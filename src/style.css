@@ -31,6 +31,7 @@ window {
     min-height: 52px;
     padding: 0;
     transition: all 0.2s ease-in-out;
+    overflow: hidden; /* CRITICAL: Schneidet alles ab, was über die 16px Rundung ragt */
 }
 
 .qs-tile.active {
@@ -38,15 +39,22 @@ window {
 }
 
 .qs-tile button {
-    background: transparent;
+    background: none;
+    background-color: transparent;
     border: none;
+    border-radius: 0; /* Wir machen das manuell */
     box-shadow: none;
     color: inherit;
     padding: 0 12px;
+    outline: none;
 }
 
 .qs-tile .qs-tile-main {
     border-radius: 16px 0 0 16px;
+}
+
+.qs-tile .qs-tile-main.sole {
+    border-radius: 16px; /* Vollständig rund, wenn kein Pfeil da ist */
 }
 
 .qs-tile .qs-tile-main:hover {

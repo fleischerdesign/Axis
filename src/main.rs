@@ -210,8 +210,11 @@ fn build_ui(app: &libadwaita::Application) {
     qs_stack.add_named(&wifi_page, Some("wifi"));
 
     let stack_back_clone = qs_stack.clone();
+    let qs_popup_back = qs_popup.clone();
     back_btn.connect_clicked(move |_| {
         stack_back_clone.set_visible_child_name("main");
+        // Layer-Shell Hack: Größe zurücksetzen, damit das Fenster schrumpft
+        qs_popup_back.set_default_size(1, 1);
     });
 
     qs_container.append(&qs_stack);
@@ -666,6 +669,10 @@ fn create_tile(label: &str, icon: &str, active: bool, has_arrow: bool) -> (gtk4:
         .css_classes(vec!["qs-tile-main".to_string()])
         .hexpand(true)
         .build();
+    
+    if !has_arrow {
+        main_btn.add_css_class("sole");
+    }
     
     let main_content = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
     let icon_img = gtk4::Image::from_icon_name(icon);
