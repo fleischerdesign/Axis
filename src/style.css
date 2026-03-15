@@ -1,0 +1,242 @@
+/* Global Window Styling */
+window {
+    background: transparent;
+}
+
+/* The Island Component */
+.island {
+    background-color: #242424;
+    color: #ffffff;
+    border-radius: 16px;
+    padding: 6px 16px;
+    margin: 0 4px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+}
+
+
+/* Quick Settings Panel */
+.qs-panel {
+    background-color: #1e1e1e;
+    padding: 20px;
+    border-radius: 28px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+}
+
+/* Quick Settings Tiles (Split Buttons) */
+.qs-tile {
+    background-color: #303030;
+    color: #ffffff;
+    border-radius: 16px;
+    min-width: 140px;
+    min-height: 52px;
+    padding: 0;
+    transition: all 0.2s ease-in-out;
+}
+
+.qs-tile.active {
+    background-color: #3584e4;
+}
+
+.qs-tile button {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    color: inherit;
+    padding: 0 12px;
+}
+
+.qs-tile .qs-tile-main {
+    border-radius: 16px 0 0 16px;
+}
+
+.qs-tile .qs-tile-main:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.qs-tile .qs-tile-arrow {
+    border-radius: 0 16px 16px 0;
+    padding: 0 8px;
+}
+
+.qs-tile .qs-tile-arrow:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.qs-tile-separator {
+    background-color: rgba(255, 255, 255, 0.1);
+    margin: 12px 0;
+    min-width: 1px;
+}
+
+.qs-tile-label {
+    font-weight: 600;
+    font-size: 13px;
+}
+
+/* QS Sub-pages */
+.qs-back-btn {
+    background: transparent;
+    border-radius: 999px;
+    min-width: 36px;
+    min-height: 36px;
+    padding: 0;
+}
+
+.qs-back-btn:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.qs-subpage-title {
+    font-weight: 800;
+    font-size: 15px;
+}
+
+.qs-list {
+    background-color: #242424;
+    border-radius: 16px;
+    color: white;
+    padding: 6px;
+}
+
+.qs-list-row {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    color: inherit;
+    border-radius: 12px; /* Tippfehler korrigiert: Bindestrich statt Unterstrich */
+    padding: 0;
+    font-weight: normal;
+}
+
+.qs-list-row:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Entfernt den kantigen Standard-Hintergrund der ListBox-Zeilen */
+.qs-list row {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+}
+
+.qs-list row:hover, .qs-list row:selected {
+    background: transparent;
+}
+
+.qs-list-row.active {
+    color: #3584e4;
+    font-weight: bold;
+}
+
+.qs-wifi-item {
+    border-radius: 12px;
+    margin-bottom: 2px;
+}
+
+.qs-wifi-connect-btn {
+    border-radius: 12px;
+    padding: 0 16px;
+}
+
+/* GNOME Pill-Slider */
+.volume-slider scale {
+    margin-left: 0;
+    margin-right: 0;
+    padding: 0;
+}
+
+.volume-slider scale trough {
+    min-height: 44px;
+    border-radius: 999px;
+    background-color: rgba(255, 255, 255, 0.1);
+    border: none;
+    margin: 0;
+}
+
+.volume-slider scale highlight {
+    min-height: 44px;
+    border-radius: 999px;
+    background-color: #3584e4;
+}
+
+.volume-slider scale slider {
+    min-width: 0;
+    min-height: 0;
+    opacity: 0;
+    margin: 0;
+}
+
+.qs-battery-btn {
+    background-color: #303030;
+    color: white;
+    min-height: 44px;
+    border-radius: 999px;
+    padding: 0 12px;
+    border: none;
+}
+
+.qs-battery-btn:hover {
+    background-color: #3d3d3d;
+}
+
+/* Bottom Actions */
+.qs-bottom-btn {
+    background-color: #303030;
+    min-width: 44px;
+    min-height: 44px;
+    border-radius: 999px;
+    padding: 0;
+}
+
+.qs-bottom-btn:hover {
+    background-color: #3d3d3d;
+}
+
+/* Workspace Shelf & Cards */
+.workspace-shelf {
+    background-color: #1e1e1e;
+    padding: 24px;
+    border-radius: 28px;
+}
+
+.workspace-card {
+    padding: 16px;
+    border-radius: 20px;
+    transition: all 0.2s;
+}
+
+.workspace-card.active {
+    background-color: rgba(255, 255, 255, 0.1);
+    box-shadow: inset 0 0 0 2px #3584e4;
+}
+
+.workspace-preview {
+    background-color: #0b0b0b;
+    border-radius: 12px;
+}
+
+.preview-window {
+    background-color: #333333;
+    border-radius: 6px;
+}
+
+.preview-window.focused {
+    background-color: #4a4a4a;
+    border-color: #3584e4;
+}
+
+.clock-label {
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.workspace-label {
+    font-size: 13px;
+}
+
+separator {
+    margin: 6px 0;
+    background-color: rgba(255, 255, 255, 0.1);
+    min-width: 1px;
+}
