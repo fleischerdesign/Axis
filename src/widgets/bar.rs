@@ -1,12 +1,17 @@
 use gtk4::prelude::*;
 use gtk4_layer_shell::{Layer, Edge, LayerShell};
 use crate::widgets::Island;
+use crate::services::network::NetworkService;
+use crate::services::power::PowerService;
+use futures_util::StreamExt;
 
 pub struct Bar {
     pub window: gtk4::ApplicationWindow,
     pub ws_label: gtk4::Label,
     pub clock_label: gtk4::Label,
     pub vol_icon: gtk4::Image,
+    pub wifi_icon: gtk4::Image,
+    pub battery_icon: gtk4::Image,
     pub status_island: gtk4::Box,
     pub center_island: gtk4::Box,
 }
@@ -49,19 +54,63 @@ impl Bar {
         // --- 3. Status ---
         let status_island = Island::new(12);
         status_island.container.set_cursor_from_name(Some("pointer"));
-        status_island.append(&gtk4::Image::from_icon_name("network-wireless-signal-excellent-symbolic"));
+        
+        let wifi_icon = gtk4::Image::from_icon_name("network-wireless-signal-excellent-symbolic");
+        status_island.append(&wifi_icon);
+        
         let vol_icon = gtk4::Image::from_icon_name("audio-volume-high-symbolic");
         status_island.append(&vol_icon);
-        status_island.append(&gtk4::Image::from_icon_name("battery-full-symbolic"));
+        
+        let battery_icon = gtk4::Image::from_icon_name("battery-full-symbolic");
+        status_island.append(&battery_icon);
+        
         root.set_end_widget(Some(&status_island.container));
 
         window.set_child(Some(&root));
+
+        let (mut network_rx, _network_tx) = NetworkService::spawn();
+        let wifi_icon_c = wifi_icon.clone();
+        gtk4::glib::MainContext::default().spawn_local(async move {
+            while let Some(data) = network_rx.next().await {
+                let icon_name = if !data.is_wifi_enabled || !data.is_wifi_connected {
+                    "network-wireless-offline-symbolic"
+                } else {
+                    if data.active_strength > 80 { "network-wireless-signal-excellent-symbolic" }
+                    else if data.active_strength > 60 { "network-wireless-signal-good-symbolic" }
+                    else if data.active_strength > 40 { "network-wireless-signal-ok-symbolic" }
+                    else { "network-wireless-signal-weak-symbolic" }
+                };
+                wifi_icon_c.set_icon_name(Some(icon_name));
+            }
+        });
+
+
+        let (mut power_rx, _) = PowerService::spawn();
+        let battery_icon_c = battery_icon.clone();
+        gtk4::glib::MainContext::default().spawn_local(async move {
+            while let Some(data) = power_rx.next().await {
+                battery_icon_c.set_visible(data.has_battery);
+                if data.has_battery {
+                    let icon_name = if data.is_charging {
+                        "battery-full-charging-symbolic"
+                    } else {
+                        if data.battery_percentage < 10.0 { "battery-empty-symbolic" }
+                        else if data.battery_percentage < 30.0 { "battery-low-symbolic" }
+                        else if data.battery_percentage < 60.0 { "battery-good-symbolic" }
+                        else { "battery-full-symbolic" }
+                    };
+                    battery_icon_c.set_icon_name(Some(icon_name));
+                }
+            }
+        });
 
         Self {
             window,
             ws_label,
             clock_label,
             vol_icon,
+            wifi_icon,
+            battery_icon,
             status_island: status_island.container,
             center_island: center_island.container,
         }

@@ -101,6 +101,7 @@ pub struct NetworkData {
     pub is_ethernet_connected: bool,
     pub is_wifi_enabled: bool,
     pub is_networking_enabled: bool,
+    pub active_strength: u8,
     pub access_points: Vec<AccessPointData>,
 }
 
@@ -206,6 +207,7 @@ impl NetworkService {
         
         let mut active_ap_path = "/".to_string();
         let mut active_ssid = String::new();
+        let mut active_strength = 0;
         let mut aps = Vec::new();
 
         if let Some(path) = wifi_path {
@@ -216,6 +218,9 @@ impl NetworkService {
                     if let Ok(ap_proxy) = AccessPointProxy::builder(conn).path(ap_path).unwrap().build().await {
                         if let Ok(ssid_bytes) = ap_proxy.ssid().await {
                             active_ssid = String::from_utf8_lossy(&ssid_bytes).to_string();
+                        }
+                        if let Ok(s) = ap_proxy.strength().await {
+                            active_strength = s;
                         }
                     }
                 }
@@ -256,6 +261,7 @@ impl NetworkService {
             is_ethernet_connected: is_connected && primary_type == "802-3-ethernet",
             is_wifi_enabled: wifi_on,
             is_networking_enabled: net_on,
+            active_strength,
             access_points: aps,
         }
     }

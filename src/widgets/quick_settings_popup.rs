@@ -3,6 +3,7 @@ use gtk4_layer_shell::{Layer, Edge, KeyboardMode, LayerShell};
 use crate::services::network::{NetworkService, NetworkCmd};
 use crate::services::bluetooth::BluetoothService;
 use crate::services::audio::{AudioService, AudioCmd};
+use crate::services::power::PowerService;
 use std::rc::Rc;
 use std::cell::RefCell;
 use futures_util::StreamExt;
@@ -52,11 +53,11 @@ impl QuickSettingsPopup {
         grid.set_row_spacing(12);
         grid.set_column_homogeneous(true);
 
-        let (wifi_tile, wifi_toggle, wifi_arrow) = Self::create_tile("Wi-Fi", "network-wireless-signal-excellent-symbolic", true, true);
-        let (eth_tile, eth_toggle, _) = Self::create_tile("Ethernet", "network-wired-symbolic", false, false);
-        let (bt_tile, bt_toggle, _) = Self::create_tile("Bluetooth", "bluetooth-active-symbolic", false, true);
-        let (night_tile, _, _) = Self::create_tile("Night Light", "night-light-symbolic", false, false);
-        let (airplane_tile, _, _) = Self::create_tile("Airplane", "airplane-mode-symbolic", false, false);
+        let (wifi_tile, wifi_toggle, wifi_arrow, wifi_icon_qs_tile) = Self::create_tile("Wi-Fi", "network-wireless-signal-excellent-symbolic", true, true);
+        let (eth_tile, eth_toggle, _, _) = Self::create_tile("Ethernet", "network-wired-symbolic", false, false);
+        let (bt_tile, bt_toggle, _, _) = Self::create_tile("Bluetooth", "bluetooth-active-symbolic", false, true);
+        let (night_tile, _, _, _) = Self::create_tile("Night Light", "night-light-symbolic", false, false);
+        let (airplane_tile, _, _, _) = Self::create_tile("Airplane", "airplane-mode-symbolic", false, false);
 
         grid.attach(&wifi_tile, 0, 0, 1, 1);
         grid.attach(&eth_tile, 1, 0, 1, 1);
@@ -82,8 +83,10 @@ impl QuickSettingsPopup {
         // Bottom Row (Actions)
         let bottom_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
         let battery_content = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
-        battery_content.append(&gtk4::Image::from_icon_name("battery-full-symbolic"));
-        battery_content.append(&gtk4::Label::new(Some("85%")));
+        let battery_icon_qs = gtk4::Image::from_icon_name("battery-full-symbolic");
+        let battery_label_qs = gtk4::Label::new(Some("...%"));
+        battery_content.append(&battery_icon_qs);
+        battery_content.append(&battery_label_qs);
         let battery_btn = gtk4::Button::builder().child(&battery_content).css_classes(vec!["qs-battery-btn".to_string()]).build();
         
         let power_btn = Self::create_bottom_btn("system-shutdown-symbolic");
@@ -134,8 +137,32 @@ impl QuickSettingsPopup {
         let (mut network_rx, network_tx) = NetworkService::spawn();
         let (mut bt_rx, bt_tx) = BluetoothService::spawn();
         let (mut audio_rx, audio_tx) = AudioService::spawn();
+        let (mut power_rx, _power_tx) = PowerService::spawn();
+
+        let battery_btn_c = battery_btn.clone();
+        let battery_icon_qs_c = battery_icon_qs.clone();
+        let battery_label_qs_c = battery_label_qs.clone();
+
+        gtk4::glib::MainContext::default().spawn_local(async move {
+            while let Some(data) = power_rx.next().await {
+                battery_btn_c.set_visible(data.has_battery);
+                if data.has_battery {
+                    battery_label_qs_c.set_label(&format!("{}%", data.battery_percentage.round()));
+                    let icon_name = if data.is_charging {
+                        "battery-full-charging-symbolic"
+                    } else {
+                        if data.battery_percentage < 10.0 { "battery-empty-symbolic" }
+                        else if data.battery_percentage < 30.0 { "battery-low-symbolic" }
+                        else if data.battery_percentage < 60.0 { "battery-good-symbolic" }
+                        else { "battery-full-symbolic" }
+                    };
+                    battery_icon_qs_c.set_icon_name(Some(icon_name));
+                }
+            }
+        });
 
         let wifi_tile_c = wifi_tile.clone();
+        let wifi_icon_qs_tile_c = wifi_icon_qs_tile.clone();
         let eth_tile_c = eth_tile.clone();
         let wifi_list_c = wifi_list.clone();
         let is_wifi_on_c = is_wifi_on.clone();
@@ -146,7 +173,20 @@ impl QuickSettingsPopup {
             while let Some(data) = network_rx.next().await {
                 *is_wifi_on_c.borrow_mut() = data.is_wifi_enabled;
                 *is_net_on_c.borrow_mut() = data.is_networking_enabled;
+                
+                // Wifi Tile Status & Icon
                 if data.is_wifi_enabled { wifi_tile_c.add_css_class("active"); } else { wifi_tile_c.remove_css_class("active"); }
+                
+                let wifi_icon_name = if !data.is_wifi_enabled || !data.is_wifi_connected {
+                    "network-wireless-offline-symbolic"
+                } else {
+                    if data.active_strength > 80 { "network-wireless-signal-excellent-symbolic" }
+                    else if data.active_strength > 60 { "network-wireless-signal-good-symbolic" }
+                    else if data.active_strength > 40 { "network-wireless-signal-ok-symbolic" }
+                    else { "network-wireless-signal-weak-symbolic" }
+                };
+                wifi_icon_qs_tile_c.set_icon_name(Some(wifi_icon_name));
+
                 if data.is_ethernet_connected { eth_tile_c.add_css_class("active"); } else { eth_tile_c.remove_css_class("active"); }
 
                 let mut any_expanded = false;
@@ -323,7 +363,7 @@ impl QuickSettingsPopup {
         Self { window, is_open }
     }
 
-    fn create_tile(label: &str, icon: &str, active: bool, has_arrow: bool) -> (gtk4::Box, gtk4::Button, Option<gtk4::Button>) {
+    fn create_tile(label: &str, icon: &str, active: bool, has_arrow: bool) -> (gtk4::Box, gtk4::Button, Option<gtk4::Button>, gtk4::Image) {
         let tile_container = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
         tile_container.add_css_class("qs-tile");
         if active { tile_container.add_css_class("active"); }
@@ -342,7 +382,7 @@ impl QuickSettingsPopup {
             tile_container.append(&separator); tile_container.append(&arrow_btn);
             arrow_btn_out = Some(arrow_btn);
         }
-        (tile_container, main_btn, arrow_btn_out)
+        (tile_container, main_btn, arrow_btn_out, icon_img)
     }
 
     fn create_bottom_btn(icon: &str) -> gtk4::Button {
