@@ -30,6 +30,7 @@
             pkgs.gtk4
             pkgs.libadwaita
             pkgs.gtk4-layer-shell
+            pkgs.libpulseaudio
           ];
           shellHook = ''
             echo "Entering Carp development environment..."

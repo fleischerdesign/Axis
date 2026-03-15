@@ -1,63 +1,74 @@
-use std::process::Command;
-use std::thread;
-use std::time::Duration;
+use pulsectl::controllers::SinkController;
+use pulsectl::controllers::DeviceControl;
+use libpulse_binding::volume::Volume;
 use futures_channel::mpsc;
-use futures_util::StreamExt;
+use std::thread;
 
 #[derive(Clone, Debug)]
 pub struct AudioData {
-    pub volume: f64, // 0.0 bis 1.0
+    pub volume: f64,
     pub is_muted: bool,
+}
+
+pub enum AudioCmd {
+    SetVolume(f64),
+    #[allow(dead_code)]
+    SetMute(bool),
 }
 
 pub struct AudioService;
 
 impl AudioService {
-    pub fn spawn() -> (mpsc::UnboundedReceiver<AudioData>, mpsc::UnboundedSender<f64>) {
-        let (data_tx, data_rx) = mpsc::unbounded();
-        let (cmd_tx, mut cmd_rx) = mpsc::unbounded::<f64>();
+    pub fn spawn() -> (
+        mpsc::UnboundedReceiver<AudioData>,
+        mpsc::UnboundedSender<AudioCmd>,
+    ) {
+        let (data_tx, data_rx) = mpsc::unbounded::<AudioData>();
+        let (cmd_tx, mut cmd_rx) = mpsc::unbounded::<AudioCmd>();
 
-        // Thread 1: Daten abfragen (Polling wpctl)
-        let tx_clone = data_tx.clone();
         thread::spawn(move || {
-            loop {
-                if let Ok(data) = Self::get_wpctl_status() {
-                    if tx_clone.unbounded_send(data).is_err() { break; }
+            let mut handler = match SinkController::create() {
+                Ok(h) => h,
+                Err(e) => {
+                    eprintln!("[AudioService] Failed to create SinkController: {:?}", e);
+                    return;
                 }
-                thread::sleep(Duration::from_millis(500));
-            }
-        });
+            };
 
-        // Thread 2: Lautstärke setzen
-        thread::spawn(move || {
-            while let Some(new_vol) = futures_executor::block_on(cmd_rx.next()) {
-                let _ = Command::new("wpctl")
-                    .arg("set-volume")
-                    .arg("@DEFAULT_AUDIO_SINK@")
-                    .arg(format!("{}%", (new_vol * 100.0) as i32))
-                    .output();
+            loop {
+                if let Ok(sink) = handler.get_default_device() {
+                    let vol_raw = sink.volume.avg().0 as f64 / Volume::NORMAL.0 as f64;
+                    
+                    let _ = data_tx.unbounded_send(AudioData {
+                        volume: vol_raw,
+                        is_muted: sink.mute,
+                    });
+
+                    while let Ok(cmd) = cmd_rx.try_recv() {
+                        match cmd {
+                            AudioCmd::SetVolume(new_vol) => {
+                                let pulse_vol = Volume(((new_vol * Volume::NORMAL.0 as f64) as u32).min(Volume::NORMAL.0 * 2));
+                                let mut cv = sink.volume.clone();
+                                let channels = cv.len();
+                                cv.set(channels, pulse_vol);
+                                
+                                if let Some(name) = &sink.name {
+                                    let _ = handler.set_device_volume_by_name(name, &cv);
+                                }
+                            },
+                            AudioCmd::SetMute(mute) => {
+                                if let Some(name) = &sink.name {
+                                    let _ = handler.set_device_mute_by_name(name, mute);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                thread::sleep(std::time::Duration::from_millis(150));
             }
         });
 
         (data_rx, cmd_tx)
-    }
-
-    fn get_wpctl_status() -> Result<AudioData, String> {
-        let output = Command::new("wpctl")
-            .arg("get-volume")
-            .arg("@DEFAULT_AUDIO_SINK@")
-            .output()
-            .map_err(|e| e.to_string())?;
-
-        let s = String::from_utf8_lossy(&output.stdout);
-        // Beispiel-Output: "Volume: 0.45" oder "Volume: 0.45 [MUTED]"
-        let parts: Vec<&str> = s.split_whitespace().collect();
-        if parts.len() >= 2 {
-            let vol = parts[1].parse::<f64>().unwrap_or(0.0);
-            let muted = s.contains("[MUTED]");
-            Ok(AudioData { volume: vol, is_muted: muted })
-        } else {
-            Err("Invalid wpctl output".into())
-        }
     }
 }

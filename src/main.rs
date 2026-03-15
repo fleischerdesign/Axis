@@ -2,7 +2,6 @@ mod services;
 mod widgets;
 
 use gtk4::prelude::*;
-use libadwaita::prelude::*;
 use crate::widgets::{Bar, QuickSettingsPopup, WorkspacePopup};
 
 #[tokio::main]

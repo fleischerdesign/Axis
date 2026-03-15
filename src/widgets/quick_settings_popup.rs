@@ -2,11 +2,10 @@ use gtk4::prelude::*;
 use gtk4_layer_shell::{Layer, Edge, KeyboardMode, LayerShell};
 use crate::services::network::{NetworkService, NetworkCmd};
 use crate::services::bluetooth::BluetoothService;
-use crate::services::audio::{AudioService, AudioData};
+use crate::services::audio::{AudioService, AudioCmd};
 use std::rc::Rc;
 use std::cell::RefCell;
 use futures_util::StreamExt;
-use futures_channel::mpsc;
 
 pub struct QuickSettingsPopup {
     pub window: gtk4::Window,
@@ -261,20 +260,64 @@ impl QuickSettingsPopup {
         let vol_slider_c = vol_slider.clone();
         let popup_vol_icon_c = popup_vol_icon.clone();
         let vol_icon_bar_c = vol_icon_bar.clone();
+        
+        let mut is_first_update = true;
+        let last_sent_vol = Rc::new(RefCell::new(0.0));
+        let last_sent_vol_c = last_sent_vol.clone();
+        let is_updating = Rc::new(RefCell::new(false));
+        let is_updating_c = is_updating.clone();
+        let last_interaction_time = Rc::new(RefCell::new(std::time::Instant::now()));
+        let last_interaction_time_c = last_interaction_time.clone();
+
         gtk4::glib::MainContext::default().spawn_local(async move {
             while let Some(data) = audio_rx.next().await {
-                vol_slider_c.set_value(data.volume);
-                let icon_name = if data.is_muted || data.volume == 0.0 { "audio-volume-muted-symbolic" }
-                else if data.volume < 0.33 { "audio-volume-low-symbolic" }
-                else if data.volume < 0.66 { "audio-volume-medium-symbolic" }
-                else { "audio-volume-high-symbolic" };
-                popup_vol_icon_c.set_icon_name(Some(icon_name));
-                vol_icon_bar_c.set_icon_name(Some(icon_name));
+                let current_val = vol_slider_c.value();
+                let diff = (current_val - data.volume).abs();
+                let last_sent = *last_sent_vol_c.borrow();
+                let diff_from_sent = (data.volume - last_sent).abs();
+                let time_since_interaction = last_interaction_time_c.borrow().elapsed();
+
+                let is_grace_period = time_since_interaction < std::time::Duration::from_millis(600);
+                
+                // Nur updaten, wenn wir NICHT in der Grace Period sind ODER das System den von uns gesendeten Wert bestätigt
+                if is_first_update || (!is_grace_period && diff > 0.01) || (is_grace_period && diff_from_sent < 0.05) {
+                    *is_updating_c.borrow_mut() = true;
+                    vol_slider_c.set_value(data.volume);
+                    *is_updating_c.borrow_mut() = false;
+                    is_first_update = false;
+
+                    // Icon-Update nur bei validen Daten-Updates durchführen
+                    let icon_name = if data.is_muted || data.volume <= 0.01 { "audio-volume-muted-symbolic" }
+                    else if data.volume < 0.33 { "audio-volume-low-symbolic" }
+                    else if data.volume < 0.66 { "audio-volume-medium-symbolic" }
+                    else { "audio-volume-high-symbolic" };
+                    popup_vol_icon_c.set_icon_name(Some(icon_name));
+                    vol_icon_bar_c.set_icon_name(Some(icon_name));
+                }
             }
         });
 
+        let audio_tx_c = audio_tx.clone();
+        let last_sent_vol_tx = last_sent_vol.clone();
+        let is_updating_tx = is_updating.clone();
+        let last_interaction_time_tx = last_interaction_time.clone();
+        let popup_vol_icon_slider = popup_vol_icon.clone();
+        let vol_icon_bar_slider = vol_icon_bar.clone();
+
         vol_slider.connect_value_changed(move |s| {
-            let _ = audio_tx.unbounded_send(s.value());
+            if *is_updating_tx.borrow() { return; }
+            *last_interaction_time_tx.borrow_mut() = std::time::Instant::now();
+            let val = s.value();
+            *last_sent_vol_tx.borrow_mut() = val;
+            let _ = audio_tx_c.unbounded_send(AudioCmd::SetVolume(val));
+
+            // Optimistisches Icon-Update für sofortiges Feedback
+            let icon_name = if val <= 0.01 { "audio-volume-muted-symbolic" }
+            else if val < 0.33 { "audio-volume-low-symbolic" }
+            else if val < 0.66 { "audio-volume-medium-symbolic" }
+            else { "audio-volume-high-symbolic" };
+            popup_vol_icon_slider.set_icon_name(Some(icon_name));
+            vol_icon_bar_slider.set_icon_name(Some(icon_name));
         });
 
         Self { window, is_open }
