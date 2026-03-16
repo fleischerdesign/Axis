@@ -68,7 +68,7 @@ impl AudioService {
                 }
 
                 // Höherer Sleep-Intervall, da wir nur bei Änderungen senden
-                thread::sleep(std::time::Duration::from_millis(250));
+                thread::sleep(std::time::Duration::from_millis(50));
             }
         });
 
