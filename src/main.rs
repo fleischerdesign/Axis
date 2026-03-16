@@ -9,6 +9,8 @@ use crate::services::network::NetworkService;
 use crate::services::bluetooth::BluetoothService;
 use crate::services::audio::AudioService;
 use crate::services::power::PowerService;
+use crate::services::niri::NiriService;
+use crate::services::clock::ClockService;
 
 #[tokio::main]
 async fn main() {
@@ -39,6 +41,8 @@ fn build_ui(app: &libadwaita::Application) {
     let (bluetooth_rx, bluetooth_tx) = BluetoothService::spawn();
     let (audio_rx, audio_tx) = AudioService::spawn();
     let power_rx = PowerService::spawn();
+    let niri_rx = NiriService::spawn();
+    let clock_rx = ClockService::spawn();
 
     let ctx = AppContext {
         network_rx,
@@ -48,16 +52,19 @@ fn build_ui(app: &libadwaita::Application) {
         audio_rx,
         audio_tx,
         power_rx,
+        niri_rx,
+        clock_rx,
     };
 
     // --- KOMPONENTEN INITIALISIEREN ---
     let bar = Bar::new(app, ctx.clone());
-    let ws_popup = WorkspacePopup::new(app, &bar.clock_label, &bar.ws_label);
+    let ws_popup = WorkspacePopup::new(app, ctx.clone());
     let qs_popup = QuickSettingsPopup::new(app, &bar.vol_icon, ctx.clone());
 
     // --- INTERACTION ---
     let ws_click = gtk4::GestureClick::new();
-    ws_click.connect_pressed(move |_, _, _, _| { ws_popup.toggle(); });
+    let ctx_ws = ctx.clone();
+    ws_click.connect_pressed(move |_, _, _, _| { ws_popup.toggle(&ctx_ws); });
     bar.center_island.add_controller(ws_click);
 
     let qs_click = gtk4::GestureClick::new();

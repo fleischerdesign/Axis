@@ -5,11 +5,9 @@ use crate::app_context::AppContext;
 
 pub struct Bar {
     pub window: gtk4::ApplicationWindow,
-    pub ws_label: gtk4::Label,
-    pub clock_label: gtk4::Label,
-    pub vol_icon: gtk4::Image,
     pub status_island: gtk4::Box,
     pub center_island: gtk4::Box,
+    pub vol_icon: gtk4::Image,
 }
 
 impl Bar {
@@ -51,7 +49,7 @@ impl Bar {
         let status_island = Island::new(12);
         status_island.container.set_cursor_from_name(Some("pointer"));
         
-        let wifi_icon = gtk4::Image::from_icon_name("network-wireless-signal-excellent-symbolic");
+        let wifi_icon = gtk4::Image::from_icon_name("network-wireless-offline-symbolic");
         status_island.append(&wifi_icon);
         
         let vol_icon = gtk4::Image::from_icon_name("audio-volume-high-symbolic");
@@ -64,6 +62,28 @@ impl Bar {
         window.set_child(Some(&root));
 
         // --- EVENTS ---
+        
+        // 1. Clock
+        let clock_label_c = clock_label.clone();
+        let mut clock_rx = ctx.clock_rx.clone();
+        gtk4::glib::MainContext::default().spawn_local(async move {
+            clock_label_c.set_text(&clock_rx.borrow().format("%H:%M").to_string());
+            while clock_rx.changed().await.is_ok() {
+                clock_label_c.set_text(&clock_rx.borrow().format("%H:%M").to_string());
+            }
+        });
+
+        // 2. Niri (Workspace Label)
+        let ws_label_c = ws_label.clone();
+        let mut niri_rx = ctx.niri_rx.clone();
+        gtk4::glib::MainContext::default().spawn_local(async move {
+            Self::update_workspaces(&ws_label_c, &niri_rx.borrow());
+            while niri_rx.changed().await.is_ok() {
+                Self::update_workspaces(&ws_label_c, &niri_rx.borrow());
+            }
+        });
+
+        // 3. Network
         let wifi_icon_c = wifi_icon.clone();
         let mut network_rx = ctx.network_rx.clone();
         gtk4::glib::MainContext::default().spawn_local(async move {
@@ -73,6 +93,7 @@ impl Bar {
             }
         });
 
+        // 4. Power
         let battery_icon_c = battery_icon.clone();
         let mut power_rx = ctx.power_rx.clone();
         gtk4::glib::MainContext::default().spawn_local(async move {
@@ -84,12 +105,21 @@ impl Bar {
 
         Self {
             window,
-            ws_label,
-            clock_label,
-            vol_icon,
             status_island: status_island.container,
             center_island: center_island.container,
+            vol_icon,
         }
+    }
+
+    fn update_workspaces(label: &gtk4::Label, data: &crate::services::niri::NiriData) {
+        let mut workspaces = data.workspaces.clone();
+        workspaces.sort_by_key(|w| w.id);
+        let mut markup = String::new();
+        for ws in workspaces {
+            if ws.is_active { markup.push_str(&format!(" <b>{}</b> ", ws.id)); }
+            else { markup.push_str(&format!(" {} ", ws.id)); }
+        }
+        label.set_markup(&markup);
     }
 
     fn update_wifi(icon: &gtk4::Image, data: &crate::services::network::NetworkData) {
