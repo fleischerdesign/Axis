@@ -1,8 +1,14 @@
 mod services;
 mod widgets;
+mod app_context;
 
 use gtk4::prelude::*;
 use crate::widgets::{Bar, QuickSettingsPopup, WorkspacePopup};
+use crate::app_context::AppContext;
+use crate::services::network::NetworkService;
+use crate::services::bluetooth::BluetoothService;
+use crate::services::audio::AudioService;
+use crate::services::power::PowerService;
 
 #[tokio::main]
 async fn main() {
@@ -28,10 +34,26 @@ fn build_ui(app: &libadwaita::Application) {
 
     libadwaita::StyleManager::default().set_color_scheme(libadwaita::ColorScheme::PreferDark);
 
+    // --- SERVICES STARTEN (Global) ---
+    let (network_rx, network_tx) = NetworkService::spawn();
+    let (bluetooth_rx, bluetooth_tx) = BluetoothService::spawn();
+    let (audio_rx, audio_tx) = AudioService::spawn();
+    let power_rx = PowerService::spawn();
+
+    let ctx = AppContext {
+        network_rx,
+        network_tx,
+        bluetooth_rx,
+        bluetooth_tx,
+        audio_rx,
+        audio_tx,
+        power_rx,
+    };
+
     // --- KOMPONENTEN INITIALISIEREN ---
-    let bar = Bar::new(app);
+    let bar = Bar::new(app, ctx.clone());
     let ws_popup = WorkspacePopup::new(app, &bar.clock_label, &bar.ws_label);
-    let qs_popup = QuickSettingsPopup::new(app, &bar.vol_icon);
+    let qs_popup = QuickSettingsPopup::new(app, &bar.vol_icon, ctx.clone());
 
     // --- INTERACTION ---
     let ws_click = gtk4::GestureClick::new();
