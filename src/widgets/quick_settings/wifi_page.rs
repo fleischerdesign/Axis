@@ -39,14 +39,14 @@ impl WifiPage {
         let scrolled = gtk4::ScrolledWindow::builder()
             .hscrollbar_policy(gtk4::PolicyType::Never)
             .vscrollbar_policy(gtk4::PolicyType::Automatic)
-            .min_content_height(200)
-            .max_content_height(500)
+            .vexpand(true)
             .build();
         scrolled.add_css_class("qs-scrolled");
         scrolled.set_child(Some(&list));
 
         container.append(&header);
         container.append(&scrolled);
+        container.set_vexpand(true);
 
         back_btn.connect_clicked(move |_| back_callback());
 

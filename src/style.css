@@ -100,13 +100,14 @@ window {
 
 .qs-list {
     background-color: #242424;
-    border-radius: 16px;
     color: white;
     padding: 6px;
 }
 
-.qs-scrolled {
+.qs-scrolled,
+.qs-scrolled viewport {
     border-radius: 16px;
+    background-color: #242424;
 }
 
 .qs-list-row {
