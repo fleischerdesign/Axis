@@ -1,7 +1,7 @@
 use gtk4::prelude::*;
 use gtk4_layer_shell::{Layer, Edge, KeyboardMode, LayerShell};
 use crate::services::network::{NetworkService, NetworkCmd};
-use crate::services::bluetooth::BluetoothService;
+use crate::services::bluetooth::{BluetoothService, BluetoothCmd};
 use crate::services::audio::{AudioService, AudioCmd};
 use crate::services::power::PowerService;
 use std::rc::Rc;
@@ -55,7 +55,7 @@ impl QuickSettingsPopup {
 
         let (wifi_tile, wifi_toggle, wifi_arrow, wifi_icon_qs_tile) = Self::create_tile("Wi-Fi", "network-wireless-signal-excellent-symbolic", true, true);
         let (eth_tile, eth_toggle, _, _) = Self::create_tile("Ethernet", "network-wired-symbolic", false, false);
-        let (bt_tile, bt_toggle, _, _) = Self::create_tile("Bluetooth", "bluetooth-active-symbolic", false, true);
+        let (bt_tile, bt_toggle, bt_arrow, _bt_icon_qs_tile) = Self::create_tile("Bluetooth", "bluetooth-active-symbolic", false, true);
         let (night_tile, _, _, _) = Self::create_tile("Night Light", "night-light-symbolic", false, false);
         let (airplane_tile, _, _, _) = Self::create_tile("Airplane", "airplane-mode-symbolic", false, false);
 
@@ -118,14 +118,33 @@ impl QuickSettingsPopup {
         wifi_page.append(&wifi_header);
         wifi_page.append(&wifi_list);
 
+        // --- PAGE 3: BLUETOOTH SUB-PAGE ---
+        let bluetooth_page = gtk4::Box::new(gtk4::Orientation::Vertical, 16);
+        let bt_header = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
+        let bt_back_btn = gtk4::Button::builder().icon_name("go-previous-symbolic").css_classes(vec!["qs-back-btn".to_string()]).build();
+        let bt_title = gtk4::Label::builder().label("Bluetooth").halign(gtk4::Align::Start).css_classes(vec!["qs-subpage-title".to_string()]).build();
+        bt_header.append(&bt_back_btn);
+        bt_header.append(&bt_title);
+        let bt_list = gtk4::ListBox::builder().css_classes(vec!["qs-list".to_string()]).selection_mode(gtk4::SelectionMode::None).build();
+        bluetooth_page.append(&bt_header);
+        bluetooth_page.append(&bt_list);
+
         qs_stack.add_named(&main_page, Some("main"));
         qs_stack.add_named(&wifi_page, Some("wifi"));
+        qs_stack.add_named(&bluetooth_page, Some("bluetooth"));
 
         let stack_back_clone = qs_stack.clone();
         let qs_popup_back = window.clone();
         back_btn.connect_clicked(move |_| {
             stack_back_clone.set_visible_child_name("main");
             qs_popup_back.set_default_size(1, 1);
+        });
+
+        let stack_bt_back_clone = qs_stack.clone();
+        let qs_popup_bt_back = window.clone();
+        bt_back_btn.connect_clicked(move |_| {
+            stack_bt_back_clone.set_visible_child_name("main");
+            qs_popup_bt_back.set_default_size(1, 1);
         });
 
         qs_container.append(&qs_stack);
@@ -283,18 +302,70 @@ impl QuickSettingsPopup {
 
         let bt_tile_c = bt_tile.clone();
         let is_bt_on_c = is_bt_on.clone();
+        let bt_list_c = bt_list.clone();
+        let bt_tx_loop = bt_tx.clone();
         gtk4::glib::MainContext::default().spawn_local(async move {
             while let Some(data) = bt_rx.next().await {
                 *is_bt_on_c.borrow_mut() = data.is_powered;
                 if data.is_powered { bt_tile_c.add_css_class("active"); } else { bt_tile_c.remove_css_class("active"); }
+                
+                while let Some(child) = bt_list_c.first_child() { bt_list_c.remove(&child); }
+                for dev in data.devices {
+                    let row_btn = gtk4::Button::builder().css_classes(vec!["qs-list-row".to_string()]).focusable(false).build();
+                    if dev.is_connected { row_btn.add_css_class("active"); }
+                    let row_content = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
+                    row_content.set_margin_start(12); row_content.set_margin_end(12); row_content.set_margin_top(8); row_content.set_margin_bottom(8);
+                    
+                    let icon_img = gtk4::Image::from_icon_name(&dev.icon);
+                    row_content.append(&icon_img);
+                    
+                    let label_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+                    label_box.append(&gtk4::Label::builder().label(&dev.name).halign(gtk4::Align::Start).build());
+                    if dev.is_connected {
+                        label_box.append(&gtk4::Label::builder().label("Connected").halign(gtk4::Align::Start).css_classes(vec!["qs-list-sublabel".to_string()]).build());
+                    } else if dev.is_paired {
+                        label_box.append(&gtk4::Label::builder().label("Paired").halign(gtk4::Align::Start).css_classes(vec!["qs-list-sublabel".to_string()]).build());
+                    }
+                    row_content.append(&label_box);
+
+                    if dev.is_connected {
+                        let check = gtk4::Image::from_icon_name("object-select-symbolic");
+                        check.set_halign(gtk4::Align::End);
+                        check.set_hexpand(true);
+                        row_content.append(&check);
+                    }
+                    row_btn.set_child(Some(&row_content));
+
+                    let tx_c = bt_tx_loop.clone();
+                    let path = dev.path.clone();
+                    let is_connected = dev.is_connected;
+                    row_btn.connect_clicked(move |_| {
+                        if is_connected {
+                            let _ = tx_c.unbounded_send(BluetoothCmd::Disconnect(path.clone()));
+                        } else {
+                            let _ = tx_c.unbounded_send(BluetoothCmd::Connect(path.clone()));
+                        }
+                    });
+                    bt_list_c.append(&row_btn);
+                }
             }
         });
 
+        let bt_tx_toggle = bt_tx.clone();
         let is_bt_on_toggle = is_bt_on.clone();
         bt_toggle.connect_clicked(move |_| {
             let current = *is_bt_on_toggle.borrow();
-            let _ = bt_tx.unbounded_send(!current);
+            let _ = bt_tx_toggle.unbounded_send(BluetoothCmd::TogglePower(!current));
         });
+
+        if let Some(arrow) = bt_arrow {
+            let stack_clone = qs_stack.clone();
+            let bt_tx_scan = bt_tx.clone();
+            arrow.connect_clicked(move |_| {
+                stack_clone.set_visible_child_name("bluetooth");
+                let _ = bt_tx_scan.unbounded_send(BluetoothCmd::Scan);
+            });
+        }
 
         // Audio Loop inside QS
         let vol_slider_c = vol_slider.clone();
