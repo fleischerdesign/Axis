@@ -1,7 +1,8 @@
-use gtk4::prelude::*;
-use gtk4_layer_shell::{Layer, Edge, LayerShell};
-use crate::widgets::Island;
 use crate::app_context::AppContext;
+use crate::widgets::Island;
+use gtk4::glib::clone;
+use gtk4::prelude::*;
+use gtk4_layer_shell::{Edge, Layer, LayerShell};
 
 pub struct Bar {
     pub window: gtk4::ApplicationWindow,
@@ -35,7 +36,9 @@ impl Bar {
 
         // --- 2. Center (Workspace & Clock) ---
         let center_island = Island::new(12);
-        center_island.container.set_cursor_from_name(Some("pointer"));
+        center_island
+            .container
+            .set_cursor_from_name(Some("pointer"));
         let ws_label = gtk4::Label::new(None);
         ws_label.add_css_class("workspace-label");
         let clock_label = gtk4::Label::new(None);
@@ -47,74 +50,91 @@ impl Bar {
 
         // --- 3. Status ---
         let status_island = Island::new(12);
-        status_island.container.set_cursor_from_name(Some("pointer"));
-        
+        status_island
+            .container
+            .set_cursor_from_name(Some("pointer"));
+
         let wifi_icon = gtk4::Image::from_icon_name("network-wireless-symbolic");
         status_island.append(&wifi_icon);
 
         let bt_icon = gtk4::Image::from_icon_name("bluetooth-symbolic");
         status_island.append(&bt_icon);
-        
+
         let vol_icon = gtk4::Image::from_icon_name("audio-volume-high-symbolic");
         status_island.append(&vol_icon);
-        
+
         let battery_icon = gtk4::Image::from_icon_name("battery-full-symbolic");
         status_island.append(&battery_icon);
-        
+
         root.set_end_widget(Some(&status_island.container));
         window.set_child(Some(&root));
 
         // --- EVENTS ---
-        
+
         // 1. Clock
         let clock_label_c = clock_label.clone();
-        let mut clock_rx = ctx.clock_rx.clone();
-        gtk4::glib::MainContext::default().spawn_local(async move {
-            clock_label_c.set_text(&clock_rx.borrow().format("%H:%M").to_string());
-            while clock_rx.changed().await.is_ok() {
-                clock_label_c.set_text(&clock_rx.borrow().format("%H:%M").to_string());
+        let clock_rx = ctx.clock_rx.clone();
+        gtk4::glib::spawn_future_local(clone!(
+            #[strong]
+            clock_label_c,
+            async move {
+                while let Ok(time) = clock_rx.recv().await {
+                    clock_label_c.set_text(&time.format("%H:%M").to_string());
+                }
             }
-        });
+        ));
 
         // 2. Niri (Workspace Label)
         let ws_label_c = ws_label.clone();
-        let mut niri_rx = ctx.niri_rx.clone();
-        gtk4::glib::MainContext::default().spawn_local(async move {
-            Self::update_workspaces(&ws_label_c, &niri_rx.borrow());
-            while niri_rx.changed().await.is_ok() {
-                Self::update_workspaces(&ws_label_c, &niri_rx.borrow());
+        let niri_rx = ctx.niri_rx.clone();
+        gtk4::glib::spawn_future_local(clone!(
+            #[strong]
+            ws_label_c,
+            async move {
+                while let Ok(data) = niri_rx.recv().await {
+                    Self::update_workspaces(&ws_label_c, &data);
+                }
             }
-        });
+        ));
 
         // 3. Network
         let wifi_icon_c = wifi_icon.clone();
-        let mut network_rx = ctx.network_rx.clone();
-        gtk4::glib::MainContext::default().spawn_local(async move {
-            Self::update_wifi(&wifi_icon_c, &network_rx.borrow());
-            while network_rx.changed().await.is_ok() {
-                Self::update_wifi(&wifi_icon_c, &network_rx.borrow());
+        let network_rx = ctx.network_rx.clone();
+        gtk4::glib::spawn_future_local(clone!(
+            #[strong]
+            wifi_icon_c,
+            async move {
+                while let Ok(data) = network_rx.recv().await {
+                    Self::update_wifi(&wifi_icon_c, &data);
+                }
             }
-        });
+        ));
 
         // 4. Bluetooth
         let bt_icon_c = bt_icon.clone();
-        let mut bluetooth_rx = ctx.bluetooth_rx.clone();
-        gtk4::glib::MainContext::default().spawn_local(async move {
-            Self::update_bluetooth(&bt_icon_c, &bluetooth_rx.borrow());
-            while bluetooth_rx.changed().await.is_ok() {
-                Self::update_bluetooth(&bt_icon_c, &bluetooth_rx.borrow());
+        let bluetooth_rx = ctx.bluetooth_rx.clone();
+        gtk4::glib::spawn_future_local(clone!(
+            #[strong]
+            bt_icon_c,
+            async move {
+                while let Ok(data) = bluetooth_rx.recv().await {
+                    Self::update_bluetooth(&bt_icon_c, &data);
+                }
             }
-        });
+        ));
 
         // 5. Power
         let battery_icon_c = battery_icon.clone();
-        let mut power_rx = ctx.power_rx.clone();
-        gtk4::glib::MainContext::default().spawn_local(async move {
-            Self::update_battery(&battery_icon_c, &power_rx.borrow());
-            while power_rx.changed().await.is_ok() {
-                Self::update_battery(&battery_icon_c, &power_rx.borrow());
+        let power_rx = ctx.power_rx.clone();
+        gtk4::glib::spawn_future_local(clone!(
+            #[strong]
+            battery_icon_c,
+            async move {
+                while let Ok(data) = power_rx.recv().await {
+                    Self::update_battery(&battery_icon_c, &data);
+                }
             }
-        });
+        ));
 
         Self {
             window,
@@ -129,8 +149,11 @@ impl Bar {
         workspaces.sort_by_key(|w| w.id);
         let mut markup = String::new();
         for ws in workspaces {
-            if ws.is_active { markup.push_str(&format!(" <b>{}</b> ", ws.id)); }
-            else { markup.push_str(&format!(" {} ", ws.id)); }
+            if ws.is_active {
+                markup.push_str(&format!(" <b>{}</b> ", ws.id));
+            } else {
+                markup.push_str(&format!(" {} ", ws.id));
+            }
         }
         label.set_markup(&markup);
     }
@@ -141,10 +164,15 @@ impl Bar {
             let icon_name = if !data.is_wifi_connected {
                 "network-wireless-offline-symbolic"
             } else {
-                if data.active_strength > 80 { "network-wireless-signal-excellent-symbolic" }
-                else if data.active_strength > 60 { "network-wireless-signal-good-symbolic" }
-                else if data.active_strength > 40 { "network-wireless-signal-ok-symbolic" }
-                else { "network-wireless-signal-weak-symbolic" }
+                if data.active_strength > 80 {
+                    "network-wireless-signal-excellent-symbolic"
+                } else if data.active_strength > 60 {
+                    "network-wireless-signal-good-symbolic"
+                } else if data.active_strength > 40 {
+                    "network-wireless-signal-ok-symbolic"
+                } else {
+                    "network-wireless-signal-weak-symbolic"
+                }
             };
             icon.set_icon_name(Some(icon_name));
         }
@@ -168,10 +196,15 @@ impl Bar {
             let icon_name = if data.is_charging {
                 "battery-full-charging-symbolic"
             } else {
-                if data.battery_percentage < 10.0 { "battery-empty-symbolic" }
-                else if data.battery_percentage < 30.0 { "battery-low-symbolic" }
-                else if data.battery_percentage < 60.0 { "battery-good-symbolic" }
-                else { "battery-full-symbolic" }
+                if data.battery_percentage < 10.0 {
+                    "battery-empty-symbolic"
+                } else if data.battery_percentage < 30.0 {
+                    "battery-low-symbolic"
+                } else if data.battery_percentage < 60.0 {
+                    "battery-good-symbolic"
+                } else {
+                    "battery-full-symbolic"
+                }
             };
             icon.set_icon_name(Some(icon_name));
         }

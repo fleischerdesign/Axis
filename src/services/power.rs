@@ -1,4 +1,5 @@
 use zbus::{Connection, proxy};
+use async_channel::{Sender, Receiver, bounded};
 use std::thread;
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -25,8 +26,9 @@ trait UPowerDevice {
 pub struct PowerService;
 
 impl PowerService {
-    pub fn spawn() -> tokio::sync::watch::Receiver<PowerData> {
-        let (data_tx, data_rx) = tokio::sync::watch::channel(PowerData::default());
+    pub fn spawn() -> (Receiver<PowerData>, Sender<PowerData>) {
+        let (data_tx, data_rx) = bounded(100);
+        let data_tx_return = data_tx.clone();
 
         thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().unwrap();
@@ -45,20 +47,13 @@ impl PowerService {
                         has_battery: is_present && percentage > 0.0,
                     };
 
-                    data_tx.send_if_modified(|current| {
-                        if *current != new_data {
-                            *current = new_data;
-                            true
-                        } else {
-                            false
-                        }
-                    });
+                    let _ = data_tx.send(new_data).await;
 
                     tokio::time::sleep(std::time::Duration::from_secs(10)).await;
                 }
             });
         });
 
-        data_rx
+        (data_rx, data_tx_return)
     }
 }

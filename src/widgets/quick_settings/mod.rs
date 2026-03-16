@@ -1,19 +1,19 @@
-mod main_page;
-mod wifi_page;
 mod bluetooth_page;
 pub mod components;
+mod main_page;
+mod wifi_page;
 
+use crate::app_context::AppContext;
+use bluetooth_page::BluetoothPage;
 use main_page::MainPage;
 use wifi_page::WifiPage;
-use bluetooth_page::BluetoothPage;
-use crate::app_context::AppContext;
 
-use gtk4::prelude::*;
-use gtk4_layer_shell::{Layer, Edge, KeyboardMode, LayerShell};
-use crate::services::network::NetworkCmd;
 use crate::services::bluetooth::BluetoothCmd;
-use std::rc::Rc;
+use crate::services::network::NetworkCmd;
+use gtk4::prelude::*;
+use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 use std::cell::RefCell;
+use std::rc::Rc;
 
 pub struct QuickSettingsPopup {
     pub window: gtk4::Window,
@@ -55,38 +55,50 @@ impl QuickSettingsPopup {
         let tx_wifi = ctx.network_tx.clone();
         let open_wifi = move || {
             stack_wifi.set_visible_child_name("wifi");
-            let _ = tx_wifi.unbounded_send(NetworkCmd::ScanWifi);
+            let _ = tx_wifi.send_blocking(NetworkCmd::ScanWifi);
         };
 
         let stack_bt = qs_stack.clone();
         let tx_bt = ctx.bluetooth_tx.clone();
         let open_bt = move || {
             stack_bt.set_visible_child_name("bluetooth");
-            let _ = tx_bt.unbounded_send(BluetoothCmd::Scan);
+            let _ = tx_bt.send_blocking(BluetoothCmd::Scan);
         };
 
         let main_page = MainPage::new(ctx.clone(), vol_icon_bar.clone(), open_wifi, open_bt);
-        
+
         let stack_back = qs_stack.clone();
         let win_back = window.clone();
-        let wifi_page = WifiPage::new(ctx.clone(), move || {
-            stack_back.set_visible_child_name("main");
-            win_back.set_default_size(1, 1);
-        }, main_page.wifi_tile.clone(), main_page.eth_tile.clone());
+        let wifi_page = WifiPage::new(
+            ctx.clone(),
+            move || {
+                stack_back.set_visible_child_name("main");
+                win_back.set_default_size(1, 1);
+            },
+            main_page.wifi_tile.clone(),
+            main_page.eth_tile.clone(),
+        );
 
         let stack_back_bt = qs_stack.clone();
         let win_back_bt = window.clone();
-        let bluetooth_page = BluetoothPage::new(ctx.clone(), move || {
-            stack_back_bt.set_visible_child_name("main");
-            win_back_bt.set_default_size(1, 1);
-        }, main_page.bt_tile.clone());
+        let bluetooth_page = BluetoothPage::new(
+            ctx.clone(),
+            move || {
+                stack_back_bt.set_visible_child_name("main");
+                win_back_bt.set_default_size(1, 1);
+            },
+            main_page.bt_tile.clone(),
+        );
 
         qs_stack.add_named(&main_page.container, Some("main"));
         qs_stack.add_named(&wifi_page.container, Some("wifi"));
         qs_stack.add_named(&bluetooth_page.container, Some("bluetooth"));
 
         qs_container.append(&qs_stack);
-        let qs_revealer = gtk4::Revealer::builder().transition_type(gtk4::RevealerTransitionType::Crossfade).transition_duration(250).build();
+        let qs_revealer = gtk4::Revealer::builder()
+            .transition_type(gtk4::RevealerTransitionType::Crossfade)
+            .transition_duration(250)
+            .build();
         qs_revealer.set_child(Some(&qs_container));
         window.set_child(Some(&qs_revealer));
 
@@ -96,7 +108,11 @@ impl QuickSettingsPopup {
     pub fn toggle(&self) {
         let mut open = self.is_open.borrow_mut();
         *open = !*open;
-        let revealer = self.window.child().and_then(|c| c.downcast::<gtk4::Revealer>().ok()).unwrap();
+        let revealer = self
+            .window
+            .child()
+            .and_then(|c| c.downcast::<gtk4::Revealer>().ok())
+            .unwrap();
         if *open {
             self.window.set_visible(true);
             revealer.set_reveal_child(true);

@@ -1,26 +1,25 @@
-use tokio::sync::watch;
-use futures_channel::mpsc;
-use chrono::{Local, DateTime};
+use async_channel::{Receiver, Sender};
+use chrono::{DateTime, Local};
 
-use crate::services::network::{NetworkData, NetworkCmd};
-use crate::services::bluetooth::{BluetoothData, BluetoothCmd};
-use crate::services::audio::{AudioData, AudioCmd};
-use crate::services::power::PowerData;
+use crate::services::audio::{AudioCmd, AudioData};
+use crate::services::bluetooth::{BluetoothCmd, BluetoothData};
+use crate::services::network::{NetworkCmd, NetworkData};
 use crate::services::niri::NiriData;
+use crate::services::power::PowerData;
 
 #[derive(Clone)]
 pub struct AppContext {
-    pub network_rx: watch::Receiver<NetworkData>,
-    pub network_tx: mpsc::UnboundedSender<NetworkCmd>,
+    pub network_rx: Receiver<NetworkData>,
+    pub network_tx: Sender<NetworkCmd>,
 
-    pub bluetooth_rx: watch::Receiver<BluetoothData>,
-    pub bluetooth_tx: mpsc::UnboundedSender<BluetoothCmd>,
+    pub bluetooth_rx: Receiver<BluetoothData>,
+    pub bluetooth_tx: Sender<BluetoothCmd>,
 
-    pub audio_rx: watch::Receiver<AudioData>,
-    pub audio_tx: mpsc::UnboundedSender<AudioCmd>,
+    pub audio_rx: Receiver<AudioData>,
+    pub audio_tx: Sender<AudioCmd>,
 
-    pub power_rx: watch::Receiver<PowerData>,
+    pub power_rx: Receiver<PowerData>,
 
-    pub niri_rx: watch::Receiver<NiriData>,
-    pub clock_rx: watch::Receiver<DateTime<Local>>,
+    pub niri_rx: Receiver<NiriData>,
+    pub clock_rx: Receiver<DateTime<Local>>,
 }

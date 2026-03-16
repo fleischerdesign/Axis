@@ -1,6 +1,6 @@
 use futures_util::StreamExt;
 use zbus::{proxy, Connection, zvariant::{OwnedObjectPath, OwnedValue, Type}};
-use futures_channel::mpsc;
+use async_channel::{Sender, Receiver, bounded};
 use std::collections::HashMap;
 
 #[proxy(
@@ -79,9 +79,9 @@ pub enum BluetoothCmd {
 pub struct BluetoothService;
 
 impl BluetoothService {
-    pub fn spawn() -> (tokio::sync::watch::Receiver<BluetoothData>, mpsc::UnboundedSender<BluetoothCmd>) {
-        let (data_tx, data_rx) = tokio::sync::watch::channel(BluetoothData::default());
-        let (cmd_tx, mut cmd_rx) = mpsc::unbounded::<BluetoothCmd>();
+    pub fn spawn() -> (Receiver<BluetoothData>, Sender<BluetoothCmd>) {
+        let (data_tx, data_rx) = bounded(100);
+        let (cmd_tx, cmd_rx) = bounded(100);
 
         tokio::spawn(async move {
             let connection = Connection::system().await.unwrap();
@@ -92,6 +92,8 @@ impl BluetoothService {
             let mut interfaces_added = obj_manager.receive_interfaces_added().await.unwrap();
             let mut interfaces_removed = obj_manager.receive_interfaces_removed().await.unwrap();
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(10));
+
+            let mut cmd_rx = Box::pin(cmd_rx);
 
             // Initial fetch
             Self::push_update(&adapter_proxy, &obj_manager, &connection, &data_tx).await;
@@ -138,16 +140,9 @@ impl BluetoothService {
         (data_rx, cmd_tx)
     }
 
-    async fn push_update(adapter: &BluetoothAdapterProxy<'_>, obj_manager: &ObjectManagerProxy<'_>, conn: &Connection, tx: &tokio::sync::watch::Sender<BluetoothData>) {
+    async fn push_update(adapter: &BluetoothAdapterProxy<'_>, obj_manager: &ObjectManagerProxy<'_>, conn: &Connection, tx: &Sender<BluetoothData>) {
         let new_data = Self::get_current_data(adapter, obj_manager, conn).await;
-        tx.send_if_modified(|current| {
-            if *current != new_data {
-                *current = new_data;
-                true
-            } else {
-                false
-            }
-        });
+        let _ = tx.send(new_data).await;
     }
 
     async fn get_current_data(adapter: &BluetoothAdapterProxy<'_>, obj_manager: &ObjectManagerProxy<'_>, conn: &Connection) -> BluetoothData {

@@ -40,9 +40,9 @@ fn build_ui(app: &libadwaita::Application) {
     let (network_rx, network_tx) = NetworkService::spawn();
     let (bluetooth_rx, bluetooth_tx) = BluetoothService::spawn();
     let (audio_rx, audio_tx) = AudioService::spawn();
-    let power_rx = PowerService::spawn();
-    let niri_rx = NiriService::spawn();
-    let clock_rx = ClockService::spawn();
+    let (power_rx, _) = PowerService::spawn();
+    let (niri_rx, _) = NiriService::spawn();
+    let (clock_rx, _) = ClockService::spawn();
 
     let ctx = AppContext {
         network_rx,

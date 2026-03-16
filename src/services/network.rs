@@ -1,6 +1,6 @@
 use futures_util::StreamExt;
 use zbus::{proxy, Connection, zvariant::OwnedObjectPath};
-use futures_channel::mpsc;
+use async_channel::{Sender, Receiver, bounded};
 use std::time::Duration;
 use std::collections::HashMap;
 
@@ -106,9 +106,9 @@ pub struct NetworkData {
 pub struct NetworkService;
 
 impl NetworkService {
-    pub fn spawn() -> (tokio::sync::watch::Receiver<NetworkData>, mpsc::UnboundedSender<NetworkCmd>) {
-        let (data_tx, data_rx) = tokio::sync::watch::channel(NetworkData::default());
-        let (cmd_tx, mut cmd_rx) = mpsc::unbounded::<NetworkCmd>();
+    pub fn spawn() -> (Receiver<NetworkData>, Sender<NetworkCmd>) {
+        let (data_tx, data_rx) = bounded(100);
+        let (cmd_tx, cmd_rx) = bounded(100);
 
         tokio::spawn(async move {
             let connection = Connection::system().await.unwrap();
@@ -129,6 +129,8 @@ impl NetworkService {
             let mut wifi_changed = proxy.receive_wireless_enabled_changed().await;
             let mut net_enabled_changed = proxy.receive_networking_enabled_changed().await;
             let mut interval = tokio::time::interval(Duration::from_secs(10));
+
+            let mut cmd_rx = Box::pin(cmd_rx);
 
             // Initial fetch
             Self::push_update(&proxy, &connection, wifi_device_path.as_ref(), &data_tx).await;
@@ -198,16 +200,9 @@ impl NetworkService {
         (data_rx, cmd_tx)
     }
 
-    async fn push_update(proxy: &NetworkManagerProxy<'_>, conn: &Connection, wifi_path: Option<&OwnedObjectPath>, tx: &tokio::sync::watch::Sender<NetworkData>) {
+    async fn push_update(proxy: &NetworkManagerProxy<'_>, conn: &Connection, wifi_path: Option<&OwnedObjectPath>, tx: &Sender<NetworkData>) {
         let new_data = Self::get_current_data(proxy, conn, wifi_path).await;
-        tx.send_if_modified(|current| {
-            if *current != new_data {
-                *current = new_data;
-                true
-            } else {
-                false
-            }
-        });
+        let _ = tx.send(new_data).await;
     }
 
     async fn get_current_data(proxy: &NetworkManagerProxy<'_>, conn: &Connection, wifi_path: Option<&OwnedObjectPath>) -> NetworkData {

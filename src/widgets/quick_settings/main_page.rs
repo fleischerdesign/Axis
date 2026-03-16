@@ -1,12 +1,12 @@
-use gtk4::prelude::*;
-use crate::services::network::NetworkCmd;
-use crate::services::bluetooth::BluetoothCmd;
-use crate::services::audio::{AudioCmd, AudioData};
-use crate::services::power::PowerData;
 use crate::app_context::AppContext;
+use crate::services::audio::AudioCmd;
+use crate::services::bluetooth::BluetoothCmd;
+use crate::services::network::NetworkCmd;
 use crate::widgets::quick_settings::components::QsTile;
-use std::rc::Rc;
+use gtk4::glib::clone;
+use gtk4::prelude::*;
 use std::cell::RefCell;
+use std::rc::Rc;
 
 pub struct MainPage {
     pub container: gtk4::Box,
@@ -28,7 +28,11 @@ impl MainPage {
         grid.set_row_spacing(12);
         grid.set_column_homogeneous(true);
 
-        let wifi_tile = Rc::new(QsTile::new("Wi-Fi", "network-wireless-signal-excellent-symbolic", true));
+        let wifi_tile = Rc::new(QsTile::new(
+            "Wi-Fi",
+            "network-wireless-signal-excellent-symbolic",
+            true,
+        ));
         let eth_tile = Rc::new(QsTile::new("Ethernet", "network-wired-symbolic", false));
         let bt_tile = Rc::new(QsTile::new("Bluetooth", "bluetooth-active-symbolic", true));
         let night_tile = QsTile::new("Night Light", "night-light-symbolic", false);
@@ -62,7 +66,10 @@ impl MainPage {
         let battery_label = gtk4::Label::new(Some("...%"));
         battery_content.append(&battery_icon);
         battery_content.append(&battery_label);
-        let battery_btn = gtk4::Button::builder().child(&battery_content).css_classes(vec!["qs-battery-btn".to_string()]).build();
+        let battery_btn = gtk4::Button::builder()
+            .child(&battery_content)
+            .css_classes(vec!["qs-battery-btn".to_string()])
+            .build();
 
         let power_btn = Self::create_bottom_btn("system-shutdown-symbolic");
         let lock_btn = Self::create_bottom_btn("system-lock-screen-symbolic");
@@ -85,43 +92,73 @@ impl MainPage {
         // --- BUTTON ACTIONS ---
         let ctx_wifi = ctx.clone();
         wifi_tile.main_btn.connect_clicked(move |_| {
-            let current = ctx_wifi.network_rx.borrow().is_wifi_enabled;
-            let _ = ctx_wifi.network_tx.unbounded_send(NetworkCmd::ToggleWifi(!current));
+            let current = ctx_wifi
+                .network_rx
+                .try_recv()
+                .unwrap_or_default()
+                .is_wifi_enabled;
+            let _ = ctx_wifi
+                .network_tx
+                .send_blocking(NetworkCmd::ToggleWifi(!current));
         });
-        wifi_tile.arrow_btn.as_ref().unwrap().connect_clicked(move |_| { open_wifi(); });
-        
+        wifi_tile
+            .arrow_btn
+            .as_ref()
+            .unwrap()
+            .connect_clicked(move |_| {
+                open_wifi();
+            });
+
         let ctx_bt_click = ctx.clone();
         bt_tile.main_btn.connect_clicked(move |_| {
-            let current = ctx_bt_click.bluetooth_rx.borrow().is_powered;
-            let _ = ctx_bt_click.bluetooth_tx.unbounded_send(BluetoothCmd::TogglePower(!current));
+            let current = ctx_bt_click
+                .bluetooth_rx
+                .try_recv()
+                .unwrap_or_default()
+                .is_powered;
+            let _ = ctx_bt_click
+                .bluetooth_tx
+                .send_blocking(BluetoothCmd::TogglePower(!current));
         });
-        bt_tile.arrow_btn.as_ref().unwrap().connect_clicked(move |_| { open_bt(); });
+        bt_tile
+            .arrow_btn
+            .as_ref()
+            .unwrap()
+            .connect_clicked(move |_| {
+                open_bt();
+            });
 
         // --- EVENT LOOPS ---
 
         // Network Loop (Tile State)
         let wifi_tile_c = wifi_tile.clone();
         let eth_tile_c = eth_tile.clone();
-        let mut network_rx = ctx.network_rx.clone();
-        gtk4::glib::MainContext::default().spawn_local(async move {
-            wifi_tile_c.set_active(network_rx.borrow().is_wifi_enabled);
-            eth_tile_c.set_active(network_rx.borrow().is_ethernet_connected);
-            while network_rx.changed().await.is_ok() {
-                let data = network_rx.borrow();
-                wifi_tile_c.set_active(data.is_wifi_enabled);
-                eth_tile_c.set_active(data.is_ethernet_connected);
+        let network_rx = ctx.network_rx.clone();
+        gtk4::glib::spawn_future_local(clone!(
+            #[strong]
+            wifi_tile_c,
+            #[strong]
+            eth_tile_c,
+            async move {
+                while let Ok(data) = network_rx.recv().await {
+                    wifi_tile_c.set_active(data.is_wifi_enabled);
+                    eth_tile_c.set_active(data.is_ethernet_connected);
+                }
             }
-        });
+        ));
 
         // Bluetooth Loop (Tile State)
         let bt_tile_c = bt_tile.clone();
-        let mut bluetooth_rx = ctx.bluetooth_rx.clone();
-        gtk4::glib::MainContext::default().spawn_local(async move {
-            bt_tile_c.set_active(bluetooth_rx.borrow().is_powered);
-            while bluetooth_rx.changed().await.is_ok() {
-                bt_tile_c.set_active(bluetooth_rx.borrow().is_powered);
+        let bluetooth_rx = ctx.bluetooth_rx.clone();
+        gtk4::glib::spawn_future_local(clone!(
+            #[strong]
+            bt_tile_c,
+            async move {
+                while let Ok(data) = bluetooth_rx.recv().await {
+                    bt_tile_c.set_active(data.is_powered);
+                }
             }
-        });
+        ));
 
         // Audio Loop
         let vol_slider_c = vol_slider.clone();
@@ -133,98 +170,73 @@ impl MainPage {
         let last_sent_c = last_sent.clone();
         let last_time = Rc::new(RefCell::new(std::time::Instant::now()));
         let last_time_c = last_time.clone();
-        let mut audio_rx = ctx.audio_rx.clone();
+        let audio_rx = ctx.audio_rx.clone();
 
-        gtk4::glib::MainContext::default().spawn_local(async move {
-            let mut is_first = true;
-            Self::update_audio_ui(&audio_rx.borrow(), &vol_slider_c, &vol_icon_c, &vol_icon_bar_c, &is_updating_c, &last_sent_c, &last_time_c, &mut is_first);
+        gtk4::glib::spawn_future_local(clone!(
+            #[strong]
+            vol_slider_c,
+            #[strong]
+            vol_icon_c,
+            #[strong]
+            vol_icon_bar_c,
+            #[strong]
+            is_updating_c,
+            #[strong]
+            last_sent_c,
+            #[strong]
+            last_time_c,
+            async move {
+                while let Ok(data) = audio_rx.recv().await {
+                    let current = vol_slider_c.value();
+                    let diff = (current - data.volume).abs();
+                    let last = *last_sent_c.borrow();
+                    let time = last_time_c.borrow().elapsed();
+                    let is_grace = time < std::time::Duration::from_millis(600);
 
-            while audio_rx.changed().await.is_ok() {
-                Self::update_audio_ui(&audio_rx.borrow(), &vol_slider_c, &vol_icon_c, &vol_icon_bar_c, &is_updating_c, &last_sent_c, &last_time_c, &mut is_first);
+                    if (!is_grace && diff > 0.01) || (is_grace && (data.volume - last).abs() < 0.05) {
+                        *is_updating_c.borrow_mut() = true;
+                        vol_slider_c.set_value(data.volume);
+                        *is_updating_c.borrow_mut() = false;
+
+                        let icon_name = if data.is_muted || data.volume <= 0.01 { "audio-volume-muted-symbolic" }
+                        else if data.volume < 0.33 { "audio-volume-low-symbolic" }
+                        else if data.volume < 0.66 { "audio-volume-medium-symbolic" }
+                        else { "audio-volume-high-symbolic" };
+                        vol_icon_c.set_icon_name(Some(icon_name));
+                        vol_icon_bar_c.set_icon_name(Some(icon_name));
+                    }
+                }
             }
-        });
+        ));
 
         let ctx_audio = ctx.clone();
         let is_updating_tx = is_updating.clone();
         let last_sent_tx = last_sent.clone();
         let last_time_tx = last_time.clone();
         vol_slider.connect_value_changed(move |s| {
-            if *is_updating_tx.borrow() { return; }
+            if *is_updating_tx.borrow() {
+                return;
+            }
             *last_time_tx.borrow_mut() = std::time::Instant::now();
             let val = s.value();
             *last_sent_tx.borrow_mut() = val;
-            let _ = ctx_audio.audio_tx.unbounded_send(AudioCmd::SetVolume(val));
-        });
-
-        // Power Loop
-        let battery_btn_c = battery_btn.clone();
-        let battery_icon_c = battery_icon.clone();
-        let battery_label_c = battery_label.clone();
-        let mut power_rx = ctx.power_rx.clone();
-
-        gtk4::glib::MainContext::default().spawn_local(async move {
-            Self::update_power_ui(&power_rx.borrow(), &battery_btn_c, &battery_icon_c, &battery_label_c);
-            while power_rx.changed().await.is_ok() {
-                Self::update_power_ui(&power_rx.borrow(), &battery_btn_c, &battery_icon_c, &battery_label_c);
-            }
+            let _ = ctx_audio.audio_tx.send_blocking(AudioCmd::SetVolume(val));
         });
 
         Self {
             container,
-            wifi_tile, eth_tile, bt_tile
-        }
-    }
-
-    fn update_audio_ui(
-        data: &crate::services::audio::AudioData,
-        slider: &gtk4::Scale,
-        icon: &gtk4::Image,
-        icon_bar: &gtk4::Image,
-        is_updating: &Rc<RefCell<bool>>,
-        last_sent: &Rc<RefCell<f64>>,
-        last_time: &Rc<RefCell<std::time::Instant>>,
-        is_first: &mut bool,
-    ) {
-        let current = slider.value();
-        let diff = (current - data.volume).abs();
-        let last = *last_sent.borrow();
-        let time = last_time.borrow().elapsed();
-        let is_grace = time < std::time::Duration::from_millis(600);
-
-        if *is_first || (!is_grace && diff > 0.01) || (is_grace && (data.volume - last).abs() < 0.05) {
-            *is_updating.borrow_mut() = true;
-            slider.set_value(data.volume);
-            *is_updating.borrow_mut() = false;
-            *is_first = false;
-
-            let icon_name = if data.is_muted || data.volume <= 0.01 { "audio-volume-muted-symbolic" }
-            else if data.volume < 0.33 { "audio-volume-low-symbolic" }
-            else if data.volume < 0.66 { "audio-volume-medium-symbolic" }
-            else { "audio-volume-high-symbolic" };
-            icon.set_icon_name(Some(icon_name));
-            icon_bar.set_icon_name(Some(icon_name));
-        }
-    }
-
-    fn update_power_ui(
-        data: &crate::services::power::PowerData,
-        btn: &gtk4::Button,
-        icon: &gtk4::Image,
-        label: &gtk4::Label,
-    ) {
-        btn.set_visible(data.has_battery);
-        if data.has_battery {
-            label.set_label(&format!("{}%", data.battery_percentage.round()));
-            let icon_name = if data.is_charging { "battery-full-charging-symbolic" }
-            else if data.battery_percentage < 10.0 { "battery-empty-symbolic" }
-            else if data.battery_percentage < 30.0 { "battery-low-symbolic" }
-            else if data.battery_percentage < 60.0 { "battery-good-symbolic" }
-            else { "battery-full-symbolic" };
-            icon.set_icon_name(Some(icon_name));
+            wifi_tile,
+            eth_tile,
+            bt_tile,
         }
     }
 
     fn create_bottom_btn(icon: &str) -> gtk4::Button {
-        gtk4::Button::builder().icon_name(icon).css_classes(vec!["qs-bottom-btn".to_string()]).halign(gtk4::Align::Center).valign(gtk4::Align::Center).build()
+        gtk4::Button::builder()
+            .icon_name(icon)
+            .css_classes(vec!["qs-bottom-btn".to_string()])
+            .halign(gtk4::Align::Center)
+            .valign(gtk4::Align::Center)
+            .build()
     }
 }

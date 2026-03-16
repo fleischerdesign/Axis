@@ -218,6 +218,7 @@ dependencies = [
 name = "carp"
 version = "0.1.0"
 dependencies = [
+ "async-channel",
  "chrono",
  "futures-channel",
  "futures-executor",
