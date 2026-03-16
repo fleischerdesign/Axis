@@ -3,6 +3,7 @@ use crate::services::audio::AudioCmd;
 use crate::services::backlight::BacklightCmd;
 use crate::services::bluetooth::BluetoothCmd;
 use crate::services::network::NetworkCmd;
+use crate::services::nightlight::NightlightCmd;
 use crate::services::power::PowerData;
 use crate::widgets::quick_settings::components::QsTile;
 use gtk4::prelude::*;
@@ -37,7 +38,7 @@ impl MainPage {
         ));
         let eth_tile = Rc::new(QsTile::new("Ethernet", "network-wired-symbolic", false));
         let bt_tile = Rc::new(QsTile::new("Bluetooth", "bluetooth-active-symbolic", true));
-        let night_tile = QsTile::new("Night Light", "night-light-symbolic", false);
+        let night_tile = Rc::new(QsTile::new("Night Light", "night-light-symbolic", false));
         let airplane_tile = QsTile::new("Airplane", "airplane-mode-symbolic", false);
 
         grid.attach(&wifi_tile.container, 0, 0, 1, 1);
@@ -155,6 +156,16 @@ impl MainPage {
                 open_bt();
             });
 
+        // Night Light toggle
+        let ctx_nl = ctx.clone();
+        let night_store = ctx.nightlight.clone();
+        night_tile.main_btn.connect_clicked(move |_| {
+            let current = night_store.get().enabled;
+            let _ = ctx_nl
+                .nightlight_tx
+                .send_blocking(NightlightCmd::Toggle(!current));
+        });
+
         // --- REAKTIVE BINDINGS ---
 
         // Network → Tile-States
@@ -169,6 +180,13 @@ impl MainPage {
         let bt_tile_c = bt_tile.clone();
         ctx.bluetooth.subscribe(move |data| {
             bt_tile_c.set_active(data.is_powered);
+        });
+
+        // Nightlight → Tile-State
+        let night_tile_c = night_tile.clone();
+        ctx.nightlight.subscribe(move |data| {
+            night_tile_c.set_active(data.enabled);
+            night_tile_c.set_sensitive(data.available);
         });
 
         // Audio → Slider + Icon (mit Debounce gegen eigene Slider-Änderungen)

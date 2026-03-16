@@ -9,6 +9,7 @@ use crate::services::audio::AudioService;
 use crate::services::backlight::BacklightService;
 use crate::services::bluetooth::BluetoothService;
 use crate::services::clock::ClockService;
+use crate::services::nightlight::NightlightService;
 use crate::services::network::NetworkService;
 use crate::services::niri::NiriService;
 use crate::services::power::PowerService;
@@ -47,6 +48,8 @@ fn build_ui(app: &libadwaita::Application) {
     let (audio_rx, audio_tx) = AudioService::spawn();
     let (backlight_rx, backlight_tx) = BacklightService::spawn();
     let backlight_initial = BacklightService::read_initial();
+    let (nightlight_rx, nightlight_tx) = NightlightService::spawn();
+    let nightlight_initial = NightlightService::read_initial();
     let power_rx = PowerService::spawn();
     let niri_rx = NiriService::spawn();
     let clock_rx = ClockService::spawn();
@@ -67,6 +70,9 @@ fn build_ui(app: &libadwaita::Application) {
 
         backlight: ServiceStore::new(backlight_rx, backlight_initial),
         backlight_tx,
+
+        nightlight: ServiceStore::new(nightlight_rx, nightlight_initial),
+        nightlight_tx,
 
         power: ServiceStore::new(power_rx, Default::default()),
 

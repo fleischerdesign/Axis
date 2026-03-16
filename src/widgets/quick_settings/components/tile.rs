@@ -66,4 +66,11 @@ impl QsTile {
     pub fn set_icon(&self, icon: &str) {
         self.icon_img.set_icon_name(Some(icon));
     }
+
+    pub fn set_sensitive(&self, sensitive: bool) {
+        self.main_btn.set_sensitive(sensitive);
+        if let Some(arrow) = &self.arrow_btn {
+            arrow.set_sensitive(sensitive);
+        }
+    }
 }

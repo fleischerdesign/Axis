@@ -5,6 +5,7 @@ use crate::services::audio::{AudioCmd, AudioData};
 use crate::services::backlight::{BacklightCmd, BacklightData};
 use crate::services::bluetooth::{BluetoothCmd, BluetoothData};
 use crate::services::network::{NetworkCmd, NetworkData};
+use crate::services::nightlight::{NightlightCmd, NightlightData};
 use crate::services::niri::NiriData;
 use crate::services::power::PowerData;
 use crate::store::ServiceStore;
@@ -27,6 +28,9 @@ pub struct AppContext {
 
     pub backlight: ServiceStore<BacklightData>,
     pub backlight_tx: Sender<BacklightCmd>,
+
+    pub nightlight: ServiceStore<NightlightData>,
+    pub nightlight_tx: Sender<NightlightCmd>,
 
     pub power: ServiceStore<PowerData>,
 

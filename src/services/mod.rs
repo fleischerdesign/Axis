@@ -5,3 +5,4 @@ pub mod bluetooth;
 pub mod power;
 pub mod clock;
 pub mod backlight;
+pub mod nightlight;
