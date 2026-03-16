@@ -2,6 +2,7 @@ use async_channel::Sender;
 use chrono::{DateTime, Local};
 
 use crate::services::audio::{AudioCmd, AudioData};
+use crate::services::backlight::{BacklightCmd, BacklightData};
 use crate::services::bluetooth::{BluetoothCmd, BluetoothData};
 use crate::services::network::{NetworkCmd, NetworkData};
 use crate::services::niri::NiriData;
@@ -23,6 +24,9 @@ pub struct AppContext {
 
     pub audio: ServiceStore<AudioData>,
     pub audio_tx: Sender<AudioCmd>,
+
+    pub backlight: ServiceStore<BacklightData>,
+    pub backlight_tx: Sender<BacklightCmd>,
 
     pub power: ServiceStore<PowerData>,
 

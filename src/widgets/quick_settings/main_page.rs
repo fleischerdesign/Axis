@@ -1,5 +1,6 @@
 use crate::app_context::AppContext;
 use crate::services::audio::AudioCmd;
+use crate::services::backlight::BacklightCmd;
 use crate::services::bluetooth::BluetoothCmd;
 use crate::services::network::NetworkCmd;
 use crate::services::power::PowerData;
@@ -63,6 +64,28 @@ impl MainPage {
         slider_overlay.set_child(Some(&vol_slider));
         slider_overlay.add_overlay(&vol_icon);
 
+        // --- BRIGHTNESS SLIDER ---
+        let brightness_overlay = gtk4::Overlay::new();
+        brightness_overlay.add_css_class("volume-slider");
+        brightness_overlay.set_hexpand(true);
+
+        let brightness_slider =
+            gtk4::Scale::with_range(gtk4::Orientation::Horizontal, 0.0, 100.0, 1.0);
+        brightness_slider.set_hexpand(true);
+
+        let brightness_icon = gtk4::Image::from_icon_name("display-brightness-symbolic");
+        brightness_icon.set_pixel_size(22);
+        brightness_icon.set_margin_start(22);
+        brightness_icon.set_halign(gtk4::Align::Start);
+        brightness_icon.set_valign(gtk4::Align::Center);
+        brightness_icon.set_can_target(false);
+
+        brightness_overlay.set_child(Some(&brightness_slider));
+        brightness_overlay.add_overlay(&brightness_icon);
+
+        // Hide brightness initially until we know if there's a backlight
+        brightness_overlay.set_visible(false);
+
         // --- BOTTOM ROW ---
         let bottom_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
 
@@ -93,6 +116,7 @@ impl MainPage {
 
         container.append(&grid);
         container.append(&slider_overlay);
+        container.append(&brightness_overlay);
         container.append(&bottom_row);
 
         // --- BUTTON ACTIONS ---
@@ -202,6 +226,59 @@ impl MainPage {
             let val = s.value();
             *last_sent.borrow_mut() = val;
             let _ = ctx_audio.audio_tx.send_blocking(AudioCmd::SetVolume(val));
+        });
+
+        // --- BRIGHTNESS SLIDER REACTIVE ---
+        let brightness_slider_c = brightness_slider.clone();
+        let brightness_overlay_c = brightness_overlay.clone();
+        let brightness_is_updating = Rc::new(std::cell::RefCell::new(false));
+        let brightness_last_sent = Rc::new(std::cell::RefCell::new(0.0));
+        let brightness_last_time = Rc::new(std::cell::RefCell::new(std::time::Instant::now()));
+        let brightness_first_update = Rc::new(std::cell::RefCell::new(true));
+
+        let brightness_is_updating_rx = brightness_is_updating.clone();
+        let brightness_last_sent_rx = brightness_last_sent.clone();
+        let brightness_last_time_rx = brightness_last_time.clone();
+        let brightness_first_update_rx = brightness_first_update.clone();
+
+        ctx.backlight.subscribe(move |data| {
+            if !data.initialized {
+                return;
+            }
+
+            brightness_overlay_c.set_visible(data.has_backlight);
+
+            let current = brightness_slider_c.value();
+            let diff = (current - data.percentage).abs();
+            let last = *brightness_last_sent_rx.borrow();
+            let elapsed = brightness_last_time_rx.borrow().elapsed();
+            let in_grace = elapsed < std::time::Duration::from_millis(600);
+            let is_first = *brightness_first_update_rx.borrow();
+
+            // Always apply first real update
+            if is_first
+                || (!in_grace && diff > 1.0)
+                || (in_grace && (data.percentage - last).abs() < 5.0)
+            {
+                *brightness_first_update_rx.borrow_mut() = false;
+                *brightness_is_updating_rx.borrow_mut() = true;
+                brightness_slider_c.set_value(data.percentage);
+                *brightness_is_updating_rx.borrow_mut() = false;
+            }
+        });
+
+        // Brightness Slider → BacklightCmd
+        let ctx_backlight = ctx.clone();
+        brightness_slider.connect_value_changed(move |s| {
+            if *brightness_is_updating.borrow() {
+                return;
+            }
+            *brightness_last_time.borrow_mut() = std::time::Instant::now();
+            let val = s.value();
+            *brightness_last_sent.borrow_mut() = val;
+            let _ = ctx_backlight
+                .backlight_tx
+                .send_blocking(BacklightCmd::SetBrightness(val));
         });
 
         Self {

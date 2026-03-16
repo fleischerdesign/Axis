@@ -6,6 +6,7 @@ mod widgets;
 
 use crate::app_context::AppContext;
 use crate::services::audio::AudioService;
+use crate::services::backlight::BacklightService;
 use crate::services::bluetooth::BluetoothService;
 use crate::services::clock::ClockService;
 use crate::services::network::NetworkService;
@@ -44,6 +45,8 @@ fn build_ui(app: &libadwaita::Application) {
     let (network_rx, network_tx) = NetworkService::spawn();
     let (bluetooth_rx, bluetooth_tx) = BluetoothService::spawn();
     let (audio_rx, audio_tx) = AudioService::spawn();
+    let (backlight_rx, backlight_tx) = BacklightService::spawn();
+    let backlight_initial = BacklightService::read_initial();
     let power_rx = PowerService::spawn();
     let niri_rx = NiriService::spawn();
     let clock_rx = ClockService::spawn();
@@ -61,6 +64,9 @@ fn build_ui(app: &libadwaita::Application) {
 
         audio: ServiceStore::new(audio_rx, Default::default()),
         audio_tx,
+
+        backlight: ServiceStore::new(backlight_rx, backlight_initial),
+        backlight_tx,
 
         power: ServiceStore::new(power_rx, Default::default()),
 

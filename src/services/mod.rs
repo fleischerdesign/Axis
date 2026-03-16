@@ -4,3 +4,4 @@ pub mod network;
 pub mod bluetooth;
 pub mod power;
 pub mod clock;
+pub mod backlight;
