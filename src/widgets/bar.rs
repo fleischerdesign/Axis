@@ -49,8 +49,11 @@ impl Bar {
         let status_island = Island::new(12);
         status_island.container.set_cursor_from_name(Some("pointer"));
         
-        let wifi_icon = gtk4::Image::from_icon_name("network-wireless-offline-symbolic");
+        let wifi_icon = gtk4::Image::from_icon_name("network-wireless-symbolic");
         status_island.append(&wifi_icon);
+
+        let bt_icon = gtk4::Image::from_icon_name("bluetooth-symbolic");
+        status_island.append(&bt_icon);
         
         let vol_icon = gtk4::Image::from_icon_name("audio-volume-high-symbolic");
         status_island.append(&vol_icon);
@@ -93,7 +96,17 @@ impl Bar {
             }
         });
 
-        // 4. Power
+        // 4. Bluetooth
+        let bt_icon_c = bt_icon.clone();
+        let mut bluetooth_rx = ctx.bluetooth_rx.clone();
+        gtk4::glib::MainContext::default().spawn_local(async move {
+            Self::update_bluetooth(&bt_icon_c, &bluetooth_rx.borrow());
+            while bluetooth_rx.changed().await.is_ok() {
+                Self::update_bluetooth(&bt_icon_c, &bluetooth_rx.borrow());
+            }
+        });
+
+        // 5. Power
         let battery_icon_c = battery_icon.clone();
         let mut power_rx = ctx.power_rx.clone();
         gtk4::glib::MainContext::default().spawn_local(async move {
@@ -123,15 +136,30 @@ impl Bar {
     }
 
     fn update_wifi(icon: &gtk4::Image, data: &crate::services::network::NetworkData) {
-        let icon_name = if !data.is_wifi_enabled || !data.is_wifi_connected {
-            "network-wireless-offline-symbolic"
-        } else {
-            if data.active_strength > 80 { "network-wireless-signal-excellent-symbolic" }
-            else if data.active_strength > 60 { "network-wireless-signal-good-symbolic" }
-            else if data.active_strength > 40 { "network-wireless-signal-ok-symbolic" }
-            else { "network-wireless-signal-weak-symbolic" }
-        };
-        icon.set_icon_name(Some(icon_name));
+        icon.set_visible(data.is_wifi_enabled);
+        if data.is_wifi_enabled {
+            let icon_name = if !data.is_wifi_connected {
+                "network-wireless-offline-symbolic"
+            } else {
+                if data.active_strength > 80 { "network-wireless-signal-excellent-symbolic" }
+                else if data.active_strength > 60 { "network-wireless-signal-good-symbolic" }
+                else if data.active_strength > 40 { "network-wireless-signal-ok-symbolic" }
+                else { "network-wireless-signal-weak-symbolic" }
+            };
+            icon.set_icon_name(Some(icon_name));
+        }
+    }
+
+    fn update_bluetooth(icon: &gtk4::Image, data: &crate::services::bluetooth::BluetoothData) {
+        icon.set_visible(data.is_powered);
+        if data.is_powered {
+            let any_connected = data.devices.iter().any(|d| d.is_connected);
+            if any_connected {
+                icon.set_icon_name(Some("bluetooth-active-symbolic"));
+            } else {
+                icon.set_icon_name(Some("bluetooth-symbolic"));
+            }
+        }
     }
 
     fn update_battery(icon: &gtk4::Image, data: &crate::services::power::PowerData) {

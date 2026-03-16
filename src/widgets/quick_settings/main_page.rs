@@ -1,7 +1,8 @@
 use gtk4::prelude::*;
 use crate::services::network::NetworkCmd;
 use crate::services::bluetooth::BluetoothCmd;
-use crate::services::audio::AudioCmd;
+use crate::services::audio::{AudioCmd, AudioData};
+use crate::services::power::PowerData;
 use crate::app_context::AppContext;
 use crate::widgets::quick_settings::components::QsTile;
 use std::rc::Rc;
@@ -81,17 +82,45 @@ impl MainPage {
         container.append(&slider_overlay);
         container.append(&bottom_row);
 
-        // Logic
-        let ctx_c = ctx.clone();
+        // --- BUTTON ACTIONS ---
+        let ctx_wifi = ctx.clone();
         wifi_tile.main_btn.connect_clicked(move |_| {
-            let _ = ctx_c.network_tx.unbounded_send(NetworkCmd::ToggleWifi(true));
+            let current = ctx_wifi.network_rx.borrow().is_wifi_enabled;
+            let _ = ctx_wifi.network_tx.unbounded_send(NetworkCmd::ToggleWifi(!current));
         });
         wifi_tile.arrow_btn.as_ref().unwrap().connect_clicked(move |_| { open_wifi(); });
-        bt_tile.arrow_btn.as_ref().unwrap().connect_clicked(move |_| { open_bt(); });
         
-        let ctx_bt = ctx.clone();
+        let ctx_bt_click = ctx.clone();
         bt_tile.main_btn.connect_clicked(move |_| {
-            let _ = ctx_bt.bluetooth_tx.unbounded_send(BluetoothCmd::TogglePower(true));
+            let current = ctx_bt_click.bluetooth_rx.borrow().is_powered;
+            let _ = ctx_bt_click.bluetooth_tx.unbounded_send(BluetoothCmd::TogglePower(!current));
+        });
+        bt_tile.arrow_btn.as_ref().unwrap().connect_clicked(move |_| { open_bt(); });
+
+        // --- EVENT LOOPS ---
+
+        // Network Loop (Tile State)
+        let wifi_tile_c = wifi_tile.clone();
+        let eth_tile_c = eth_tile.clone();
+        let mut network_rx = ctx.network_rx.clone();
+        gtk4::glib::MainContext::default().spawn_local(async move {
+            wifi_tile_c.set_active(network_rx.borrow().is_wifi_enabled);
+            eth_tile_c.set_active(network_rx.borrow().is_ethernet_connected);
+            while network_rx.changed().await.is_ok() {
+                let data = network_rx.borrow();
+                wifi_tile_c.set_active(data.is_wifi_enabled);
+                eth_tile_c.set_active(data.is_ethernet_connected);
+            }
+        });
+
+        // Bluetooth Loop (Tile State)
+        let bt_tile_c = bt_tile.clone();
+        let mut bluetooth_rx = ctx.bluetooth_rx.clone();
+        gtk4::glib::MainContext::default().spawn_local(async move {
+            bt_tile_c.set_active(bluetooth_rx.borrow().is_powered);
+            while bluetooth_rx.changed().await.is_ok() {
+                bt_tile_c.set_active(bluetooth_rx.borrow().is_powered);
+            }
         });
 
         // Audio Loop
