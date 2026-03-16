@@ -88,6 +88,11 @@ impl Bar {
             Self::update_battery(&battery_icon, data);
         });
 
+        let vol_icon_clone = vol_icon.clone();
+        ctx.audio.subscribe(move |data| {
+            Self::update_volume(&vol_icon_clone, data);
+        });
+
         Self {
             window,
             status_island: status_island.container,
@@ -157,5 +162,18 @@ impl Bar {
             };
             icon.set_icon_name(Some(icon_name));
         }
+    }
+
+    fn update_volume(icon: &gtk4::Image, data: &crate::services::audio::AudioData) {
+        let icon_name = if data.is_muted || data.volume <= 0.01 {
+            "audio-volume-muted-symbolic"
+        } else if data.volume < 0.33 {
+            "audio-volume-low-symbolic"
+        } else if data.volume < 0.66 {
+            "audio-volume-medium-symbolic"
+        } else {
+            "audio-volume-high-symbolic"
+        };
+        icon.set_icon_name(Some(icon_name));
     }
 }
