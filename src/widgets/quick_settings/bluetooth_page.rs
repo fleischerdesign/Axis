@@ -34,6 +34,7 @@ impl BluetoothPage {
         let scrolled = gtk4::ScrolledWindow::builder()
             .hscrollbar_policy(gtk4::PolicyType::Never)
             .vscrollbar_policy(gtk4::PolicyType::Automatic)
+            .min_content_height(200)
             .vexpand(true)
             .build();
         scrolled.add_css_class("qs-scrolled");
