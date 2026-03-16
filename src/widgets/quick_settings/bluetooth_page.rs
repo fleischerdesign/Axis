@@ -31,8 +31,16 @@ impl BluetoothPage {
             .selection_mode(gtk4::SelectionMode::None)
             .build();
 
+        let scrolled = gtk4::ScrolledWindow::builder()
+            .hscrollbar_policy(gtk4::PolicyType::Never)
+            .vscrollbar_policy(gtk4::PolicyType::Automatic)
+            .min_content_height(200)
+            .max_content_height(400)
+            .build();
+        scrolled.set_child(Some(&list));
+
         container.append(&header);
-        container.append(&list);
+        container.append(&scrolled);
 
         back_btn.connect_clicked(move |_| back_callback());
 
