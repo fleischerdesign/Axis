@@ -2,7 +2,7 @@ use futures_util::StreamExt;
 use zbus::{proxy, Connection, zvariant::OwnedObjectPath};
 use async_channel::{Sender, Receiver, bounded};
 use std::time::Duration;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[proxy(
     interface = "org.freedesktop.NetworkManager",
@@ -211,7 +211,6 @@ impl NetworkService {
         let primary_type = proxy.primary_connection_type().await.unwrap_or_default();
         
         let mut active_ap_path = "/".to_string();
-        let mut active_ssid = String::new();
         let mut active_strength = 0;
         let mut aps = Vec::new();
 
@@ -219,11 +218,8 @@ impl NetworkService {
             if let Ok(wifi_proxy) = WirelessDeviceProxy::builder(conn).path(path).unwrap().build().await {
                 if let Ok(ap_path) = wifi_proxy.active_access_point().await {
                     active_ap_path = ap_path.to_string();
-                    if let Ok(ap_proxy) = AccessPointProxy::builder(conn).path(ap_path).unwrap().build().await {
-                        if let Ok(ssid_bytes) = ap_proxy.ssid().await {
-                            active_ssid = String::from_utf8_lossy(&ssid_bytes).to_string();
-                        }
-                        if let Ok(s) = ap_proxy.strength().await {
+                    if let Ok(active_ap_proxy) = AccessPointProxy::builder(conn).path(ap_path).unwrap().build().await {
+                        if let Ok(s) = active_ap_proxy.strength().await {
                             active_strength = s;
                         }
                     }
@@ -237,7 +233,7 @@ impl NetworkService {
                                 if !ssid.is_empty() {
                                     let strength = ap_proxy.strength().await.unwrap_or(0);
                                     let flags = ap_proxy.flags().await.unwrap_or(0);
-                                    let is_this_active = ap_path.to_string() == active_ap_path || (!active_ssid.is_empty() && ssid == active_ssid);
+                                    let is_this_active = ap_path.to_string() == active_ap_path;
 
                                     aps.push(AccessPointData { 
                                         ssid, 
@@ -253,8 +249,14 @@ impl NetworkService {
                 }
             }
         }
-        aps.sort_by(|a, b| b.strength.cmp(&a.strength));
-        aps.dedup_by(|a, b| a.ssid == b.ssid);
+        
+        aps.sort_by(|a, b| {
+            b.is_active.cmp(&a.is_active)
+                .then_with(|| b.strength.cmp(&a.strength))
+        });
+
+        let mut seen_ssids = HashSet::new();
+        aps.retain(|ap| seen_ssids.insert(ap.ssid.clone()));
 
         let is_connected = state >= 50 && state <= 70;
 
