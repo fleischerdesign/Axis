@@ -105,6 +105,10 @@ window {
     padding: 6px;
 }
 
+.qs-scrolled {
+    border-radius: 16px;
+}
+
 .qs-list-row {
     background: transparent;
     border: none;

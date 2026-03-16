@@ -35,8 +35,9 @@ impl BluetoothPage {
             .hscrollbar_policy(gtk4::PolicyType::Never)
             .vscrollbar_policy(gtk4::PolicyType::Automatic)
             .min_content_height(200)
-            .max_content_height(400)
+            .max_content_height(500)
             .build();
+        scrolled.add_css_class("qs-scrolled");
         scrolled.set_child(Some(&list));
 
         container.append(&header);
