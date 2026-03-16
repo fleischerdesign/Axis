@@ -1,6 +1,5 @@
 use crate::app_context::AppContext;
 use crate::widgets::Island;
-use gtk4::glib::clone;
 use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, Layer, LayerShell};
 
@@ -55,86 +54,39 @@ impl Bar {
             .set_cursor_from_name(Some("pointer"));
 
         let wifi_icon = gtk4::Image::from_icon_name("network-wireless-symbolic");
-        status_island.append(&wifi_icon);
-
         let bt_icon = gtk4::Image::from_icon_name("bluetooth-symbolic");
-        status_island.append(&bt_icon);
-
         let vol_icon = gtk4::Image::from_icon_name("audio-volume-high-symbolic");
-        status_island.append(&vol_icon);
-
         let battery_icon = gtk4::Image::from_icon_name("battery-full-symbolic");
+
+        status_island.append(&wifi_icon);
+        status_island.append(&bt_icon);
+        status_island.append(&vol_icon);
         status_island.append(&battery_icon);
 
         root.set_end_widget(Some(&status_island.container));
         window.set_child(Some(&root));
 
-        // --- EVENTS ---
+        // --- REAKTIVE BINDINGS ---
 
-        // 1. Clock
-        let clock_label_c = clock_label.clone();
-        let clock_rx = ctx.clock_rx.clone();
-        gtk4::glib::spawn_future_local(clone!(
-            #[strong]
-            clock_label_c,
-            async move {
-                while let Ok(time) = clock_rx.recv().await {
-                    clock_label_c.set_text(&time.format("%H:%M").to_string());
-                }
-            }
-        ));
+        ctx.clock.subscribe(move |time| {
+            clock_label.set_text(&time.format("%H:%M").to_string());
+        });
 
-        // 2. Niri (Workspace Label)
-        let ws_label_c = ws_label.clone();
-        let niri_rx = ctx.niri_rx.clone();
-        gtk4::glib::spawn_future_local(clone!(
-            #[strong]
-            ws_label_c,
-            async move {
-                while let Ok(data) = niri_rx.recv().await {
-                    Self::update_workspaces(&ws_label_c, &data);
-                }
-            }
-        ));
+        ctx.niri.subscribe(move |data| {
+            Self::update_workspaces(&ws_label, data);
+        });
 
-        // 3. Network
-        let wifi_icon_c = wifi_icon.clone();
-        let network_rx = ctx.network_rx.clone();
-        gtk4::glib::spawn_future_local(clone!(
-            #[strong]
-            wifi_icon_c,
-            async move {
-                while let Ok(data) = network_rx.recv().await {
-                    Self::update_wifi(&wifi_icon_c, &data);
-                }
-            }
-        ));
+        ctx.network.subscribe(move |data| {
+            Self::update_wifi(&wifi_icon, data);
+        });
 
-        // 4. Bluetooth
-        let bt_icon_c = bt_icon.clone();
-        let bluetooth_rx = ctx.bluetooth_rx.clone();
-        gtk4::glib::spawn_future_local(clone!(
-            #[strong]
-            bt_icon_c,
-            async move {
-                while let Ok(data) = bluetooth_rx.recv().await {
-                    Self::update_bluetooth(&bt_icon_c, &data);
-                }
-            }
-        ));
+        ctx.bluetooth.subscribe(move |data| {
+            Self::update_bluetooth(&bt_icon, data);
+        });
 
-        // 5. Power
-        let battery_icon_c = battery_icon.clone();
-        let power_rx = ctx.power_rx.clone();
-        gtk4::glib::spawn_future_local(clone!(
-            #[strong]
-            battery_icon_c,
-            async move {
-                while let Ok(data) = power_rx.recv().await {
-                    Self::update_battery(&battery_icon_c, &data);
-                }
-            }
-        ));
+        ctx.power.subscribe(move |data| {
+            Self::update_battery(&battery_icon, data);
+        });
 
         Self {
             window,
@@ -163,16 +115,14 @@ impl Bar {
         if data.is_wifi_enabled {
             let icon_name = if !data.is_wifi_connected {
                 "network-wireless-offline-symbolic"
+            } else if data.active_strength > 80 {
+                "network-wireless-signal-excellent-symbolic"
+            } else if data.active_strength > 60 {
+                "network-wireless-signal-good-symbolic"
+            } else if data.active_strength > 40 {
+                "network-wireless-signal-ok-symbolic"
             } else {
-                if data.active_strength > 80 {
-                    "network-wireless-signal-excellent-symbolic"
-                } else if data.active_strength > 60 {
-                    "network-wireless-signal-good-symbolic"
-                } else if data.active_strength > 40 {
-                    "network-wireless-signal-ok-symbolic"
-                } else {
-                    "network-wireless-signal-weak-symbolic"
-                }
+                "network-wireless-signal-weak-symbolic"
             };
             icon.set_icon_name(Some(icon_name));
         }
@@ -182,11 +132,12 @@ impl Bar {
         icon.set_visible(data.is_powered);
         if data.is_powered {
             let any_connected = data.devices.iter().any(|d| d.is_connected);
-            if any_connected {
-                icon.set_icon_name(Some("bluetooth-active-symbolic"));
+            let icon_name = if any_connected {
+                "bluetooth-active-symbolic"
             } else {
-                icon.set_icon_name(Some("bluetooth-symbolic"));
-            }
+                "bluetooth-symbolic"
+            };
+            icon.set_icon_name(Some(icon_name));
         }
     }
 
@@ -195,16 +146,14 @@ impl Bar {
         if data.has_battery {
             let icon_name = if data.is_charging {
                 "battery-full-charging-symbolic"
+            } else if data.battery_percentage < 10.0 {
+                "battery-empty-symbolic"
+            } else if data.battery_percentage < 30.0 {
+                "battery-low-symbolic"
+            } else if data.battery_percentage < 60.0 {
+                "battery-good-symbolic"
             } else {
-                if data.battery_percentage < 10.0 {
-                    "battery-empty-symbolic"
-                } else if data.battery_percentage < 30.0 {
-                    "battery-low-symbolic"
-                } else if data.battery_percentage < 60.0 {
-                    "battery-good-symbolic"
-                } else {
-                    "battery-full-symbolic"
-                }
+                "battery-full-symbolic"
             };
             icon.set_icon_name(Some(icon_name));
         }

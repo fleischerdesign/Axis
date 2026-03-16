@@ -1,16 +1,19 @@
-mod services;
-mod widgets;
 mod app_context;
+mod services;
+mod store;
+mod widgets;
 
-use gtk4::prelude::*;
-use crate::widgets::{Bar, QuickSettingsPopup, WorkspacePopup};
+
 use crate::app_context::AppContext;
-use crate::services::network::NetworkService;
-use crate::services::bluetooth::BluetoothService;
 use crate::services::audio::AudioService;
-use crate::services::power::PowerService;
-use crate::services::niri::NiriService;
+use crate::services::bluetooth::BluetoothService;
 use crate::services::clock::ClockService;
+use crate::services::network::NetworkService;
+use crate::services::niri::NiriService;
+use crate::services::power::PowerService;
+use crate::store::ServiceStore;
+use crate::widgets::{Bar, QuickSettingsPopup, WorkspacePopup};
+use gtk4::prelude::*;
 
 #[tokio::main]
 async fn main() {
@@ -36,39 +39,51 @@ fn build_ui(app: &libadwaita::Application) {
 
     libadwaita::StyleManager::default().set_color_scheme(libadwaita::ColorScheme::PreferDark);
 
-    // --- SERVICES STARTEN (Global) ---
+    // --- SERVICES STARTEN ---
+    // Jeder Service läuft in einem eigenen Thread und sendet Daten über einen Channel.
     let (network_rx, network_tx) = NetworkService::spawn();
     let (bluetooth_rx, bluetooth_tx) = BluetoothService::spawn();
     let (audio_rx, audio_tx) = AudioService::spawn();
-    let (power_rx, _) = PowerService::spawn();
-    let (niri_rx, _) = NiriService::spawn();
-    let (clock_rx, _) = ClockService::spawn();
+    let power_rx = PowerService::spawn();
+    let niri_rx = NiriService::spawn();
+    let clock_rx = ClockService::spawn();
 
+
+    // --- STORES BAUEN (auf dem GTK-Main-Thread) ---
+    // Ab hier kein direktes Channel-Handling mehr in den Widgets.
+    // Stores empfangen, cachen und broadcasten an alle Subscriber.
     let ctx = AppContext {
-        network_rx,
+        network: ServiceStore::new(network_rx, Default::default()),
         network_tx,
-        bluetooth_rx,
+
+        bluetooth: ServiceStore::new(bluetooth_rx, Default::default()),
         bluetooth_tx,
-        audio_rx,
+
+        audio: ServiceStore::new(audio_rx, Default::default()),
         audio_tx,
-        power_rx,
-        niri_rx,
-        clock_rx,
+
+        power: ServiceStore::new(power_rx, Default::default()),
+
+        niri: ServiceStore::new(niri_rx, Default::default()),
+        clock: ServiceStore::new(clock_rx, chrono::Local::now()),
     };
 
-    // --- KOMPONENTEN INITIALISIEREN ---
+    // --- WIDGETS INITIALISIEREN ---
     let bar = Bar::new(app, ctx.clone());
     let ws_popup = WorkspacePopup::new(app, ctx.clone());
     let qs_popup = QuickSettingsPopup::new(app, &bar.vol_icon, ctx.clone());
 
-    // --- INTERACTION ---
+    // --- INTERAKTION ---
     let ws_click = gtk4::GestureClick::new();
-    let ctx_ws = ctx.clone();
-    ws_click.connect_pressed(move |_, _, _, _| { ws_popup.toggle(&ctx_ws); });
+    ws_click.connect_pressed(move |_, _, _, _| {
+        ws_popup.toggle();
+    });
     bar.center_island.add_controller(ws_click);
 
     let qs_click = gtk4::GestureClick::new();
-    qs_click.connect_pressed(move |_, _, _, _| { qs_popup.toggle(); });
+    qs_click.connect_pressed(move |_, _, _, _| {
+        qs_popup.toggle();
+    });
     bar.status_island.add_controller(qs_click);
 
     bar.window.present();

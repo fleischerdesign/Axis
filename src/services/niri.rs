@@ -1,4 +1,4 @@
-use async_channel::{bounded, Receiver, Sender};
+use async_channel::{bounded, Receiver};
 use niri_ipc::{socket::Socket, Output, Request, Response, Window, Workspace};
 use std::collections::HashMap;
 use std::thread;
@@ -36,9 +36,8 @@ impl PartialEq for NiriData {
 pub struct NiriService;
 
 impl NiriService {
-    pub fn spawn() -> (Receiver<NiriData>, Sender<NiriData>) {
-        let (data_tx, data_rx) = bounded(100);
-        let data_tx_return = data_tx.clone();
+    pub fn spawn() -> Receiver<NiriData> {
+        let (data_tx, data_rx) = bounded(10);
 
         thread::spawn(move || {
             loop {
@@ -69,6 +68,6 @@ impl NiriService {
             }
         });
 
-        (data_rx, data_tx_return)
+        data_rx
     }
 }

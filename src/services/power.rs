@@ -1,6 +1,6 @@
-use zbus::{Connection, proxy};
-use async_channel::{Sender, Receiver, bounded};
+use async_channel::{Receiver, bounded};
 use std::thread;
+use zbus::{proxy, Connection};
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct PowerData {
@@ -26,9 +26,8 @@ trait UPowerDevice {
 pub struct PowerService;
 
 impl PowerService {
-    pub fn spawn() -> (Receiver<PowerData>, Sender<PowerData>) {
-        let (data_tx, data_rx) = bounded(100);
-        let data_tx_return = data_tx.clone();
+    pub fn spawn() -> Receiver<PowerData> {
+        let (tx, rx) = bounded(10);
 
         thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().unwrap();
@@ -38,22 +37,21 @@ impl PowerService {
 
                 loop {
                     let percentage = upower.percentage().await.unwrap_or(0.0);
-                    let state = upower.state().await.unwrap_or(0); // 1=Charging
+                    let state = upower.state().await.unwrap_or(0); // 1 = Charging
                     let is_present = upower.is_present().await.unwrap_or(false);
 
-                    let new_data = PowerData {
+                    let data = PowerData {
                         battery_percentage: (percentage * 10.0).round() / 10.0,
                         is_charging: state == 1,
                         has_battery: is_present && percentage > 0.0,
                     };
 
-                    let _ = data_tx.send(new_data).await;
-
+                    let _ = tx.send(data).await;
                     tokio::time::sleep(std::time::Duration::from_secs(10)).await;
                 }
             });
         });
 
-        (data_rx, data_tx_return)
+        rx
     }
 }
