@@ -105,7 +105,14 @@ impl NightlightService {
     }
 
     fn start_wlsunset(temperature: u32) -> Option<u32> {
+        let high = temperature + 1000;
         let child = Command::new("wlsunset")
+            .arg("-S")
+            .arg("00:00")
+            .arg("-s")
+            .arg("23:59")
+            .arg("-T")
+            .arg(high.to_string())
             .arg("-t")
             .arg(temperature.to_string())
             .spawn()

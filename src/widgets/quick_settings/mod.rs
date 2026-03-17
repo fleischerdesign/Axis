@@ -112,6 +112,7 @@ impl QuickSettingsPopup {
                 win_back_nl.set_default_size(1, 1);
             },
             main_page.nl_tile.clone(),
+            ctx.nightlight_tx.clone(),
         );
 
         qs_stack.add_named(&main_page.container, Some("main"));

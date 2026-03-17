@@ -176,8 +176,6 @@ impl MainPage {
                 .send_blocking(NightlightCmd::Toggle(!current));
         });
 
-        // --- REAKTIVE BINDINGS ---
-
         // Network → Tile-States
         let wifi_tile_c = wifi_tile.clone();
         let eth_tile_c = eth_tile.clone();
