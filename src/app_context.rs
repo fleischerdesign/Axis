@@ -6,6 +6,7 @@ use crate::services::backlight::{BacklightCmd, BacklightData};
 use crate::services::bluetooth::{BluetoothCmd, BluetoothData};
 use crate::services::network::{NetworkCmd, NetworkData};
 use crate::services::nightlight::{NightlightCmd, NightlightData};
+use crate::services::launcher::{LauncherCmd, LauncherData};
 use crate::services::niri::NiriData;
 use crate::services::power::PowerData;
 use crate::store::ServiceStore;
@@ -31,6 +32,9 @@ pub struct AppContext {
 
     pub nightlight: ServiceStore<NightlightData>,
     pub nightlight_tx: Sender<NightlightCmd>,
+
+    pub launcher: ServiceStore<LauncherData>,
+    pub launcher_tx: Sender<LauncherCmd>,
 
     pub power: ServiceStore<PowerData>,
 

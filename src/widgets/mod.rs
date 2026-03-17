@@ -1,9 +1,11 @@
-pub mod island;
-pub mod bar;
+mod bar;
+mod island;
+pub mod launcher;
 pub mod quick_settings;
-pub mod workspace_popup;
+mod workspace_popup;
 
-pub use island::Island;
 pub use bar::Bar;
+pub use island::Island;
+pub use launcher::launcher_popup::LauncherPopup;
 pub use quick_settings::QuickSettingsPopup;
 pub use workspace_popup::WorkspacePopup;

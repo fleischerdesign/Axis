@@ -20,6 +20,7 @@ const ANIM_STEP: i32 = 8;
 
 pub struct Bar {
     pub window: gtk4::ApplicationWindow,
+    pub launcher_island: gtk4::Box,
     pub status_island: gtk4::Box,
     pub center_island: gtk4::Box,
     pub vol_icon: gtk4::Image,
@@ -54,6 +55,7 @@ impl Bar {
 
         // --- 1. Launcher ---
         let launcher_island = Island::new(0);
+        launcher_island.container.set_cursor_from_name(Some("pointer"));
         launcher_island.append(&gtk4::Image::from_icon_name("view-app-grid-symbolic"));
         root.set_start_widget(Some(&launcher_island.container));
 
@@ -215,6 +217,7 @@ impl Bar {
 
         Self {
             window,
+            launcher_island: launcher_island.container,
             status_island: status_island.container,
             center_island: center_island.container,
             vol_icon,
