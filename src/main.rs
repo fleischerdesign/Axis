@@ -19,6 +19,7 @@ use crate::store::ServiceStore;
 use crate::widgets::{Bar, QuickSettingsPopup, WorkspacePopup, LauncherPopup};
 use gtk4::prelude::*;
 use gtk4::glib;
+use std::sync::Arc;
 
 #[tokio::main]
 async fn main() {
@@ -64,7 +65,7 @@ fn build_ui(app: &libadwaita::Application) {
     // Provider registrieren (später mehr!)
     let launcher_service_init = launcher_service;
     glib::spawn_future_local(async move {
-        launcher_service_init.add_provider(Box::new(AppProvider::default()));
+        launcher_service_init.add_provider(Arc::new(AppProvider::default()));
         launcher_service_init.start(launcher_rx);
     });
 
