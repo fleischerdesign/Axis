@@ -1,7 +1,22 @@
 use crate::app_context::AppContext;
 use crate::widgets::Island;
+use gtk4::glib;
 use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, Layer, LayerShell};
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::time::Duration;
+
+// Gesamthöhe des Bar-Fensters (Inhalt + Abstand nach unten)
+const BAR_HEIGHT: i32 = 54;
+// Wie viele Pixel sichtbar bleiben wenn versteckt (>0 damit Pointer-Events ankommen)
+const PEEK_PX: i32 = 1;
+// Verzögerung bevor die Bar wieder verschwindet
+const HIDE_DELAY_MS: u64 = 300;
+// Animations-Framerate (16ms ≈ 60fps)
+const ANIM_INTERVAL_MS: u64 = 16;
+// Pixel pro Frame
+const ANIM_STEP: i32 = 8;
 
 pub struct Bar {
     pub window: gtk4::ApplicationWindow,
@@ -12,6 +27,10 @@ pub struct Bar {
 
 impl Bar {
     pub fn new(app: &libadwaita::Application, ctx: AppContext) -> Self {
+        let is_visible: Rc<RefCell<bool>> = Rc::new(RefCell::new(false));
+        let hide_timeout: Rc<RefCell<Option<glib::SourceId>>> = Rc::new(RefCell::new(None));
+        let anim_source: Rc<RefCell<Option<glib::SourceId>>> = Rc::new(RefCell::new(None));
+
         let window = gtk4::ApplicationWindow::builder()
             .application(app)
             .title("Carp Bottom Bar")
@@ -22,7 +41,10 @@ impl Bar {
         window.set_anchor(Edge::Bottom, true);
         window.set_anchor(Edge::Left, true);
         window.set_anchor(Edge::Right, true);
-        window.set_exclusive_zone(54);
+        // exclusive_zone(-1): Fenster darf außerhalb des nutzbaren Bereichs liegen
+        window.set_exclusive_zone(-1);
+        // Versteckt starten: fast komplett off-screen, nur PEEK_PX sichtbar
+        window.set_margin(Edge::Bottom, -(BAR_HEIGHT - PEEK_PX));
 
         let root = gtk4::CenterBox::new();
         root.set_margin_bottom(10);
@@ -65,6 +87,97 @@ impl Bar {
 
         root.set_end_widget(Some(&status_island.container));
         window.set_child(Some(&root));
+
+        // --- AUTO-HIDE: slide-in beim Hovern ---
+        let motion = gtk4::EventControllerMotion::new();
+
+        {
+            let window_ref = window.clone();
+            let is_visible_ref = is_visible.clone();
+            let hide_timeout_ref = hide_timeout.clone();
+            let anim_source_ref = anim_source.clone();
+
+            motion.connect_enter(move |_, _x, _y| {
+                // Laufenden Hide-Timer abbrechen
+                if let Some(src) = hide_timeout_ref.borrow_mut().take() {
+                    src.remove();
+                }
+                // Bereits sichtbar oder Animation läuft schon → nichts tun
+                if *is_visible_ref.borrow() || anim_source_ref.borrow().is_some() {
+                    return;
+                }
+                *is_visible_ref.borrow_mut() = true;
+
+                // Slide-in: Margin von -(BAR_HEIGHT - PEEK_PX) → 0
+                let window_anim = window_ref.clone();
+                let anim_source_cb = anim_source_ref.clone();
+                let src =
+                    glib::timeout_add_local(Duration::from_millis(ANIM_INTERVAL_MS), move || {
+                        let current = window_anim.margin(Edge::Bottom);
+                        let next = (current + ANIM_STEP).min(0);
+                        window_anim.set_margin(Edge::Bottom, next);
+                        if next >= 0 {
+                            *anim_source_cb.borrow_mut() = None;
+                            glib::ControlFlow::Break
+                        } else {
+                            glib::ControlFlow::Continue
+                        }
+                    });
+                *anim_source_ref.borrow_mut() = Some(src);
+            });
+        }
+
+        {
+            let window_ref = window.clone();
+            let is_visible_ref = is_visible.clone();
+            let hide_timeout_ref = hide_timeout.clone();
+            let anim_source_ref = anim_source.clone();
+
+            motion.connect_leave(move |_| {
+                // Schon ein Hide-Timer aktiv → nichts tun
+                if hide_timeout_ref.borrow().is_some() {
+                    return;
+                }
+                let window_for_cb = window_ref.clone();
+                let is_visible_for_cb = is_visible_ref.clone();
+                let hide_timeout_for_cb = hide_timeout_ref.clone();
+                let anim_source_for_cb = anim_source_ref.clone();
+
+                let src =
+                    glib::timeout_add_local_once(Duration::from_millis(HIDE_DELAY_MS), move || {
+                        *is_visible_for_cb.borrow_mut() = false;
+                        *hide_timeout_for_cb.borrow_mut() = None;
+
+                        // Laufende Slide-in Animation abbrechen
+                        if let Some(anim) = anim_source_for_cb.borrow_mut().take() {
+                            anim.remove();
+                        }
+
+                        // Slide-out: Margin von aktuellem Wert → -(BAR_HEIGHT - PEEK_PX)
+                        let window_anim = window_for_cb.clone();
+                        let anim_source_cb = anim_source_for_cb.clone();
+                        let src = glib::timeout_add_local(
+                            Duration::from_millis(ANIM_INTERVAL_MS),
+                            move || {
+                                let current = window_anim.margin(Edge::Bottom);
+                                let target = -(BAR_HEIGHT - PEEK_PX);
+                                let next = (current - ANIM_STEP).max(target);
+                                window_anim.set_margin(Edge::Bottom, next);
+                                if next <= target {
+                                    *anim_source_cb.borrow_mut() = None;
+                                    glib::ControlFlow::Break
+                                } else {
+                                    glib::ControlFlow::Continue
+                                }
+                            },
+                        );
+                        *anim_source_for_cb.borrow_mut() = Some(src);
+                    });
+                *hide_timeout_ref.borrow_mut() = Some(src);
+            });
+        }
+
+        window.add_controller(motion);
 
         // --- REAKTIVE BINDINGS ---
 
