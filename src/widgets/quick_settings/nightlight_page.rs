@@ -17,10 +17,6 @@ impl NightlightPage {
         nightlight_tx: async_channel::Sender<NightlightCmd>,
     ) -> Self {
         let container = gtk4::Box::new(gtk4::Orientation::Vertical, 16);
-        container.set_margin_start(16);
-        container.set_margin_end(16);
-        container.set_margin_top(16);
-        container.set_margin_bottom(16);
 
         // --- HEADER ---
         let header = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
@@ -40,9 +36,24 @@ impl NightlightPage {
         header.append(&title);
         container.append(&header);
 
+        // --- CONTENT BOX (The "Box" like in BT/WiFi) ---
+        let list = gtk4::ListBox::builder()
+            .css_classes(vec!["qs-list".to_string()])
+            .selection_mode(gtk4::SelectionMode::None)
+            .build();
+
+        let content_wrapper = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+        content_wrapper.add_css_class("qs-scrolled");
+        content_wrapper.append(&list);
+        container.append(&content_wrapper);
+
         // --- TOGGLE ROW ---
         let toggle_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
         toggle_row.set_hexpand(true);
+        toggle_row.set_margin_start(12);
+        toggle_row.set_margin_end(12);
+        toggle_row.set_margin_top(8);
+        toggle_row.set_margin_bottom(8);
 
         let toggle_label = gtk4::Label::builder()
             .label("Enable")
@@ -54,11 +65,16 @@ impl NightlightPage {
 
         toggle_row.append(&toggle_label);
         toggle_row.append(&toggle);
-        container.append(&toggle_row);
+        list.append(&toggle_row);
 
         // --- TEMPERATURES ---
         let create_temp_section = |label_text: &str, initial_val: u32| {
             let section = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
+            section.set_margin_start(12);
+            section.set_margin_end(12);
+            section.set_margin_top(8);
+            section.set_margin_bottom(8);
+
             let label_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
             let label = gtk4::Label::builder()
                 .label(label_text)
@@ -87,12 +103,18 @@ impl NightlightPage {
         let (night_sec, night_slider, night_val) =
             create_temp_section("Night Temperature", initial.temp_night);
 
-        container.append(&day_sec);
-        container.append(&night_sec);
+        list.append(&day_sec);
+        list.append(&night_sec);
 
         // --- SCHEDULE ---
-        container.append(&gtk4::Separator::new(gtk4::Orientation::Horizontal));
-        container.append(
+        let schedule_section = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
+        schedule_section.set_margin_start(12);
+        schedule_section.set_margin_end(12);
+        schedule_section.set_margin_top(12);
+        schedule_section.set_margin_bottom(12);
+
+        schedule_section.append(&gtk4::Separator::new(gtk4::Orientation::Horizontal));
+        schedule_section.append(
             &gtk4::Label::builder()
                 .label("Manual Schedule")
                 .halign(gtk4::Align::Start)
@@ -114,7 +136,8 @@ impl NightlightPage {
 
         schedule_row.append(&sunrise_entry);
         schedule_row.append(&sunset_entry);
-        container.append(&schedule_row);
+        schedule_section.append(&schedule_row);
+        list.append(&schedule_section);
 
         // --- BINDINGS ---
         let updating_from_service = Rc::new(Cell::new(false));

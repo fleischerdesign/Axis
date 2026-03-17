@@ -102,6 +102,7 @@ window {
     background-color: #242424;
     color: white;
     padding: 6px;
+    border-radius: 16px;
 }
 
 .qs-scrolled,
