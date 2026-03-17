@@ -20,16 +20,6 @@ trait BluetoothAdapter {
 
 #[proxy(interface = "org.bluez.Device1", default_service = "org.bluez")]
 trait BluetoothDevice {
-    #[zbus(property)]
-    fn name(&self) -> zbus::Result<String>;
-    #[zbus(property)]
-    fn alias(&self) -> zbus::Result<String>;
-    #[zbus(property)]
-    fn paired(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn connected(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn icon(&self) -> zbus::Result<String>;
     fn connect(&self) -> zbus::Result<()>;
     fn disconnect(&self) -> zbus::Result<()>;
 }
@@ -125,7 +115,7 @@ impl BluetoothService {
                 }
 
                 if should_update {
-                    let next_data = Self::fetch_data(&adapter_proxy, &obj_manager, &connection, full_scan, &current_data).await;
+                    let next_data = Self::fetch_data(&adapter_proxy, &obj_manager, full_scan, &current_data).await;
                     if next_data != current_data {
                         current_data = next_data;
                         let _ = data_tx.send(current_data.clone()).await;
@@ -137,29 +127,40 @@ impl BluetoothService {
         (data_rx, cmd_tx)
     }
 
-    async fn fetch_data(adapter: &BluetoothAdapterProxy<'_>, obj_manager: &ObjectManagerProxy<'_>, conn: &Connection, include_devices: bool, old_data: &BluetoothData) -> BluetoothData {
+    async fn fetch_data(adapter: &BluetoothAdapterProxy<'_>, obj_manager: &ObjectManagerProxy<'_>, include_devices: bool, old_data: &BluetoothData) -> BluetoothData {
         let is_powered = adapter.powered().await.unwrap_or(false);
         let mut devices = if include_devices { Vec::new() } else { old_data.devices.clone() };
 
         if include_devices {
             if let Ok(objects) = obj_manager.get_managed_objects().await {
                 for (path, interfaces) in objects {
-                    if interfaces.contains_key("org.bluez.Device1") {
-                        if let Ok(dev_proxy) = BluetoothDeviceProxy::builder(conn).path(path.clone()).unwrap().build().await {
-                            let name = if let Ok(n) = dev_proxy.name().await {
-                                n
-                            } else {
-                                dev_proxy.alias().await.unwrap_or_else(|_| "Unknown Device".to_string())
-                            };
+                    if let Some(props) = interfaces.get("org.bluez.Device1") {
+                        let name = props.get("Name")
+                            .or_else(|| props.get("Alias"))
+                            .and_then(|v| <&str>::try_from(v).ok())
+                            .map(|s| s.to_string())
+                            .unwrap_or_else(|| "Unknown Device".to_string());
+                        
+                        let is_connected = props.get("Connected")
+                            .and_then(|v| bool::try_from(v).ok())
+                            .unwrap_or(false);
 
-                            devices.push(BluetoothDeviceData {
-                                name,
-                                is_connected: dev_proxy.connected().await.unwrap_or(false),
-                                is_paired: dev_proxy.paired().await.unwrap_or(false),
-                                path: path.to_string(),
-                                icon: dev_proxy.icon().await.unwrap_or_else(|_| "bluetooth-symbolic".to_string()),
-                            });
-                        }
+                        let is_paired = props.get("Paired")
+                            .and_then(|v| bool::try_from(v).ok())
+                            .unwrap_or(false);
+
+                        let icon = props.get("Icon")
+                            .and_then(|v| <&str>::try_from(v).ok())
+                            .map(|s| s.to_string())
+                            .unwrap_or_else(|| "bluetooth-symbolic".to_string());
+
+                        devices.push(BluetoothDeviceData {
+                            name,
+                            is_connected,
+                            is_paired,
+                            path: path.to_string(),
+                            icon,
+                        });
                     }
                 }
                 devices.sort_by(|a, b| b.is_connected.cmp(&a.is_connected).then_with(|| b.is_paired.cmp(&a.is_paired)).then_with(|| a.name.cmp(&b.name)));

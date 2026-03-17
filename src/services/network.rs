@@ -29,10 +29,7 @@ trait NetworkManager {
     ) -> zbus::Result<(OwnedObjectPath, OwnedObjectPath)>;
 }
 
-#[proxy(
-    interface = "org.freedesktop.NetworkManager.Device",
-    default_service = "org.freedesktop.NetworkManager"
-)]
+#[proxy(interface = "org.freedesktop.NetworkManager.Device", default_service = "org.freedesktop.NetworkManager")]
 trait Device {
     #[zbus(property)]
     fn device_type(&self) -> zbus::Result<u32>;
@@ -40,10 +37,7 @@ trait Device {
     fn active_connection(&self) -> zbus::Result<OwnedObjectPath>;
 }
 
-#[proxy(
-    interface = "org.freedesktop.NetworkManager.Device.Wireless",
-    default_service = "org.freedesktop.NetworkManager"
-)]
+#[proxy(interface = "org.freedesktop.NetworkManager.Device.Wireless", default_service = "org.freedesktop.NetworkManager")]
 trait WirelessDevice {
     fn get_access_points(&self) -> zbus::Result<Vec<OwnedObjectPath>>;
     fn request_scan(&self, options: HashMap<String, zbus::zvariant::Value<'_>>) -> zbus::Result<()>;
@@ -51,10 +45,7 @@ trait WirelessDevice {
     fn active_access_point(&self) -> zbus::Result<OwnedObjectPath>;
 }
 
-#[proxy(
-    interface = "org.freedesktop.NetworkManager.AccessPoint",
-    default_service = "org.freedesktop.NetworkManager"
-)]
+#[proxy(interface = "org.freedesktop.NetworkManager.AccessPoint", default_service = "org.freedesktop.NetworkManager")]
 trait AccessPoint {
     #[zbus(property)]
     fn ssid(&self) -> zbus::Result<Vec<u8>>;
@@ -104,10 +95,11 @@ impl NetworkService {
             let mut wifi_device_path = None;
             if let Ok(devices) = proxy.get_devices().await {
                 for path in devices {
-                    let dev_proxy = DeviceProxy::builder(&connection).path(path.clone()).unwrap().build().await.unwrap();
-                    if let Ok(2) = dev_proxy.device_type().await {
-                        wifi_device_path = Some(path);
-                        break;
+                    if let Ok(dev_proxy) = DeviceProxy::builder(&connection).path(path.clone()).unwrap().build().await {
+                        if let Ok(2) = dev_proxy.device_type().await {
+                            wifi_device_path = Some(path);
+                            break;
+                        }
                     }
                 }
             }
@@ -132,9 +124,10 @@ impl NetworkService {
                             NetworkCmd::ToggleWifi(on) => { let _ = proxy.set_wireless_enabled(on).await; }
                             NetworkCmd::ScanWifi => {
                                 if let Some(path) = &wifi_device_path {
-                                    let wifi_proxy = WirelessDeviceProxy::builder(&connection).path(path).unwrap().build().await.unwrap();
-                                    let _ = wifi_proxy.request_scan(HashMap::new()).await;
-                                    full_scan = true;
+                                    if let Ok(wifi_proxy) = WirelessDeviceProxy::builder(&connection).path(path).unwrap().build().await {
+                                        let _ = wifi_proxy.request_scan(HashMap::new()).await;
+                                        full_scan = true;
+                                    }
                                 }
                             }
                             NetworkCmd::ConnectToAp(ap_path_str) => {
@@ -161,10 +154,11 @@ impl NetworkService {
                             }
                             NetworkCmd::DisconnectWifi => {
                                 if let Some(path) = &wifi_device_path {
-                                    let dev_proxy = DeviceProxy::builder(&connection).path(path.clone()).unwrap().build().await.unwrap();
-                                    if let Ok(active_conn_path) = dev_proxy.active_connection().await {
-                                        if active_conn_path.to_string() != "/" {
-                                            let _ = proxy.deactivate_connection(active_conn_path).await;
+                                    if let Ok(dev_proxy) = DeviceProxy::builder(&connection).path(path.clone()).unwrap().build().await {
+                                        if let Ok(active_conn_path) = dev_proxy.active_connection().await {
+                                            if active_conn_path.to_string() != "/" {
+                                                let _ = proxy.deactivate_connection(active_conn_path).await;
+                                            }
                                         }
                                     }
                                 }
@@ -207,7 +201,7 @@ impl NetworkService {
 
                 if include_aps {
                     if let Ok(ap_paths) = wifi_proxy.get_access_points().await {
-                        for ap_path in ap_paths {
+                        for ap_path in ap_paths.into_iter().take(15) { 
                             if let Ok(ap_proxy) = AccessPointProxy::builder(conn).path(ap_path.clone()).unwrap().build().await {
                                 if let Ok(ssid_bytes) = ap_proxy.ssid().await {
                                     let ssid = String::from_utf8_lossy(&ssid_bytes).to_string();

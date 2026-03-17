@@ -44,7 +44,6 @@ impl QuickSettingsPopup {
         let base = PopupBase::new(app, "Carp Quick Settings", true);
         let on_state_change = Rc::new(on_state_change);
 
-        // State-Change an den Controller melden
         let on_change_c = on_state_change.clone();
         base.window.connect_visible_notify(move |_| {
             on_change_c();
@@ -53,6 +52,8 @@ impl QuickSettingsPopup {
         let qs_container = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
         qs_container.add_css_class("qs-panel");
         qs_container.set_width_request(340);
+        // WICHTIG: Valign::Start erlaubt es dem Container, nur so viel Platz wie nötig zu beanspruchen
+        qs_container.set_valign(gtk4::Align::Start);
 
         let qs_stack = gtk4::Stack::builder()
             .transition_type(gtk4::StackTransitionType::SlideLeftRight)
@@ -61,6 +62,13 @@ impl QuickSettingsPopup {
             .hhomogeneous(false)
             .interpolate_size(true)
             .build();
+
+        // Helper für sanftes Resizing
+        let win_resize = base.window.clone();
+        let resize_window = move || {
+            // Wir setzen keine harte Größe, sondern bitten GTK, das Layout neu zu berechnen
+            win_resize.queue_resize();
+        };
 
         // --- PAGES ---
         let stack_wifi = qs_stack.clone();
@@ -91,35 +99,35 @@ impl QuickSettingsPopup {
         );
 
         let stack_back = qs_stack.clone();
-        let win_back = base.window.clone();
+        let resize_wifi = resize_window.clone();
         let wifi_page = WifiPage::new(
             ctx.clone(),
             move || {
                 stack_back.set_visible_child_name("main");
-                win_back.set_default_size(1, 1);
+                resize_wifi();
             },
             main_page.wifi_tile.clone(),
             main_page.eth_tile.clone(),
         );
 
         let stack_back_bt = qs_stack.clone();
-        let win_back_bt = base.window.clone();
+        let resize_bt = resize_window.clone();
         let bluetooth_page = BluetoothPage::new(
             ctx.clone(),
             move || {
                 stack_back_bt.set_visible_child_name("main");
-                win_back_bt.set_default_size(1, 1);
+                resize_bt();
             },
             main_page.bt_tile.clone(),
         );
 
         let stack_back_nl = qs_stack.clone();
-        let win_back_nl = base.window.clone();
+        let resize_nl = resize_window.clone();
         let nightlight_page = NightlightPage::new(
             ctx.clone(),
             move || {
                 stack_back_nl.set_visible_child_name("main");
-                win_back_nl.set_default_size(1, 1);
+                resize_nl();
             },
             main_page.nl_tile.clone(),
             ctx.nightlight_tx.clone(),
@@ -129,6 +137,19 @@ impl QuickSettingsPopup {
         qs_stack.add_named(&wifi_page.container, Some("wifi"));
         qs_stack.add_named(&bluetooth_page.container, Some("bluetooth"));
         qs_stack.add_named(&nightlight_page.container, Some("nightlight"));
+        
+        // Signal: Wenn die Animation des Stacks fertig ist, passen wir das Fenster an
+        let win_final = base.window.clone();
+        qs_stack.connect_visible_child_notify(move |stack| {
+            if stack.visible_child_name() == Some("main".into()) {
+                // Ein kleiner Delay, damit die Animation erst fertig slidet
+                let win_c = win_final.clone();
+                gtk4::glib::timeout_add_local_once(std::time::Duration::from_millis(260), move || {
+                    win_c.set_default_size(1, 1);
+                });
+            }
+        });
+
         qs_container.append(&qs_stack);
         base.set_content(&qs_container);
 
