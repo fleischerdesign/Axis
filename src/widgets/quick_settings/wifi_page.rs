@@ -124,7 +124,7 @@ impl WifiPage {
                 } else {
                     "network-wireless-signal-weak-symbolic"
                 };
-                let row = QsListRow::new(&ap.ssid, icon, ap.is_active, None);
+                let row = QsListRow::new(&ap.ssid, icon, ap.is_active, None, true);
 
                 let auth_revealer = gtk4::Revealer::new();
                 let auth_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);

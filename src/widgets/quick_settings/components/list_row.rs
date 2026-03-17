@@ -6,12 +6,13 @@ pub struct QsListRow {
 }
 
 impl QsListRow {
-    pub fn new(label: &str, icon: &str, active: bool, sublabel: Option<&str>) -> Self {
+    pub fn new(label: &str, icon: &str, active: bool, sublabel: Option<&str>, show_check: bool) -> Self {
         let container = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
         let button = gtk4::Button::builder()
             .css_classes(vec!["qs-list-row".to_string()])
             .focusable(false)
             .build();
+        
         if active {
             button.add_css_class("active");
         }
@@ -23,6 +24,7 @@ impl QsListRow {
         content.set_margin_bottom(8);
 
         let icon_img = gtk4::Image::from_icon_name(icon);
+        icon_img.set_pixel_size(18);
         content.append(&icon_img);
 
         let label_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
@@ -41,17 +43,17 @@ impl QsListRow {
                     .label(sub)
                     .halign(gtk4::Align::Start)
                     .ellipsize(gtk4::pango::EllipsizeMode::End)
-                    .max_width_chars(30)
+                    .max_width_chars(35)
                     .css_classes(vec!["qs-list-sublabel".to_string()])
                     .build(),
             );
         }
         content.append(&label_box);
 
-        if active {
+        // Haken nur anzeigen, wenn explizit gewünscht (WLAN/BT Status)
+        if active && show_check {
             let check = gtk4::Image::from_icon_name("object-select-symbolic");
             check.set_halign(gtk4::Align::End);
-            check.set_hexpand(true);
             content.append(&check);
         }
 

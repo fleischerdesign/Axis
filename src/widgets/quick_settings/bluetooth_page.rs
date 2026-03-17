@@ -75,7 +75,7 @@ impl BluetoothPage {
                 } else {
                     None
                 };
-                let row = QsListRow::new(&dev.name, &dev.icon, dev.is_connected, sublabel);
+                let row = QsListRow::new(&dev.name, &dev.icon, dev.is_connected, sublabel, true);
 
                 let tx = ctx.bluetooth_tx.clone();
                 let path = dev.path.clone();

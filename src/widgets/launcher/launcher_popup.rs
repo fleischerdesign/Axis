@@ -144,6 +144,7 @@ impl LauncherPopup {
                     &item.icon_name,
                     is_selected,
                     item.description.as_deref(),
+                    false, // Kein Checkmark im Launcher
                 );
                 list_c.append(&row.container);
 
