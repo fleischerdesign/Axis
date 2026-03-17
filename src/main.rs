@@ -20,6 +20,8 @@ use crate::widgets::{Bar, QuickSettingsPopup, WorkspacePopup, LauncherPopup};
 use gtk4::prelude::*;
 use gtk4::glib;
 use std::sync::Arc;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 #[tokio::main]
 async fn main() {
@@ -62,7 +64,7 @@ fn build_ui(app: &libadwaita::Application) {
     let launcher_store = ServiceStore::new_manual(Default::default());
     let launcher_service = LauncherService::new(launcher_store.store.clone());
     
-    // Provider registrieren (später mehr!)
+    // Provider registrieren
     let launcher_service_init = launcher_service;
     glib::spawn_future_local(async move {
         launcher_service_init.add_provider(Arc::new(AppProvider::default()));
@@ -70,28 +72,21 @@ fn build_ui(app: &libadwaita::Application) {
     });
 
 
-    // --- STORES BAUEN (auf dem GTK-Main-Thread) ---
+    // --- STORES BAUEN ---
     let ctx = AppContext {
         network: ServiceStore::new(network_rx, Default::default()),
         network_tx,
-
         bluetooth: ServiceStore::new(bluetooth_rx, Default::default()),
         bluetooth_tx,
-
         audio: ServiceStore::new(audio_rx, Default::default()),
         audio_tx,
-
         backlight: ServiceStore::new(backlight_rx, backlight_initial),
         backlight_tx,
-
         nightlight: ServiceStore::new(nightlight_rx, nightlight_initial),
         nightlight_tx,
-
         launcher: launcher_store,
         launcher_tx,
-
         power: ServiceStore::new(power_rx, Default::default()),
-
         niri: ServiceStore::new(niri_rx, Default::default()),
         clock: ServiceStore::new(clock_rx, chrono::Local::now()),
     };
@@ -100,24 +95,36 @@ fn build_ui(app: &libadwaita::Application) {
     let bar = Bar::new(app, ctx.clone());
     let ws_popup = WorkspacePopup::new(app, ctx.clone());
     let qs_popup = QuickSettingsPopup::new(app, &bar.vol_icon, ctx.clone());
-    let launcher_popup = LauncherPopup::new(app, ctx.clone());
 
     // --- INTERAKTION ---
     let ws_is_open = ws_popup.is_open.clone();
     let qs_is_open = qs_popup.is_open.clone();
-    let launcher_is_open = launcher_popup.is_open.clone();
-
     let popup_open = bar.popup_open.clone();
-    let ws_is_open_ref = ws_is_open.clone();
-    let qs_is_open_ref = qs_is_open.clone();
-    let launcher_is_open_ref = launcher_is_open.clone();
+    let bar_ref = bar.clone();
 
-    // Helper für Bar-Zustand
+    // Wir brauchen einen Weg, den Launcher-State erst nach der Erstellung des Popups zu kennen.
+    // Wir nutzen eine RefCell für die Launcher-Zustands-Referenz.
+    let launcher_is_open_ptr: Rc<RefCell<Option<Rc<RefCell<bool>>>>> = Rc::new(RefCell::new(None));
+    let launcher_ptr_cb = launcher_is_open_ptr.clone();
+
     let update_bar_popup_state = move || {
-        *popup_open.borrow_mut() = *ws_is_open_ref.borrow() 
-            || *qs_is_open_ref.borrow() 
-            || *launcher_is_open_ref.borrow();
+        let ws_open = *ws_is_open.borrow();
+        let qs_open = *qs_is_open.borrow();
+        let l_open = launcher_ptr_cb.borrow().as_ref()
+            .map(|ptr| *ptr.borrow())
+            .unwrap_or(false);
+
+        *popup_open.borrow_mut() = ws_open || qs_open || l_open;
+        bar_ref.check_auto_hide();
     };
+
+    let update_cb = update_bar_popup_state.clone();
+    let launcher_popup = LauncherPopup::new(app, ctx.clone(), move || {
+        update_cb();
+    });
+    
+    // Jetzt binden wir den echten State des Launchers ein
+    *launcher_is_open_ptr.borrow_mut() = Some(launcher_popup.is_open.clone());
 
     let update_bar_ws = update_bar_popup_state.clone();
     let ws_click = gtk4::GestureClick::new();

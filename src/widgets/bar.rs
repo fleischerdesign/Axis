@@ -18,6 +18,7 @@ const ANIM_INTERVAL_MS: u64 = 16;
 // Pixel pro Frame
 const ANIM_STEP: i32 = 8;
 
+#[derive(Clone)]
 pub struct Bar {
     pub window: gtk4::ApplicationWindow,
     pub launcher_island: gtk4::Box,
@@ -25,14 +26,19 @@ pub struct Bar {
     pub center_island: gtk4::Box,
     pub vol_icon: gtk4::Image,
     pub popup_open: Rc<RefCell<bool>>,
+    is_visible: Rc<RefCell<bool>>,
+    hide_timeout: Rc<RefCell<Option<glib::SourceId>>>,
+    anim_source: Rc<RefCell<Option<glib::SourceId>>>,
+    is_hovered: Rc<RefCell<bool>>,
 }
 
 impl Bar {
     pub fn new(app: &libadwaita::Application, ctx: AppContext) -> Self {
-        let is_visible: Rc<RefCell<bool>> = Rc::new(RefCell::new(false));
-        let hide_timeout: Rc<RefCell<Option<glib::SourceId>>> = Rc::new(RefCell::new(None));
-        let anim_source: Rc<RefCell<Option<glib::SourceId>>> = Rc::new(RefCell::new(None));
-        let popup_open: Rc<RefCell<bool>> = Rc::new(RefCell::new(false));
+        let is_visible = Rc::new(RefCell::new(false));
+        let hide_timeout = Rc::new(RefCell::new(None));
+        let anim_source = Rc::new(RefCell::new(None));
+        let popup_open = Rc::new(RefCell::new(false));
+        let is_hovered = Rc::new(RefCell::new(false));
 
         let window = gtk4::ApplicationWindow::builder()
             .application(app)
@@ -44,9 +50,7 @@ impl Bar {
         window.set_anchor(Edge::Bottom, true);
         window.set_anchor(Edge::Left, true);
         window.set_anchor(Edge::Right, true);
-        // exclusive_zone(-1): Fenster darf außerhalb des nutzbaren Bereichs liegen
         window.set_exclusive_zone(-1);
-        // Versteckt starten: fast komplett off-screen, nur PEEK_PX sichtbar
         window.set_margin(Edge::Bottom, -(BAR_HEIGHT - PEEK_PX));
 
         let root = gtk4::CenterBox::new();
@@ -59,11 +63,9 @@ impl Bar {
         launcher_island.append(&gtk4::Image::from_icon_name("view-app-grid-symbolic"));
         root.set_start_widget(Some(&launcher_island.container));
 
-        // --- 2. Center (Workspace & Clock) ---
+        // --- 2. Center ---
         let center_island = Island::new(12);
-        center_island
-            .container
-            .set_cursor_from_name(Some("pointer"));
+        center_island.container.set_cursor_from_name(Some("pointer"));
         let ws_label = gtk4::Label::new(None);
         ws_label.add_css_class("workspace-label");
         let clock_label = gtk4::Label::new(None);
@@ -75,154 +77,119 @@ impl Bar {
 
         // --- 3. Status ---
         let status_island = Island::new(12);
-        status_island
-            .container
-            .set_cursor_from_name(Some("pointer"));
-
+        status_island.container.set_cursor_from_name(Some("pointer"));
         let wifi_icon = gtk4::Image::from_icon_name("network-wireless-symbolic");
         let bt_icon = gtk4::Image::from_icon_name("bluetooth-symbolic");
         let vol_icon = gtk4::Image::from_icon_name("audio-volume-high-symbolic");
         let battery_icon = gtk4::Image::from_icon_name("battery-full-symbolic");
-
         status_island.append(&wifi_icon);
         status_island.append(&bt_icon);
         status_island.append(&vol_icon);
         status_island.append(&battery_icon);
-
         root.set_end_widget(Some(&status_island.container));
+
         window.set_child(Some(&root));
 
-        // --- AUTO-HIDE: slide-in beim Hovern ---
-        let motion = gtk4::EventControllerMotion::new();
-
-        {
-            let window_ref = window.clone();
-            let is_visible_ref = is_visible.clone();
-            let hide_timeout_ref = hide_timeout.clone();
-            let anim_source_ref = anim_source.clone();
-
-            motion.connect_enter(move |_, _x, _y| {
-                // Laufenden Hide-Timer abbrechen
-                if let Some(src) = hide_timeout_ref.borrow_mut().take() {
-                    src.remove();
-                }
-                // Bereits sichtbar oder Animation läuft schon → nichts tun
-                if *is_visible_ref.borrow() || anim_source_ref.borrow().is_some() {
-                    return;
-                }
-                *is_visible_ref.borrow_mut() = true;
-
-                // Slide-in: Margin von -(BAR_HEIGHT - PEEK_PX) → 0
-                let window_anim = window_ref.clone();
-                let anim_source_cb = anim_source_ref.clone();
-                let src =
-                    glib::timeout_add_local(Duration::from_millis(ANIM_INTERVAL_MS), move || {
-                        let current = window_anim.margin(Edge::Bottom);
-                        let next = (current + ANIM_STEP).min(0);
-                        window_anim.set_margin(Edge::Bottom, next);
-                        if next >= 0 {
-                            *anim_source_cb.borrow_mut() = None;
-                            glib::ControlFlow::Break
-                        } else {
-                            glib::ControlFlow::Continue
-                        }
-                    });
-                *anim_source_ref.borrow_mut() = Some(src);
-            });
-        }
-
-        {
-            let window_ref = window.clone();
-            let is_visible_ref = is_visible.clone();
-            let hide_timeout_ref = hide_timeout.clone();
-            let anim_source_ref = anim_source.clone();
-            let popup_open_ref = popup_open.clone();
-
-            motion.connect_leave(move |_| {
-                // Popup ist offen → Bar darf nicht einklappen
-                if *popup_open_ref.borrow() {
-                    return;
-                }
-                // Schon ein Hide-Timer aktiv → nichts tun
-                if hide_timeout_ref.borrow().is_some() {
-                    return;
-                }
-                let window_for_cb = window_ref.clone();
-                let is_visible_for_cb = is_visible_ref.clone();
-                let hide_timeout_for_cb = hide_timeout_ref.clone();
-                let anim_source_for_cb = anim_source_ref.clone();
-
-                let src =
-                    glib::timeout_add_local_once(Duration::from_millis(HIDE_DELAY_MS), move || {
-                        *is_visible_for_cb.borrow_mut() = false;
-                        *hide_timeout_for_cb.borrow_mut() = None;
-
-                        // Laufende Slide-in Animation abbrechen
-                        if let Some(anim) = anim_source_for_cb.borrow_mut().take() {
-                            anim.remove();
-                        }
-
-                        // Slide-out: Margin von aktuellem Wert → -(BAR_HEIGHT - PEEK_PX)
-                        let window_anim = window_for_cb.clone();
-                        let anim_source_cb = anim_source_for_cb.clone();
-                        let src = glib::timeout_add_local(
-                            Duration::from_millis(ANIM_INTERVAL_MS),
-                            move || {
-                                let current = window_anim.margin(Edge::Bottom);
-                                let target = -(BAR_HEIGHT - PEEK_PX);
-                                let next = (current - ANIM_STEP).max(target);
-                                window_anim.set_margin(Edge::Bottom, next);
-                                if next <= target {
-                                    *anim_source_cb.borrow_mut() = None;
-                                    glib::ControlFlow::Break
-                                } else {
-                                    glib::ControlFlow::Continue
-                                }
-                            },
-                        );
-                        *anim_source_for_cb.borrow_mut() = Some(src);
-                    });
-                *hide_timeout_ref.borrow_mut() = Some(src);
-            });
-        }
-
-        window.add_controller(motion);
-
-        // --- REAKTIVE BINDINGS ---
-
-        ctx.clock.subscribe(move |time| {
-            clock_label.set_text(&time.format("%H:%M").to_string());
-        });
-
-        ctx.niri.subscribe(move |data| {
-            Self::update_workspaces(&ws_label, data);
-        });
-
-        ctx.network.subscribe(move |data| {
-            Self::update_wifi(&wifi_icon, data);
-        });
-
-        ctx.bluetooth.subscribe(move |data| {
-            Self::update_bluetooth(&bt_icon, data);
-        });
-
-        ctx.power.subscribe(move |data| {
-            Self::update_battery(&battery_icon, data);
-        });
-
-        let vol_icon_clone = vol_icon.clone();
-        ctx.audio.subscribe(move |data| {
-            Self::update_volume(&vol_icon_clone, data);
-        });
-
-        Self {
+        let bar = Self {
             window,
             launcher_island: launcher_island.container,
             status_island: status_island.container,
             center_island: center_island.container,
-            vol_icon,
-            popup_open,
+            vol_icon: vol_icon.clone(),
+            popup_open: popup_open.clone(),
+            is_visible: is_visible.clone(),
+            hide_timeout: hide_timeout.clone(),
+            anim_source: anim_source.clone(),
+            is_hovered: is_hovered.clone(),
+        };
+
+        // --- AUTO-HIDE Logic ---
+        let motion = gtk4::EventControllerMotion::new();
+        {
+            let is_hovered_c = is_hovered.clone();
+            let is_visible_c = is_visible.clone();
+            let hide_timeout_c = hide_timeout.clone();
+            let anim_source_c = anim_source.clone();
+            let window_c = bar.window.clone();
+
+            motion.connect_enter(move |_, _, _| {
+                *is_hovered_c.borrow_mut() = true;
+                if let Some(src) = hide_timeout_c.borrow_mut().take() { src.remove(); }
+                if *is_visible_c.borrow() || anim_source_c.borrow().is_some() { return; }
+                *is_visible_c.borrow_mut() = true;
+
+                let window_anim = window_c.clone();
+                let anim_source_cb = anim_source_c.clone();
+                let src = glib::timeout_add_local(Duration::from_millis(ANIM_INTERVAL_MS), move || {
+                    let current = window_anim.margin(Edge::Bottom);
+                    let next = (current + ANIM_STEP).min(0);
+                    window_anim.set_margin(Edge::Bottom, next);
+                    if next >= 0 {
+                        *anim_source_cb.borrow_mut() = None;
+                        glib::ControlFlow::Break
+                    } else { glib::ControlFlow::Continue }
+                });
+                *anim_source_c.borrow_mut() = Some(src);
+            });
         }
+
+        {
+            let is_hovered_c = is_hovered.clone();
+            let bar_instance = bar.clone();
+            motion.connect_leave(move |_| {
+                *is_hovered_c.borrow_mut() = false;
+                bar_instance.check_auto_hide();
+            });
+        }
+        bar.window.add_controller(motion);
+
+        // --- BINDINGS ---
+        ctx.clock.subscribe(move |time| { clock_label.set_text(&time.format("%H:%M").to_string()); });
+        ctx.niri.subscribe(move |data| { Self::update_workspaces(&ws_label, data); });
+        ctx.network.subscribe(move |data| { Self::update_wifi(&wifi_icon, data); });
+        ctx.bluetooth.subscribe(move |data| { Self::update_bluetooth(&bt_icon, data); });
+        ctx.power.subscribe(move |data| { Self::update_battery(&battery_icon, data); });
+        let vol_icon_clone = vol_icon.clone();
+        ctx.audio.subscribe(move |data| { Self::update_volume(&vol_icon_clone, data); });
+
+        bar
+    }
+
+    pub fn check_auto_hide(&self) {
+        // Falls ein Popup offen ist oder die Maus drüber schwebt -> NICHT einklappen
+        if *self.popup_open.borrow() || *self.is_hovered.borrow() {
+            return;
+        }
+        
+        if let Some(src) = self.hide_timeout.borrow_mut().take() {
+            src.remove();
+        }
+
+        let is_visible_for_cb = self.is_visible.clone();
+        let hide_timeout_for_cb = self.hide_timeout.clone();
+        let anim_source_for_cb = self.anim_source.clone();
+        let window_anim = self.window.clone();
+
+        let src = glib::timeout_add_local_once(Duration::from_millis(HIDE_DELAY_MS), move || {
+            *is_visible_for_cb.borrow_mut() = false;
+            *hide_timeout_for_cb.borrow_mut() = None;
+            if let Some(anim) = anim_source_for_cb.borrow_mut().take() {
+                anim.remove();
+            }
+            let anim_source_cb = anim_source_for_cb.clone();
+            let src = glib::timeout_add_local(Duration::from_millis(ANIM_INTERVAL_MS), move || {
+                let current = window_anim.margin(Edge::Bottom);
+                let target = -(BAR_HEIGHT - PEEK_PX);
+                let next = (current - ANIM_STEP).max(target);
+                window_anim.set_margin(Edge::Bottom, next);
+                if next <= target {
+                    *anim_source_cb.borrow_mut() = None;
+                    glib::ControlFlow::Break
+                } else { glib::ControlFlow::Continue }
+            });
+            *anim_source_for_cb.borrow_mut() = Some(src);
+        });
+        *self.hide_timeout.borrow_mut() = Some(src);
     }
 
     fn update_workspaces(label: &gtk4::Label, data: &crate::services::niri::NiriData) {
@@ -230,11 +197,8 @@ impl Bar {
         workspaces.sort_by_key(|w| w.id);
         let mut markup = String::new();
         for ws in workspaces {
-            if ws.is_active {
-                markup.push_str(&format!(" <b>{}</b> ", ws.id));
-            } else {
-                markup.push_str(&format!(" {} ", ws.id));
-            }
+            if ws.is_active { markup.push_str(&format!(" <b>{}</b> ", ws.id)); }
+            else { markup.push_str(&format!(" {} ", ws.id)); }
         }
         label.set_markup(&markup);
     }
@@ -242,17 +206,11 @@ impl Bar {
     fn update_wifi(icon: &gtk4::Image, data: &crate::services::network::NetworkData) {
         icon.set_visible(data.is_wifi_enabled);
         if data.is_wifi_enabled {
-            let icon_name = if !data.is_wifi_connected {
-                "network-wireless-offline-symbolic"
-            } else if data.active_strength > 80 {
-                "network-wireless-signal-excellent-symbolic"
-            } else if data.active_strength > 60 {
-                "network-wireless-signal-good-symbolic"
-            } else if data.active_strength > 40 {
-                "network-wireless-signal-ok-symbolic"
-            } else {
-                "network-wireless-signal-weak-symbolic"
-            };
+            let icon_name = if !data.is_wifi_connected { "network-wireless-offline-symbolic" }
+            else if data.active_strength > 80 { "network-wireless-signal-excellent-symbolic" }
+            else if data.active_strength > 60 { "network-wireless-signal-good-symbolic" }
+            else if data.active_strength > 40 { "network-wireless-signal-ok-symbolic" }
+            else { "network-wireless-signal-weak-symbolic" };
             icon.set_icon_name(Some(icon_name));
         }
     }
@@ -261,11 +219,8 @@ impl Bar {
         icon.set_visible(data.is_powered);
         if data.is_powered {
             let any_connected = data.devices.iter().any(|d| d.is_connected);
-            let icon_name = if any_connected {
-                "bluetooth-active-symbolic"
-            } else {
-                "bluetooth-symbolic"
-            };
+            let icon_name = if any_connected { "bluetooth-active-symbolic" }
+            else { "bluetooth-symbolic" };
             icon.set_icon_name(Some(icon_name));
         }
     }
@@ -273,31 +228,20 @@ impl Bar {
     fn update_battery(icon: &gtk4::Image, data: &crate::services::power::PowerData) {
         icon.set_visible(data.has_battery);
         if data.has_battery {
-            let icon_name = if data.is_charging {
-                "battery-full-charging-symbolic"
-            } else if data.battery_percentage < 10.0 {
-                "battery-empty-symbolic"
-            } else if data.battery_percentage < 30.0 {
-                "battery-low-symbolic"
-            } else if data.battery_percentage < 60.0 {
-                "battery-good-symbolic"
-            } else {
-                "battery-full-symbolic"
-            };
+            let icon_name = if data.is_charging { "battery-full-charging-symbolic" }
+            else if data.battery_percentage < 10.0 { "battery-empty-symbolic" }
+            else if data.battery_percentage < 30.0 { "battery-low-symbolic" }
+            else if data.battery_percentage < 60.0 { "battery-good-symbolic" }
+            else { "battery-full-symbolic" };
             icon.set_icon_name(Some(icon_name));
         }
     }
 
     fn update_volume(icon: &gtk4::Image, data: &crate::services::audio::AudioData) {
-        let icon_name = if data.is_muted || data.volume <= 0.01 {
-            "audio-volume-muted-symbolic"
-        } else if data.volume < 0.33 {
-            "audio-volume-low-symbolic"
-        } else if data.volume < 0.66 {
-            "audio-volume-medium-symbolic"
-        } else {
-            "audio-volume-high-symbolic"
-        };
+        let icon_name = if data.is_muted || data.volume <= 0.01 { "audio-volume-muted-symbolic" }
+        else if data.volume < 0.33 { "audio-volume-low-symbolic" }
+        else if data.volume < 0.66 { "audio-volume-medium-symbolic" }
+        else { "audio-volume-high-symbolic" };
         icon.set_icon_name(Some(icon_name));
     }
 }

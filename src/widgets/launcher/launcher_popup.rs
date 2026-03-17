@@ -13,9 +13,13 @@ pub struct LauncherPopup {
 }
 
 impl LauncherPopup {
-    pub fn new(app: &libadwaita::Application, ctx: AppContext) -> Self {
+    pub fn new(
+        app: &libadwaita::Application,
+        ctx: AppContext,
+        on_state_change: impl Fn() + 'static,
+    ) -> Self {
         let is_open = Rc::new(RefCell::new(false));
-        let ctx_internal = ctx.clone();
+        let on_state_change = Rc::new(on_state_change);
 
         let window = gtk4::Window::builder()
             .application(app)
@@ -130,11 +134,11 @@ impl LauncherPopup {
         let tx_activate = ctx.launcher_tx.clone();
         let win_activate = window.clone();
         let is_open_activate = is_open.clone();
-        let entry_activate = entry.clone();
+        let on_state_change_activate = on_state_change.clone();
         entry.connect_activate(move |_| {
-            println!("UI: Enter gedrückt (activate)");
             let _ = tx_activate.send_blocking(LauncherCmd::Activate);
-            Self::close_internal(&win_activate, &is_open_activate, &entry_activate);
+            Self::close_internal(&win_activate, &is_open_activate);
+            on_state_change_activate();
         });
 
         // Results Rendering
@@ -146,7 +150,7 @@ impl LauncherPopup {
         let tx_click = ctx.launcher_tx.clone();
         let is_open_click = is_open.clone();
         let window_click = window.clone();
-        let entry_click = entry.clone();
+        let on_state_change_click = on_state_change.clone();
 
         ctx.launcher.subscribe(move |data| {
             while let Some(child) = list_c.first_child() {
@@ -166,12 +170,12 @@ impl LauncherPopup {
                 let tx_row = tx_click.clone();
                 let is_open_row = is_open_click.clone();
                 let window_row = window_click.clone();
-                let entry_row = entry_click.clone();
+                let on_state_change_row = on_state_change_click.clone();
                 
                 row.button.connect_clicked(move |_| {
-                    println!("UI: Item geklickt");
                     let _ = tx_row.send_blocking(LauncherCmd::Activate);
-                    Self::close_internal(&window_row, &is_open_row, &entry_row);
+                    Self::close_internal(&window_row, &is_open_row);
+                    on_state_change_row();
                 });
 
                 list_c.append(&row.container);
@@ -193,7 +197,7 @@ impl LauncherPopup {
         Self { window, is_open, ctx }
     }
 
-    fn close_internal(window: &gtk4::Window, is_open: &Rc<RefCell<bool>>, _entry: &gtk4::Entry) {
+    fn close_internal(window: &gtk4::Window, is_open: &Rc<RefCell<bool>>) {
         let mut open = is_open.borrow_mut();
         *open = false;
         let revealer = window
@@ -222,7 +226,7 @@ impl LauncherPopup {
             self.window.set_visible(true);
             revealer.set_reveal_child(true);
             
-            // Initiale Suche mit leerem String triggern, um alle Apps anzuzeigen
+            // Initiale Suche mit leerem String triggern
             let _ = self.ctx.launcher_tx.send_blocking(LauncherCmd::Search("".to_string()));
 
             if let Some(container) = revealer.child() {
