@@ -7,6 +7,8 @@ use gtk4::prelude::*;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::cell::RefCell;
+use std::process::{Command, Stdio};
+use std::os::unix::process::CommandExt;
 use async_channel::Receiver;
 use gtk4::glib;
 
@@ -65,9 +67,7 @@ impl LauncherService {
                     }
                     LauncherCmd::Activate => {
                         let data = store.get();
-                        println!("Launcher: Aktivierung angefordert. Index: {:?}, Ergebnisse: {}", data.selected_index, data.results.len());
                         
-                        // Fallback: Wenn noch nichts selektiert ist (z.B. schnelles Enter), nimm das erste Item
                         let idx_to_activate = data.selected_index.or_else(|| {
                             if !data.results.is_empty() { Some(0) } else { None }
                         });
@@ -76,31 +76,23 @@ impl LauncherService {
                             if let Some(item) = data.results.get(idx) {
                                 match &item.action {
                                     crate::services::launcher::provider::LauncherAction::Exec(cmd) => {
-                                        println!("Launcher: Versuche zu starten: '{}'", cmd);
-                                        // Gio AppInfo ist robuster für .desktop Files
-                                        if let Ok(app_info) = gtk4::gio::AppInfo::create_from_commandline(
-                                            cmd, 
-                                            None, 
-                                            gtk4::gio::AppInfoCreateFlags::NONE
-                                        ) {
-                                            let _ = app_info.launch(&[], None::<&gtk4::gio::AppLaunchContext>);
-                                            println!("Launcher: Start-Befehl an GIO übergeben.");
-                                        } else {
-                                            // Fallback auf sh -c
-                                            println!("Launcher: GIO gescheitert, nutze sh-Fallback");
-                                            let _ = std::process::Command::new("sh")
-                                                .arg("-c")
-                                                .arg(format!("{} &", cmd))
-                                                .spawn();
-                                        }
+                                        println!("Launcher: Bulletproof Start von '{}'", cmd);
+                                        
+                                        // 1. Command vorbereiten
+                                        // 2. I/O umleiten nach /dev/null (verhindert Hängenbleiben)
+                                        // 3. process_group(0) erstellt eine neue Session (detaching)
+                                        let _ = Command::new("sh")
+                                            .arg("-c")
+                                            .arg(cmd)
+                                            .stdin(Stdio::null())
+                                            .stdout(Stdio::null())
+                                            .stderr(Stdio::null())
+                                            .process_group(0) 
+                                            .spawn();
                                     }
                                     _ => {}
                                 }
-                            } else {
-                                println!("Launcher: Kein Item an Index {} gefunden!", idx);
                             }
-                        } else {
-                            println!("Launcher: Kein Element zur Aktivierung verfügbar.");
                         }
                     }
                     LauncherCmd::Search(query) => {
@@ -132,7 +124,6 @@ impl LauncherService {
                         store.update(|d| {
                             d.results = all_results;
                             d.is_searching = false;
-                            // Index erst setzen, wenn Ergebnisse da sind!
                             d.selected_index = if d.results.is_empty() { None } else { Some(0) };
                         });
                     }
