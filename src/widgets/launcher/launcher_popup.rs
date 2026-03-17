@@ -9,11 +9,13 @@ use std::rc::Rc;
 pub struct LauncherPopup {
     pub window: gtk4::Window,
     pub is_open: Rc<RefCell<bool>>,
+    pub ctx: AppContext,
 }
 
 impl LauncherPopup {
     pub fn new(app: &libadwaita::Application, ctx: AppContext) -> Self {
         let is_open = Rc::new(RefCell::new(false));
+        let ctx_internal = ctx.clone();
 
         let window = gtk4::Window::builder()
             .application(app)
@@ -188,7 +190,7 @@ impl LauncherPopup {
             }
         });
 
-        Self { window, is_open }
+        Self { window, is_open, ctx }
     }
 
     fn close_internal(window: &gtk4::Window, is_open: &Rc<RefCell<bool>>, _entry: &gtk4::Entry) {
@@ -220,6 +222,9 @@ impl LauncherPopup {
             self.window.set_visible(true);
             revealer.set_reveal_child(true);
             
+            // Initiale Suche mit leerem String triggern, um alle Apps anzuzeigen
+            let _ = self.ctx.launcher_tx.send_blocking(LauncherCmd::Search("".to_string()));
+
             if let Some(container) = revealer.child() {
                 if let Some(box_w) = container.downcast_ref::<gtk4::Box>() {
                     if let Some(left_pane) = box_w.first_child().and_then(|c| c.downcast::<gtk4::Box>().ok()) {

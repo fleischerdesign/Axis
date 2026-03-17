@@ -113,8 +113,21 @@ impl LauncherProvider for AppProvider {
     ) -> Pin<Box<dyn Future<Output = Vec<LauncherItem>> + Send + 'a>> {
         Box::pin(async move {
             let query_lower = query.to_lowercase();
-            let all_apps = self.scan_apps();
+            let mut all_apps = self.scan_apps();
             
+            // Bei leerer Suche: Alle Apps alphabetisch sortiert zurückgeben
+            if query_lower.is_empty() {
+                all_apps.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+                return all_apps.into_iter().map(|app| LauncherItem {
+                    id: format!("app-{}", app.name),
+                    title: app.name.clone(),
+                    description: app.comment.clone(),
+                    icon_name: app.icon.clone(),
+                    action: LauncherAction::Exec(app.exec.clone()),
+                    score: 1, // Niedriger Basis-Score
+                }).collect();
+            }
+
             let mut results = Vec::new();
             for app in all_apps {
                 let name_lower = app.name.to_lowercase();

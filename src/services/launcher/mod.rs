@@ -100,16 +100,12 @@ impl LauncherService {
                         
                         store.update(|d| {
                             d.query = query.clone();
-                            d.is_searching = !query_trimmed.is_empty();
+                            d.is_searching = true;
                             if query_trimmed.is_empty() {
                                 d.results.clear();
                                 d.selected_index = None;
                             }
                         });
-
-                        if query_trimmed.is_empty() {
-                            continue;
-                        }
 
                         let active_providers: Vec<Arc<dyn LauncherProvider>> = providers_ref.borrow().clone();
                         let mut all_results = Vec::new();
