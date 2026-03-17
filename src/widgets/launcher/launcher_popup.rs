@@ -1,37 +1,31 @@
 use crate::app_context::AppContext;
 use crate::services::launcher::LauncherCmd;
 use crate::widgets::ListRow;
+use crate::widgets::base::PopupBase;
 use crate::shell::ShellPopup;
 use gtk4::prelude::*;
-use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
-use std::cell::RefCell;
 use std::rc::Rc;
 
 pub struct LauncherPopup {
-    pub window: gtk4::Window,
-    pub is_open: Rc<RefCell<bool>>,
+    pub base: PopupBase,
     pub ctx: AppContext,
-    on_state_change: Rc<dyn Fn() + 'static>,
+    pub entry: gtk4::Entry,
 }
 
 impl ShellPopup for LauncherPopup {
     fn id(&self) -> &str { "launcher" }
-    fn is_open(&self) -> bool { *self.is_open.borrow() }
+    fn is_open(&self) -> bool { *self.base.is_open.borrow() }
 
     fn close(&self) {
-        if !self.is_open() { return; }
-        *self.is_open.borrow_mut() = false;
-        self.animate_close();
-        (self.on_state_change)();
+        self.base.close();
     }
 
     fn toggle(&self) {
         if self.is_open() {
             self.close();
         } else {
-            *self.is_open.borrow_mut() = true;
-            self.animate_open();
-            (self.on_state_change)();
+            self.on_open();
+            self.base.open();
         }
     }
 }
@@ -42,22 +36,13 @@ impl LauncherPopup {
         ctx: AppContext,
         on_state_change: impl Fn() + 'static,
     ) -> Self {
-        let is_open = Rc::new(RefCell::new(false));
-        let on_state_change = Rc::new(on_state_change);
-
-        let window = gtk4::Window::builder()
-            .application(app)
-            .title("Carp Launcher")
-            .visible(false)
-            .build();
-
-        window.init_layer_shell();
-        window.set_layer(Layer::Overlay);
-        window.set_keyboard_mode(KeyboardMode::OnDemand);
-        window.set_anchor(Edge::Bottom, true);
-        window.set_anchor(Edge::Left, true);
-        window.set_margin(Edge::Bottom, 64);
-        window.set_margin(Edge::Left, 10);
+        let base = PopupBase::new(app, "Carp Launcher", false);
+        
+        let on_change = Rc::new(on_state_change);
+        let on_change_c = on_change.clone();
+        base.window.connect_visible_notify(move |_| {
+            on_change_c();
+        });
 
         let container = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
         container.add_css_class("qs-panel");
@@ -95,7 +80,7 @@ impl LauncherPopup {
         left_pane.append(&scrolled);
         container.append(&left_pane);
 
-        // --- RIGHT PANE ---
+        // --- RIGHT PANE (Details) ---
         let detail_revealer = gtk4::Revealer::builder()
             .transition_type(gtk4::RevealerTransitionType::SlideRight)
             .transition_duration(250)
@@ -123,20 +108,16 @@ impl LauncherPopup {
         detail_revealer.set_child(Some(&detail_box));
         container.append(&detail_revealer);
 
-        // --- REAKTIVE BINDINGS ---
+        base.set_content(&container);
+
+        // --- LOGIK ---
         let tx = ctx.launcher_tx.clone();
+        let entry_c = entry.clone();
         entry.connect_changed(move |e| {
             let _ = tx.send_blocking(LauncherCmd::Search(e.text().to_string()));
         });
 
-        let qs_revealer = gtk4::Revealer::builder()
-            .transition_type(gtk4::RevealerTransitionType::Crossfade)
-            .transition_duration(250)
-            .build();
-        qs_revealer.set_child(Some(&container));
-        window.set_child(Some(&qs_revealer));
-
-        // Keyboard Handling
+        // Navigation (Pfeiltasten)
         let tx_key = ctx.launcher_tx.clone();
         let key_controller = gtk4::EventControllerKey::new();
         key_controller.connect_key_pressed(move |_, key, _, _| {
@@ -154,25 +135,12 @@ impl LauncherPopup {
         });
         entry.add_controller(key_controller);
 
-        // Enter-Taste (Activate)
+        // Aktivierung (Enter)
         let tx_activate = ctx.launcher_tx.clone();
-        let win_activate = window.clone();
-        let is_open_activate = is_open.clone();
-        let on_state_change_activate = on_state_change.clone();
+        let base_activate = base.clone();
         entry.connect_activate(move |_| {
             let _ = tx_activate.send_blocking(LauncherCmd::Activate);
-            *is_open_activate.borrow_mut() = false;
-            
-            // Animation starten (sauberes Refactoring in animate_close folgt)
-            let win = win_activate.clone();
-            if let Some(rev) = win.child().and_then(|c| c.downcast::<gtk4::Revealer>().ok()) {
-                rev.set_reveal_child(false);
-                gtk4::glib::timeout_add_local(std::time::Duration::from_millis(280), move || {
-                    win.set_visible(false);
-                    gtk4::glib::ControlFlow::Break
-                });
-            }
-            on_state_change_activate();
+            base_activate.close();
         });
 
         // Results Rendering
@@ -180,11 +148,9 @@ impl LauncherPopup {
         let d_title = detail_title.clone();
         let d_desc = detail_desc.clone();
         let d_rev = detail_revealer.clone();
-        let win_c = window.clone();
-        let tx_click = ctx.launcher_tx.clone();
-        let is_open_click = is_open.clone();
-        let window_click = window.clone();
-        let on_state_change_click = on_state_change.clone();
+        let win_c = base.window.clone();
+        let tx_row = ctx.launcher_tx.clone();
+        let base_row = base.clone();
 
         ctx.launcher.subscribe(move |data| {
             while let Some(child) = list_c.first_child() {
@@ -201,23 +167,11 @@ impl LauncherPopup {
                     false,
                 );
                 
-                let tx_row = tx_click.clone();
-                let is_open_row = is_open_click.clone();
-                let window_row = window_click.clone();
-                let on_state_change_row = on_state_change_click.clone();
-                
+                let tx_inner = tx_row.clone();
+                let base_inner = base_row.clone();
                 row.button.connect_clicked(move |_| {
-                    let _ = tx_row.send_blocking(LauncherCmd::Activate);
-                    *is_open_row.borrow_mut() = false;
-                    let win = window_row.clone();
-                    if let Some(rev) = win.child().and_then(|c| c.downcast::<gtk4::Revealer>().ok()) {
-                        rev.set_reveal_child(false);
-                        gtk4::glib::timeout_add_local(std::time::Duration::from_millis(280), move || {
-                            win.set_visible(false);
-                            gtk4::glib::ControlFlow::Break
-                        });
-                    }
-                    on_state_change_row();
+                    let _ = tx_inner.send_blocking(LauncherCmd::Activate);
+                    base_inner.close();
                 });
 
                 list_c.append(&row.container);
@@ -236,39 +190,16 @@ impl LauncherPopup {
             }
         });
 
-        Self { window, is_open, ctx, on_state_change }
+        Self { 
+            ctx,
+            base,
+            entry: entry_c,
+        }
     }
 
-    fn animate_open(&self) {
-        self.window.set_visible(true);
-        if let Some(rev) = self.window.child().and_then(|c| c.downcast::<gtk4::Revealer>().ok()) {
-            rev.set_reveal_child(true);
-            
-            // Fokus in das Entry-Feld (etwas hacky, aber funktional für den Moment)
-            if let Some(container) = rev.child() {
-                if let Some(box_w) = container.downcast_ref::<gtk4::Box>() {
-                    if let Some(left_pane) = box_w.first_child().and_then(|c| c.downcast::<gtk4::Box>().ok()) {
-                        if let Some(entry_box) = left_pane.first_child().and_then(|c| c.downcast::<gtk4::Box>().ok()) {
-                            if let Some(entry) = entry_box.first_child().and_then(|c| c.downcast::<gtk4::Entry>().ok()) {
-                                entry.set_text("");
-                                entry.grab_focus();
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    fn on_open(&self) {
+        self.entry.set_text("");
+        self.entry.grab_focus();
         let _ = self.ctx.launcher_tx.send_blocking(LauncherCmd::Search("".to_string()));
-    }
-
-    fn animate_close(&self) {
-        if let Some(rev) = self.window.child().and_then(|c| c.downcast::<gtk4::Revealer>().ok()) {
-            rev.set_reveal_child(false);
-            let win = self.window.clone();
-            gtk4::glib::timeout_add_local(std::time::Duration::from_millis(280), move || {
-                win.set_visible(false);
-                gtk4::glib::ControlFlow::Break
-            });
-        }
     }
 }

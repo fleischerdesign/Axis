@@ -4,6 +4,7 @@ pub mod bar;
 pub mod base;
 pub mod launcher;
 pub mod quick_settings;
+pub mod animations;
 mod workspace_popup;
 
 pub use island::Island;

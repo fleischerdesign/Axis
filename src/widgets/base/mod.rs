@@ -4,6 +4,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
+#[derive(Clone)]
 pub struct PopupBase {
     pub window: gtk4::Window,
     pub revealer: gtk4::Revealer,

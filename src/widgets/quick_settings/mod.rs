@@ -10,39 +10,27 @@ use bluetooth_page::BluetoothPage;
 use main_page::MainPage;
 use wifi_page::WifiPage;
 use crate::shell::ShellPopup;
+use crate::widgets::base::PopupBase;
 
 use crate::services::bluetooth::BluetoothCmd;
 use crate::services::network::NetworkCmd;
 use gtk4::prelude::*;
-use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
-use std::cell::RefCell;
 use std::rc::Rc;
 
 pub struct QuickSettingsPopup {
-    pub window: gtk4::Window,
-    pub is_open: Rc<RefCell<bool>>,
-    on_state_change: Rc<dyn Fn() + 'static>,
+    pub base: PopupBase,
 }
 
 impl ShellPopup for QuickSettingsPopup {
     fn id(&self) -> &str { "qs" }
-    fn is_open(&self) -> bool { *self.is_open.borrow() }
+    fn is_open(&self) -> bool { *self.base.is_open.borrow() }
 
     fn close(&self) {
-        if !self.is_open() { return; }
-        *self.is_open.borrow_mut() = false;
-        self.animate_close();
-        (self.on_state_change)();
+        self.base.close();
     }
 
     fn toggle(&self) {
-        if self.is_open() {
-            self.close();
-        } else {
-            *self.is_open.borrow_mut() = true;
-            self.animate_open();
-            (self.on_state_change)();
-        }
+        self.base.toggle();
     }
 }
 
@@ -53,22 +41,14 @@ impl QuickSettingsPopup {
         ctx: AppContext,
         on_state_change: impl Fn() + 'static,
     ) -> Self {
-        let is_open = Rc::new(RefCell::new(false));
+        let base = PopupBase::new(app, "Carp Quick Settings", true);
         let on_state_change = Rc::new(on_state_change);
 
-        let window = gtk4::Window::builder()
-            .application(app)
-            .title("Carp Quick Settings")
-            .visible(false)
-            .build();
-
-        window.init_layer_shell();
-        window.set_layer(Layer::Overlay);
-        window.set_keyboard_mode(KeyboardMode::OnDemand);
-        window.set_anchor(Edge::Bottom, true);
-        window.set_anchor(Edge::Right, true);
-        window.set_margin(Edge::Bottom, 64);
-        window.set_margin(Edge::Right, 10);
+        // State-Change an den Controller melden
+        let on_change_c = on_state_change.clone();
+        base.window.connect_visible_notify(move |_| {
+            on_change_c();
+        });
 
         let qs_container = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
         qs_container.add_css_class("qs-panel");
@@ -111,7 +91,7 @@ impl QuickSettingsPopup {
         );
 
         let stack_back = qs_stack.clone();
-        let win_back = window.clone();
+        let win_back = base.window.clone();
         let wifi_page = WifiPage::new(
             ctx.clone(),
             move || {
@@ -123,7 +103,7 @@ impl QuickSettingsPopup {
         );
 
         let stack_back_bt = qs_stack.clone();
-        let win_back_bt = window.clone();
+        let win_back_bt = base.window.clone();
         let bluetooth_page = BluetoothPage::new(
             ctx.clone(),
             move || {
@@ -134,7 +114,7 @@ impl QuickSettingsPopup {
         );
 
         let stack_back_nl = qs_stack.clone();
-        let win_back_nl = window.clone();
+        let win_back_nl = base.window.clone();
         let nightlight_page = NightlightPage::new(
             ctx.clone(),
             move || {
@@ -149,33 +129,9 @@ impl QuickSettingsPopup {
         qs_stack.add_named(&wifi_page.container, Some("wifi"));
         qs_stack.add_named(&bluetooth_page.container, Some("bluetooth"));
         qs_stack.add_named(&nightlight_page.container, Some("nightlight"));
-
         qs_container.append(&qs_stack);
-        let qs_revealer = gtk4::Revealer::builder()
-            .transition_type(gtk4::RevealerTransitionType::Crossfade)
-            .transition_duration(250)
-            .build();
-        qs_revealer.set_child(Some(&qs_container));
-        window.set_child(Some(&qs_revealer));
+        base.set_content(&qs_container);
 
-        Self { window, is_open, on_state_change }
-    }
-
-    fn animate_open(&self) {
-        self.window.set_visible(true);
-        if let Some(rev) = self.window.child().and_then(|c| c.downcast::<gtk4::Revealer>().ok()) {
-            rev.set_reveal_child(true);
-        }
-    }
-
-    fn animate_close(&self) {
-        if let Some(rev) = self.window.child().and_then(|c| c.downcast::<gtk4::Revealer>().ok()) {
-            rev.set_reveal_child(false);
-            let win = self.window.clone();
-            gtk4::glib::timeout_add_local(std::time::Duration::from_millis(280), move || {
-                win.set_visible(false);
-                gtk4::glib::ControlFlow::Break
-            });
-        }
+        Self { base }
     }
 }

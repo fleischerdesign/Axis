@@ -3,7 +3,6 @@ pub mod providers;
 
 use crate::services::launcher::provider::{LauncherItem, LauncherProvider};
 use crate::store::Store;
-use gtk4::prelude::*;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::cell::RefCell;

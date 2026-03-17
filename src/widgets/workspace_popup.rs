@@ -1,93 +1,73 @@
 use crate::app_context::AppContext;
 use crate::shell::ShellPopup;
+use crate::widgets::base::PopupBase;
 use gtk4::prelude::*;
-use gtk4_layer_shell::{Edge, Layer, LayerShell};
-use std::cell::RefCell;
+use gtk4_layer_shell::LayerShell;
 use std::rc::Rc;
 
 pub struct WorkspacePopup {
-    pub window: gtk4::Window,
-    pub is_open: Rc<RefCell<bool>>,
+    pub base: PopupBase,
     ctx: AppContext,
-    on_state_change: Rc<dyn Fn() + 'static>,
 }
 
 impl ShellPopup for WorkspacePopup {
     fn id(&self) -> &str { "ws" }
-    fn is_open(&self) -> bool { *self.is_open.borrow() }
+    fn is_open(&self) -> bool { *self.base.is_open.borrow() }
 
     fn close(&self) {
-        if !self.is_open() { return; }
-        *self.is_open.borrow_mut() = false;
-        self.animate_close();
-        (self.on_state_change)();
+        self.base.close();
     }
 
     fn toggle(&self) {
         if self.is_open() {
             self.close();
         } else {
-            *self.is_open.borrow_mut() = true;
-            self.animate_open();
-            (self.on_state_change)();
+            self.on_open();
+            self.base.open();
         }
     }
 }
 
 impl WorkspacePopup {
     pub fn new(app: &libadwaita::Application, ctx: AppContext, on_state_change: impl Fn() + 'static) -> Self {
-        let is_open = Rc::new(RefCell::new(false));
+        let base = PopupBase::new(app, "Carp Workspace Popup", false);
         let on_state_change = Rc::new(on_state_change);
 
-        let window = gtk4::Window::builder()
-            .application(app)
-            .title("Carp Workspace Popup")
-            .visible(false)
-            .build();
+        // State-Change an den Controller melden
+        let on_change_c = on_state_change.clone();
+        base.window.connect_visible_notify(move |_| {
+            on_change_c();
+        });
 
-        window.init_layer_shell();
-        window.set_layer(Layer::Overlay);
-        window.set_anchor(Edge::Bottom, true);
-        window.set_margin(Edge::Bottom, 64);
+        // Den Workspace-Shelf mittig ausrichten
+        base.window.set_anchor(gtk4_layer_shell::Edge::Left, true);
+        base.window.set_anchor(gtk4_layer_shell::Edge::Right, true);
+        base.window.set_margin(gtk4_layer_shell::Edge::Left, 10);
+        base.window.set_margin(gtk4_layer_shell::Edge::Right, 10);
 
-        let revealer = gtk4::Revealer::builder()
-            .transition_type(gtk4::RevealerTransitionType::Crossfade)
-            .transition_duration(250)
-            .build();
         let shelf = gtk4::Box::new(gtk4::Orientation::Horizontal, 24);
         shelf.add_css_class("workspace-shelf");
-        revealer.set_child(Some(&shelf));
-        window.set_child(Some(&revealer));
+        base.set_content(&shelf);
 
         let shelf_c = shelf.clone();
-        let window_c = window.clone();
-        let is_open_c = is_open.clone();
+        let window_c = base.window.clone();
+        let is_open_c = base.is_open.clone();
         ctx.niri.subscribe(move |data| {
             if *is_open_c.borrow() {
                 Self::render_shelf(&shelf_c, data, &window_c);
             }
         });
 
-        Self { window, is_open, ctx, on_state_change }
+        Self { 
+            base, 
+            ctx, 
+        }
     }
 
-    fn animate_open(&self) {
-        let revealer = self.window.child().and_then(|c| c.downcast::<gtk4::Revealer>().ok()).unwrap();
-        let shelf = revealer.child().and_then(|c| c.downcast::<gtk4::Box>().ok()).unwrap();
-        
-        Self::render_shelf(&shelf, &self.ctx.niri.get(), &self.window);
-        self.window.set_visible(true);
-        revealer.set_reveal_child(true);
-    }
-
-    fn animate_close(&self) {
-        if let Some(rev) = self.window.child().and_then(|c| c.downcast::<gtk4::Revealer>().ok()) {
-            rev.set_reveal_child(false);
-            let win = self.window.clone();
-            gtk4::glib::timeout_add_local(std::time::Duration::from_millis(280), move || {
-                win.set_visible(false);
-                gtk4::glib::ControlFlow::Break
-            });
+    fn on_open(&self) {
+        // Shelf-Inhalt vor dem Anzeigen rendern
+        if let Some(shelf) = self.base.revealer.child().and_then(|c| c.downcast::<gtk4::Box>().ok()) {
+            Self::render_shelf(&shelf, &self.ctx.niri.get(), &self.base.window);
         }
     }
 

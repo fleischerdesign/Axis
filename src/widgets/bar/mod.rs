@@ -6,6 +6,7 @@ use crate::app_context::AppContext;
 use launcher::BarLauncher;
 use center::BarCenter;
 use status::BarStatus;
+use crate::widgets::animations::SlideAnimator;
 
 use gtk4::glib;
 use gtk4::prelude::*;
@@ -17,8 +18,6 @@ use std::time::Duration;
 const BAR_HEIGHT: i32 = 54;
 const PEEK_PX: i32 = 1;
 const HIDE_DELAY_MS: u64 = 300;
-const ANIM_INTERVAL_MS: u64 = 16;
-const ANIM_STEP: i32 = 8;
 
 #[derive(Clone)]
 pub struct Bar {
@@ -69,7 +68,7 @@ impl Bar {
         window.set_child(Some(&root));
 
         let bar = Self {
-            window,
+            window: window.clone(),
             launcher_island: launcher.container,
             status_island: status.container,
             center_island: center.container,
@@ -88,26 +87,15 @@ impl Bar {
             let is_visible_c = is_visible.clone();
             let hide_timeout_c = hide_timeout.clone();
             let anim_source_c = anim_source.clone();
-            let window_c = bar.window.clone();
+            let window_c = window.clone();
 
             motion.connect_enter(move |_, _, _| {
                 *is_hovered_c.borrow_mut() = true;
                 if let Some(src) = hide_timeout_c.borrow_mut().take() { src.remove(); }
-                if *is_visible_c.borrow() || anim_source_c.borrow().is_some() { return; }
+                if *is_visible_c.borrow() { return; }
                 *is_visible_c.borrow_mut() = true;
 
-                let window_anim = window_c.clone();
-                let anim_source_cb = anim_source_c.clone();
-                let src = glib::timeout_add_local(Duration::from_millis(ANIM_INTERVAL_MS), move || {
-                    let current = window_anim.margin(Edge::Bottom);
-                    let next = (current + ANIM_STEP).min(0);
-                    window_anim.set_margin(Edge::Bottom, next);
-                    if next >= 0 {
-                        *anim_source_cb.borrow_mut() = None;
-                        glib::ControlFlow::Break
-                    } else { glib::ControlFlow::Continue }
-                });
-                *anim_source_c.borrow_mut() = Some(src);
+                SlideAnimator::slide_margin(&window_c, Edge::Bottom, 0, anim_source_c.clone());
             });
         }
 
@@ -119,7 +107,7 @@ impl Bar {
                 bar_instance.check_auto_hide();
             });
         }
-        bar.window.add_controller(motion);
+        window.add_controller(motion);
 
         bar
     }
@@ -136,19 +124,13 @@ impl Bar {
         let src = glib::timeout_add_local_once(Duration::from_millis(HIDE_DELAY_MS), move || {
             *is_visible_for_cb.borrow_mut() = false;
             *hide_timeout_for_cb.borrow_mut() = None;
-            if let Some(anim) = anim_source_for_cb.borrow_mut().take() { anim.remove(); }
-            let anim_source_cb = anim_source_for_cb.clone();
-            let src = glib::timeout_add_local(Duration::from_millis(ANIM_INTERVAL_MS), move || {
-                let current = window_anim.margin(Edge::Bottom);
-                let target = -(BAR_HEIGHT - PEEK_PX);
-                let next = (current - ANIM_STEP).max(target);
-                window_anim.set_margin(Edge::Bottom, next);
-                if next <= target {
-                    *anim_source_cb.borrow_mut() = None;
-                    glib::ControlFlow::Break
-                } else { glib::ControlFlow::Continue }
-            });
-            *anim_source_for_cb.borrow_mut() = Some(src);
+            
+            SlideAnimator::slide_margin(
+                &window_anim, 
+                Edge::Bottom, 
+                -(BAR_HEIGHT - PEEK_PX), 
+                anim_source_for_cb
+            );
         });
         *self.hide_timeout.borrow_mut() = Some(src);
     }
