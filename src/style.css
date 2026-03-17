@@ -138,8 +138,33 @@ window {
 }
 
 .qs-list-row.active {
+    background-color: rgba(255, 255, 255, 0.1);
     color: #3584e4;
     font-weight: bold;
+}
+
+.qs-list-sublabel {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 11px;
+}
+
+/* Launcher Specifics */
+.qs-entry {
+    background-color: #303030;
+    color: white;
+    border-radius: 12px;
+    padding: 8px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.qs-entry:focus {
+    border-color: #3584e4;
+    box-shadow: 0 0 0 2px rgba(53, 132, 228, 0.3);
+}
+
+.launcher-details {
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 12px;
 }
 
 .qs-wifi-item {

@@ -26,10 +26,12 @@ impl QsListRow {
         content.append(&icon_img);
 
         let label_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+        label_box.set_hexpand(true);
         label_box.append(
             &gtk4::Label::builder()
                 .label(label)
                 .halign(gtk4::Align::Start)
+                .ellipsize(gtk4::pango::EllipsizeMode::End)
                 .build(),
         );
 
@@ -38,6 +40,8 @@ impl QsListRow {
                 &gtk4::Label::builder()
                     .label(sub)
                     .halign(gtk4::Align::Start)
+                    .ellipsize(gtk4::pango::EllipsizeMode::End)
+                    .max_width_chars(30)
                     .css_classes(vec!["qs-list-sublabel".to_string()])
                     .build(),
             );
