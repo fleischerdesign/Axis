@@ -1,6 +1,6 @@
 use crate::app_context::AppContext;
 use crate::services::bluetooth::BluetoothCmd;
-use crate::widgets::quick_settings::components::{QsListRow, QsTile};
+use crate::widgets::{ListRow, QsTile};
 use gtk4::prelude::*;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -75,7 +75,7 @@ impl BluetoothPage {
                 } else {
                     None
                 };
-                let row = QsListRow::new(&dev.name, &dev.icon, dev.is_connected, sublabel, true);
+                let row = ListRow::new(&dev.name, &dev.icon, dev.is_connected, sublabel, true);
 
                 let tx = ctx.bluetooth_tx.clone();
                 let path = dev.path.clone();

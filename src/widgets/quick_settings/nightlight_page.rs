@@ -1,6 +1,6 @@
 use crate::app_context::AppContext;
 use crate::services::nightlight::NightlightCmd;
-use crate::widgets::quick_settings::components::QsTile;
+use crate::widgets::QsTile;
 use gtk4::prelude::*;
 use std::cell::Cell;
 use std::rc::Rc;

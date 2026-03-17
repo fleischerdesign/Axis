@@ -1,6 +1,6 @@
 use crate::app_context::AppContext;
 use crate::services::network::NetworkCmd;
-use crate::widgets::quick_settings::components::{QsListRow, QsTile};
+use crate::widgets::{ListRow, QsTile};
 use gtk4::prelude::*;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -59,7 +59,7 @@ impl WifiPage {
             wifi_tile.set_active(data.is_wifi_enabled);
             eth_tile.set_active(data.is_ethernet_connected);
 
-            let wifi_icon = if !data.is_wifi_enabled || !data.is_wifi_connected {
+            let icon_name = if !data.is_wifi_enabled || !data.is_wifi_connected {
                 "network-wireless-offline-symbolic"
             } else if data.active_strength > 80 {
                 "network-wireless-signal-excellent-symbolic"
@@ -70,7 +70,7 @@ impl WifiPage {
             } else {
                 "network-wireless-signal-weak-symbolic"
             };
-            wifi_tile.set_icon(wifi_icon);
+            wifi_tile.set_icon(icon_name);
 
             // AP-Liste nur neu aufbauen wenn sich die IDs geändert haben
             let current_ap_ids: Vec<String> = data
@@ -124,7 +124,7 @@ impl WifiPage {
                 } else {
                     "network-wireless-signal-weak-symbolic"
                 };
-                let row = QsListRow::new(&ap.ssid, icon, ap.is_active, None, true);
+                let row = ListRow::new(&ap.ssid, icon, ap.is_active, None, true);
 
                 let auth_revealer = gtk4::Revealer::new();
                 let auth_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);

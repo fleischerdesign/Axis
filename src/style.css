@@ -111,17 +111,17 @@ window {
     background-color: #242424;
 }
 
-.qs-list-row {
+.list-row {
     background: transparent;
     border: none;
     box-shadow: none;
     color: inherit;
-    border-radius: 12px; /* Tippfehler korrigiert: Bindestrich statt Unterstrich */
+    border-radius: 12px;
     padding: 0;
     font-weight: normal;
 }
 
-.qs-list-row:hover {
+.list-row:hover {
     background-color: rgba(255, 255, 255, 0.05);
 }
 
@@ -137,13 +137,13 @@ window {
     background: transparent;
 }
 
-.qs-list-row.active {
+.list-row.active {
     background-color: rgba(255, 255, 255, 0.1);
     color: #3584e4;
     font-weight: bold;
 }
 
-.qs-list-sublabel {
+.list-sublabel {
     color: rgba(255, 255, 255, 0.5);
     font-size: 11px;
 }

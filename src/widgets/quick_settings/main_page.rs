@@ -5,7 +5,7 @@ use crate::services::bluetooth::BluetoothCmd;
 use crate::services::network::NetworkCmd;
 use crate::services::nightlight::NightlightCmd;
 use crate::services::power::PowerData;
-use crate::widgets::quick_settings::components::QsTile;
+use crate::widgets::QsTile;
 use gtk4::prelude::*;
 use std::rc::Rc;
 

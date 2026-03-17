@@ -1,6 +1,6 @@
 use crate::app_context::AppContext;
 use crate::services::launcher::LauncherCmd;
-use crate::widgets::quick_settings::components::QsListRow;
+use crate::widgets::ListRow;
 use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 use std::cell::RefCell;
@@ -139,7 +139,7 @@ impl LauncherPopup {
             // Ergebnisse hinzufügen
             for (i, item) in data.results.iter().enumerate() {
                 let is_selected = data.selected_index == Some(i);
-                let row = QsListRow::new(
+                let row = ListRow::new(
                     &item.title,
                     &item.icon_name,
                     is_selected,
