@@ -1,6 +1,7 @@
 use crate::app_context::AppContext;
 use crate::services::launcher::LauncherCmd;
 use crate::widgets::ListRow;
+use crate::shell::ShellPopup;
 use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 use std::cell::RefCell;
@@ -10,6 +11,29 @@ pub struct LauncherPopup {
     pub window: gtk4::Window,
     pub is_open: Rc<RefCell<bool>>,
     pub ctx: AppContext,
+    on_state_change: Rc<dyn Fn() + 'static>,
+}
+
+impl ShellPopup for LauncherPopup {
+    fn id(&self) -> &str { "launcher" }
+    fn is_open(&self) -> bool { *self.is_open.borrow() }
+
+    fn close(&self) {
+        if !self.is_open() { return; }
+        *self.is_open.borrow_mut() = false;
+        self.animate_close();
+        (self.on_state_change)();
+    }
+
+    fn toggle(&self) {
+        if self.is_open() {
+            self.close();
+        } else {
+            *self.is_open.borrow_mut() = true;
+            self.animate_open();
+            (self.on_state_change)();
+        }
+    }
 }
 
 impl LauncherPopup {
@@ -112,7 +136,7 @@ impl LauncherPopup {
         qs_revealer.set_child(Some(&container));
         window.set_child(Some(&qs_revealer));
 
-        // Keyboard Handling (Pfeiltasten)
+        // Keyboard Handling
         let tx_key = ctx.launcher_tx.clone();
         let key_controller = gtk4::EventControllerKey::new();
         key_controller.connect_key_pressed(move |_, key, _, _| {
@@ -130,14 +154,24 @@ impl LauncherPopup {
         });
         entry.add_controller(key_controller);
 
-        // Enter-Taste (Activate Signal)
+        // Enter-Taste (Activate)
         let tx_activate = ctx.launcher_tx.clone();
         let win_activate = window.clone();
         let is_open_activate = is_open.clone();
         let on_state_change_activate = on_state_change.clone();
         entry.connect_activate(move |_| {
             let _ = tx_activate.send_blocking(LauncherCmd::Activate);
-            Self::close_internal(&win_activate, &is_open_activate);
+            *is_open_activate.borrow_mut() = false;
+            
+            // Animation starten (sauberes Refactoring in animate_close folgt)
+            let win = win_activate.clone();
+            if let Some(rev) = win.child().and_then(|c| c.downcast::<gtk4::Revealer>().ok()) {
+                rev.set_reveal_child(false);
+                gtk4::glib::timeout_add_local(std::time::Duration::from_millis(280), move || {
+                    win.set_visible(false);
+                    gtk4::glib::ControlFlow::Break
+                });
+            }
             on_state_change_activate();
         });
 
@@ -174,7 +208,15 @@ impl LauncherPopup {
                 
                 row.button.connect_clicked(move |_| {
                     let _ = tx_row.send_blocking(LauncherCmd::Activate);
-                    Self::close_internal(&window_row, &is_open_row);
+                    *is_open_row.borrow_mut() = false;
+                    let win = window_row.clone();
+                    if let Some(rev) = win.child().and_then(|c| c.downcast::<gtk4::Revealer>().ok()) {
+                        rev.set_reveal_child(false);
+                        gtk4::glib::timeout_add_local(std::time::Duration::from_millis(280), move || {
+                            win.set_visible(false);
+                            gtk4::glib::ControlFlow::Break
+                        });
+                    }
                     on_state_change_row();
                 });
 
@@ -194,42 +236,16 @@ impl LauncherPopup {
             }
         });
 
-        Self { window, is_open, ctx }
+        Self { window, is_open, ctx, on_state_change }
     }
 
-    fn close_internal(window: &gtk4::Window, is_open: &Rc<RefCell<bool>>) {
-        let mut open = is_open.borrow_mut();
-        *open = false;
-        let revealer = window
-            .child()
-            .and_then(|c| c.downcast::<gtk4::Revealer>().ok())
-            .unwrap();
-        
-        revealer.set_reveal_child(false);
-        let win = window.clone();
-        gtk4::glib::timeout_add_local(std::time::Duration::from_millis(280), move || {
-            win.set_visible(false);
-            gtk4::glib::ControlFlow::Break
-        });
-    }
-
-    pub fn toggle(&self) {
-        let mut open = self.is_open.borrow_mut();
-        *open = !*open;
-        let revealer = self
-            .window
-            .child()
-            .and_then(|c| c.downcast::<gtk4::Revealer>().ok())
-            .unwrap();
-        
-        if *open {
-            self.window.set_visible(true);
-            revealer.set_reveal_child(true);
+    fn animate_open(&self) {
+        self.window.set_visible(true);
+        if let Some(rev) = self.window.child().and_then(|c| c.downcast::<gtk4::Revealer>().ok()) {
+            rev.set_reveal_child(true);
             
-            // Initiale Suche mit leerem String triggern
-            let _ = self.ctx.launcher_tx.send_blocking(LauncherCmd::Search("".to_string()));
-
-            if let Some(container) = revealer.child() {
+            // Fokus in das Entry-Feld (etwas hacky, aber funktional für den Moment)
+            if let Some(container) = rev.child() {
                 if let Some(box_w) = container.downcast_ref::<gtk4::Box>() {
                     if let Some(left_pane) = box_w.first_child().and_then(|c| c.downcast::<gtk4::Box>().ok()) {
                         if let Some(entry_box) = left_pane.first_child().and_then(|c| c.downcast::<gtk4::Box>().ok()) {
@@ -241,8 +257,13 @@ impl LauncherPopup {
                     }
                 }
             }
-        } else {
-            revealer.set_reveal_child(false);
+        }
+        let _ = self.ctx.launcher_tx.send_blocking(LauncherCmd::Search("".to_string()));
+    }
+
+    fn animate_close(&self) {
+        if let Some(rev) = self.window.child().and_then(|c| c.downcast::<gtk4::Revealer>().ok()) {
+            rev.set_reveal_child(false);
             let win = self.window.clone();
             gtk4::glib::timeout_add_local(std::time::Duration::from_millis(280), move || {
                 win.set_visible(false);

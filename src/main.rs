@@ -2,7 +2,7 @@ mod app_context;
 mod services;
 mod store;
 mod widgets;
-
+mod shell;
 
 use crate::app_context::AppContext;
 use crate::services::audio::AudioService;
@@ -17,6 +17,7 @@ use crate::services::launcher::LauncherService;
 use crate::services::launcher::providers::apps::AppProvider;
 use crate::store::ServiceStore;
 use crate::widgets::{Bar, QuickSettingsPopup, WorkspacePopup, LauncherPopup};
+use crate::shell::ShellController;
 use gtk4::prelude::*;
 use gtk4::glib;
 use std::sync::Arc;
@@ -48,6 +49,67 @@ fn build_ui(app: &libadwaita::Application) {
     libadwaita::StyleManager::default().set_color_scheme(libadwaita::ColorScheme::PreferDark);
 
     // --- SERVICES STARTEN ---
+    let ctx = setup_services();
+
+    // --- WIDGETS & CONTROLLER ---
+    let bar = Bar::new(app, ctx.clone());
+    
+    // Der Controller orchestriert alle Popups
+    let bar_popup_state = bar.popup_open.clone();
+    let bar_ref = bar.clone();
+    
+    // Wir nutzen eine RefCell für den Controller selbst, damit wir ihn in den Callbacks nutzen können
+    let controller: Rc<RefCell<Option<Rc<ShellController>>>> = Rc::new(RefCell::new(None));
+    let controller_cb = controller.clone();
+
+    let on_change = move || {
+        bar_ref.check_auto_hide();
+    };
+
+    let mut shell = ShellController::new(bar_popup_state, on_change);
+
+    // Popups erstellen und im Controller registrieren
+    let ctx_c = ctx.clone();
+    let ctrl_l = controller_cb.clone();
+    let launcher = Rc::new(LauncherPopup::new(app, ctx_c, move || {
+        if let Some(c) = ctrl_l.borrow().as_ref() { c.sync(); }
+    }));
+    shell.add_popup(launcher.clone());
+
+    let ctx_c = ctx.clone();
+    let ctrl_q = controller_cb.clone();
+    let qs = Rc::new(QuickSettingsPopup::new(app, &bar.vol_icon, ctx_c, move || {
+        if let Some(c) = ctrl_q.borrow().as_ref() { c.sync(); }
+    }));
+    shell.add_popup(qs.clone());
+
+    let ctx_c = ctx.clone();
+    let ctrl_w = controller_cb.clone();
+    let ws = Rc::new(WorkspacePopup::new(app, ctx_c, move || {
+        if let Some(c) = ctrl_w.borrow().as_ref() { c.sync(); }
+    }));
+    shell.add_popup(ws.clone());
+
+    let shell = Rc::new(shell);
+    *controller.borrow_mut() = Some(shell.clone());
+
+    // --- CLICK HANDLER (DRY!) ---
+    setup_click_handler(&bar.launcher_island, shell.clone(), "launcher");
+    setup_click_handler(&bar.status_island, shell.clone(), "qs");
+    setup_click_handler(&bar.center_island, shell.clone(), "ws");
+
+    bar.window.present();
+}
+
+fn setup_click_handler(island: &gtk4::Box, controller: Rc<ShellController>, id: &'static str) {
+    let click = gtk4::GestureClick::new();
+    click.connect_pressed(move |_, _, _, _| {
+        controller.toggle(id);
+    });
+    island.add_controller(click);
+}
+
+fn setup_services() -> AppContext {
     let (network_rx, network_tx) = NetworkService::spawn();
     let (bluetooth_rx, bluetooth_tx) = BluetoothService::spawn();
     let (audio_rx, audio_tx) = AudioService::spawn();
@@ -59,21 +121,17 @@ fn build_ui(app: &libadwaita::Application) {
     let niri_rx = NiriService::spawn();
     let clock_rx = ClockService::spawn();
 
-    // Launcher Service
     let (launcher_tx, launcher_rx) = async_channel::unbounded();
     let launcher_store = ServiceStore::new_manual(Default::default());
     let launcher_service = LauncherService::new(launcher_store.store.clone());
     
-    // Provider registrieren
     let launcher_service_init = launcher_service;
     glib::spawn_future_local(async move {
         launcher_service_init.add_provider(Arc::new(AppProvider::default()));
         launcher_service_init.start(launcher_rx);
     });
 
-
-    // --- STORES BAUEN ---
-    let ctx = AppContext {
+    AppContext {
         network: ServiceStore::new(network_rx, Default::default()),
         network_tx,
         bluetooth: ServiceStore::new(bluetooth_rx, Default::default()),
@@ -89,66 +147,5 @@ fn build_ui(app: &libadwaita::Application) {
         power: ServiceStore::new(power_rx, Default::default()),
         niri: ServiceStore::new(niri_rx, Default::default()),
         clock: ServiceStore::new(clock_rx, chrono::Local::now()),
-    };
-
-    // --- WIDGETS INITIALISIEREN ---
-    let bar = Bar::new(app, ctx.clone());
-    let ws_popup = WorkspacePopup::new(app, ctx.clone());
-    let qs_popup = QuickSettingsPopup::new(app, &bar.vol_icon, ctx.clone());
-
-    // --- INTERAKTION ---
-    let ws_is_open = ws_popup.is_open.clone();
-    let qs_is_open = qs_popup.is_open.clone();
-    let popup_open = bar.popup_open.clone();
-    let bar_ref = bar.clone();
-
-    // Wir brauchen einen Weg, den Launcher-State erst nach der Erstellung des Popups zu kennen.
-    // Wir nutzen eine RefCell für die Launcher-Zustands-Referenz.
-    let launcher_is_open_ptr: Rc<RefCell<Option<Rc<RefCell<bool>>>>> = Rc::new(RefCell::new(None));
-    let launcher_ptr_cb = launcher_is_open_ptr.clone();
-
-    let update_bar_popup_state = move || {
-        let ws_open = *ws_is_open.borrow();
-        let qs_open = *qs_is_open.borrow();
-        let l_open = launcher_ptr_cb.borrow().as_ref()
-            .map(|ptr| *ptr.borrow())
-            .unwrap_or(false);
-
-        *popup_open.borrow_mut() = ws_open || qs_open || l_open;
-        bar_ref.check_auto_hide();
-    };
-
-    let update_cb = update_bar_popup_state.clone();
-    let launcher_popup = LauncherPopup::new(app, ctx.clone(), move || {
-        update_cb();
-    });
-    
-    // Jetzt binden wir den echten State des Launchers ein
-    *launcher_is_open_ptr.borrow_mut() = Some(launcher_popup.is_open.clone());
-
-    let update_bar_ws = update_bar_popup_state.clone();
-    let ws_click = gtk4::GestureClick::new();
-    ws_click.connect_pressed(move |_, _, _, _| {
-        ws_popup.toggle();
-        update_bar_ws();
-    });
-    bar.center_island.add_controller(ws_click);
-
-    let update_bar_qs = update_bar_popup_state.clone();
-    let qs_click = gtk4::GestureClick::new();
-    qs_click.connect_pressed(move |_, _, _, _| {
-        qs_popup.toggle();
-        update_bar_qs();
-    });
-    bar.status_island.add_controller(qs_click);
-
-    let update_bar_launcher = update_bar_popup_state.clone();
-    let launcher_click = gtk4::GestureClick::new();
-    launcher_click.connect_pressed(move |_, _, _, _| {
-        launcher_popup.toggle();
-        update_bar_launcher();
-    });
-    bar.launcher_island.add_controller(launcher_click);
-
-    bar.window.present();
+    }
 }

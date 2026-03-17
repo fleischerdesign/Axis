@@ -9,6 +9,7 @@ use crate::widgets::quick_settings::nightlight_page::NightlightPage;
 use bluetooth_page::BluetoothPage;
 use main_page::MainPage;
 use wifi_page::WifiPage;
+use crate::shell::ShellPopup;
 
 use crate::services::bluetooth::BluetoothCmd;
 use crate::services::network::NetworkCmd;
@@ -20,11 +21,40 @@ use std::rc::Rc;
 pub struct QuickSettingsPopup {
     pub window: gtk4::Window,
     pub is_open: Rc<RefCell<bool>>,
+    on_state_change: Rc<dyn Fn() + 'static>,
+}
+
+impl ShellPopup for QuickSettingsPopup {
+    fn id(&self) -> &str { "qs" }
+    fn is_open(&self) -> bool { *self.is_open.borrow() }
+
+    fn close(&self) {
+        if !self.is_open() { return; }
+        *self.is_open.borrow_mut() = false;
+        self.animate_close();
+        (self.on_state_change)();
+    }
+
+    fn toggle(&self) {
+        if self.is_open() {
+            self.close();
+        } else {
+            *self.is_open.borrow_mut() = true;
+            self.animate_open();
+            (self.on_state_change)();
+        }
+    }
 }
 
 impl QuickSettingsPopup {
-    pub fn new(app: &libadwaita::Application, vol_icon_bar: &gtk4::Image, ctx: AppContext) -> Self {
+    pub fn new(
+        app: &libadwaita::Application, 
+        vol_icon_bar: &gtk4::Image, 
+        ctx: AppContext,
+        on_state_change: impl Fn() + 'static,
+    ) -> Self {
         let is_open = Rc::new(RefCell::new(false));
+        let on_state_change = Rc::new(on_state_change);
 
         let window = gtk4::Window::builder()
             .application(app)
@@ -128,26 +158,19 @@ impl QuickSettingsPopup {
         qs_revealer.set_child(Some(&qs_container));
         window.set_child(Some(&qs_revealer));
 
-        Self { window, is_open }
+        Self { window, is_open, on_state_change }
     }
 
-    pub fn is_open(&self) -> bool {
-        *self.is_open.borrow()
+    fn animate_open(&self) {
+        self.window.set_visible(true);
+        if let Some(rev) = self.window.child().and_then(|c| c.downcast::<gtk4::Revealer>().ok()) {
+            rev.set_reveal_child(true);
+        }
     }
 
-    pub fn toggle(&self) {
-        let mut open = self.is_open.borrow_mut();
-        *open = !*open;
-        let revealer = self
-            .window
-            .child()
-            .and_then(|c| c.downcast::<gtk4::Revealer>().ok())
-            .unwrap();
-        if *open {
-            self.window.set_visible(true);
-            revealer.set_reveal_child(true);
-        } else {
-            revealer.set_reveal_child(false);
+    fn animate_close(&self) {
+        if let Some(rev) = self.window.child().and_then(|c| c.downcast::<gtk4::Revealer>().ok()) {
+            rev.set_reveal_child(false);
             let win = self.window.clone();
             gtk4::glib::timeout_add_local(std::time::Duration::from_millis(280), move || {
                 win.set_visible(false);
