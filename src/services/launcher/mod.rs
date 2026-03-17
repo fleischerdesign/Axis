@@ -3,6 +3,7 @@ pub mod providers;
 
 use crate::services::launcher::provider::{LauncherItem, LauncherProvider};
 use crate::store::Store;
+use gtk4::prelude::*;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::cell::RefCell;
@@ -64,18 +65,42 @@ impl LauncherService {
                     }
                     LauncherCmd::Activate => {
                         let data = store.get();
-                        if let Some(idx) = data.selected_index {
+                        println!("Launcher: Aktivierung angefordert. Index: {:?}, Ergebnisse: {}", data.selected_index, data.results.len());
+                        
+                        // Fallback: Wenn noch nichts selektiert ist (z.B. schnelles Enter), nimm das erste Item
+                        let idx_to_activate = data.selected_index.or_else(|| {
+                            if !data.results.is_empty() { Some(0) } else { None }
+                        });
+
+                        if let Some(idx) = idx_to_activate {
                             if let Some(item) = data.results.get(idx) {
                                 match &item.action {
                                     crate::services::launcher::provider::LauncherAction::Exec(cmd) => {
-                                        let _ = std::process::Command::new("sh")
-                                            .arg("-c")
-                                            .arg(cmd)
-                                            .spawn();
+                                        println!("Launcher: Versuche zu starten: '{}'", cmd);
+                                        // Gio AppInfo ist robuster für .desktop Files
+                                        if let Ok(app_info) = gtk4::gio::AppInfo::create_from_commandline(
+                                            cmd, 
+                                            None, 
+                                            gtk4::gio::AppInfoCreateFlags::NONE
+                                        ) {
+                                            let _ = app_info.launch(&[], None::<&gtk4::gio::AppLaunchContext>);
+                                            println!("Launcher: Start-Befehl an GIO übergeben.");
+                                        } else {
+                                            // Fallback auf sh -c
+                                            println!("Launcher: GIO gescheitert, nutze sh-Fallback");
+                                            let _ = std::process::Command::new("sh")
+                                                .arg("-c")
+                                                .arg(format!("{} &", cmd))
+                                                .spawn();
+                                        }
                                     }
                                     _ => {}
                                 }
+                            } else {
+                                println!("Launcher: Kein Item an Index {} gefunden!", idx);
                             }
+                        } else {
+                            println!("Launcher: Kein Element zur Aktivierung verfügbar.");
                         }
                     }
                     LauncherCmd::Search(query) => {
@@ -84,9 +109,9 @@ impl LauncherService {
                         store.update(|d| {
                             d.query = query.clone();
                             d.is_searching = !query_trimmed.is_empty();
-                            d.selected_index = if query_trimmed.is_empty() { None } else { Some(0) };
                             if query_trimmed.is_empty() {
                                 d.results.clear();
+                                d.selected_index = None;
                             }
                         });
 
@@ -94,8 +119,6 @@ impl LauncherService {
                             continue;
                         }
 
-                        // Wir kopieren die Provider-Liste in einen lokalen Vec von Arcs.
-                        // Arcs zu klonen ist billig und löst das Borrow-Problem über await.
                         let active_providers: Vec<Arc<dyn LauncherProvider>> = providers_ref.borrow().clone();
                         let mut all_results = Vec::new();
 
@@ -109,6 +132,8 @@ impl LauncherService {
                         store.update(|d| {
                             d.results = all_results;
                             d.is_searching = false;
+                            // Index erst setzen, wenn Ergebnisse da sind!
+                            d.selected_index = if d.results.is_empty() { None } else { Some(0) };
                         });
                     }
                 }

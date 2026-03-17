@@ -34,7 +34,7 @@ impl LauncherPopup {
         container.set_width_request(380);
         container.set_height_request(450);
 
-        // --- LEFT PANE (Search + List) ---
+        // --- LEFT PANE ---
         let left_pane = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
         left_pane.set_width_request(380);
         left_pane.set_hexpand(true);
@@ -65,7 +65,7 @@ impl LauncherPopup {
         left_pane.append(&scrolled);
         container.append(&left_pane);
 
-        // --- RIGHT PANE (Details) ---
+        // --- RIGHT PANE ---
         let detail_revealer = gtk4::Revealer::builder()
             .transition_type(gtk4::RevealerTransitionType::SlideRight)
             .transition_duration(250)
@@ -85,7 +85,7 @@ impl LauncherPopup {
         let detail_desc = gtk4::Label::builder()
             .halign(gtk4::Align::Start)
             .wrap(true)
-            .css_classes(vec!["qs-list-sublabel".to_string()])
+            .css_classes(vec!["list-sublabel".to_string()])
             .build();
         
         detail_box.append(&detail_title);
@@ -94,14 +94,19 @@ impl LauncherPopup {
         container.append(&detail_revealer);
 
         // --- REAKTIVE BINDINGS ---
-        
-        // Suche triggern bei Texteingabe
         let tx = ctx.launcher_tx.clone();
         entry.connect_changed(move |e| {
             let _ = tx.send_blocking(LauncherCmd::Search(e.text().to_string()));
         });
 
-        // Tastatursteuerung im Entry
+        let qs_revealer = gtk4::Revealer::builder()
+            .transition_type(gtk4::RevealerTransitionType::Crossfade)
+            .transition_duration(250)
+            .build();
+        qs_revealer.set_child(Some(&container));
+        window.set_child(Some(&qs_revealer));
+
+        // Keyboard Handling (Pfeiltasten)
         let tx_key = ctx.launcher_tx.clone();
         let key_controller = gtk4::EventControllerKey::new();
         key_controller.connect_key_pressed(move |_, key, _, _| {
@@ -114,29 +119,38 @@ impl LauncherPopup {
                     let _ = tx_key.send_blocking(LauncherCmd::SelectPrev);
                     gtk4::glib::Propagation::Stop
                 }
-                gtk4::gdk::Key::Return => {
-                    let _ = tx_key.send_blocking(LauncherCmd::Activate);
-                    gtk4::glib::Propagation::Stop
-                }
                 _ => gtk4::glib::Propagation::Proceed,
             }
         });
         entry.add_controller(key_controller);
 
-        // Ergebnisse anzeigen
+        // Enter-Taste (Activate Signal)
+        let tx_activate = ctx.launcher_tx.clone();
+        let win_activate = window.clone();
+        let is_open_activate = is_open.clone();
+        let entry_activate = entry.clone();
+        entry.connect_activate(move |_| {
+            println!("UI: Enter gedrückt (activate)");
+            let _ = tx_activate.send_blocking(LauncherCmd::Activate);
+            Self::close_internal(&win_activate, &is_open_activate, &entry_activate);
+        });
+
+        // Results Rendering
         let list_c = list.clone();
         let d_title = detail_title.clone();
         let d_desc = detail_desc.clone();
         let d_rev = detail_revealer.clone();
         let win_c = window.clone();
+        let tx_click = ctx.launcher_tx.clone();
+        let is_open_click = is_open.clone();
+        let window_click = window.clone();
+        let entry_click = entry.clone();
 
         ctx.launcher.subscribe(move |data| {
-            // Liste leeren
             while let Some(child) = list_c.first_child() {
                 list_c.remove(&child);
             }
 
-            // Ergebnisse hinzufügen
             for (i, item) in data.results.iter().enumerate() {
                 let is_selected = data.selected_index == Some(i);
                 let row = ListRow::new(
@@ -144,16 +158,26 @@ impl LauncherPopup {
                     &item.icon_name,
                     is_selected,
                     item.description.as_deref(),
-                    false, // Kein Checkmark im Launcher
+                    false,
                 );
+                
+                let tx_row = tx_click.clone();
+                let is_open_row = is_open_click.clone();
+                let window_row = window_click.clone();
+                let entry_row = entry_click.clone();
+                
+                row.button.connect_clicked(move |_| {
+                    println!("UI: Item geklickt");
+                    let _ = tx_row.send_blocking(LauncherCmd::Activate);
+                    Self::close_internal(&window_row, &is_open_row, &entry_row);
+                });
+
                 list_c.append(&row.container);
 
                 if is_selected {
                     d_title.set_text(&item.title);
                     d_desc.set_text(item.description.as_deref().unwrap_or(""));
                     d_rev.set_reveal_child(true);
-                    
-                    // Fenstergröße anpassen (breiter werden für Details)
                     win_c.set_width_request(380 + 300);
                 }
             }
@@ -164,14 +188,23 @@ impl LauncherPopup {
             }
         });
 
-        let qs_revealer = gtk4::Revealer::builder()
-            .transition_type(gtk4::RevealerTransitionType::Crossfade)
-            .transition_duration(250)
-            .build();
-        qs_revealer.set_child(Some(&container));
-        window.set_child(Some(&qs_revealer));
-
         Self { window, is_open }
+    }
+
+    fn close_internal(window: &gtk4::Window, is_open: &Rc<RefCell<bool>>, _entry: &gtk4::Entry) {
+        let mut open = is_open.borrow_mut();
+        *open = false;
+        let revealer = window
+            .child()
+            .and_then(|c| c.downcast::<gtk4::Revealer>().ok())
+            .unwrap();
+        
+        revealer.set_reveal_child(false);
+        let win = window.clone();
+        gtk4::glib::timeout_add_local(std::time::Duration::from_millis(280), move || {
+            win.set_visible(false);
+            gtk4::glib::ControlFlow::Break
+        });
     }
 
     pub fn toggle(&self) {
@@ -186,12 +219,15 @@ impl LauncherPopup {
         if *open {
             self.window.set_visible(true);
             revealer.set_reveal_child(true);
-            // Fokus auf das Entry legen
+            
             if let Some(container) = revealer.child() {
                 if let Some(box_w) = container.downcast_ref::<gtk4::Box>() {
-                    if let Some(entry_box) = box_w.first_child() {
-                        if let Some(entry) = entry_box.first_child() {
-                            entry.grab_focus();
+                    if let Some(left_pane) = box_w.first_child().and_then(|c| c.downcast::<gtk4::Box>().ok()) {
+                        if let Some(entry_box) = left_pane.first_child().and_then(|c| c.downcast::<gtk4::Box>().ok()) {
+                            if let Some(entry) = entry_box.first_child().and_then(|c| c.downcast::<gtk4::Entry>().ok()) {
+                                entry.set_text("");
+                                entry.grab_focus();
+                            }
                         }
                     }
                 }
