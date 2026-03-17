@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 pub struct WorkspacePopup {
     pub window: gtk4::Window,
-    is_open: Rc<RefCell<bool>>,
+    pub is_open: Rc<RefCell<bool>>,
     /// Store gibt uns jederzeit den letzten Niri-Zustand via `ctx.niri.get()`
     ctx: AppContext,
 }
@@ -24,7 +24,7 @@ impl WorkspacePopup {
         window.init_layer_shell();
         window.set_layer(Layer::Overlay);
         window.set_anchor(Edge::Bottom, true);
-        window.set_margin(Edge::Bottom, 10);
+        window.set_margin(Edge::Bottom, 64);
 
         let revealer = gtk4::Revealer::builder()
             .transition_type(gtk4::RevealerTransitionType::Crossfade)
@@ -50,6 +50,10 @@ impl WorkspacePopup {
             is_open,
             ctx,
         }
+    }
+
+    pub fn is_open(&self) -> bool {
+        *self.is_open.borrow()
     }
 
     pub fn toggle(&self) {

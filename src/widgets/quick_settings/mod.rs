@@ -35,7 +35,7 @@ impl QuickSettingsPopup {
         window.set_keyboard_mode(KeyboardMode::OnDemand);
         window.set_anchor(Edge::Bottom, true);
         window.set_anchor(Edge::Right, true);
-        window.set_margin(Edge::Bottom, 10);
+        window.set_margin(Edge::Bottom, 64);
         window.set_margin(Edge::Right, 10);
 
         let qs_container = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
@@ -103,6 +103,10 @@ impl QuickSettingsPopup {
         window.set_child(Some(&qs_revealer));
 
         Self { window, is_open }
+    }
+
+    pub fn is_open(&self) -> bool {
+        *self.is_open.borrow()
     }
 
     pub fn toggle(&self) {

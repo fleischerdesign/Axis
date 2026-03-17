@@ -86,15 +86,25 @@ fn build_ui(app: &libadwaita::Application) {
     let qs_popup = QuickSettingsPopup::new(app, &bar.vol_icon, ctx.clone());
 
     // --- INTERAKTION ---
+    // Shared refs damit beide Closures den kombinierten Popup-State lesen können
+    let ws_is_open = ws_popup.is_open.clone();
+    let qs_is_open = qs_popup.is_open.clone();
+
+    let popup_open = bar.popup_open.clone();
+    let ws_is_open_ref = ws_is_open.clone();
+    let qs_is_open_ref = qs_is_open.clone();
     let ws_click = gtk4::GestureClick::new();
     ws_click.connect_pressed(move |_, _, _, _| {
         ws_popup.toggle();
+        *popup_open.borrow_mut() = *ws_is_open_ref.borrow() || *qs_is_open_ref.borrow();
     });
     bar.center_island.add_controller(ws_click);
 
+    let popup_open = bar.popup_open.clone();
     let qs_click = gtk4::GestureClick::new();
     qs_click.connect_pressed(move |_, _, _, _| {
         qs_popup.toggle();
+        *popup_open.borrow_mut() = *ws_is_open.borrow() || *qs_is_open.borrow();
     });
     bar.status_island.add_controller(qs_click);
 

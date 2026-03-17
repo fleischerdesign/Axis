@@ -23,6 +23,7 @@ pub struct Bar {
     pub status_island: gtk4::Box,
     pub center_island: gtk4::Box,
     pub vol_icon: gtk4::Image,
+    pub popup_open: Rc<RefCell<bool>>,
 }
 
 impl Bar {
@@ -30,6 +31,7 @@ impl Bar {
         let is_visible: Rc<RefCell<bool>> = Rc::new(RefCell::new(false));
         let hide_timeout: Rc<RefCell<Option<glib::SourceId>>> = Rc::new(RefCell::new(None));
         let anim_source: Rc<RefCell<Option<glib::SourceId>>> = Rc::new(RefCell::new(None));
+        let popup_open: Rc<RefCell<bool>> = Rc::new(RefCell::new(false));
 
         let window = gtk4::ApplicationWindow::builder()
             .application(app)
@@ -132,8 +134,13 @@ impl Bar {
             let is_visible_ref = is_visible.clone();
             let hide_timeout_ref = hide_timeout.clone();
             let anim_source_ref = anim_source.clone();
+            let popup_open_ref = popup_open.clone();
 
             motion.connect_leave(move |_| {
+                // Popup ist offen → Bar darf nicht einklappen
+                if *popup_open_ref.borrow() {
+                    return;
+                }
                 // Schon ein Hide-Timer aktiv → nichts tun
                 if hide_timeout_ref.borrow().is_some() {
                     return;
@@ -211,6 +218,7 @@ impl Bar {
             status_island: status_island.container,
             center_island: center_island.container,
             vol_icon,
+            popup_open,
         }
     }
 
