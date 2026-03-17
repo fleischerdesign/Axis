@@ -17,7 +17,10 @@ impl NightlightPage {
         nightlight_tx: async_channel::Sender<NightlightCmd>,
     ) -> Self {
         let container = gtk4::Box::new(gtk4::Orientation::Vertical, 16);
+        container.set_margin_start(16);
+        container.set_margin_end(16);
         container.set_margin_top(16);
+        container.set_margin_bottom(16);
 
         // --- HEADER ---
         let header = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
@@ -35,6 +38,7 @@ impl NightlightPage {
 
         header.append(&back_btn);
         header.append(&title);
+        container.append(&header);
 
         // --- TOGGLE ROW ---
         let toggle_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
@@ -50,93 +54,152 @@ impl NightlightPage {
 
         toggle_row.append(&toggle_label);
         toggle_row.append(&toggle);
+        container.append(&toggle_row);
 
-        // --- TEMPERATURE SLIDER ---
-        let temp_label_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
-        temp_label_row.set_hexpand(true);
+        // --- TEMPERATURES ---
+        let create_temp_section = |label_text: &str, initial_val: u32| {
+            let section = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
+            let label_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+            let label = gtk4::Label::builder()
+                .label(label_text)
+                .halign(gtk4::Align::Start)
+                .hexpand(true)
+                .build();
+            let val_label = gtk4::Label::new(Some(&format!("{} K", initial_val)));
+            label_row.append(&label);
+            label_row.append(&val_label);
 
-        let temp_label = gtk4::Label::builder()
-            .label("Temperature")
-            .halign(gtk4::Align::Start)
+            let slider =
+                gtk4::Scale::with_range(gtk4::Orientation::Horizontal, 1000.0, 10000.0, 100.0);
+            slider.set_hexpand(true);
+            slider.set_value(initial_val as f64);
+            slider.add_css_class("volume-slider");
+
+            section.append(&label_row);
+            section.append(&slider);
+            (section, slider, val_label)
+        };
+
+        let initial = ctx.nightlight.get();
+
+        let (day_sec, day_slider, day_val) =
+            create_temp_section("Day Temperature", initial.temp_day);
+        let (night_sec, night_slider, night_val) =
+            create_temp_section("Night Temperature", initial.temp_night);
+
+        container.append(&day_sec);
+        container.append(&night_sec);
+
+        // --- SCHEDULE ---
+        container.append(&gtk4::Separator::new(gtk4::Orientation::Horizontal));
+        container.append(
+            &gtk4::Label::builder()
+                .label("Manual Schedule")
+                .halign(gtk4::Align::Start)
+                .css_classes(vec!["qs-tile-label".to_string()])
+                .build(),
+        );
+
+        let schedule_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+        let sunrise_entry = gtk4::Entry::builder()
+            .placeholder_text("Sunrise (07:00)")
             .hexpand(true)
             .build();
-
-        let temp_value = gtk4::Label::builder()
-            .label("4500 K")
-            .halign(gtk4::Align::End)
+        let sunset_entry = gtk4::Entry::builder()
+            .placeholder_text("Sunset (20:00)")
+            .hexpand(true)
             .build();
+        sunrise_entry.set_text(&initial.sunrise);
+        sunset_entry.set_text(&initial.sunset);
 
-        temp_label_row.append(&temp_label);
-        temp_label_row.append(&temp_value);
-
-        let slider = gtk4::Scale::with_range(gtk4::Orientation::Horizontal, 1000.0, 10000.0, 100.0);
-        slider.set_hexpand(true);
-        slider.add_mark(4500.0, gtk4::PositionType::Bottom, Some("4500 K"));
-        slider.add_css_class("volume-slider");
-
-        // --- LAYOUT ---
-        container.append(&header);
-        container.append(&toggle_row);
-        container.append(&temp_label_row);
-        container.append(&slider);
-
-        // --- INITIAL STATE ---
-        let initial = ctx.nightlight.get();
-        toggle.set_state(initial.enabled);
-        slider.set_value(initial.temperature as f64);
-        temp_value.set_text(&format!("{} K", initial.temperature));
+        schedule_row.append(&sunrise_entry);
+        schedule_row.append(&sunset_entry);
+        container.append(&schedule_row);
 
         // --- BINDINGS ---
+        let updating_from_service = Rc::new(Cell::new(false));
 
-        // Flag: true = wir setzen den Slider gerade vom Service aus → Handler ignorieren
-        let updating_from_service: Rc<Cell<bool>> = Rc::new(Cell::new(false));
-
-        // Slider → Service
-        let slider_tx = nightlight_tx.clone();
-        let temp_value_label = temp_value.clone();
-        let updating_ref = updating_from_service.clone();
-        slider.connect_value_changed(move |s| {
-            // Ignorieren wenn wir gerade programmatisch updaten
-            if updating_ref.get() {
+        // Day Slider -> Service
+        let tx = nightlight_tx.clone();
+        let val_lbl = day_val.clone();
+        let updating = updating_from_service.clone();
+        day_slider.connect_value_changed(move |s| {
+            if updating.get() {
                 return;
             }
             let val = s.value() as u32;
-            temp_value_label.set_text(&format!("{} K", val));
-            let _ = slider_tx.send_blocking(NightlightCmd::SetTemperature(val));
+            val_lbl.set_text(&format!("{} K", val));
+            let _ = tx.send_blocking(NightlightCmd::SetTempDay(val));
         });
 
-        // Toggle → Service
-        let toggle_tx = nightlight_tx.clone();
-        toggle.connect_state_notify(move |sw| {
-            let _ = toggle_tx.send_blocking(NightlightCmd::Toggle(sw.state()));
-        });
-
-        // Service → UI (Toggle + Tile)
-        let toggle_update = toggle.clone();
-        let nl_tile_service = nl_tile.clone();
-        ctx.nightlight.subscribe(move |data| {
-            toggle_update.set_state(data.enabled);
-            nl_tile_service.set_active(data.enabled);
-        });
-
-        // Service → UI (Slider + Label) — mit Block-Flag
-        let slider_update = slider.clone();
-        let temp_value_update = temp_value.clone();
-        let updating_set = updating_from_service.clone();
-        ctx.nightlight.subscribe(move |data| {
-            let current = slider_update.value() as u32;
-            if current != data.temperature {
-                updating_set.set(true);
-                slider_update.set_value(data.temperature as f64);
-                updating_set.set(false);
+        // Night Slider -> Service
+        let tx = nightlight_tx.clone();
+        let val_lbl = night_val.clone();
+        let updating = updating_from_service.clone();
+        night_slider.connect_value_changed(move |s| {
+            if updating.get() {
+                return;
             }
-            temp_value_update.set_text(&format!("{} K", data.temperature));
+            let val = s.value() as u32;
+            val_lbl.set_text(&format!("{} K", val));
+            let _ = tx.send_blocking(NightlightCmd::SetTempNight(val));
         });
 
-        // Tile bei Toggle-Change updaten
-        let nl_tile_toggle = nl_tile.clone();
+        // Toggle -> Service
+        let tx = nightlight_tx.clone();
         toggle.connect_state_notify(move |sw| {
-            nl_tile_toggle.set_active(sw.state());
+            let _ = tx.send_blocking(NightlightCmd::Toggle(sw.state()));
+        });
+
+        // Schedule: Apply on Enter
+        let apply_schedule = {
+            let tx = nightlight_tx.clone();
+            let sun_e = sunrise_entry.clone();
+            let set_e = sunset_entry.clone();
+            move || {
+                let _ = tx.send_blocking(NightlightCmd::SetSchedule(
+                    sun_e.text().to_string(),
+                    set_e.text().to_string(),
+                ));
+            }
+        };
+
+        let apply_c1 = apply_schedule.clone();
+        sunrise_entry.connect_activate(move |_| apply_c1());
+        let apply_c2 = apply_schedule.clone();
+        sunset_entry.connect_activate(move |_| apply_c2());
+
+        // Service -> UI
+        let toggle_c = toggle.clone();
+        let nl_tile_c = nl_tile.clone();
+        let day_slider_c = day_slider.clone();
+        let night_slider_c = night_slider.clone();
+        let day_val_c = day_val.clone();
+        let night_val_c = night_val.clone();
+        let sun_e_c = sunrise_entry.clone();
+        let set_e_c = sunset_entry.clone();
+        let updating_c = updating_from_service.clone();
+
+        ctx.nightlight.subscribe(move |data| {
+            updating_c.set(true);
+            toggle_c.set_state(data.enabled);
+            nl_tile_c.set_active(data.enabled);
+
+            day_slider_c.set_value(data.temp_day as f64);
+            day_val_c.set_text(&format!("{} K", data.temp_day));
+
+            night_slider_c.set_value(data.temp_night as f64);
+            night_val_c.set_text(&format!("{} K", data.temp_night));
+
+            // Nur updaten, wenn der User gerade nicht tippt (Fokus-Check wäre besser, aber Textvergleich reicht meist)
+            if sun_e_c.text() != data.sunrise {
+                sun_e_c.set_text(&data.sunrise);
+            }
+            if set_e_c.text() != data.sunset {
+                set_e_c.set_text(&data.sunset);
+            }
+
+            updating_c.set(false);
         });
 
         back_btn.connect_clicked(move |_| back_callback());

@@ -2,16 +2,39 @@ use async_channel::{bounded, Receiver, Sender};
 use std::process::{Command, Stdio};
 use std::thread;
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct NightlightData {
     pub enabled: bool,
     pub available: bool,
-    pub temperature: u32,
+    pub temp_day: u32,
+    pub temp_night: u32,
+    pub sunrise: String,
+    pub sunset: String,
+    pub latitude: String,
+    pub longitude: String,
+}
+
+impl Default for NightlightData {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            available: false,
+            temp_day: 6500,
+            temp_night: 4500,
+            sunrise: "07:00".to_string(),
+            sunset: "20:00".to_string(),
+            latitude: "".to_string(),
+            longitude: "".to_string(),
+        }
+    }
 }
 
 pub enum NightlightCmd {
     Toggle(bool),
-    SetTemperature(u32),
+    SetTempDay(u32),
+    SetTempNight(u32),
+    SetSchedule(String, String), // sunrise, sunset
+    SetLocation(String, String), // lat, long
 }
 
 pub struct NightlightService;
@@ -23,9 +46,10 @@ impl NightlightService {
 
         thread::spawn(move || {
             let mut wlsunset_pid = None;
-            let mut enabled = false;
-            let mut temperature = 4500;
-            let available = Self::check_available();
+            let mut data = NightlightData {
+                available: Self::check_available(),
+                ..Default::default()
+            };
 
             loop {
                 // Handle commands
@@ -33,49 +57,80 @@ impl NightlightService {
                     match cmd {
                         NightlightCmd::Toggle(on) => {
                             if on {
-                                if !enabled {
-                                    if let Some(pid) = Self::start_wlsunset(temperature) {
+                                if !data.enabled {
+                                    if let Some(pid) = Self::start_wlsunset(&data) {
                                         wlsunset_pid = Some(pid);
-                                        enabled = true;
+                                        data.enabled = true;
                                     }
                                 }
-                            } else if enabled {
+                            } else if data.enabled {
                                 if let Some(pid) = wlsunset_pid.take() {
                                     Self::stop_wlsunset(pid);
-                                    enabled = false;
+                                    data.enabled = false;
                                 }
                             }
                         }
-                        NightlightCmd::SetTemperature(kelvin) => {
-                            temperature = kelvin;
-                            if enabled {
+                        NightlightCmd::SetTempDay(kelvin) => {
+                            data.temp_day = kelvin;
+                            if data.enabled {
                                 if let Some(pid) = wlsunset_pid.take() {
                                     Self::stop_wlsunset(pid);
                                 }
-                                if let Some(pid) = Self::start_wlsunset(temperature) {
+                                if let Some(pid) = Self::start_wlsunset(&data) {
+                                    wlsunset_pid = Some(pid);
+                                }
+                            }
+                        }
+                        NightlightCmd::SetTempNight(kelvin) => {
+                            data.temp_night = kelvin;
+                            if data.enabled {
+                                if let Some(pid) = wlsunset_pid.take() {
+                                    Self::stop_wlsunset(pid);
+                                }
+                                if let Some(pid) = Self::start_wlsunset(&data) {
+                                    wlsunset_pid = Some(pid);
+                                }
+                            }
+                        }
+                        NightlightCmd::SetSchedule(sunrise, sunset) => {
+                            data.sunrise = sunrise;
+                            data.sunset = sunset;
+                            data.latitude = "".to_string();
+                            data.longitude = "".to_string();
+                            if data.enabled {
+                                if let Some(pid) = wlsunset_pid.take() {
+                                    Self::stop_wlsunset(pid);
+                                }
+                                if let Some(pid) = Self::start_wlsunset(&data) {
+                                    wlsunset_pid = Some(pid);
+                                }
+                            }
+                        }
+                        NightlightCmd::SetLocation(lat, long) => {
+                            data.latitude = lat;
+                            data.longitude = long;
+                            data.sunrise = "".to_string();
+                            data.sunset = "".to_string();
+                            if data.enabled {
+                                if let Some(pid) = wlsunset_pid.take() {
+                                    Self::stop_wlsunset(pid);
+                                }
+                                if let Some(pid) = Self::start_wlsunset(&data) {
                                     wlsunset_pid = Some(pid);
                                 }
                             }
                         }
                     }
 
-                    let _ = data_tx.send_blocking(NightlightData {
-                        enabled,
-                        available,
-                        temperature,
-                    });
+                    let _ = data_tx.send_blocking(data.clone());
                 }
 
                 // If wlsunset crashed, reset state
                 if let Some(pid) = wlsunset_pid {
                     if !Self::is_pid_alive(pid) {
                         wlsunset_pid = None;
-                        enabled = false;
-                        let _ = data_tx.send_blocking(NightlightData {
-                            enabled,
-                            available,
-                            temperature,
-                        });
+                        data.enabled = false;
+                        let _ = data_tx.send_blocking(data.clone());
                     }
                 }
 
@@ -98,25 +153,25 @@ impl NightlightService {
 
     pub fn read_initial() -> NightlightData {
         NightlightData {
-            enabled: false,
             available: Self::check_available(),
-            temperature: 4500,
+            ..Default::default()
         }
     }
 
-    fn start_wlsunset(temperature: u32) -> Option<u32> {
-        let high = temperature + 1000;
-        let child = Command::new("wlsunset")
-            .arg("-S")
-            .arg("00:00")
-            .arg("-s")
-            .arg("23:59")
-            .arg("-T")
-            .arg(high.to_string())
-            .arg("-t")
-            .arg(temperature.to_string())
-            .spawn()
-            .ok()?;
+    fn start_wlsunset(data: &NightlightData) -> Option<u32> {
+        let mut cmd = Command::new("wlsunset");
+        cmd.arg("-t").arg(data.temp_night.to_string());
+        cmd.arg("-T").arg(data.temp_day.to_string());
+
+        if !data.latitude.is_empty() && !data.longitude.is_empty() {
+            cmd.arg("-l").arg(&data.latitude);
+            cmd.arg("-L").arg(&data.longitude);
+        } else if !data.sunrise.is_empty() && !data.sunset.is_empty() {
+            cmd.arg("-S").arg(&data.sunrise);
+            cmd.arg("-s").arg(&data.sunset);
+        }
+
+        let child = cmd.spawn().ok()?;
 
         Some(child.id())
     }
