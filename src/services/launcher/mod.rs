@@ -23,7 +23,7 @@ pub enum LauncherCmd {
     Search(String),
     SelectNext,
     SelectPrev,
-    Activate,
+    Activate(Option<usize>), // Optionaler Index für Mausklicks
 }
 
 pub struct LauncherService {
@@ -64,22 +64,19 @@ impl LauncherService {
                             d.selected_index = Some(prev);
                         });
                     }
-                    LauncherCmd::Activate => {
+                    LauncherCmd::Activate(maybe_idx) => {
                         let data = store.get();
                         
-                        let idx_to_activate = data.selected_index.or_else(|| {
-                            if !data.results.is_empty() { Some(0) } else { None }
-                        });
+                        // Nutze mitgelieferten Index ODER den selektierten ODER den ersten Treffer
+                        let idx_to_activate = maybe_idx
+                            .or(data.selected_index)
+                            .or_else(|| if !data.results.is_empty() { Some(0) } else { None });
 
                         if let Some(idx) = idx_to_activate {
                             if let Some(item) = data.results.get(idx) {
                                 match &item.action {
                                     crate::services::launcher::provider::LauncherAction::Exec(cmd) => {
                                         println!("Launcher: Bulletproof Start von '{}'", cmd);
-                                        
-                                        // 1. Command vorbereiten
-                                        // 2. I/O umleiten nach /dev/null (verhindert Hängenbleiben)
-                                        // 3. process_group(0) erstellt eine neue Session (detaching)
                                         let _ = Command::new("sh")
                                             .arg("-c")
                                             .arg(cmd)

@@ -139,7 +139,7 @@ impl LauncherPopup {
         let tx_activate = ctx.launcher_tx.clone();
         let base_activate = base.clone();
         entry.connect_activate(move |_| {
-            let _ = tx_activate.send_blocking(LauncherCmd::Activate);
+            let _ = tx_activate.send_blocking(LauncherCmd::Activate(None)); // None = Nutze Selektion
             base_activate.close();
         });
 
@@ -169,8 +169,11 @@ impl LauncherPopup {
                 
                 let tx_inner = tx_row.clone();
                 let base_inner = base_row.clone();
+                let idx = i; // Index für den Closure capturen
+                
                 row.button.connect_clicked(move |_| {
-                    let _ = tx_inner.send_blocking(LauncherCmd::Activate);
+                    // WICHTIG: Hier schicken wir den exakten Index des geklickten Items!
+                    let _ = tx_inner.send_blocking(LauncherCmd::Activate(Some(idx)));
                     base_inner.close();
                 });
 
