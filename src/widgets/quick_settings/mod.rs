@@ -1,9 +1,11 @@
 mod bluetooth_page;
 pub mod components;
 mod main_page;
+mod nightlight_page;
 mod wifi_page;
 
 use crate::app_context::AppContext;
+use crate::widgets::quick_settings::nightlight_page::NightlightPage;
 use bluetooth_page::BluetoothPage;
 use main_page::MainPage;
 use wifi_page::WifiPage;
@@ -65,7 +67,18 @@ impl QuickSettingsPopup {
             let _ = tx_bt.send_blocking(BluetoothCmd::Scan);
         };
 
-        let main_page = MainPage::new(ctx.clone(), vol_icon_bar.clone(), open_wifi, open_bt);
+        let stack_nl = qs_stack.clone();
+        let open_nl = move || {
+            stack_nl.set_visible_child_name("nightlight");
+        };
+
+        let main_page = MainPage::new(
+            ctx.clone(),
+            vol_icon_bar.clone(),
+            open_wifi,
+            open_bt,
+            open_nl,
+        );
 
         let stack_back = qs_stack.clone();
         let win_back = window.clone();
@@ -90,9 +103,21 @@ impl QuickSettingsPopup {
             main_page.bt_tile.clone(),
         );
 
+        let stack_back_nl = qs_stack.clone();
+        let win_back_nl = window.clone();
+        let nightlight_page = NightlightPage::new(
+            ctx.clone(),
+            move || {
+                stack_back_nl.set_visible_child_name("main");
+                win_back_nl.set_default_size(1, 1);
+            },
+            main_page.nl_tile.clone(),
+        );
+
         qs_stack.add_named(&main_page.container, Some("main"));
         qs_stack.add_named(&wifi_page.container, Some("wifi"));
         qs_stack.add_named(&bluetooth_page.container, Some("bluetooth"));
+        qs_stack.add_named(&nightlight_page.container, Some("nightlight"));
 
         qs_container.append(&qs_stack);
         let qs_revealer = gtk4::Revealer::builder()

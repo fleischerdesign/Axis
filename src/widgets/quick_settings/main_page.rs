@@ -14,6 +14,7 @@ pub struct MainPage {
     pub wifi_tile: Rc<QsTile>,
     pub eth_tile: Rc<QsTile>,
     pub bt_tile: Rc<QsTile>,
+    pub nl_tile: Rc<QsTile>,
 }
 
 impl MainPage {
@@ -22,6 +23,7 @@ impl MainPage {
         vol_icon_bar: gtk4::Image,
         open_wifi: impl Fn() + 'static,
         open_bt: impl Fn() + 'static,
+        open_nl: impl Fn() + 'static,
     ) -> Self {
         let container = gtk4::Box::new(gtk4::Orientation::Vertical, 20);
 
@@ -38,13 +40,13 @@ impl MainPage {
         ));
         let eth_tile = Rc::new(QsTile::new("Ethernet", "network-wired-symbolic", false));
         let bt_tile = Rc::new(QsTile::new("Bluetooth", "bluetooth-active-symbolic", true));
-        let night_tile = Rc::new(QsTile::new("Night Light", "night-light-symbolic", false));
+        let nl_tile = Rc::new(QsTile::new("Night Light", "night-light-symbolic", true));
         let airplane_tile = QsTile::new("Airplane", "airplane-mode-symbolic", false);
 
         grid.attach(&wifi_tile.container, 0, 0, 1, 1);
         grid.attach(&eth_tile.container, 1, 0, 1, 1);
         grid.attach(&bt_tile.container, 0, 1, 1, 1);
-        grid.attach(&night_tile.container, 1, 1, 1, 1);
+        grid.attach(&nl_tile.container, 1, 1, 1, 1);
         grid.attach(&airplane_tile.container, 0, 2, 1, 1);
 
         // --- VOLUME SLIDER ---
@@ -139,6 +141,14 @@ impl MainPage {
                 open_wifi();
             });
 
+        nl_tile
+            .arrow_btn
+            .as_ref()
+            .unwrap()
+            .connect_clicked(move |_| {
+                open_nl();
+            });
+
         // Bluetooth toggle: liest aktuellen State direkt aus dem Store
         let ctx_bt = ctx.clone();
         let bt_store = ctx.bluetooth.clone();
@@ -159,7 +169,7 @@ impl MainPage {
         // Night Light toggle
         let ctx_nl = ctx.clone();
         let night_store = ctx.nightlight.clone();
-        night_tile.main_btn.connect_clicked(move |_| {
+        nl_tile.main_btn.connect_clicked(move |_| {
             let current = night_store.get().enabled;
             let _ = ctx_nl
                 .nightlight_tx
@@ -183,10 +193,10 @@ impl MainPage {
         });
 
         // Nightlight → Tile-State
-        let night_tile_c = night_tile.clone();
+        let nl_tile_c = nl_tile.clone();
         ctx.nightlight.subscribe(move |data| {
-            night_tile_c.set_active(data.enabled);
-            night_tile_c.set_sensitive(data.available);
+            nl_tile_c.set_active(data.enabled);
+            nl_tile_c.set_sensitive(data.available);
         });
 
         // Audio → Slider + Icon (mit Debounce gegen eigene Slider-Änderungen)
@@ -304,6 +314,7 @@ impl MainPage {
             wifi_tile,
             eth_tile,
             bt_tile,
+            nl_tile,
         }
     }
 
