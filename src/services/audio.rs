@@ -32,15 +32,15 @@ impl AudioService {
                 }
             };
 
-            // Initialer fetch
-            Self::push_update(&mut handler, &data_tx);
+            let mut last_data = AudioData::default();
 
             loop {
-                // Wir nutzen hier immer noch einen kleinen Sleep, da pulsectl-rs
-                // kein einfaches async-Event-Interface für Sink-Changes bietet,
-                // aber wir deduplizieren die Sends massiv.
-
-                Self::push_update(&mut handler, &data_tx);
+                if let Some(new_data) = Self::get_current_data(&mut handler) {
+                    if new_data != last_data {
+                        let _ = data_tx.send_blocking(new_data.clone());
+                        last_data = new_data;
+                    }
+                }
 
                 // Befehle verarbeiten
                 while let Ok(cmd) = cmd_rx.try_recv() {
@@ -67,23 +67,30 @@ impl AudioService {
                     }
                 }
 
-                // Höherer Sleep-Intervall, da wir nur bei Änderungen senden
-                thread::sleep(std::time::Duration::from_millis(50));
+                thread::sleep(std::time::Duration::from_millis(100));
             }
         });
 
         (data_rx, cmd_tx)
     }
 
-    fn push_update(handler: &mut SinkController, tx: &Sender<AudioData>) {
+    pub fn read_initial() -> AudioData {
+        if let Ok(mut handler) = SinkController::create() {
+            if let Some(data) = Self::get_current_data(&mut handler) {
+                return data;
+            }
+        }
+        AudioData::default()
+    }
+
+    fn get_current_data(handler: &mut SinkController) -> Option<AudioData> {
         if let Ok(sink) = handler.get_default_device() {
             let vol_raw = sink.volume.avg().0 as f64 / Volume::NORMAL.0 as f64;
-            let new_data = AudioData {
+            return Some(AudioData {
                 volume: (vol_raw * 100.0).round() / 100.0,
                 is_muted: sink.mute,
-            };
-
-            let _ = tx.send_blocking(new_data);
+            });
         }
+        None
     }
 }

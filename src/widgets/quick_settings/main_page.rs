@@ -201,6 +201,7 @@ impl MainPage {
         let is_updating = Rc::new(std::cell::RefCell::new(false));
         let last_sent: Rc<std::cell::RefCell<f64>> = Rc::new(std::cell::RefCell::new(0.0));
         let last_time = Rc::new(std::cell::RefCell::new(std::time::Instant::now()));
+        let is_first_update = Rc::new(std::cell::RefCell::new(true));
 
         let vol_slider_c = vol_slider.clone();
         let vol_icon_c = vol_icon.clone();
@@ -208,6 +209,7 @@ impl MainPage {
         let is_updating_rx = is_updating.clone();
         let last_sent_rx = last_sent.clone();
         let last_time_rx = last_time.clone();
+        let is_first_rx = is_first_update.clone();
 
         ctx.audio.subscribe(move |data| {
             let current = vol_slider_c.value();
@@ -215,8 +217,10 @@ impl MainPage {
             let last = *last_sent_rx.borrow();
             let elapsed = last_time_rx.borrow().elapsed();
             let in_grace = elapsed < std::time::Duration::from_millis(600);
+            let is_first = *is_first_rx.borrow();
 
-            if (!in_grace && diff > 0.01) || (in_grace && (data.volume - last).abs() < 0.05) {
+            if is_first || (!in_grace && diff > 0.01) || (in_grace && (data.volume - last).abs() < 0.05) {
+                *is_first_rx.borrow_mut() = false;
                 *is_updating_rx.borrow_mut() = true;
                 vol_slider_c.set_value(data.volume);
                 *is_updating_rx.borrow_mut() = false;

@@ -113,6 +113,7 @@ fn setup_services() -> AppContext {
     let (network_rx, network_tx) = NetworkService::spawn();
     let (bluetooth_rx, bluetooth_tx) = BluetoothService::spawn();
     let (audio_rx, audio_tx) = AudioService::spawn();
+    let audio_initial = AudioService::read_initial();
     let (backlight_rx, backlight_tx) = BacklightService::spawn();
     let backlight_initial = BacklightService::read_initial();
     let (nightlight_rx, nightlight_tx) = NightlightService::spawn();
@@ -136,7 +137,7 @@ fn setup_services() -> AppContext {
         network_tx,
         bluetooth: ServiceStore::new(bluetooth_rx, Default::default()),
         bluetooth_tx,
-        audio: ServiceStore::new(audio_rx, Default::default()),
+        audio: ServiceStore::new(audio_rx, audio_initial),
         audio_tx,
         backlight: ServiceStore::new(backlight_rx, backlight_initial),
         backlight_tx,
