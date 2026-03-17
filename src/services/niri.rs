@@ -16,8 +16,10 @@ impl PartialEq for NiriData {
         if self.workspaces.len() != other.workspaces.len() || self.windows.len() != other.windows.len() {
             return false;
         }
+        // Vergleich der Workspaces
         let ws_eq = self.workspaces.iter().zip(&other.workspaces)
             .all(|(a, b)| a.id == b.id && a.is_active == b.is_active);
+        // Vergleich der Fenster (IDs und Fokus reichen für UI-Update-Trigger)
         let win_eq = self.windows.iter().zip(&other.windows).all(|(a, b)| {
             a.id == b.id && a.is_focused == b.is_focused && a.workspace_id == b.workspace_id
         });
@@ -33,19 +35,19 @@ impl NiriService {
 
         thread::spawn(move || {
             loop {
-                if let Ok(mut client) = Socket::connect() {
-                    println!("Niri: Connected to IPC");
+                let client_event = Socket::connect();
+                let client_query = Socket::connect();
+
+                if let (Ok(mut events_sock), Ok(mut query_sock)) = (client_event, client_query) {
+                    println!("Niri: Connected (Dual Socket Mode)");
                     
-                    // Initialen Zustand abfragen
-                    if let Some(data) = Self::fetch_full_state(&mut client) {
+                    if let Some(data) = Self::fetch_full_state(&mut query_sock) {
                         let _ = data_tx.send_blocking(data);
                     }
 
-                    // Event Stream anfordern
-                    if let Ok(Ok(Response::Handled)) = client.send(Request::EventStream) {
-                        let mut read_event = client.read_events();
+                    if let Ok(Ok(Response::Handled)) = events_sock.send(Request::EventStream) {
+                        let mut read_event = events_sock.read_events();
                         
-                        // Hier blockiert der Thread, bis ein Event kommt
                         while let Ok(event) = read_event() {
                             match event {
                                 Event::WorkspacesChanged { .. } | 
@@ -53,11 +55,8 @@ impl NiriService {
                                 Event::WindowsChanged { .. } |
                                 Event::WindowOpenedOrChanged { .. } |
                                 Event::WindowClosed { .. } => {
-                                    // Bei relevanten Änderungen neu pollen (über separaten Client)
-                                    if let Ok(mut query_client) = Socket::connect() {
-                                        if let Some(data) = Self::fetch_full_state(&mut query_client) {
-                                            let _ = data_tx.send_blocking(data);
-                                        }
+                                    if let Some(data) = Self::fetch_full_state(&mut query_sock) {
+                                        let _ = data_tx.send_blocking(data);
                                     }
                                 }
                                 _ => {}
@@ -65,7 +64,6 @@ impl NiriService {
                         }
                     }
                 }
-                // Bei Verbindungsverlust kurz warten und neu versuchen
                 thread::sleep(Duration::from_secs(1));
             }
         });
