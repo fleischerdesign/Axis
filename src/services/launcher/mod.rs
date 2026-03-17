@@ -11,7 +11,7 @@ use std::os::unix::process::CommandExt;
 use async_channel::Receiver;
 use gtk4::glib;
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct LauncherData {
     pub query: String,
     pub results: Vec<LauncherItem>,

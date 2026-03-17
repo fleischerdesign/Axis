@@ -4,16 +4,11 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 /// Ein reaktiver Store für einen Service-Datentyp.
-///
-/// Läuft vollständig auf dem GTK-Main-Thread (via `glib::spawn_future_local`).
-/// Kein Tokio, kein Blocking. Empfängt Daten aus einem `async_channel::Receiver`
-/// und benachrichtigt alle registrierten Subscriber synchron.
-pub struct ServiceStore<T: Clone + 'static> {
+pub struct ServiceStore<T: Clone + PartialEq + 'static> {
     pub store: Store<T>,
 }
 
-impl<T: Clone + 'static> ServiceStore<T> {
-    /// Erstellt einen neuen Store und startet den GLib-Empfangsloop.
+impl<T: Clone + PartialEq + 'static> ServiceStore<T> {
     pub fn new(rx: Receiver<T>, initial: T) -> Self {
         let store = Store::new(initial);
         let store_c = store.clone();
@@ -27,7 +22,6 @@ impl<T: Clone + 'static> ServiceStore<T> {
         Self { store }
     }
 
-    /// Erstellt einen Store, der manuell geupdatet werden kann (z.B. für UI-State).
     pub fn new_manual(initial: T) -> Self {
         Self {
             store: Store::new(initial),
@@ -43,7 +37,7 @@ impl<T: Clone + 'static> ServiceStore<T> {
     }
 }
 
-impl<T: Clone + 'static> Clone for ServiceStore<T> {
+impl<T: Clone + PartialEq + 'static> Clone for ServiceStore<T> {
     fn clone(&self) -> Self {
         Self {
             store: self.store.clone(),
@@ -51,13 +45,13 @@ impl<T: Clone + 'static> Clone for ServiceStore<T> {
     }
 }
 
-/// Ein einfacher, thread-lokaler (GTK-Main-Thread) reaktiver Datenspeicher.
-pub struct Store<T: Clone + 'static> {
+/// Ein einfacher, thread-lokaler reaktiver Datenspeicher.
+pub struct Store<T: Clone + PartialEq + 'static> {
     data: Rc<RefCell<T>>,
     listeners: Rc<RefCell<Vec<Box<dyn Fn(&T)>>>>,
 }
 
-impl<T: Clone + 'static> Store<T> {
+impl<T: Clone + PartialEq + 'static> Store<T> {
     pub fn new(initial: T) -> Self {
         Self {
             data: Rc::new(RefCell::new(initial)),
@@ -75,9 +69,13 @@ impl<T: Clone + 'static> Store<T> {
     }
 
     pub fn set(&self, val: T) {
-        *self.data.borrow_mut() = val.clone();
-        for listener in self.listeners.borrow().iter() {
-            listener(&val);
+        let mut data = self.data.borrow_mut();
+        if *data != val {
+            *data = val.clone();
+            drop(data); // Lock lösen vor Callbacks
+            for listener in self.listeners.borrow().iter() {
+                listener(&val);
+            }
         }
     }
 
@@ -86,15 +84,19 @@ impl<T: Clone + 'static> Store<T> {
         F: FnOnce(&mut T),
     {
         let mut data = self.data.borrow_mut();
+        let old_data = data.clone();
         f(&mut *data);
-        let val = data.clone();
-        for listener in self.listeners.borrow().iter() {
-            listener(&val);
+        if old_data != *data {
+            let val = data.clone();
+            drop(data); // Lock lösen vor Callbacks
+            for listener in self.listeners.borrow().iter() {
+                listener(&val);
+            }
         }
     }
 }
 
-impl<T: Clone + 'static> Clone for Store<T> {
+impl<T: Clone + PartialEq + 'static> Clone for Store<T> {
     fn clone(&self) -> Self {
         Self {
             data: self.data.clone(),

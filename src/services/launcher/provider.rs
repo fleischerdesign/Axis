@@ -2,14 +2,14 @@ use std::fmt::Debug;
 use std::future::Future;
 use std::pin::Pin;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum LauncherAction {
     Exec(String),
     OpenUrl(String),
     Internal(String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LauncherItem {
     pub id: String,
     pub title: String,

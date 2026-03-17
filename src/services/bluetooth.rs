@@ -2,6 +2,7 @@ use futures_util::StreamExt;
 use zbus::{proxy, Connection, zvariant::{OwnedObjectPath, OwnedValue, Type}};
 use async_channel::{Sender, Receiver, bounded};
 use std::collections::HashMap;
+use std::time::Duration;
 
 #[proxy(
     interface = "org.bluez.Adapter1",
@@ -17,24 +18,18 @@ trait BluetoothAdapter {
     fn stop_discovery(&self) -> zbus::Result<()>;
 }
 
-#[proxy(
-    interface = "org.bluez.Device1",
-    default_service = "org.bluez"
-)]
+#[proxy(interface = "org.bluez.Device1", default_service = "org.bluez")]
 trait BluetoothDevice {
     #[zbus(property)]
     fn name(&self) -> zbus::Result<String>;
     #[zbus(property)]
     fn alias(&self) -> zbus::Result<String>;
     #[zbus(property)]
-    fn address(&self) -> zbus::Result<String>;
-    #[zbus(property)]
     fn paired(&self) -> zbus::Result<bool>;
     #[zbus(property)]
     fn connected(&self) -> zbus::Result<bool>;
     #[zbus(property)]
     fn icon(&self) -> zbus::Result<String>;
-
     fn connect(&self) -> zbus::Result<()>;
     fn disconnect(&self) -> zbus::Result<()>;
 }
@@ -46,10 +41,8 @@ trait BluetoothDevice {
 )]
 trait ObjectManager {
     fn get_managed_objects(&self) -> zbus::Result<HashMap<OwnedObjectPath, HashMap<String, HashMap<String, OwnedValue>>>>;
-
     #[zbus(signal)]
     fn interfaces_added(&self, object_path: OwnedObjectPath, interfaces_and_properties: HashMap<String, HashMap<String, OwnedValue>>) -> zbus::Result<()>;
-
     #[zbus(signal)]
     fn interfaces_removed(&self, object_path: OwnedObjectPath, interfaces: Vec<String>) -> zbus::Result<()>;
 }
@@ -80,8 +73,8 @@ pub struct BluetoothService;
 
 impl BluetoothService {
     pub fn spawn() -> (Receiver<BluetoothData>, Sender<BluetoothCmd>) {
-        let (data_tx, data_rx) = bounded(100);
-        let (cmd_tx, cmd_rx) = bounded(100);
+        let (data_tx, data_rx) = bounded(10);
+        let (cmd_tx, cmd_rx) = bounded(10);
 
         tokio::spawn(async move {
             let connection = Connection::system().await.unwrap();
@@ -91,31 +84,27 @@ impl BluetoothService {
             let mut powered_changed = adapter_proxy.receive_powered_changed().await;
             let mut interfaces_added = obj_manager.receive_interfaces_added().await.unwrap();
             let mut interfaces_removed = obj_manager.receive_interfaces_removed().await.unwrap();
-            let mut interval = tokio::time::interval(std::time::Duration::from_secs(10));
+            let mut interval = tokio::time::interval(Duration::from_secs(60)); 
 
             let mut cmd_rx = Box::pin(cmd_rx);
-
-            // Initial fetch
-            Self::push_update(&adapter_proxy, &obj_manager, &connection, &data_tx).await;
+            let mut current_data = BluetoothData::default();
 
             loop {
+                let should_update;
+                let mut full_scan = false;
+
                 tokio::select! {
-                    _ = interval.tick() => {
-                        Self::push_update(&adapter_proxy, &obj_manager, &connection, &data_tx).await;
-                    }
-                    Some(_) = powered_changed.next() => {
-                        Self::push_update(&adapter_proxy, &obj_manager, &connection, &data_tx).await;
-                    }
-                    Some(_) = interfaces_added.next() => {
-                        Self::push_update(&adapter_proxy, &obj_manager, &connection, &data_tx).await;
-                    }
-                    Some(_) = interfaces_removed.next() => {
-                        Self::push_update(&adapter_proxy, &obj_manager, &connection, &data_tx).await;
-                    }
+                    _ = interval.tick() => { should_update = true; }
+                    Some(_) = powered_changed.next() => { should_update = true; }
+                    Some(_) = interfaces_added.next() => { should_update = true; }
+                    Some(_) = interfaces_removed.next() => { should_update = true; }
                     Some(cmd) = cmd_rx.next() => {
                         match cmd {
                             BluetoothCmd::TogglePower(on) => { let _ = adapter_proxy.set_powered(on).await; }
-                            BluetoothCmd::Scan => { let _ = adapter_proxy.start_discovery().await; }
+                            BluetoothCmd::Scan => { 
+                                let _ = adapter_proxy.start_discovery().await;
+                                full_scan = true;
+                            }
                             BluetoothCmd::Connect(path_str) => {
                                 if let Ok(path) = OwnedObjectPath::try_from(path_str) {
                                     if let Ok(dev_proxy) = BluetoothDeviceProxy::builder(&connection).path(path).unwrap().build().await {
@@ -131,7 +120,15 @@ impl BluetoothService {
                                 }
                             }
                         }
-                        Self::push_update(&adapter_proxy, &obj_manager, &connection, &data_tx).await;
+                        should_update = true;
+                    }
+                }
+
+                if should_update {
+                    let next_data = Self::fetch_data(&adapter_proxy, &obj_manager, &connection, full_scan, &current_data).await;
+                    if next_data != current_data {
+                        current_data = next_data;
+                        let _ = data_tx.send(current_data.clone()).await;
                     }
                 }
             }
@@ -140,48 +137,34 @@ impl BluetoothService {
         (data_rx, cmd_tx)
     }
 
-    async fn push_update(adapter: &BluetoothAdapterProxy<'_>, obj_manager: &ObjectManagerProxy<'_>, conn: &Connection, tx: &Sender<BluetoothData>) {
-        let new_data = Self::get_current_data(adapter, obj_manager, conn).await;
-        let _ = tx.send(new_data).await;
-    }
-
-    async fn get_current_data(adapter: &BluetoothAdapterProxy<'_>, obj_manager: &ObjectManagerProxy<'_>, conn: &Connection) -> BluetoothData {
+    async fn fetch_data(adapter: &BluetoothAdapterProxy<'_>, obj_manager: &ObjectManagerProxy<'_>, conn: &Connection, include_devices: bool, old_data: &BluetoothData) -> BluetoothData {
         let is_powered = adapter.powered().await.unwrap_or(false);
-        let mut devices = Vec::new();
+        let mut devices = if include_devices { Vec::new() } else { old_data.devices.clone() };
 
-        if let Ok(objects) = obj_manager.get_managed_objects().await {
-            for (path, interfaces) in objects {
-                if interfaces.contains_key("org.bluez.Device1") {
-                    if let Ok(dev_proxy) = BluetoothDeviceProxy::builder(conn).path(path.clone()).unwrap().build().await {
-                        let name = match dev_proxy.name().await {
-                            Ok(n) => n,
-                            Err(_) => dev_proxy.alias().await.unwrap_or_else(|_| "Unknown Device".to_string()),
-                        };
-                        let is_connected = dev_proxy.connected().await.unwrap_or(false);
-                        let is_paired = dev_proxy.paired().await.unwrap_or(false);
-                        let icon = dev_proxy.icon().await.unwrap_or_else(|_| "bluetooth-symbolic".to_string());
+        if include_devices {
+            if let Ok(objects) = obj_manager.get_managed_objects().await {
+                for (path, interfaces) in objects {
+                    if interfaces.contains_key("org.bluez.Device1") {
+                        if let Ok(dev_proxy) = BluetoothDeviceProxy::builder(conn).path(path.clone()).unwrap().build().await {
+                            let name = if let Ok(n) = dev_proxy.name().await {
+                                n
+                            } else {
+                                dev_proxy.alias().await.unwrap_or_else(|_| "Unknown Device".to_string())
+                            };
 
-                        devices.push(BluetoothDeviceData {
-                            name,
-                            is_connected,
-                            is_paired,
-                            path: path.to_string(),
-                            icon,
-                        });
+                            devices.push(BluetoothDeviceData {
+                                name,
+                                is_connected: dev_proxy.connected().await.unwrap_or(false),
+                                is_paired: dev_proxy.paired().await.unwrap_or(false),
+                                path: path.to_string(),
+                                icon: dev_proxy.icon().await.unwrap_or_else(|_| "bluetooth-symbolic".to_string()),
+                            });
+                        }
                     }
                 }
+                devices.sort_by(|a, b| b.is_connected.cmp(&a.is_connected).then_with(|| b.is_paired.cmp(&a.is_paired)).then_with(|| a.name.cmp(&b.name)));
             }
         }
-
-        devices.sort_by(|a, b| {
-            if a.is_connected != b.is_connected {
-                b.is_connected.cmp(&a.is_connected)
-            } else if a.is_paired != b.is_paired {
-                b.is_paired.cmp(&a.is_paired)
-            } else {
-                a.name.cmp(&b.name)
-            }
-        });
 
         BluetoothData { is_powered, devices }
     }
