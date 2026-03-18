@@ -39,11 +39,9 @@ impl WorkspacePopup {
             on_change_c();
         });
 
-        // Den Workspace-Shelf mittig ausrichten
-        base.window.set_anchor(gtk4_layer_shell::Edge::Left, true);
-        base.window.set_anchor(gtk4_layer_shell::Edge::Right, true);
-        base.window.set_margin(gtk4_layer_shell::Edge::Left, 10);
-        base.window.set_margin(gtk4_layer_shell::Edge::Right, 10);
+        // Den Workspace-Shelf mittig ausrichten (keine Anker für Links/Rechts = Zentriert)
+        base.window.set_anchor(gtk4_layer_shell::Edge::Left, false);
+        base.window.set_anchor(gtk4_layer_shell::Edge::Right, false);
 
         let shelf = gtk4::Box::new(gtk4::Orientation::Horizontal, 24);
         shelf.add_css_class("workspace-shelf");
