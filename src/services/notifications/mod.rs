@@ -38,9 +38,6 @@ impl NotificationService {
         let (data_tx, data_rx) = bounded::<NotificationData>(64);
         let (cmd_tx, cmd_rx) = bounded::<NotificationCmd>(32);
         
-        let cmd_rx_for_bus = cmd_rx.clone();
-        let cmd_rx_for_mapper = cmd_rx.clone();
-
         tokio::spawn(async move {
             let server = NotificationServer::new(raw_tx);
             let conn = Builder::session()
@@ -59,26 +56,11 @@ impl NotificationService {
                 .await
                 .unwrap();
 
-            // D-Bus Signal Loop (Signals auf InterfaceRef)
-            while let Ok(cmd) = cmd_rx_for_bus.recv().await {
-                match cmd {
-                    NotificationCmd::Close(id) => {
-                        let _ = interface_ref.notification_closed(id, 2).await;
-                    },
-                    NotificationCmd::Action(id, key) => {
-                        let _ = interface_ref.action_invoked(id, &key).await;
-                        let _ = interface_ref.notification_closed(id, 2).await;
-                    }
-                }
-            }
-        });
-
-        // Mapper: History Management
-        tokio::spawn(async move {
             let mut history: Vec<Notification> = Vec::new();
-            
+
             loop {
                 tokio::select! {
+                    // Neue Nachricht von D-Bus (App schickt Notification)
                     Ok(n) = raw_rx.recv() => {
                         let id = n.id;
                         if let Some(pos) = history.iter().position(|x| x.id == id) {
@@ -87,13 +69,37 @@ impl NotificationService {
                             history.push(n);
                         }
                         if history.len() > 20 { history.remove(0); }
-                        let _ = data_tx.send(NotificationData { notifications: history.clone(), last_id: id }).await;
+                        let _ = data_tx.send(NotificationData { 
+                            notifications: history.clone(), 
+                            last_id: id 
+                        }).await;
                     }
-                    
-                    Ok(cmd) = cmd_rx_for_mapper.recv() => {
-                        if let NotificationCmd::Close(id) = cmd {
-                            history.retain(|n| n.id != id);
-                            let _ = data_tx.send(NotificationData { notifications: history.clone(), last_id: 0 }).await;
+
+                    // Befehl von unserer UI (User klickt "X" oder Action)
+                    Ok(cmd) = cmd_rx.recv() => {
+                        match cmd {
+                            NotificationCmd::Close(id) => {
+                                // 1. Aus History entfernen (für UI)
+                                history.retain(|n| n.id != id);
+                                let _ = data_tx.send(NotificationData { 
+                                    notifications: history.clone(), 
+                                    last_id: 0 
+                                }).await;
+                                
+                                // 2. D-Bus informieren (App Bescheid geben)
+                                let _ = interface_ref.notification_closed(id, 2).await;
+                            },
+                            NotificationCmd::Action(id, key) => {
+                                // D-Bus informieren
+                                let _ = interface_ref.action_invoked(id, &key).await;
+                                // Danach schließen wir sie meistens direkt
+                                history.retain(|n| n.id != id);
+                                let _ = data_tx.send(NotificationData { 
+                                    notifications: history.clone(), 
+                                    last_id: 0 
+                                }).await;
+                                let _ = interface_ref.notification_closed(id, 2).await;
+                            }
                         }
                     }
                 }
