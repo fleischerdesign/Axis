@@ -31,7 +31,7 @@ impl NotificationArchiveManager {
         let revealer = gtk4::Revealer::builder()
             .transition_type(gtk4::RevealerTransitionType::Crossfade)
             .transition_duration(250)
-            .reveal_child(false) // Startet immer versteckt
+            .reveal_child(false)
             .build();
 
         let list_box = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
@@ -49,6 +49,22 @@ impl NotificationArchiveManager {
             hide_timeout: Rc::new(RefCell::new(None)),
         });
         
+        // --- ECHTZEIT-SYNC (Der Fix) ---
+        // Dieser Callback läuft jeden Frame und sorgt dafür, dass die Position
+        // immer exakt über dem QS-Inhalt bleibt, egal wie dieser sich verändert.
+        let window_c = manager.window.clone();
+        let qs_c = manager.qs_content.clone();
+        manager.window.add_tick_callback(move |_, _| {
+            if window_c.is_visible() {
+                let height = qs_c.allocated_height();
+                if height > 50 {
+                    // Margin = Inhaltshöhe + Bar(54) + Abstand(10)
+                    window_c.set_margin(Edge::Bottom, height + 76);
+                }
+            }
+            gtk4::glib::ControlFlow::Continue
+        });
+
         let manager_c = manager.clone();
         ctx.notifications.subscribe(move |data| {
             manager_c.update(&data.notifications);
@@ -58,21 +74,18 @@ impl NotificationArchiveManager {
     }
 
     pub fn set_visible(&self, visible: bool) {
-        // Bestehenden Hide-Timer immer abbrechen
         if let Some(src) = self.hide_timeout.borrow_mut().take() {
             src.remove();
         }
 
         if visible {
+            // Initialen Sync erzwingen
             let height = self.qs_content.allocated_height();
-            if height > 100 {
-                self.window.set_margin(Edge::Bottom, height + 54 + 12);
-            } else {
-                self.window.set_margin(Edge::Bottom, 500);
+            if height > 50 {
+                self.window.set_margin(Edge::Bottom, height + 76);
             }
             
             self.window.set_visible(true);
-            // Kleiner Delay für den Revealer, damit das Fenster erst gemappt werden kann
             let rev = self.revealer.clone();
             gtk4::glib::timeout_add_local_once(Duration::from_millis(10), move || {
                 rev.set_reveal_child(true);
