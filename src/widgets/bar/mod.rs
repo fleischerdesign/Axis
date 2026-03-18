@@ -84,27 +84,20 @@ impl Bar {
         let motion = gtk4::EventControllerMotion::new();
         {
             let is_hovered_c = is_hovered.clone();
-            let is_visible_c = is_visible.clone();
-            let hide_timeout_c = hide_timeout.clone();
-            let anim_source_c = anim_source.clone();
-            let window_c = window.clone();
+            let bar_ref = bar.clone();
 
             motion.connect_enter(move |_, _, _| {
                 *is_hovered_c.borrow_mut() = true;
-                if let Some(src) = hide_timeout_c.borrow_mut().take() { src.remove(); }
-                if *is_visible_c.borrow() { return; }
-                *is_visible_c.borrow_mut() = true;
-
-                SlideAnimator::slide_margin(&window_c, Edge::Bottom, 0, anim_source_c.clone());
+                bar_ref.check_auto_hide();
             });
         }
 
         {
             let is_hovered_c = is_hovered.clone();
-            let bar_instance = bar.clone();
+            let bar_ref = bar.clone();
             motion.connect_leave(move |_| {
                 *is_hovered_c.borrow_mut() = false;
-                bar_instance.check_auto_hide();
+                bar_ref.check_auto_hide();
             });
         }
         window.add_controller(motion);
@@ -113,25 +106,38 @@ impl Bar {
     }
 
     pub fn check_auto_hide(&self) {
-        if *self.popup_open.borrow() || *self.is_hovered.borrow() { return; }
-        if let Some(src) = self.hide_timeout.borrow_mut().take() { src.remove(); }
+        let should_be_visible = *self.popup_open.borrow() || *self.is_hovered.borrow();
+        
+        // Timer für das Verstecken immer stoppen, wenn sich der Status ändert
+        if let Some(src) = self.hide_timeout.borrow_mut().take() {
+            src.remove();
+        }
 
-        let is_visible_for_cb = self.is_visible.clone();
-        let hide_timeout_for_cb = self.hide_timeout.clone();
-        let anim_source_for_cb = self.anim_source.clone();
-        let window_anim = self.window.clone();
+        if should_be_visible {
+            // SHOW
+            if !*self.is_visible.borrow() {
+                *self.is_visible.borrow_mut() = true;
+                SlideAnimator::slide_margin(&self.window, Edge::Bottom, 0, self.anim_source.clone());
+            }
+        } else {
+            // HIDE (mit Delay)
+            let is_visible_for_cb = self.is_visible.clone();
+            let hide_timeout_for_cb = self.hide_timeout.clone();
+            let anim_source_for_cb = self.anim_source.clone();
+            let window_anim = self.window.clone();
 
-        let src = glib::timeout_add_local_once(Duration::from_millis(HIDE_DELAY_MS), move || {
-            *is_visible_for_cb.borrow_mut() = false;
-            *hide_timeout_for_cb.borrow_mut() = None;
-            
-            SlideAnimator::slide_margin(
-                &window_anim, 
-                Edge::Bottom, 
-                -(BAR_HEIGHT - PEEK_PX), 
-                anim_source_for_cb
-            );
-        });
-        *self.hide_timeout.borrow_mut() = Some(src);
+            let src = glib::timeout_add_local_once(Duration::from_millis(HIDE_DELAY_MS), move || {
+                *is_visible_for_cb.borrow_mut() = false;
+                *hide_timeout_for_cb.borrow_mut() = None;
+                
+                SlideAnimator::slide_margin(
+                    &window_anim, 
+                    Edge::Bottom, 
+                    -(BAR_HEIGHT - PEEK_PX), 
+                    anim_source_for_cb
+                );
+            });
+            *self.hide_timeout.borrow_mut() = Some(src);
+        }
     }
 }

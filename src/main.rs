@@ -14,6 +14,7 @@ use crate::services::network::NetworkService;
 use crate::services::niri::NiriService;
 use crate::services::power::PowerService;
 use crate::services::launcher::LauncherService;
+use crate::services::ipc::IpcService;
 use crate::services::launcher::providers::apps::AppProvider;
 use crate::store::ServiceStore;
 use crate::widgets::{Bar, QuickSettingsPopup, WorkspacePopup, LauncherPopup};
@@ -24,8 +25,12 @@ use std::sync::Arc;
 use std::rc::Rc;
 use std::cell::RefCell;
 
-#[tokio::main]
-async fn main() {
+fn main() {
+    // Wir erstellen eine globale Tokio-Laufzeit für alle asynchronen Services.
+    // Das ist sauberer als #[tokio::main], da GTK die volle Kontrolle über den Main-Thread behält.
+    let runtime = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+    let _guard = runtime.enter();
+
     let application = libadwaita::Application::builder()
         .application_id("com.github.carp.shell")
         .build();
@@ -35,7 +40,6 @@ async fn main() {
 }
 
 fn build_ui(app: &libadwaita::Application) {
-    // CSS laden
     let provider = gtk4::CssProvider::new();
     provider.load_from_path("src/style.css");
     if let Some(display) = gtk4::gdk::Display::default() {
@@ -53,12 +57,9 @@ fn build_ui(app: &libadwaita::Application) {
 
     // --- WIDGETS & CONTROLLER ---
     let bar = Bar::new(app, ctx.clone());
-    
-    // Der Controller orchestriert alle Popups
     let bar_popup_state = bar.popup_open.clone();
     let bar_ref = bar.clone();
     
-    // Wir nutzen eine RefCell für den Controller selbst, damit wir ihn in den Callbacks nutzen können
     let controller: Rc<RefCell<Option<Rc<ShellController>>>> = Rc::new(RefCell::new(None));
     let controller_cb = controller.clone();
 
@@ -68,7 +69,7 @@ fn build_ui(app: &libadwaita::Application) {
 
     let mut shell = ShellController::new(bar_popup_state, on_change);
 
-    // Popups erstellen und im Controller registrieren
+    // Popups registrieren
     let ctx_c = ctx.clone();
     let ctrl_l = controller_cb.clone();
     let launcher = Rc::new(LauncherPopup::new(app, ctx_c, move || {
@@ -93,7 +94,22 @@ fn build_ui(app: &libadwaita::Application) {
     let shell = Rc::new(shell);
     *controller.borrow_mut() = Some(shell.clone());
 
-    // --- CLICK HANDLER (DRY!) ---
+    // --- IPC SERVICE STARTEN ---
+    let ipc_rx = IpcService::spawn();
+    let shell_ipc = shell.clone();
+    glib::spawn_future_local(async move {
+        while let Ok(cmd) = ipc_rx.recv().await {
+            use crate::services::ipc::server::ShellIpcCmd;
+            match cmd {
+                ShellIpcCmd::ToggleLauncher => shell_ipc.toggle("launcher"),
+                ShellIpcCmd::ToggleQuickSettings => shell_ipc.toggle("qs"),
+                ShellIpcCmd::ToggleWorkspaces => shell_ipc.toggle("ws"),
+                ShellIpcCmd::CloseAll => shell_ipc.close_all(),
+            }
+        }
+    });
+
+    // --- CLICK HANDLER ---
     setup_click_handler(&bar.launcher_island, shell.clone(), "launcher");
     setup_click_handler(&bar.status_island, shell.clone(), "qs");
     setup_click_handler(&bar.center_island, shell.clone(), "ws");

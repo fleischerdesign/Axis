@@ -7,3 +7,4 @@ pub mod clock;
 pub mod backlight;
 pub mod nightlight;
 pub mod launcher;
+pub mod ipc;
