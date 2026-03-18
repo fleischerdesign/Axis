@@ -6,7 +6,6 @@ use std::rc::Rc;
 use std::cell::{Cell, RefCell};
 use std::time::Duration;
 
-// Zentrale Konstante für den Abstand (Bar 54 + Padding 10 + Gap 12)
 const ARCHIVE_MARGIN_BOTTOM: i32 = 76;
 
 pub struct NotificationArchiveManager {
@@ -16,6 +15,7 @@ pub struct NotificationArchiveManager {
     qs_content: gtk4::Box,
     hide_timeout: Rc<RefCell<Option<gtk4::glib::SourceId>>>,
     last_known_id: Cell<u32>,
+    ctx: AppContext,
 }
 
 impl NotificationArchiveManager {
@@ -52,9 +52,9 @@ impl NotificationArchiveManager {
             qs_content: qs_content.clone(),
             hide_timeout: Rc::new(RefCell::new(None)),
             last_known_id: Cell::new(0),
+            ctx: ctx.clone(),
         });
         
-        // --- ECHTZEIT-SYNC ---
         let window_c = manager.window.clone();
         let qs_c = manager.qs_content.clone();
         manager.window.add_tick_callback(move |_, _| {
@@ -85,7 +85,6 @@ impl NotificationArchiveManager {
             if height > 50 {
                 self.window.set_margin(Edge::Bottom, height + ARCHIVE_MARGIN_BOTTOM);
             }
-            
             self.window.set_visible(true);
             let rev = self.revealer.clone();
             gtk4::glib::timeout_add_local_once(Duration::from_millis(10), move || {
@@ -95,7 +94,6 @@ impl NotificationArchiveManager {
             self.revealer.set_reveal_child(false);
             let win = self.window.clone();
             let hide_timeout_c = self.hide_timeout.clone();
-            
             let src = gtk4::glib::timeout_add_local_once(Duration::from_millis(260), move || {
                 win.set_visible(false);
                 *hide_timeout_c.borrow_mut() = None;
@@ -107,8 +105,9 @@ impl NotificationArchiveManager {
     fn update(&self, notifications: &[crate::services::notifications::Notification]) {
         let newest_id = notifications.last().map(|n| n.id).unwrap_or(0);
         
-        // UI-Update nur wenn nötig (Clean Code & Performance)
-        if newest_id == self.last_known_id.get() && self.list_box.first_child().is_some() {
+        // UI-Update nur wenn nötig, aber wir müssen auch prüfen ob sich die Anzahl geändert hat
+        // (z.B. beim Löschen)
+        if newest_id == self.last_known_id.get() && self.list_box.first_child().is_some() && notifications.len() == self.get_child_count() {
             return;
         }
         self.last_known_id.set(newest_id);
@@ -117,12 +116,20 @@ impl NotificationArchiveManager {
             self.list_box.remove(&child);
         }
 
-        // --- KORREKTE SORTIERUNG (Senior Fix) ---
-        // Wir nehmen die LETZTEN 10 Nachrichten aus dem Vec (die aktuellsten).
         let start_idx = notifications.len().saturating_sub(10);
         for n in notifications.iter().skip(start_idx) {
-            let card = NotificationCard::new(n);
+            let card = NotificationCard::new(n, self.ctx.clone());
             self.list_box.append(&card.container);
         }
+    }
+
+    fn get_child_count(&self) -> usize {
+        let mut count = 0;
+        let mut next = self.list_box.first_child();
+        while let Some(child) = next {
+            count += 1;
+            next = child.next_sibling();
+        }
+        count
     }
 }

@@ -4,12 +4,13 @@ use crate::app_context::AppContext;
 use crate::widgets::notification::NotificationCard;
 use std::time::Duration;
 use std::rc::Rc;
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 
 pub struct NotificationToastManager {
     window: gtk4::ApplicationWindow,
     container: gtk4::Box,
     last_shown_id: Rc<Cell<u32>>,
+    ctx: AppContext,
 }
 
 impl NotificationToastManager {
@@ -27,7 +28,6 @@ impl NotificationToastManager {
         window.set_margin(Edge::Right, 10);
         window.set_exclusive_zone(-1);
 
-        // Container für die Stapelung (Vertical Box)
         let container = gtk4::Box::new(gtk4::Orientation::Vertical, 10);
         container.set_valign(gtk4::Align::Start);
         window.set_child(Some(&container));
@@ -36,6 +36,7 @@ impl NotificationToastManager {
             window,
             container,
             last_shown_id: Rc::new(Cell::new(0)),
+            ctx: ctx.clone(),
         });
 
         let manager_c = manager.clone();
@@ -50,9 +51,8 @@ impl NotificationToastManager {
     }
 
     fn add_toast(&self, data: &crate::services::notifications::Notification) {
-        let card = NotificationCard::new(data);
+        let card = NotificationCard::new(data, self.ctx.clone());
         
-        // Revealer für die Ein- und Ausblend-Animation
         let revealer = gtk4::Revealer::builder()
             .transition_type(gtk4::RevealerTransitionType::Crossfade)
             .transition_duration(250)
@@ -61,15 +61,12 @@ impl NotificationToastManager {
         revealer.set_child(Some(&card.container));
         self.container.append(&revealer);
         
-        // Fenster anzeigen, falls es noch versteckt war
         if !self.window.is_visible() {
             self.window.set_visible(true);
         }
 
-        // Animation starten
         revealer.set_reveal_child(true);
 
-        // Auto-Entfernung nach 5 Sekunden
         let container_c = self.container.clone();
         let revealer_c = revealer.clone();
         let window_c = self.window.clone();
@@ -78,7 +75,6 @@ impl NotificationToastManager {
             Self::remove_toast(&container_c, &revealer_c, &window_c);
         });
 
-        // Entfernung bei Klick
         let click = gtk4::GestureClick::new();
         let container_click = self.container.clone();
         let revealer_click = revealer.clone();
@@ -98,8 +94,6 @@ impl NotificationToastManager {
         
         gtk4::glib::timeout_add_local_once(Duration::from_millis(280), move || {
             container_c.remove(&revealer_c);
-            
-            // Wenn keine Toasts mehr da sind, Fenster verstecken
             if container_c.first_child().is_none() {
                 window_c.set_visible(false);
             }

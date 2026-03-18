@@ -1,9 +1,16 @@
 pub mod server;
 
-use crate::services::notifications::server::{NotificationServer, NotificationCmd};
+use crate::services::notifications::server::{NotificationServer, NotificationCmd, NotificationServerSignals};
 use async_channel::{bounded, Receiver, Sender};
 use serde::Serialize;
 use zbus::connection::Builder;
+use zbus::object_server::InterfaceRef;
+
+#[derive(Clone, Debug, Default, Serialize, PartialEq)]
+pub struct NotificationAction {
+    pub key: String,
+    pub label: String,
+}
 
 #[derive(Clone, Debug, Default, Serialize, PartialEq)]
 pub struct Notification {
@@ -14,12 +21,12 @@ pub struct Notification {
     pub body: String,
     pub urgency: u8,
     pub timestamp: i64,
+    pub actions: Vec<NotificationAction>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, PartialEq)]
 pub struct NotificationData {
     pub notifications: Vec<Notification>,
-    /// Hilft der UI zu erkennen, ob gerade eine NEUE Nachricht reinkam
     pub last_id: u32,
 }
 
@@ -29,12 +36,14 @@ impl NotificationService {
     pub fn spawn() -> (Receiver<NotificationData>, Sender<NotificationCmd>) {
         let (raw_tx, raw_rx) = bounded::<Notification>(64);
         let (data_tx, data_rx) = bounded::<NotificationData>(64);
-        let (cmd_tx, cmd_rx) = bounded(32);
+        let (cmd_tx, cmd_rx) = bounded::<NotificationCmd>(32);
         
-        let server = NotificationServer::new(raw_tx, cmd_rx.clone());
+        let cmd_rx_for_bus = cmd_rx.clone();
+        let cmd_rx_for_mapper = cmd_rx.clone();
 
         tokio::spawn(async move {
-            let _conn = Builder::session()
+            let server = NotificationServer::new(raw_tx);
+            let conn = Builder::session()
                 .unwrap()
                 .name("org.freedesktop.Notifications")
                 .unwrap()
@@ -44,27 +53,50 @@ impl NotificationService {
                 .await
                 .unwrap();
 
-            loop {
-                tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
+            let interface_ref: InterfaceRef<NotificationServer> = conn
+                .object_server()
+                .interface("/org/freedesktop/Notifications")
+                .await
+                .unwrap();
+
+            // D-Bus Signal Loop (Signals auf InterfaceRef)
+            while let Ok(cmd) = cmd_rx_for_bus.recv().await {
+                match cmd {
+                    NotificationCmd::Close(id) => {
+                        let _ = interface_ref.notification_closed(id, 2).await;
+                    },
+                    NotificationCmd::Action(id, key) => {
+                        let _ = interface_ref.action_invoked(id, &key).await;
+                        let _ = interface_ref.notification_closed(id, 2).await;
+                    }
+                }
             }
         });
 
         // Mapper: History Management
         tokio::spawn(async move {
             let mut history: Vec<Notification> = Vec::new();
-            while let Ok(n) = raw_rx.recv().await {
-                let id = n.id;
-                history.push(n);
-                
-                // Limit: Nur die letzten 20 behalten (Clean & Memory Safe)
-                if history.len() > 20 {
-                    history.remove(0);
+            
+            loop {
+                tokio::select! {
+                    Ok(n) = raw_rx.recv() => {
+                        let id = n.id;
+                        if let Some(pos) = history.iter().position(|x| x.id == id) {
+                            history[pos] = n;
+                        } else {
+                            history.push(n);
+                        }
+                        if history.len() > 20 { history.remove(0); }
+                        let _ = data_tx.send(NotificationData { notifications: history.clone(), last_id: id }).await;
+                    }
+                    
+                    Ok(cmd) = cmd_rx_for_mapper.recv() => {
+                        if let NotificationCmd::Close(id) = cmd {
+                            history.retain(|n| n.id != id);
+                            let _ = data_tx.send(NotificationData { notifications: history.clone(), last_id: 0 }).await;
+                        }
+                    }
                 }
-
-                let _ = data_tx.send(NotificationData { 
-                    notifications: history.clone(),
-                    last_id: id 
-                }).await;
             }
         });
 

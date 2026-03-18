@@ -2,10 +2,9 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
 use zbus::interface;
 use zbus::zvariant::Value;
-use crate::services::notifications::Notification;
-use async_channel::{Sender, Receiver};
-
-static NOTIFICATION_ID: AtomicU32 = AtomicU32::new(1);
+use crate::services::notifications::{Notification, NotificationAction};
+use async_channel::Sender;
+use zbus::object_server::SignalEmitter;
 
 #[derive(Debug, Clone)]
 pub enum NotificationCmd {
@@ -15,18 +14,16 @@ pub enum NotificationCmd {
 
 pub struct NotificationServer {
     tx: Sender<Notification>,
-    _cmd_rx: Receiver<NotificationCmd>,
 }
 
 impl NotificationServer {
-    pub fn new(tx: Sender<Notification>, cmd_rx: Receiver<NotificationCmd>) -> Self {
-        Self { tx, _cmd_rx: cmd_rx }
+    pub fn new(tx: Sender<Notification>) -> Self {
+        Self { tx }
     }
 }
 
 #[interface(name = "org.freedesktop.Notifications")]
 impl NotificationServer {
-    /// Die Hauptmethode für neue Benachrichtigungen
     pub fn notify(
         &self,
         app_name: String,
@@ -34,20 +31,29 @@ impl NotificationServer {
         app_icon: String,
         summary: String,
         body: String,
-        _actions: Vec<String>,
+        actions: Vec<String>,
         hints: HashMap<String, Value>,
         _expire_timeout: i32,
     ) -> u32 {
+        static NOTIFICATION_ID: AtomicU32 = AtomicU32::new(1);
+        
         let id = if replaces_id == 0 {
             NOTIFICATION_ID.fetch_add(1, Ordering::SeqCst)
         } else {
             replaces_id
         };
 
-        // Urgency aus Hints extrahieren (0=Low, 1=Normal, 2=Critical)
         let urgency = hints.get("urgency")
             .and_then(|v| v.downcast_ref::<u8>().ok())
             .unwrap_or(1);
+
+        let mut parsed_actions = Vec::new();
+        for chunk in actions.chunks_exact(2) {
+            parsed_actions.push(NotificationAction {
+                key: chunk[0].clone(),
+                label: chunk[1].clone(),
+            });
+        }
 
         let notification = Notification {
             id,
@@ -57,33 +63,28 @@ impl NotificationServer {
             body,
             urgency,
             timestamp: chrono::Local::now().timestamp(),
+            actions: parsed_actions,
         };
 
-        // Nachricht an den Main-Thread schicken
         let _ = self.tx.send_blocking(notification);
-
         id
     }
 
-    pub fn close_notification(&self, id: u32) {
-        println!("Notification: Request to close ID {}", id);
-    }
+    pub fn close_notification(&self, _id: u32) {}
+
+    // --- SIGNALE (Zbus 5 Style) ---
+    // Wichtig: Kein &self, SignalEmitter als erstes Argument
+    #[zbus(signal)]
+    async fn action_invoked(emitter: &SignalEmitter<'_>, id: u32, action_key: &str) -> zbus::Result<()>;
+
+    #[zbus(signal)]
+    async fn notification_closed(emitter: &SignalEmitter<'_>, id: u32, reason: u32) -> zbus::Result<()>;
 
     pub fn get_capabilities(&self) -> Vec<String> {
-        vec![
-            "body".to_string(),
-            "actions".to_string(),
-            "icon-static".to_string(),
-            "persistence".to_string(),
-        ]
+        vec!["body".to_string(), "actions".to_string(), "icon-static".to_string(), "persistence".to_string()]
     }
 
     pub fn get_server_information(&self) -> (String, String, String, String) {
-        (
-            "carp-shell-notifications".to_string(),
-            "Carp Project".to_string(),
-            "0.1.0".to_string(),
-            "1.2".to_string(),
-        )
+        ("carp-shell-notifications".to_string(), "Carp Project".to_string(), "0.1.0".to_string(), "1.2".to_string())
     }
 }

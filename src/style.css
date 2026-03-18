@@ -313,13 +313,19 @@ separator {
     letter-spacing: 0.5px;
 }
 
-.notification-time {
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.25);
+.notification-close-btn {
+    background: transparent;
+    border: none;
+    border-radius: 999px;
+    min-width: 24px;
+    min-height: 24px;
+    padding: 0;
+    color: rgba(255, 255, 255, 0.3);
 }
 
-.notification-content-area {
-    margin-left: 0;
+.notification-close-btn:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
 }
 
 .notification-summary {
@@ -334,4 +340,18 @@ separator {
     color: rgba(255, 255, 255, 0.75);
     margin-top: 6px;
     line-height: 1.4;
+}
+
+.notification-action-btn {
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    color: white;
+    font-weight: 600;
+    font-size: 13px;
+    padding: 8px 12px;
+}
+
+.notification-action-btn:hover {
+    background-color: rgba(255, 255, 255, 0.1);
 }

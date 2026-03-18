@@ -3,20 +3,22 @@ pub mod archive;
 
 use gtk4::prelude::*;
 use crate::services::notifications::Notification;
+use crate::app_context::AppContext;
+use crate::services::notifications::server::NotificationCmd;
 
 pub struct NotificationCard {
     pub container: gtk4::Box,
 }
 
 impl NotificationCard {
-    pub fn new(data: &Notification) -> Self {
+    pub fn new(data: &Notification, ctx: AppContext) -> Self {
         let container = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
         container.add_css_class("notification-card");
         container.set_width_request(380);
         container.set_hexpand(false);
         container.set_halign(gtk4::Align::End);
 
-        // --- HEADER (App Name & Zeit) ---
+        // --- HEADER (App Name, Zeit, Close) ---
         let header_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
         header_box.add_css_class("notification-header");
 
@@ -36,16 +38,23 @@ impl NotificationCard {
         let spacer = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
         spacer.set_hexpand(true);
 
-        let time_label = gtk4::Label::builder()
-            .label("jetzt")
+        // Close Button
+        let close_btn = gtk4::Button::builder()
+            .icon_name("window-close-symbolic")
+            .css_classes(vec!["notification-close-btn".to_string()])
             .halign(gtk4::Align::End)
-            .css_classes(vec!["notification-time".to_string()])
             .build();
+
+        let id = data.id;
+        let tx = ctx.notifications_tx.clone();
+        close_btn.connect_clicked(move |_| {
+            let _ = tx.send_blocking(NotificationCmd::Close(id));
+        });
 
         header_box.append(&app_icon);
         header_box.append(&app_label);
         header_box.append(&spacer);
-        header_box.append(&time_label);
+        header_box.append(&close_btn);
 
         // --- CONTENT (Titel & Body) ---
         let content_box = gtk4::Box::new(gtk4::Orientation::Vertical, 2);
@@ -74,6 +83,29 @@ impl NotificationCard {
 
         container.append(&header_box);
         container.append(&content_box);
+
+        // --- ACTIONS ---
+        if !data.actions.is_empty() {
+            let action_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+            action_box.set_margin_top(8);
+            action_box.set_homogeneous(true);
+
+            for action in &data.actions {
+                let btn = gtk4::Button::builder()
+                    .label(&action.label)
+                    .css_classes(vec!["notification-action-btn".to_string()])
+                    .build();
+                
+                let tx = ctx.notifications_tx.clone();
+                let key = action.key.clone();
+                btn.connect_clicked(move |_| {
+                    let _ = tx.send_blocking(NotificationCmd::Action(id, key.clone()));
+                    let _ = tx.send_blocking(NotificationCmd::Close(id));
+                });
+                action_box.append(&btn);
+            }
+            container.append(&action_box);
+        }
 
         Self { container }
     }
