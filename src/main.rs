@@ -15,9 +15,10 @@ use crate::services::niri::NiriService;
 use crate::services::power::PowerService;
 use crate::services::launcher::LauncherService;
 use crate::services::ipc::IpcService;
+use crate::services::notifications::NotificationService;
 use crate::services::launcher::providers::apps::AppProvider;
 use crate::store::ServiceStore;
-use crate::widgets::{Bar, QuickSettingsPopup, WorkspacePopup, LauncherPopup};
+use crate::widgets::{Bar, QuickSettingsPopup, WorkspacePopup, LauncherPopup, NotificationToastManager};
 use crate::shell::ShellController;
 use gtk4::prelude::*;
 use gtk4::glib;
@@ -26,8 +27,6 @@ use std::rc::Rc;
 use std::cell::RefCell;
 
 fn main() {
-    // Wir erstellen eine globale Tokio-Laufzeit für alle asynchronen Services.
-    // Das ist sauberer als #[tokio::main], da GTK die volle Kontrolle über den Main-Thread behält.
     let runtime = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
     let _guard = runtime.enter();
 
@@ -52,7 +51,6 @@ fn build_ui(app: &libadwaita::Application) {
 
     libadwaita::StyleManager::default().set_color_scheme(libadwaita::ColorScheme::PreferDark);
 
-    // --- SERVICES STARTEN ---
     let ctx = setup_services();
 
     // --- WIDGETS & CONTROLLER ---
@@ -60,43 +58,56 @@ fn build_ui(app: &libadwaita::Application) {
     let bar_popup_state = bar.popup_open.clone();
     let bar_ref = bar.clone();
     
+    // Controller braucht RefCell für Callbacks
     let controller: Rc<RefCell<Option<Rc<ShellController>>>> = Rc::new(RefCell::new(None));
-    let controller_cb = controller.clone();
+    let controller_on_change = controller.clone();
 
-    let on_change = move || {
-        bar_ref.check_auto_hide();
-    };
+    // Toasts initialisieren
+    NotificationToastManager::init(app, ctx.clone());
 
-    let mut shell = ShellController::new(bar_popup_state, on_change);
-
-    // Popups registrieren
+    // Popups initialisieren (QS brauchen wir zuerst für das Archiv)
     let ctx_c = ctx.clone();
-    let ctrl_l = controller_cb.clone();
-    let launcher = Rc::new(LauncherPopup::new(app, ctx_c, move || {
-        if let Some(c) = ctrl_l.borrow().as_ref() { c.sync(); }
-    }));
-    shell.add_popup(launcher.clone());
-
-    let ctx_c = ctx.clone();
-    let ctrl_q = controller_cb.clone();
+    let ctrl_q = controller.clone();
     let qs = Rc::new(QuickSettingsPopup::new(app, &bar.vol_icon, ctx_c, move || {
         if let Some(c) = ctrl_q.borrow().as_ref() { c.sync(); }
     }));
-    shell.add_popup(qs.clone());
+
+    // --- ARCHIVE (Braucht QS-Referenz) ---
+    let notification_archive = crate::widgets::notification::archive::NotificationArchiveManager::new(app, ctx.clone(), &qs.container);
+    let archive_cb = notification_archive.clone();
+
+    // OnChange Callback für alle Popups
+    let on_change = move || {
+        bar_ref.check_auto_hide();
+        if let Some(c) = controller_on_change.borrow().as_ref() {
+            let is_qs = c.active_id() == Some("qs".to_string());
+            archive_cb.set_visible(is_qs);
+        }
+    };
+
+    let shell_ctrl = ShellController::new(bar_popup_state, on_change);
+    shell_ctrl.add_popup(qs.clone());
 
     let ctx_c = ctx.clone();
-    let ctrl_w = controller_cb.clone();
+    let ctrl_l = controller.clone();
+    let launcher = Rc::new(LauncherPopup::new(app, ctx_c, move || {
+        if let Some(c) = ctrl_l.borrow().as_ref() { c.sync(); }
+    }));
+    shell_ctrl.add_popup(launcher.clone());
+
+    let ctx_c = ctx.clone();
+    let ctrl_w = controller.clone();
     let ws = Rc::new(WorkspacePopup::new(app, ctx_c, move || {
         if let Some(c) = ctrl_w.borrow().as_ref() { c.sync(); }
     }));
-    shell.add_popup(ws.clone());
+    shell_ctrl.add_popup(ws.clone());
 
-    let shell = Rc::new(shell);
-    *controller.borrow_mut() = Some(shell.clone());
+    let shell_ctrl = Rc::new(shell_ctrl);
+    *controller.borrow_mut() = Some(shell_ctrl.clone());
 
     // --- IPC SERVICE STARTEN ---
     let ipc_rx = IpcService::spawn();
-    let shell_ipc = shell.clone();
+    let shell_ipc = shell_ctrl.clone();
     glib::spawn_future_local(async move {
         while let Ok(cmd) = ipc_rx.recv().await {
             use crate::services::ipc::server::ShellIpcCmd;
@@ -110,9 +121,9 @@ fn build_ui(app: &libadwaita::Application) {
     });
 
     // --- CLICK HANDLER ---
-    setup_click_handler(&bar.launcher_island, shell.clone(), "launcher");
-    setup_click_handler(&bar.status_island, shell.clone(), "qs");
-    setup_click_handler(&bar.center_island, shell.clone(), "ws");
+    setup_click_handler(&bar.launcher_island, shell_ctrl.clone(), "launcher");
+    setup_click_handler(&bar.status_island, shell_ctrl.clone(), "qs");
+    setup_click_handler(&bar.center_island, shell_ctrl.clone(), "ws");
 
     bar.window.present();
 }
@@ -134,6 +145,7 @@ fn setup_services() -> AppContext {
     let backlight_initial = BacklightService::read_initial();
     let (nightlight_rx, nightlight_tx) = NightlightService::spawn();
     let nightlight_initial = NightlightService::read_initial();
+    let (notification_rx, notification_tx) = NotificationService::spawn();
     let power_rx = PowerService::spawn();
     let niri_rx = NiriService::spawn();
     let clock_rx = ClockService::spawn();
@@ -161,6 +173,8 @@ fn setup_services() -> AppContext {
         nightlight_tx,
         launcher: launcher_store,
         launcher_tx,
+        notifications: ServiceStore::new(notification_rx, Default::default()),
+        notifications_tx: notification_tx,
         power: ServiceStore::new(power_rx, Default::default()),
         niri: ServiceStore::new(niri_rx, Default::default()),
         clock: ServiceStore::new(clock_rx, chrono::Local::now()),

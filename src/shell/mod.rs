@@ -11,6 +11,7 @@ pub trait ShellPopup {
 pub struct ShellController {
     popups: RefCell<Vec<Rc<dyn ShellPopup>>>,
     bar_popup_state: Rc<RefCell<bool>>,
+    active_id: Rc<RefCell<Option<String>>>,
     on_change: Box<dyn Fn()>,
 }
 
@@ -19,6 +20,7 @@ impl ShellController {
         Self {
             popups: RefCell::new(Vec::new()),
             bar_popup_state,
+            active_id: Rc::new(RefCell::new(None)),
             on_change: Box::new(on_change),
         }
     }
@@ -27,19 +29,28 @@ impl ShellController {
         self.popups.borrow_mut().push(popup);
     }
 
+    pub fn active_id(&self) -> Option<String> {
+        self.active_id.borrow().clone()
+    }
+
     pub fn toggle(&self, id: &str) {
         let popups = self.popups.borrow();
         let mut any_open_after = false;
+        let mut new_id = None;
 
         for p in popups.iter() {
             if p.id() == id {
                 p.toggle();
-                if p.is_open() { any_open_after = true; }
+                if p.is_open() { 
+                    any_open_after = true; 
+                    new_id = Some(id.to_string());
+                }
             } else if p.is_open() {
                 p.close();
             }
         }
 
+        *self.active_id.borrow_mut() = new_id;
         self.sync_state(any_open_after);
     }
 
@@ -50,12 +61,14 @@ impl ShellController {
                 p.close();
             }
         }
+        *self.active_id.borrow_mut() = None;
         self.sync_state(false);
     }
 
     pub fn sync(&self) {
         let popups = self.popups.borrow();
         let any_open = popups.iter().any(|p| p.is_open());
+        if !any_open { *self.active_id.borrow_mut() = None; }
         self.sync_state(any_open);
     }
 

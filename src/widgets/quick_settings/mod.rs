@@ -19,6 +19,7 @@ use std::rc::Rc;
 
 pub struct QuickSettingsPopup {
     pub base: PopupBase,
+    pub container: gtk4::Box,
 }
 
 impl ShellPopup for QuickSettingsPopup {
@@ -130,6 +131,6 @@ impl QuickSettingsPopup {
         qs_container.append(&qs_stack);
         base.set_content(&qs_container);
 
-        Self { base }
+        Self { base, container: qs_container }
     }
 }

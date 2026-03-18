@@ -8,3 +8,4 @@ pub mod backlight;
 pub mod nightlight;
 pub mod launcher;
 pub mod ipc;
+pub mod notifications;
