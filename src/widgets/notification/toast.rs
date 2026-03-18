@@ -89,11 +89,26 @@ impl NotificationToastManager {
 
         revealer.set_reveal_child(true);
 
-        // Auto-Entfernung nach 5 Sekunden
+        // Auto-Entfernung nach 5 Sekunden (NUR lokal als Toast verstecken, NICHT global löschen!)
         let id = data.id;
-        let tx = self.ctx.notifications_tx.clone();
+        let active_toasts_c = self.active_toasts.clone();
+        let container_c = self.container.clone();
+        let window_c = self.window.clone();
+
         gtk4::glib::timeout_add_local_once(Duration::from_secs(5), move || {
-            let _ = tx.send_blocking(crate::services::notifications::server::NotificationCmd::Close(id));
+            if let Some(revealer) = active_toasts_c.borrow_mut().remove(&id) {
+                revealer.set_reveal_child(false);
+                
+                let container_cc = container_c.clone();
+                let window_cc = window_c.clone();
+                
+                gtk4::glib::timeout_add_local_once(Duration::from_millis(280), move || {
+                    container_cc.remove(&revealer);
+                    if container_cc.first_child().is_none() {
+                        window_cc.set_visible(false);
+                    }
+                });
+            }
         });
     }
 
