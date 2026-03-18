@@ -6,6 +6,9 @@ use std::rc::Rc;
 use std::cell::{Cell, RefCell};
 use std::time::Duration;
 
+// Zentrale Konstante für den Abstand (Bar 54 + Padding 10 + Gap 12)
+const ARCHIVE_MARGIN_BOTTOM: i32 = 76;
+
 pub struct NotificationArchiveManager {
     window: gtk4::ApplicationWindow,
     revealer: gtk4::Revealer,
@@ -51,14 +54,14 @@ impl NotificationArchiveManager {
             last_known_id: Cell::new(0),
         });
         
-        // Echtzeit-Positionierung (wie gehabt)
+        // --- ECHTZEIT-SYNC ---
         let window_c = manager.window.clone();
         let qs_c = manager.qs_content.clone();
         manager.window.add_tick_callback(move |_, _| {
             if window_c.is_visible() {
                 let height = qs_c.allocated_height();
                 if height > 50 {
-                    window_c.set_margin(Edge::Bottom, height + 76);
+                    window_c.set_margin(Edge::Bottom, height + ARCHIVE_MARGIN_BOTTOM);
                 }
             }
             gtk4::glib::ControlFlow::Continue
@@ -80,7 +83,7 @@ impl NotificationArchiveManager {
         if visible {
             let height = self.qs_content.allocated_height();
             if height > 50 {
-                self.window.set_margin(Edge::Bottom, height + 76);
+                self.window.set_margin(Edge::Bottom, height + ARCHIVE_MARGIN_BOTTOM);
             }
             
             self.window.set_visible(true);
@@ -102,21 +105,22 @@ impl NotificationArchiveManager {
     }
 
     fn update(&self, notifications: &[crate::services::notifications::Notification]) {
-        // Nur wenn sich wirklich was geändert hat
         let newest_id = notifications.last().map(|n| n.id).unwrap_or(0);
-        if newest_id <= self.last_known_id.get() && self.list_box.first_child().is_some() {
+        
+        // UI-Update nur wenn nötig (Clean Code & Performance)
+        if newest_id == self.last_known_id.get() && self.list_box.first_child().is_some() {
             return;
         }
         self.last_known_id.set(newest_id);
 
-        // Liste leeren (für diesen Refactoring-Schritt machen wir es sauberer)
         while let Some(child) = self.list_box.first_child() {
             self.list_box.remove(&child);
         }
 
-        // Wir fügen die Nachrichten hinzu (Neueste unten, am QS-Popup)
-        // Das ist besser für den Lesefluss von unten nach oben.
-        for n in notifications.iter().take(10) {
+        // --- KORREKTE SORTIERUNG (Senior Fix) ---
+        // Wir nehmen die LETZTEN 10 Nachrichten aus dem Vec (die aktuellsten).
+        let start_idx = notifications.len().saturating_sub(10);
+        for n in notifications.iter().skip(start_idx) {
             let card = NotificationCard::new(n);
             self.list_box.append(&card.container);
         }
