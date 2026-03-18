@@ -12,7 +12,7 @@ gtk4 = "0.10"
 gtk4-layer-shell = "0.7.1"
 libadwaita = "0.8"
 libpulse-binding = "2.30.1"
-pulsectl-rs = "0.3.2"
+
 niri-ipc = "25.11.0"
 tokio = { version = "1.50.0", features = ["full", "sync"] }
 zbus = { version = "5.14.0", features = ["tokio"] }

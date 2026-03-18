@@ -244,7 +244,6 @@ dependencies = [
  "libadwaita",
  "libpulse-binding",
  "niri-ipc",
- "pulsectl-rs",
  "serde",
  "tokio",
  "zbus",
@@ -1205,15 +1204,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8fd00f0bb2e90d81d1044c2b32617f68fcb9fa3bb7640c23e9c748e53fb30934"
 dependencies = [
  "unicode-ident",
-]
-
-[[package]]
-name = "pulsectl-rs"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06a988bceed1981b2c5fc4a3da0e4e073fdaff8e6bd022b089f54bc573dc3cfc"
-dependencies = [
- "libpulse-binding",
 ]
 
 [[package]]
