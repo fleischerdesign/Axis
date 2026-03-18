@@ -1,8 +1,8 @@
 use crate::app_context::AppContext;
 use crate::services::network::NetworkCmd;
-use crate::widgets::{ListRow, QsTile};
+use crate::widgets::quick_settings::components::tile::QsTile;
+use crate::widgets::ListRow;
 use gtk4::prelude::*;
-use std::cell::RefCell;
 use std::rc::Rc;
 
 pub struct WifiPage {
@@ -12,25 +12,30 @@ pub struct WifiPage {
 impl WifiPage {
     pub fn new(
         ctx: AppContext,
-        back_callback: impl Fn() + 'static,
+        on_back: impl Fn() + 'static,
         wifi_tile: Rc<QsTile>,
         eth_tile: Rc<QsTile>,
     ) -> Self {
-        let container = gtk4::Box::new(gtk4::Orientation::Vertical, 16);
+        let container = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
 
-        let header = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
+        // --- HEADER ---
+        let header = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
         let back_btn = gtk4::Button::builder()
             .icon_name("go-previous-symbolic")
             .css_classes(vec!["qs-back-btn".to_string()])
             .build();
+        
         let title = gtk4::Label::builder()
-            .label("Wi-Fi")
+            .label("Wi-Fi Netzwerke")
             .halign(gtk4::Align::Start)
             .css_classes(vec!["qs-subpage-title".to_string()])
             .build();
+        
         header.append(&back_btn);
         header.append(&title);
+        container.append(&header);
 
+        // --- LIST ---
         let list = gtk4::ListBox::builder()
             .css_classes(vec!["qs-list".to_string()])
             .selection_mode(gtk4::SelectionMode::None)
@@ -39,151 +44,58 @@ impl WifiPage {
         let scrolled = gtk4::ScrolledWindow::builder()
             .hscrollbar_policy(gtk4::PolicyType::Never)
             .vscrollbar_policy(gtk4::PolicyType::Automatic)
-            .min_content_height(200)
             .vexpand(true)
+            .min_content_height(300)
             .build();
-        scrolled.add_css_class("qs-scrolled");
         scrolled.set_child(Some(&list));
-
-        container.append(&header);
         container.append(&scrolled);
-        container.set_vexpand(true);
 
-        back_btn.connect_clicked(move |_| back_callback());
+        // --- LOGIC ---
+        let on_back = Rc::new(on_back);
+        let on_back_c = on_back.clone();
+        back_btn.connect_clicked(move |_| {
+            on_back_c();
+        });
 
-        // State-Tracking: AP-Liste nur neu aufbauen wenn sich was geändert hat
-        let last_ap_ids: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
+        let list_c = list.clone();
+        let wifi_tile_c = wifi_tile.clone();
+        let eth_tile_c = eth_tile.clone();
+        let tx_row = ctx.network_tx.clone();
 
         ctx.network.subscribe(move |data| {
-            // Tile-States aktualisieren
-            wifi_tile.set_active(data.is_wifi_enabled);
-            eth_tile.set_active(data.is_ethernet_connected);
-
-            let icon_name = if !data.is_wifi_enabled || !data.is_wifi_connected {
-                "network-wireless-offline-symbolic"
-            } else if data.active_strength > 80 {
-                "network-wireless-signal-excellent-symbolic"
-            } else if data.active_strength > 60 {
-                "network-wireless-signal-good-symbolic"
-            } else if data.active_strength > 40 {
-                "network-wireless-signal-ok-symbolic"
-            } else {
-                "network-wireless-signal-weak-symbolic"
-            };
-            wifi_tile.set_icon(icon_name);
-
-            // AP-Liste nur neu aufbauen wenn sich die IDs geändert haben
-            let current_ap_ids: Vec<String> = data
-                .access_points
-                .iter()
-                .map(|ap| format!("{}-{}", ap.ssid, ap.is_active))
-                .collect();
-
-            if *last_ap_ids.borrow() == current_ap_ids {
-                return;
-            }
-
-            // Nicht rebuilden wenn ein Passwort-Feld offen ist
-            let any_expanded = {
-                let mut expanded = false;
-                let mut curr = list.first_child();
-                while let Some(row) = curr {
-                    if let Some(item_box) = row.downcast_ref::<gtk4::Box>() {
-                        if let Some(revealer) = item_box
-                            .last_child()
-                            .and_then(|c| c.downcast::<gtk4::Revealer>().ok())
-                        {
-                            if revealer.reveals_child() {
-                                expanded = true;
-                                break;
-                            }
-                        }
-                    }
-                    curr = row.next_sibling();
-                }
-                expanded
-            };
-
-            if any_expanded {
-                return;
-            }
-
-            *last_ap_ids.borrow_mut() = current_ap_ids;
-
-            while let Some(child) = list.first_child() {
-                list.remove(&child);
+            wifi_tile_c.set_active(data.is_wifi_enabled);
+            eth_tile_c.set_active(data.is_ethernet_connected);
+            
+            while let Some(child) = list_c.first_child() {
+                list_c.remove(&child);
             }
 
             for ap in &data.access_points {
-                let icon = if ap.strength > 75 {
-                    "network-wireless-signal-excellent-symbolic"
-                } else if ap.strength > 50 {
-                    "network-wireless-signal-good-symbolic"
-                } else if ap.strength > 25 {
-                    "network-wireless-signal-ok-symbolic"
-                } else {
-                    "network-wireless-signal-weak-symbolic"
-                };
-                let row = ListRow::new(&ap.ssid, icon, ap.is_active, None, true);
+                let row = ListRow::new(
+                    &ap.ssid,
+                    if ap.needs_auth { "network-wireless-encrypted-symbolic" } else { "network-wireless-signal-excellent-symbolic" },
+                    ap.is_active,
+                    if ap.is_active { Some("Verbunden") } else { None },
+                    false,
+                );
 
-                let auth_revealer = gtk4::Revealer::new();
-                let auth_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
-                auth_box.set_margin_start(12);
-                auth_box.set_margin_end(12);
-                auth_box.set_margin_bottom(12);
-                let pass_entry = gtk4::PasswordEntry::builder()
-                    .placeholder_text("Password")
-                    .hexpand(true)
-                    .build();
-                let connect_btn = gtk4::Button::builder()
-                    .label("Connect")
-                    .css_classes(vec![
-                        "suggested-action".to_string(),
-                        "qs-wifi-connect-btn".to_string(),
-                    ])
-                    .build();
-                auth_box.append(&pass_entry);
-                auth_box.append(&connect_btn);
-                auth_revealer.set_child(Some(&auth_box));
+                let tx_inner = tx_row.clone();
+                let path_inner = ap.path.clone();
 
-                let tx = ctx.network_tx.clone();
-                let ap_path = ap.path.clone();
-                let is_active = ap.is_active;
-                let needs_auth = ap.needs_auth;
-                let rev = auth_revealer.clone();
                 row.button.connect_clicked(move |_| {
-                    if is_active {
-                        let _ = tx.send_blocking(NetworkCmd::DisconnectWifi);
-                    } else if needs_auth {
-                        rev.set_reveal_child(!rev.reveals_child());
-                    } else {
-                        let _ = tx.send_blocking(NetworkCmd::ConnectToAp(ap_path.clone()));
-                    }
+                    let _ = tx_inner.send_blocking(NetworkCmd::ConnectToAp(path_inner.clone()));
                 });
 
-                let tx = ctx.network_tx.clone();
-                let ap_path = ap.path.clone();
-                let ap_ssid = ap.ssid.clone();
-                let btn_c = connect_btn.clone();
-                let pass_c = pass_entry.clone();
-                connect_btn.connect_clicked(move |_| {
-                    let spinner = gtk4::Spinner::builder()
-                        .spinning(true)
-                        .halign(gtk4::Align::Center)
-                        .valign(gtk4::Align::Center)
-                        .build();
-                    btn_c.set_child(Some(&spinner));
-                    btn_c.set_sensitive(false);
-                    let _ = tx.send_blocking(NetworkCmd::ConnectToApWithPassword(
-                        ap_path.clone(),
-                        ap_ssid.clone(),
-                        pass_c.text().to_string(),
-                    ));
-                });
+                list_c.append(&row.container);
+            }
 
-                let item_container = row.container;
-                item_container.append(&auth_revealer);
-                list.append(&item_container);
+            if data.access_points.is_empty() && data.is_wifi_enabled {
+                let empty_label = gtk4::Label::builder()
+                    .label("Suche nach Netzwerken...")
+                    .css_classes(vec!["list-sublabel".to_string()])
+                    .margin_top(20)
+                    .build();
+                list_c.append(&empty_label);
             }
         });
 

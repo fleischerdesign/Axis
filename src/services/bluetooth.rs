@@ -57,6 +57,7 @@ pub enum BluetoothCmd {
     Connect(String),
     Disconnect(String),
     Scan,
+    StopScan,
 }
 
 pub struct BluetoothService;
@@ -78,10 +79,10 @@ impl BluetoothService {
 
             let mut cmd_rx = Box::pin(cmd_rx);
             let mut current_data = BluetoothData::default();
+            let mut is_discovering = false;
 
             loop {
-                let should_update;
-                let mut full_scan = false;
+                let mut should_update = false;
 
                 tokio::select! {
                     _ = interval.tick() => { should_update = true; }
@@ -90,10 +91,17 @@ impl BluetoothService {
                     Some(_) = interfaces_removed.next() => { should_update = true; }
                     Some(cmd) = cmd_rx.next() => {
                         match cmd {
-                            BluetoothCmd::TogglePower(on) => { let _ = adapter_proxy.set_powered(on).await; }
+                            BluetoothCmd::TogglePower(on) => { 
+                                let _ = adapter_proxy.set_powered(on).await; 
+                                if !on { is_discovering = false; }
+                            }
                             BluetoothCmd::Scan => { 
                                 let _ = adapter_proxy.start_discovery().await;
-                                full_scan = true;
+                                is_discovering = true;
+                            }
+                            BluetoothCmd::StopScan => {
+                                let _ = adapter_proxy.stop_discovery().await;
+                                is_discovering = false;
                             }
                             BluetoothCmd::Connect(path_str) => {
                                 if let Ok(path) = OwnedObjectPath::try_from(path_str) {
@@ -115,7 +123,7 @@ impl BluetoothService {
                 }
 
                 if should_update {
-                    let next_data = Self::fetch_data(&adapter_proxy, &obj_manager, full_scan, &current_data).await;
+                    let next_data = Self::fetch_data(&adapter_proxy, &obj_manager, is_discovering, &current_data).await;
                     if next_data != current_data {
                         current_data = next_data;
                         let _ = data_tx.send(current_data.clone()).await;
@@ -129,9 +137,12 @@ impl BluetoothService {
 
     async fn fetch_data(adapter: &BluetoothAdapterProxy<'_>, obj_manager: &ObjectManagerProxy<'_>, include_devices: bool, old_data: &BluetoothData) -> BluetoothData {
         let is_powered = adapter.powered().await.unwrap_or(false);
-        let mut devices = if include_devices { Vec::new() } else { old_data.devices.clone() };
+        // Wenn BT aus ist, brauchen wir keine Geräte-Abfrage
+        let actual_include = include_devices && is_powered;
+        
+        let mut devices = if actual_include { Vec::new() } else { old_data.devices.clone() };
 
-        if include_devices {
+        if actual_include {
             if let Ok(objects) = obj_manager.get_managed_objects().await {
                 for (path, interfaces) in objects {
                     if let Some(props) = interfaces.get("org.bluez.Device1") {
@@ -165,6 +176,8 @@ impl BluetoothService {
                 }
                 devices.sort_by(|a, b| b.is_connected.cmp(&a.is_connected).then_with(|| b.is_paired.cmp(&a.is_paired)).then_with(|| a.name.cmp(&b.name)));
             }
+        } else if !is_powered {
+            devices.clear();
         }
 
         BluetoothData { is_powered, devices }
