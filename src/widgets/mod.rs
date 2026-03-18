@@ -7,6 +7,7 @@ pub mod quick_settings;
 pub mod animations;
 mod workspace_popup;
 pub mod notification;
+pub mod osd;
 
 pub use island::Island;
 pub use bar::Bar;

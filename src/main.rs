@@ -18,7 +18,7 @@ use crate::services::ipc::IpcService;
 use crate::services::notifications::NotificationService;
 use crate::services::launcher::providers::apps::AppProvider;
 use crate::store::ServiceStore;
-use crate::widgets::{Bar, QuickSettingsPopup, WorkspacePopup, LauncherPopup, NotificationToastManager};
+use crate::widgets::{Bar, QuickSettingsPopup, WorkspacePopup, LauncherPopup, NotificationToastManager, osd::OsdManager};
 use crate::shell::ShellController;
 use gtk4::prelude::*;
 use gtk4::glib;
@@ -64,6 +64,9 @@ fn build_ui(app: &libadwaita::Application) {
 
     // Toasts initialisieren
     NotificationToastManager::init(app, ctx.clone());
+
+    // OSD initialisieren
+    let _osd = OsdManager::new(app, ctx.clone());
 
     // Popups initialisieren (QS brauchen wir zuerst für das Archiv)
     let ctx_c = ctx.clone();

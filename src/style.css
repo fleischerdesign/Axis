@@ -351,3 +351,40 @@ separator {
 .notification-action-btn:hover {
     background-color: rgba(255, 255, 255, 0.1);
 }
+
+/* OSD (On-Screen Display) - Rotated Island Style */
+.osd-module {
+    background-color: #242424;
+    color: #ffffff;
+    border-radius: 16px; /* Exakt wie .island */
+    padding: 16px 0;    /* Zentrierung über Rust halign */
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3); /* Exakt wie .island */
+}
+
+.osd-level-bar {
+    min-width: 4px; /* Deutlich schlanker */
+}
+
+/* Den Standard-Look von GTK LevelBar komplett auf modernes Design umstellen */
+levelbar.osd-level-bar trough {
+    border-radius: 4px; /* Harmonischer Radius für schmale Balken */
+    background-color: rgba(255, 255, 255, 0.15);
+    padding: 0;
+}
+
+levelbar.osd-level-bar block {
+    border-radius: 4px;
+    min-width: 4px;
+    margin: 0;
+    border: none;
+    box-shadow: none;
+}
+
+levelbar.osd-level-bar block.filled {
+    background-color: #3584e4;
+    background-image: none;
+}
+
+levelbar.osd-level-bar block.empty {
+    background-color: transparent;
+}
