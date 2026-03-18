@@ -182,12 +182,31 @@ impl MainPage {
         ctx.network.subscribe(move |data| {
             wifi_tile_c.set_active(data.is_wifi_enabled);
             eth_tile_c.set_active(data.is_ethernet_connected);
+
+            if data.is_wifi_enabled {
+                let icon_name = if !data.is_wifi_connected { "network-wireless-offline-symbolic" }
+                else if data.active_strength > 80 { "network-wireless-signal-excellent-symbolic" }
+                else if data.active_strength > 60 { "network-wireless-signal-good-symbolic" }
+                else if data.active_strength > 40 { "network-wireless-signal-ok-symbolic" }
+                else { "network-wireless-signal-weak-symbolic" };
+                wifi_tile_c.set_icon(icon_name);
+            } else {
+                wifi_tile_c.set_icon("network-wireless-disabled-symbolic");
+            }
         });
 
         // Bluetooth → Tile-State
         let bt_tile_c = bt_tile.clone();
         ctx.bluetooth.subscribe(move |data| {
             bt_tile_c.set_active(data.is_powered);
+            
+            if data.is_powered {
+                let any_connected = data.devices.iter().any(|d| d.is_connected);
+                let icon_name = if any_connected { "bluetooth-active-symbolic" } else { "bluetooth-symbolic" };
+                bt_tile_c.set_icon(icon_name);
+            } else {
+                bt_tile_c.set_icon("bluetooth-disabled-symbolic");
+            }
         });
 
         // Nightlight → Tile-State
