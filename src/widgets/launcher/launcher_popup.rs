@@ -117,14 +117,23 @@ impl LauncherPopup {
             let _ = tx.send_blocking(LauncherCmd::Search(e.text().to_string()));
         });
 
-        // Navigation (Pfeiltasten & ESC)
+        // Navigation (Pfeiltasten, Tab & ESC)
         let tx_key = ctx.launcher_tx.clone();
         let base_key = base.clone();
         let key_controller = gtk4::EventControllerKey::new();
-        key_controller.connect_key_pressed(move |_, key, _, _| {
+        key_controller.connect_key_pressed(move |_, key, _, state| {
             match key {
                 gtk4::gdk::Key::Down => {
                     let _ = tx_key.send_blocking(LauncherCmd::SelectNext);
+                    gtk4::glib::Propagation::Stop
+                }
+                gtk4::gdk::Key::Tab => {
+                    // Wenn Shift gedrückt ist: Zurück
+                    if state.contains(gtk4::gdk::ModifierType::SHIFT_MASK) {
+                        let _ = tx_key.send_blocking(LauncherCmd::SelectPrev);
+                    } else {
+                        let _ = tx_key.send_blocking(LauncherCmd::SelectNext);
+                    }
                     gtk4::glib::Propagation::Stop
                 }
                 gtk4::gdk::Key::Up => {

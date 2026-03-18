@@ -3,6 +3,12 @@ window {
     background: transparent;
 }
 
+/* Fokus-Ringe (blaue Rahmen) deaktivieren, da wir eigene Auswahl-Logik haben */
+*:focus {
+    outline: none;
+    box-shadow: none;
+}
+
 /* The Island Component */
 .island {
     background-color: #242424;
