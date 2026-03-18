@@ -80,36 +80,47 @@ impl NotificationArchiveManager {
     }
 
     pub fn set_visible(&self, visible: bool) {
+        if visible {
+            self.show_archive();
+        } else {
+            self.hide_archive();
+        }
+    }
+
+    fn show_archive(&self) {
         if let Some(src) = self.hide_timeout.borrow_mut().take() {
             src.remove();
         }
 
-        if visible {
-            let height = self.qs_content.allocated_height();
-            if height > 50 {
-                self.window.set_margin(Edge::Bottom, height + ARCHIVE_MARGIN_BOTTOM);
-            }
-            
-            // Wenn wir gar keine Items haben, brauchen wir auch nicht aufploppen
-            if self.active_items.borrow().is_empty() {
-                return;
-            }
-
-            self.window.set_visible(true);
-            let rev = self.main_revealer.clone();
-            gtk4::glib::timeout_add_local_once(Duration::from_millis(10), move || {
-                rev.set_reveal_child(true);
-            });
-        } else {
-            self.main_revealer.set_reveal_child(false);
-            let win = self.window.clone();
-            let hide_timeout_c = self.hide_timeout.clone();
-            let src = gtk4::glib::timeout_add_local_once(Duration::from_millis(260), move || {
-                win.set_visible(false);
-                *hide_timeout_c.borrow_mut() = None;
-            });
-            *self.hide_timeout.borrow_mut() = Some(src);
+        let height = self.qs_content.allocated_height();
+        if height > 50 {
+            self.window.set_margin(Edge::Bottom, height + ARCHIVE_MARGIN_BOTTOM);
         }
+        
+        if self.active_items.borrow().is_empty() {
+            return;
+        }
+
+        self.window.set_visible(true);
+        let rev = self.main_revealer.clone();
+        gtk4::glib::timeout_add_local_once(Duration::from_millis(10), move || {
+            rev.set_reveal_child(true);
+        });
+    }
+
+    fn hide_archive(&self) {
+        if let Some(src) = self.hide_timeout.borrow_mut().take() {
+            src.remove();
+        }
+
+        self.main_revealer.set_reveal_child(false);
+        let win = self.window.clone();
+        let hide_timeout_c = self.hide_timeout.clone();
+        let src = gtk4::glib::timeout_add_local_once(Duration::from_millis(260), move || {
+            win.set_visible(false);
+            *hide_timeout_c.borrow_mut() = None;
+        });
+        *self.hide_timeout.borrow_mut() = Some(src);
     }
 
     fn sync(&self, data: &crate::services::notifications::NotificationData) {
@@ -128,25 +139,18 @@ impl NotificationArchiveManager {
                 revealer.set_reveal_child(false);
                 
                 let list_box_c = self.list_box.clone();
-                let main_revealer_c = self.main_revealer.clone();
                 
                 // Nach der Animation komplett aus dem DOM entfernen
                 gtk4::glib::timeout_add_local_once(Duration::from_millis(280), move || {
                     list_box_c.remove(&revealer);
-                    
-                    // Wenn das die letzte war, blenden wir das ganze Archiv aus
-                    if list_box_c.first_child().is_none() {
-                        main_revealer_c.set_reveal_child(false);
-                    }
                 });
             }
         }
 
-        // 3. Fallback: Wenn wir in sync() sind und keine aktiven Items mehr haben,
-        // garantieren wir, dass der Main-Revealer geschlossen ist.
-        // Das verhindert, dass eine leere Box mit Padding/Spacing als 1px Linie gerendert wird.
+        // Wenn wir in sync() sind und keine aktiven Items mehr haben,
+        // FENSTER KOMPLETT VERSTECKEN! Sonst bleiben Layer-Shell Artefakte hängen.
         if active_items.is_empty() {
-             self.main_revealer.set_reveal_child(false);
+             self.hide_archive();
         }
 
         // 2. Neue Nachrichten hinzufügen (Sanftes Fade-In)
