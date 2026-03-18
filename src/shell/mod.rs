@@ -67,8 +67,18 @@ impl ShellController {
 
     pub fn sync(&self) {
         let popups = self.popups.borrow();
-        let any_open = popups.iter().any(|p| p.is_open());
-        if !any_open { *self.active_id.borrow_mut() = None; }
+        let mut any_open = false;
+        let mut found_id = None;
+
+        for p in popups.iter() {
+            if p.is_open() {
+                any_open = true;
+                found_id = Some(p.id().to_string());
+                break;
+            }
+        }
+
+        *self.active_id.borrow_mut() = found_id;
         self.sync_state(any_open);
     }
 

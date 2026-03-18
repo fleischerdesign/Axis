@@ -52,7 +52,7 @@ impl QuickSettingsPopup {
 
         let qs_container = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
         qs_container.add_css_class("qs-panel");
-        qs_container.set_width_request(340);
+        qs_container.set_width_request(380);
         
         // WICHTIG: Valign auf End sorgt dafür, dass das Fenster nach oben wächst,
         // wenn es am unteren Rand verankert ist.

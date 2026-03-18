@@ -12,7 +12,6 @@ impl NotificationToastManager {
     pub fn init(app: &libadwaita::Application, ctx: AppContext) {
         let app_c = app.clone();
         
-        // Wir merken uns die ID der letzten Nachricht, um nur bei ECHTEN neuen Events zu toasten
         let last_shown_id = Rc::new(Cell::new(0u32));
         
         ctx.notifications.subscribe(move |data| {
@@ -36,24 +35,40 @@ impl NotificationToastManager {
         window.set_anchor(Edge::Top, true);
         window.set_anchor(Edge::Right, true);
         window.set_margin(Edge::Top, 20);
-        window.set_margin(Edge::Right, 20);
+        window.set_margin(Edge::Right, 10);
         window.set_exclusive_zone(-1);
 
-        let card = NotificationCard::new(data);
-        window.set_child(Some(&card.container));
-        window.present();
+        let revealer = gtk4::Revealer::builder()
+            .transition_type(gtk4::RevealerTransitionType::Crossfade)
+            .transition_duration(250)
+            .build();
 
-        // Nach 5 Sekunden automatisch schließen
+        let card = NotificationCard::new(data);
+        revealer.set_child(Some(&card.container));
+        window.set_child(Some(&revealer));
+        window.present();
+        revealer.set_reveal_child(true);
+
+        // Auto-close sequence
         let window_c = window.clone();
+        let revealer_c = revealer.clone();
         gtk4::glib::timeout_add_local_once(Duration::from_secs(5), move || {
-            window_c.close();
+            revealer_c.set_reveal_child(false);
+            gtk4::glib::timeout_add_local_once(Duration::from_millis(280), move || {
+                window_c.close();
+            });
         });
 
-        // Schließen bei Klick
+        // Close on click
         let click = gtk4::GestureClick::new();
         let window_c = window.clone();
+        let revealer_c = revealer.clone();
         click.connect_pressed(move |_, _, _, _| {
-            window_c.close();
+            revealer_c.set_reveal_child(false);
+            let win = window_c.clone();
+            gtk4::glib::timeout_add_local_once(Duration::from_millis(280), move || {
+                win.close();
+            });
         });
         card.container.add_controller(click);
     }

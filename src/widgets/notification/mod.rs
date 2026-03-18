@@ -13,6 +13,8 @@ impl NotificationCard {
         let container = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
         container.add_css_class("notification-card");
         container.set_width_request(380);
+        container.set_hexpand(false);
+        container.set_halign(gtk4::Align::End);
 
         // --- HEADER (App Name & Zeit) ---
         let header_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
