@@ -283,14 +283,9 @@ impl MainPage {
         let brightness_slider_c = brightness_slider.clone();
         let brightness_overlay_c = brightness_overlay.clone();
         let brightness_is_updating = Rc::new(std::cell::RefCell::new(false));
-        let brightness_last_sent = Rc::new(std::cell::RefCell::new(0.0));
-        let brightness_last_time = Rc::new(std::cell::RefCell::new(std::time::Instant::now()));
-        let brightness_first_update = Rc::new(std::cell::RefCell::new(true));
 
+        // Brightness → Slider (vereinfachter Debounce)
         let brightness_is_updating_rx = brightness_is_updating.clone();
-        let brightness_last_sent_rx = brightness_last_sent.clone();
-        let brightness_last_time_rx = brightness_last_time.clone();
-        let brightness_first_update_rx = brightness_first_update.clone();
 
         ctx.backlight.subscribe(move |data| {
             if !data.initialized {
@@ -301,17 +296,8 @@ impl MainPage {
 
             let current = brightness_slider_c.value();
             let diff = (current - data.percentage).abs();
-            let last = *brightness_last_sent_rx.borrow();
-            let elapsed = brightness_last_time_rx.borrow().elapsed();
-            let in_grace = elapsed < std::time::Duration::from_millis(600);
-            let is_first = *brightness_first_update_rx.borrow();
 
-            // Always apply first real update
-            if is_first
-                || (!in_grace && diff > 1.0)
-                || (in_grace && (data.percentage - last).abs() < 5.0)
-            {
-                *brightness_first_update_rx.borrow_mut() = false;
+            if diff > 0.5 {
                 *brightness_is_updating_rx.borrow_mut() = true;
                 brightness_slider_c.set_value(data.percentage);
                 *brightness_is_updating_rx.borrow_mut() = false;
@@ -324,9 +310,7 @@ impl MainPage {
             if *brightness_is_updating.borrow() {
                 return;
             }
-            *brightness_last_time.borrow_mut() = std::time::Instant::now();
             let val = s.value();
-            *brightness_last_sent.borrow_mut() = val;
             let _ = ctx_backlight
                 .backlight_tx
                 .send_blocking(BacklightCmd::SetBrightness(val));
