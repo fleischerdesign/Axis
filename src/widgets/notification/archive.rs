@@ -3,18 +3,19 @@ use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use crate::app_context::AppContext;
 use crate::widgets::notification::NotificationCard;
 use std::rc::Rc;
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::time::Duration;
 
 const ARCHIVE_MARGIN_BOTTOM: i32 = 76;
 
 pub struct NotificationArchiveManager {
     window: gtk4::ApplicationWindow,
-    revealer: gtk4::Revealer,
+    main_revealer: gtk4::Revealer,
     list_box: gtk4::Box,
     qs_content: gtk4::Box,
     hide_timeout: Rc<RefCell<Option<gtk4::glib::SourceId>>>,
-    last_known_id: Cell<u32>,
+    active_items: Rc<RefCell<HashMap<u32, gtk4::Revealer>>>,
     ctx: AppContext,
 }
 
@@ -32,7 +33,8 @@ impl NotificationArchiveManager {
         window.set_margin(Edge::Right, 10);
         window.set_exclusive_zone(-1);
 
-        let revealer = gtk4::Revealer::builder()
+        // Haupt-Revealer für das gesamte Archiv (Ein/Ausblenden mit dem QS-Menü)
+        let main_revealer = gtk4::Revealer::builder()
             .transition_type(gtk4::RevealerTransitionType::Crossfade)
             .transition_duration(250)
             .reveal_child(false)
@@ -42,19 +44,20 @@ impl NotificationArchiveManager {
         list_box.set_valign(gtk4::Align::End);
         list_box.set_halign(gtk4::Align::End);
         list_box.set_width_request(380);
-        revealer.set_child(Some(&list_box));
-        window.set_child(Some(&revealer));
+        main_revealer.set_child(Some(&list_box));
+        window.set_child(Some(&main_revealer));
 
         let manager = Rc::new(Self { 
             window, 
-            revealer,
+            main_revealer,
             list_box, 
             qs_content: qs_content.clone(),
             hide_timeout: Rc::new(RefCell::new(None)),
-            last_known_id: Cell::new(0),
+            active_items: Rc::new(RefCell::new(HashMap::new())),
             ctx: ctx.clone(),
         });
         
+        // Dynamische Höhenanpassung
         let window_c = manager.window.clone();
         let qs_c = manager.qs_content.clone();
         manager.window.add_tick_callback(move |_, _| {
@@ -67,9 +70,10 @@ impl NotificationArchiveManager {
             gtk4::glib::ControlFlow::Continue
         });
 
+        // Reaktiver Store-Sync
         let manager_c = manager.clone();
         ctx.notifications.subscribe(move |data| {
-            manager_c.update(&data.notifications);
+            manager_c.sync(data);
         });
 
         manager
@@ -85,13 +89,19 @@ impl NotificationArchiveManager {
             if height > 50 {
                 self.window.set_margin(Edge::Bottom, height + ARCHIVE_MARGIN_BOTTOM);
             }
+            
+            // Wenn wir gar keine Items haben, brauchen wir auch nicht aufploppen
+            if self.active_items.borrow().is_empty() {
+                return;
+            }
+
             self.window.set_visible(true);
-            let rev = self.revealer.clone();
+            let rev = self.main_revealer.clone();
             gtk4::glib::timeout_add_local_once(Duration::from_millis(10), move || {
                 rev.set_reveal_child(true);
             });
         } else {
-            self.revealer.set_reveal_child(false);
+            self.main_revealer.set_reveal_child(false);
             let win = self.window.clone();
             let hide_timeout_c = self.hide_timeout.clone();
             let src = gtk4::glib::timeout_add_local_once(Duration::from_millis(260), move || {
@@ -102,34 +112,71 @@ impl NotificationArchiveManager {
         }
     }
 
-    fn update(&self, notifications: &[crate::services::notifications::Notification]) {
-        let newest_id = notifications.last().map(|n| n.id).unwrap_or(0);
-        
-        // UI-Update nur wenn nötig, aber wir müssen auch prüfen ob sich die Anzahl geändert hat
-        // (z.B. beim Löschen)
-        if newest_id == self.last_known_id.get() && self.list_box.first_child().is_some() && notifications.len() == self.get_child_count() {
-            return;
-        }
-        self.last_known_id.set(newest_id);
+    fn sync(&self, data: &crate::services::notifications::NotificationData) {
+        let mut active_items = self.active_items.borrow_mut();
 
-        while let Some(child) = self.list_box.first_child() {
-            self.list_box.remove(&child);
+        // 1. Alte/Gelöschte Nachrichten entfernen (Sanftes Fade-Out)
+        let mut to_remove = Vec::new();
+        for id in active_items.keys() {
+            if !data.notifications.iter().any(|n| n.id == *id) {
+                to_remove.push(*id);
+            }
         }
 
-        let start_idx = notifications.len().saturating_sub(10);
-        for n in notifications.iter().skip(start_idx) {
-            let card = NotificationCard::new(n, self.ctx.clone());
-            self.list_box.append(&card.container);
+        for id in to_remove {
+            if let Some(revealer) = active_items.remove(&id) {
+                revealer.set_reveal_child(false);
+                
+                let list_box_c = self.list_box.clone();
+                let main_revealer_c = self.main_revealer.clone();
+                
+                // Nach der Animation komplett aus dem DOM entfernen
+                gtk4::glib::timeout_add_local_once(Duration::from_millis(280), move || {
+                    list_box_c.remove(&revealer);
+                    
+                    // Wenn das die letzte war, blenden wir das ganze Archiv aus
+                    if list_box_c.first_child().is_none() {
+                        main_revealer_c.set_reveal_child(false);
+                    }
+                });
+            }
         }
-    }
 
-    fn get_child_count(&self) -> usize {
-        let mut count = 0;
-        let mut next = self.list_box.first_child();
-        while let Some(child) = next {
-            count += 1;
-            next = child.next_sibling();
+        // 3. Fallback: Wenn wir in sync() sind und keine aktiven Items mehr haben,
+        // garantieren wir, dass der Main-Revealer geschlossen ist.
+        // Das verhindert, dass eine leere Box mit Padding/Spacing als 1px Linie gerendert wird.
+        if active_items.is_empty() {
+             self.main_revealer.set_reveal_child(false);
         }
-        count
+
+        // 2. Neue Nachrichten hinzufügen (Sanftes Fade-In)
+        // Wir iterieren chronologisch. Da wir nur anhängen, ist die neueste immer unten.
+        for n in &data.notifications {
+            if !active_items.contains_key(&n.id) {
+                let card = NotificationCard::new(n, self.ctx.clone());
+                
+                // Jede Karte bekommt ihren eigenen Revealer
+                let revealer = gtk4::Revealer::builder()
+                    .transition_type(gtk4::RevealerTransitionType::Crossfade)
+                    .transition_duration(250)
+                    .reveal_child(false)
+                    .build();
+
+                revealer.set_child(Some(&card.container));
+                self.list_box.append(&revealer);
+                
+                active_items.insert(n.id, revealer.clone());
+                
+                // Einblenden
+                gtk4::glib::timeout_add_local_once(Duration::from_millis(10), move || {
+                    revealer.set_reveal_child(true);
+                });
+            }
+        }
+
+        // Wenn wir neue Nachrichten bekommen haben und das QS offen ist, müssen wir das Archiv sichtbar machen
+        if !active_items.is_empty() && self.window.is_visible() && !self.main_revealer.reveals_child() {
+            self.main_revealer.set_reveal_child(true);
+        }
     }
 }
