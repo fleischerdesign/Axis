@@ -3,7 +3,7 @@ use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use crate::app_context::AppContext;
 use crate::widgets::notification::NotificationCard;
 use std::rc::Rc;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::time::Duration;
 
 pub struct NotificationArchiveManager {
@@ -12,6 +12,7 @@ pub struct NotificationArchiveManager {
     list_box: gtk4::Box,
     qs_content: gtk4::Box,
     hide_timeout: Rc<RefCell<Option<gtk4::glib::SourceId>>>,
+    last_known_id: Cell<u32>,
 }
 
 impl NotificationArchiveManager {
@@ -47,18 +48,16 @@ impl NotificationArchiveManager {
             list_box, 
             qs_content: qs_content.clone(),
             hide_timeout: Rc::new(RefCell::new(None)),
+            last_known_id: Cell::new(0),
         });
         
-        // --- ECHTZEIT-SYNC (Der Fix) ---
-        // Dieser Callback läuft jeden Frame und sorgt dafür, dass die Position
-        // immer exakt über dem QS-Inhalt bleibt, egal wie dieser sich verändert.
+        // Echtzeit-Positionierung (wie gehabt)
         let window_c = manager.window.clone();
         let qs_c = manager.qs_content.clone();
         manager.window.add_tick_callback(move |_, _| {
             if window_c.is_visible() {
                 let height = qs_c.allocated_height();
                 if height > 50 {
-                    // Margin = Inhaltshöhe + Bar(54) + Abstand(10)
                     window_c.set_margin(Edge::Bottom, height + 76);
                 }
             }
@@ -79,7 +78,6 @@ impl NotificationArchiveManager {
         }
 
         if visible {
-            // Initialen Sync erzwingen
             let height = self.qs_content.allocated_height();
             if height > 50 {
                 self.window.set_margin(Edge::Bottom, height + 76);
@@ -104,10 +102,21 @@ impl NotificationArchiveManager {
     }
 
     fn update(&self, notifications: &[crate::services::notifications::Notification]) {
+        // Nur wenn sich wirklich was geändert hat
+        let newest_id = notifications.last().map(|n| n.id).unwrap_or(0);
+        if newest_id <= self.last_known_id.get() && self.list_box.first_child().is_some() {
+            return;
+        }
+        self.last_known_id.set(newest_id);
+
+        // Liste leeren (für diesen Refactoring-Schritt machen wir es sauberer)
         while let Some(child) = self.list_box.first_child() {
             self.list_box.remove(&child);
         }
-        for n in notifications.iter().rev().take(10) {
+
+        // Wir fügen die Nachrichten hinzu (Neueste unten, am QS-Popup)
+        // Das ist besser für den Lesefluss von unten nach oben.
+        for n in notifications.iter().take(10) {
             let card = NotificationCard::new(n);
             self.list_box.append(&card.container);
         }
