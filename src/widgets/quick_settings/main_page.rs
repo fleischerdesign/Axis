@@ -184,11 +184,17 @@ impl MainPage {
             eth_tile_c.set_active(data.is_ethernet_connected);
 
             if data.is_wifi_enabled {
-                let icon_name = if !data.is_wifi_connected { "network-wireless-offline-symbolic" }
-                else if data.active_strength > 80 { "network-wireless-signal-excellent-symbolic" }
-                else if data.active_strength > 60 { "network-wireless-signal-good-symbolic" }
-                else if data.active_strength > 40 { "network-wireless-signal-ok-symbolic" }
-                else { "network-wireless-signal-weak-symbolic" };
+                let icon_name = if !data.is_wifi_connected {
+                    "network-wireless-offline-symbolic"
+                } else if data.active_strength > 80 {
+                    "network-wireless-signal-excellent-symbolic"
+                } else if data.active_strength > 60 {
+                    "network-wireless-signal-good-symbolic"
+                } else if data.active_strength > 40 {
+                    "network-wireless-signal-ok-symbolic"
+                } else {
+                    "network-wireless-signal-weak-symbolic"
+                };
                 wifi_tile_c.set_icon(icon_name);
             } else {
                 wifi_tile_c.set_icon("network-wireless-disabled-symbolic");
@@ -199,10 +205,14 @@ impl MainPage {
         let bt_tile_c = bt_tile.clone();
         ctx.bluetooth.subscribe(move |data| {
             bt_tile_c.set_active(data.is_powered);
-            
+
             if data.is_powered {
                 let any_connected = data.devices.iter().any(|d| d.is_connected);
-                let icon_name = if any_connected { "bluetooth-active-symbolic" } else { "bluetooth-symbolic" };
+                let icon_name = if any_connected {
+                    "bluetooth-active-symbolic"
+                } else {
+                    "bluetooth-symbolic"
+                };
                 bt_tile_c.set_icon(icon_name);
             } else {
                 bt_tile_c.set_icon("bluetooth-disabled-symbolic");
@@ -218,27 +228,20 @@ impl MainPage {
 
         // Audio → Slider + Icon (mit Debounce gegen eigene Slider-Änderungen)
         let is_updating = Rc::new(std::cell::RefCell::new(false));
-        let last_sent: Rc<std::cell::RefCell<f64>> = Rc::new(std::cell::RefCell::new(0.0));
-        let last_time = Rc::new(std::cell::RefCell::new(std::time::Instant::now()));
         let is_first_update = Rc::new(std::cell::RefCell::new(true));
 
         let vol_slider_c = vol_slider.clone();
         let vol_icon_c = vol_icon.clone();
         let vol_icon_bar_c = vol_icon_bar.clone();
         let is_updating_rx = is_updating.clone();
-        let last_sent_rx = last_sent.clone();
-        let last_time_rx = last_time.clone();
         let is_first_rx = is_first_update.clone();
 
         ctx.audio.subscribe(move |data| {
             let current = vol_slider_c.value();
             let diff = (current - data.volume).abs();
-            let last = *last_sent_rx.borrow();
-            let elapsed = last_time_rx.borrow().elapsed();
-            let in_grace = elapsed < std::time::Duration::from_millis(600);
             let is_first = *is_first_rx.borrow();
 
-            if is_first || (!in_grace && diff > 0.01) || (in_grace && (data.volume - last).abs() < 0.05) {
+            if is_first || diff > 0.01 {
                 *is_first_rx.borrow_mut() = false;
                 *is_updating_rx.borrow_mut() = true;
                 vol_slider_c.set_value(data.volume);
@@ -267,13 +270,12 @@ impl MainPage {
 
         // Slider → AudioCmd (Gegenseite)
         let ctx_audio = ctx.clone();
+        let is_updating_cmd = is_updating.clone();
         vol_slider.connect_value_changed(move |s| {
-            if *is_updating.borrow() {
+            if *is_updating_cmd.borrow() {
                 return;
             }
-            *last_time.borrow_mut() = std::time::Instant::now();
             let val = s.value();
-            *last_sent.borrow_mut() = val;
             let _ = ctx_audio.audio_tx.send_blocking(AudioCmd::SetVolume(val));
         });
 

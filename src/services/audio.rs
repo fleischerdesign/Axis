@@ -149,7 +149,81 @@ impl AudioService {
     }
 
     pub fn read_initial() -> AudioData {
-        AudioData::default()
+        // Kurzlebige PulseAudio-Verbindung für den Initialzustand
+        let mainloop = match Mainloop::new() {
+            Some(ml) => Rc::new(RefCell::new(ml)),
+            None => return AudioData::default(),
+        };
+
+        let context = match Context::new(&*mainloop.borrow(), "carp-audio-init") {
+            Some(ctx) => Rc::new(RefCell::new(ctx)),
+            None => return AudioData::default(),
+        };
+
+        let result = Rc::new(RefCell::new(None::<AudioData>));
+
+        {
+            let ml_ref = Rc::clone(&mainloop);
+            let ctx_ref = Rc::clone(&context);
+            context.borrow_mut().set_state_callback(Some(Box::new(move || {
+                let state = unsafe { (*ctx_ref.as_ptr()).get_state() };
+                match state {
+                    ContextState::Ready | ContextState::Failed | ContextState::Terminated => {
+                        unsafe { (*ml_ref.as_ptr()).signal(false); }
+                    }
+                    _ => {}
+                }
+            })));
+        }
+
+        if context
+            .borrow_mut()
+            .connect(None, ContextFlagSet::NOFLAGS, None)
+            .is_err()
+        {
+            return AudioData::default();
+        }
+
+        mainloop.borrow_mut().lock();
+        if mainloop.borrow_mut().start().is_err() {
+            return AudioData::default();
+        }
+
+        loop {
+            match context.borrow().get_state() {
+                ContextState::Ready => break,
+                ContextState::Failed | ContextState::Terminated => {
+                    mainloop.borrow_mut().unlock();
+                    mainloop.borrow_mut().stop();
+                    return AudioData::default();
+                }
+                _ => {
+                    mainloop.borrow_mut().wait();
+                }
+            }
+        }
+
+        {
+            let result_ref = Rc::clone(&result);
+            context
+                .borrow()
+                .introspect()
+                .get_sink_info_by_name("@DEFAULT_SINK@", {
+                    move |list_result: ListResult<&SinkInfo>| {
+                        if let ListResult::Item(sink) = list_result {
+                            let vol_raw = sink.volume.avg().0 as f64 / Volume::NORMAL.0 as f64;
+                            *result_ref.borrow_mut() = Some(AudioData {
+                                volume: (vol_raw * 100.0).round() / 100.0,
+                                is_muted: sink.mute,
+                            });
+                        }
+                    }
+                });
+        }
+
+        mainloop.borrow_mut().unlock();
+
+        result.borrow_mut().take().unwrap_or_default()
     }
 
     fn fetch_and_send(ctx_ref: &Rc<RefCell<Context>>, data_tx: &Sender<AudioData>) {
