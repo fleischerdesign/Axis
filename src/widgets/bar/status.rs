@@ -16,13 +16,21 @@ impl BarStatus {
         let bt_icon = gtk4::Image::from_icon_name("bluetooth-symbolic");
         let vol_icon = gtk4::Image::from_icon_name("audio-volume-high-symbolic");
         let battery_icon = gtk4::Image::from_icon_name("battery-full-symbolic");
+        // Notification icon, initially hidden
+        let notif_icon = gtk4::Image::from_icon_name("preferences-system-notifications-symbolic");
+        notif_icon.set_visible(false);
 
         island.append(&wifi_icon);
         island.append(&bt_icon);
         island.append(&vol_icon);
         island.append(&battery_icon);
+        island.append(&notif_icon);
 
         // Subscriptions
+        ctx.notifications.subscribe(move |data| {
+            notif_icon.set_visible(!data.notifications.is_empty());
+        });
+
         ctx.network.subscribe(move |data| {
             wifi_icon.set_visible(data.is_wifi_enabled);
             if data.is_wifi_enabled {
