@@ -117,8 +117,9 @@ impl LauncherPopup {
             let _ = tx.send_blocking(LauncherCmd::Search(e.text().to_string()));
         });
 
-        // Navigation (Pfeiltasten)
+        // Navigation (Pfeiltasten & ESC)
         let tx_key = ctx.launcher_tx.clone();
+        let base_key = base.clone();
         let key_controller = gtk4::EventControllerKey::new();
         key_controller.connect_key_pressed(move |_, key, _, _| {
             match key {
@@ -128,6 +129,10 @@ impl LauncherPopup {
                 }
                 gtk4::gdk::Key::Up => {
                     let _ = tx_key.send_blocking(LauncherCmd::SelectPrev);
+                    gtk4::glib::Propagation::Stop
+                }
+                gtk4::gdk::Key::Escape => {
+                    base_key.close();
                     gtk4::glib::Propagation::Stop
                 }
                 _ => gtk4::glib::Propagation::Proceed,
