@@ -84,6 +84,20 @@ impl NotificationCard {
         container.append(&header_box);
         container.append(&content_box);
 
+        // --- CLICK GESTURE (Default Action) ---
+        let click = gtk4::GestureClick::new();
+        let tx = ctx.notifications_tx.clone();
+        let id = data.id;
+        let has_default = data.actions.iter().any(|a| a.key == "default");
+        
+        click.connect_pressed(move |_, _, _, _| {
+            if has_default {
+                let _ = tx.send_blocking(NotificationCmd::Action(id, "default".to_string()));
+                let _ = tx.send_blocking(NotificationCmd::Close(id));
+            }
+        });
+        container.add_controller(click);
+
         // --- ACTIONS ---
         if !data.actions.is_empty() {
             let action_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
