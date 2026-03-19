@@ -105,7 +105,7 @@ fn build_ap_row(
     item.add_css_class("qs-wifi-item");
 
     let row = ListRow::new(&ap.ssid, icon, ap.is_active, sublabel, false);
-    item.append(&row.button);
+    item.append(&row.container);
 
     let auth_revealer = build_auth_revealer(&ap.path, &ap.ssid, tx);
 
