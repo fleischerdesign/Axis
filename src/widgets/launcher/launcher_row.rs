@@ -48,6 +48,7 @@ impl LauncherRow {
 
         content.append(&label_box);
         row.set_child(Some(&content));
+        row.set_cursor_from_name(Some("pointer"));
 
         Self { row }
     }
