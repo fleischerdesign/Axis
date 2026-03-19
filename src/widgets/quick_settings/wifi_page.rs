@@ -31,6 +31,7 @@ fn build_auth_revealer(
     auth_box.set_margin_start(12);
     auth_box.set_margin_end(12);
     auth_box.set_margin_bottom(12);
+    auth_box.add_css_class("qs-wifi-auth");
 
     let pass_entry = gtk4::PasswordEntry::builder()
         .placeholder_text("Passwort")
@@ -78,6 +79,61 @@ fn build_auth_revealer(
     });
 
     revealer
+}
+
+fn build_ap_row(
+    ap: &crate::services::network::AccessPointData,
+    tx: &async_channel::Sender<NetworkCmd>,
+) -> gtk4::Box {
+    let icon = if ap.is_active {
+        "network-wireless-connected-symbolic"
+    } else if ap.needs_auth {
+        "network-wireless-encrypted-symbolic"
+    } else {
+        wifi_signal_icon(ap.strength)
+    };
+
+    let sublabel = if ap.is_active {
+        Some("Verbunden")
+    } else if ap.needs_auth {
+        Some("Gesichert")
+    } else {
+        None
+    };
+
+    let item = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    item.add_css_class("qs-wifi-item");
+
+    let row = ListRow::new(&ap.ssid, icon, ap.is_active, sublabel, false);
+    item.append(&row.button);
+
+    let auth_revealer = build_auth_revealer(&ap.path, &ap.ssid, tx);
+
+    let tx = tx.clone();
+    let path = ap.path.clone();
+    let is_active = ap.is_active;
+    let needs_auth = ap.needs_auth;
+    let revealer = auth_revealer.clone();
+    let item_c = item.clone();
+
+    row.button.connect_clicked(move |_| {
+        if is_active {
+            let _ = tx.send_blocking(NetworkCmd::DisconnectWifi);
+        } else if needs_auth {
+            let open = revealer.reveals_child();
+            revealer.set_reveal_child(!open);
+            if open {
+                item_c.remove_css_class("expanded");
+            } else {
+                item_c.add_css_class("expanded");
+            }
+        } else {
+            let _ = tx.send_blocking(NetworkCmd::ConnectToAp(path.clone()));
+        }
+    });
+
+    item.append(&auth_revealer);
+    item
 }
 
 pub struct WifiPage {
@@ -143,45 +199,7 @@ impl WifiPage {
             }
 
             for ap in &data.access_points {
-                let icon = if ap.is_active {
-                    "network-wireless-connected-symbolic"
-                } else if ap.needs_auth {
-                    "network-wireless-encrypted-symbolic"
-                } else {
-                    wifi_signal_icon(ap.strength)
-                };
-
-                let sublabel = if ap.is_active {
-                    Some("Verbunden")
-                } else if ap.needs_auth {
-                    Some("Gesichert")
-                } else {
-                    None
-                };
-
-                let row = ListRow::new(&ap.ssid, icon, ap.is_active, sublabel, false);
-
-                let auth_revealer = build_auth_revealer(&ap.path, &ap.ssid, &tx);
-
-                let tx = tx.clone();
-                let path = ap.path.clone();
-                let is_active = ap.is_active;
-                let needs_auth = ap.needs_auth;
-                let revealer = auth_revealer.clone();
-
-                row.button.connect_clicked(move |_| {
-                    if is_active {
-                        let _ = tx.send_blocking(NetworkCmd::DisconnectWifi);
-                    } else if needs_auth {
-                        revealer.set_reveal_child(!revealer.reveals_child());
-                    } else {
-                        let _ = tx.send_blocking(NetworkCmd::ConnectToAp(path.clone()));
-                    }
-                });
-
-                let item = row.container;
-                item.append(&auth_revealer);
-                list_c.append(&item);
+                list_c.append(&build_ap_row(ap, &tx));
             }
 
             if data.access_points.is_empty() && data.is_wifi_enabled {

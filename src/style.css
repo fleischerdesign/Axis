@@ -193,8 +193,23 @@ window {
 }
 
 .qs-wifi-item {
+    background-color: #2c2c2c;
     border-radius: 12px;
     margin-bottom: 2px;
+    overflow: hidden;
+}
+
+.qs-wifi-item.expanded .list-row {
+    border-radius: 12px 12px 0 0;
+}
+
+.qs-wifi-item .list-row {
+    border-radius: 12px;
+}
+
+.qs-wifi-auth {
+    background-color: #2c2c2c;
+    padding-left: 4px;
 }
 
 .qs-wifi-connect-btn {
