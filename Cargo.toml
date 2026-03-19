@@ -8,7 +8,7 @@ chrono = "0.4.44"
 futures-channel = "0.3.32"
 futures-executor = "0.3.32"
 futures-util = "0.3.32"
-gtk4 = "0.10"
+gtk4 = { version = "0.10", features = ["v4_12"] }
 gtk4-layer-shell = "0.7.1"
 libadwaita = "0.8"
 libpulse-binding = "2.30.1"
