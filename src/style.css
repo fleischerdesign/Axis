@@ -161,6 +161,7 @@ entry:focus-visible {
     border: none;
     box-shadow: none;
     padding: 0;
+    border-radius: 12px;
 }
 
 /* Quick Settings: Selektion komplett ausblenden (Buttons haben eigene Styles) */

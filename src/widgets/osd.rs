@@ -206,11 +206,11 @@ impl OsdManager {
 
             if changed {
                 let icon_name = if current_val < 0.33 {
-                    "display-brightness-low-symbolic"
+                    "display-brightness-symbolic"
                 } else if current_val < 0.66 {
                     "display-brightness-symbolic"
                 } else {
-                    "display-brightness-high-symbolic"
+                    "display-brightness-symbolic"
                 };
 
                 if !win_bright.is_visible() {
