@@ -101,20 +101,18 @@ fn build_ap_row(
         None
     };
 
-    let item = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-    item.add_css_class("qs-wifi-item");
-
     let row = ListRow::new(&ap.ssid, icon, ap.is_active, sublabel, false);
-    item.append(&row.container);
 
     let auth_revealer = build_auth_revealer(&ap.path, &ap.ssid, tx);
+    row.container.append(&auth_revealer);
+    row.container.add_css_class("qs-wifi-item");
 
     let tx = tx.clone();
     let path = ap.path.clone();
     let is_active = ap.is_active;
     let needs_auth = ap.needs_auth;
     let revealer = auth_revealer.clone();
-    let item_c = item.clone();
+    let container_c = row.container.clone();
 
     row.button.connect_clicked(move |_| {
         if is_active {
@@ -123,17 +121,16 @@ fn build_ap_row(
             let open = revealer.reveals_child();
             revealer.set_reveal_child(!open);
             if open {
-                item_c.remove_css_class("expanded");
+                container_c.remove_css_class("expanded");
             } else {
-                item_c.add_css_class("expanded");
+                container_c.add_css_class("expanded");
             }
         } else {
             let _ = tx.send_blocking(NetworkCmd::ConnectToAp(path.clone()));
         }
     });
 
-    item.append(&auth_revealer);
-    item
+    row.container
 }
 
 pub struct WifiPage {
