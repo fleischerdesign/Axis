@@ -277,8 +277,19 @@ window {
     font-size: 13px;
 }
 
-.workspace-label {
-    font-size: 13px;
+/* Workspace Dots (libadwaita style) */
+.ws-dot {
+    min-width: 6px;
+    max-width: 6px;
+    min-height: 6px;
+    max-height: 6px;
+    border-radius: 50%;
+    background-color: rgba(255, 255, 255, 0.25);
+}
+
+.ws-dot.active {
+    background-color: #3584e4;
+    box-shadow: 0 0 4px rgba(53, 132, 228, 0.5);
 }
 
 separator {
