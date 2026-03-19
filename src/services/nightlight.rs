@@ -1,5 +1,5 @@
 use async_channel::{bounded, Receiver, Sender};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::thread;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -45,7 +45,7 @@ impl NightlightService {
         let (cmd_tx, cmd_rx) = bounded(100);
 
         thread::spawn(move || {
-            let mut wlsunset_pid = None;
+            let mut wlsunset_child: Option<Child> = None;
             let mut data = NightlightData {
                 available: Self::check_available(),
                 ..Default::default()
@@ -58,14 +58,14 @@ impl NightlightService {
                         NightlightCmd::Toggle(on) => {
                             if on {
                                 if !data.enabled {
-                                    if let Some(pid) = Self::start_wlsunset(&data) {
-                                        wlsunset_pid = Some(pid);
+                                    if let Some(child) = Self::start_wlsunset(&data) {
+                                        wlsunset_child = Some(child);
                                         data.enabled = true;
                                     }
                                 }
                             } else if data.enabled {
-                                if let Some(pid) = wlsunset_pid.take() {
-                                    Self::stop_wlsunset(pid);
+                                if let Some(mut child) = wlsunset_child.take() {
+                                    Self::stop_wlsunset(&mut child);
                                     data.enabled = false;
                                 }
                             }
@@ -73,22 +73,22 @@ impl NightlightService {
                         NightlightCmd::SetTempDay(kelvin) => {
                             data.temp_day = kelvin;
                             if data.enabled {
-                                if let Some(pid) = wlsunset_pid.take() {
-                                    Self::stop_wlsunset(pid);
+                                if let Some(mut child) = wlsunset_child.take() {
+                                    Self::stop_wlsunset(&mut child);
                                 }
-                                if let Some(pid) = Self::start_wlsunset(&data) {
-                                    wlsunset_pid = Some(pid);
+                                if let Some(child) = Self::start_wlsunset(&data) {
+                                    wlsunset_child = Some(child);
                                 }
                             }
                         }
                         NightlightCmd::SetTempNight(kelvin) => {
                             data.temp_night = kelvin;
                             if data.enabled {
-                                if let Some(pid) = wlsunset_pid.take() {
-                                    Self::stop_wlsunset(pid);
+                                if let Some(mut child) = wlsunset_child.take() {
+                                    Self::stop_wlsunset(&mut child);
                                 }
-                                if let Some(pid) = Self::start_wlsunset(&data) {
-                                    wlsunset_pid = Some(pid);
+                                if let Some(child) = Self::start_wlsunset(&data) {
+                                    wlsunset_child = Some(child);
                                 }
                             }
                         }
@@ -98,11 +98,11 @@ impl NightlightService {
                             data.latitude = "".to_string();
                             data.longitude = "".to_string();
                             if data.enabled {
-                                if let Some(pid) = wlsunset_pid.take() {
-                                    Self::stop_wlsunset(pid);
+                                if let Some(mut child) = wlsunset_child.take() {
+                                    Self::stop_wlsunset(&mut child);
                                 }
-                                if let Some(pid) = Self::start_wlsunset(&data) {
-                                    wlsunset_pid = Some(pid);
+                                if let Some(child) = Self::start_wlsunset(&data) {
+                                    wlsunset_child = Some(child);
                                 }
                             }
                         }
@@ -112,11 +112,11 @@ impl NightlightService {
                             data.sunrise = "".to_string();
                             data.sunset = "".to_string();
                             if data.enabled {
-                                if let Some(pid) = wlsunset_pid.take() {
-                                    Self::stop_wlsunset(pid);
+                                if let Some(mut child) = wlsunset_child.take() {
+                                    Self::stop_wlsunset(&mut child);
                                 }
-                                if let Some(pid) = Self::start_wlsunset(&data) {
-                                    wlsunset_pid = Some(pid);
+                                if let Some(child) = Self::start_wlsunset(&data) {
+                                    wlsunset_child = Some(child);
                                 }
                             }
                         }
@@ -126,11 +126,21 @@ impl NightlightService {
                 }
 
                 // If wlsunset crashed, reset state
-                if let Some(pid) = wlsunset_pid {
-                    if !Self::is_pid_alive(pid) {
-                        wlsunset_pid = None;
-                        data.enabled = false;
-                        let _ = data_tx.send_blocking(data.clone());
+                if let Some(child) = &mut wlsunset_child {
+                    match child.try_wait() {
+                        Ok(Some(_)) => {
+                            // Process exited
+                            wlsunset_child = None;
+                            data.enabled = false;
+                            let _ = data_tx.send_blocking(data.clone());
+                        }
+                        Ok(None) => {} // Still running
+                        Err(e) => {
+                            eprintln!("[NightlightService] Error checking wlsunset: {e}");
+                            wlsunset_child = None;
+                            data.enabled = false;
+                            let _ = data_tx.send_blocking(data.clone());
+                        }
                     }
                 }
 
@@ -158,7 +168,7 @@ impl NightlightService {
         }
     }
 
-    fn start_wlsunset(data: &NightlightData) -> Option<u32> {
+    fn start_wlsunset(data: &NightlightData) -> Option<Child> {
         let mut cmd = Command::new("wlsunset");
         cmd.arg("-t").arg(data.temp_night.to_string());
         cmd.arg("-T").arg(data.temp_day.to_string());
@@ -171,23 +181,11 @@ impl NightlightService {
             cmd.arg("-s").arg(&data.sunset);
         }
 
-        let child = cmd.spawn().ok()?;
-
-        Some(child.id())
+        cmd.spawn().ok()
     }
 
-    fn stop_wlsunset(pid: u32) {
-        let _ = Command::new("kill").arg(pid.to_string()).status();
-    }
-
-    fn is_pid_alive(pid: u32) -> bool {
-        Command::new("kill")
-            .arg("-0")
-            .arg(pid.to_string())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false)
+    fn stop_wlsunset(child: &mut Child) {
+        let _ = child.kill();
+        let _ = child.wait();
     }
 }

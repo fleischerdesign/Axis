@@ -1,9 +1,9 @@
 use gtk4::glib;
 use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, LayerShell};
-use std::time::Duration;
-use std::rc::Rc;
 use std::cell::RefCell;
+use std::rc::Rc;
+use std::time::Duration;
 
 pub struct SlideAnimator;
 
@@ -25,10 +25,10 @@ impl SlideAnimator {
 
         let window_c = window.clone();
         let anim_c = active_anim.clone();
-        
+
         let src = glib::timeout_add_local(Duration::from_millis(Self::INTERVAL_MS), move || {
             let current = window_c.margin(edge);
-            
+
             if current == target {
                 *anim_c.borrow_mut() = None;
                 return glib::ControlFlow::Break;
@@ -41,7 +41,7 @@ impl SlideAnimator {
             };
 
             window_c.set_margin(edge, next);
-            
+
             if next == target {
                 *anim_c.borrow_mut() = None;
                 glib::ControlFlow::Break

@@ -1,21 +1,10 @@
 use crate::app_context::AppContext;
 use crate::services::network::NetworkCmd;
+use crate::widgets::icons::wifi_signal_icon;
 use crate::widgets::quick_settings::components::tile::QsTile;
 use crate::widgets::ListRow;
 use gtk4::prelude::*;
 use std::rc::Rc;
-
-fn wifi_signal_icon(strength: u8) -> &'static str {
-    if strength > 75 {
-        "network-wireless-signal-excellent-symbolic"
-    } else if strength > 50 {
-        "network-wireless-signal-good-symbolic"
-    } else if strength > 25 {
-        "network-wireless-signal-ok-symbolic"
-    } else {
-        "network-wireless-signal-weak-symbolic"
-    }
-}
 
 fn build_auth_revealer(
     ap_path: &str,

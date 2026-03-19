@@ -19,13 +19,13 @@ impl BluetoothPage {
             .icon_name("go-previous-symbolic")
             .css_classes(vec!["qs-back-btn".to_string()])
             .build();
-        
+
         let title = gtk4::Label::builder()
             .label("Bluetooth")
             .halign(gtk4::Align::Start)
             .css_classes(vec!["qs-subpage-title".to_string()])
             .build();
-        
+
         header.append(&back_btn);
         header.append(&title);
         container.append(&header);
@@ -60,7 +60,7 @@ impl BluetoothPage {
 
         ctx.bluetooth.subscribe(move |data| {
             parent_tile_c.set_active(data.is_powered);
-            
+
             // Liste leeren
             while let Some(child) = list_c.first_child() {
                 list_c.remove(&child);
@@ -72,7 +72,13 @@ impl BluetoothPage {
                     &device.name,
                     &device.icon,
                     device.is_connected,
-                    if device.is_connected { Some("Verbunden") } else if device.is_paired { Some("Gekoppelt") } else { None },
+                    if device.is_connected {
+                        Some("Verbunden")
+                    } else if device.is_paired {
+                        Some("Gekoppelt")
+                    } else {
+                        None
+                    },
                     false,
                 );
 
@@ -82,7 +88,8 @@ impl BluetoothPage {
 
                 row.button.connect_clicked(move |_| {
                     if is_connected {
-                        let _ = tx_inner.send_blocking(BluetoothCmd::Disconnect(path_inner.clone()));
+                        let _ =
+                            tx_inner.send_blocking(BluetoothCmd::Disconnect(path_inner.clone()));
                     } else {
                         let _ = tx_inner.send_blocking(BluetoothCmd::Connect(path_inner.clone()));
                     }

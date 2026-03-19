@@ -1,5 +1,6 @@
 use async_channel::{Receiver, bounded};
 use std::thread;
+use std::time::Duration;
 use zbus::{proxy, Connection};
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -32,8 +33,17 @@ impl PowerService {
         thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().unwrap();
             rt.block_on(async move {
-                let conn = Connection::system().await.unwrap();
-                let upower = UPowerDeviceProxy::new(&conn).await.unwrap();
+                // Retry connection setup with backoff
+                let upower = loop {
+                    match Connection::system().await {
+                        Ok(conn) => match UPowerDeviceProxy::new(&conn).await {
+                            Ok(proxy) => break proxy,
+                            Err(e) => eprintln!("[PowerService] Failed to create proxy: {e}"),
+                        },
+                        Err(e) => eprintln!("[PowerService] Failed to connect to D-Bus: {e}"),
+                    }
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+                };
 
                 loop {
                     let percentage = upower.percentage().await.unwrap_or(0.0);
@@ -47,7 +57,7 @@ impl PowerService {
                     };
 
                     let _ = tx.send(data).await;
-                    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+                    tokio::time::sleep(Duration::from_secs(10)).await;
                 }
             });
         });

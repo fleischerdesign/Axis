@@ -5,12 +5,12 @@ mod nightlight_page;
 mod wifi_page;
 
 use crate::app_context::AppContext;
+use crate::shell::ShellPopup;
+use crate::widgets::base::PopupBase;
 use crate::widgets::quick_settings::nightlight_page::NightlightPage;
 use bluetooth_page::BluetoothPage;
 use main_page::MainPage;
 use wifi_page::WifiPage;
-use crate::shell::ShellPopup;
-use crate::widgets::base::PopupBase;
 
 use crate::services::bluetooth::BluetoothCmd;
 use crate::services::network::NetworkCmd;
@@ -23,8 +23,12 @@ pub struct QuickSettingsPopup {
 }
 
 impl ShellPopup for QuickSettingsPopup {
-    fn id(&self) -> &str { "qs" }
-    fn is_open(&self) -> bool { *self.base.is_open.borrow() }
+    fn id(&self) -> &str {
+        "qs"
+    }
+    fn is_open(&self) -> bool {
+        *self.base.is_open.borrow()
+    }
 
     fn close(&self) {
         self.base.close();
@@ -37,8 +41,8 @@ impl ShellPopup for QuickSettingsPopup {
 
 impl QuickSettingsPopup {
     pub fn new(
-        app: &libadwaita::Application, 
-        vol_icon_bar: &gtk4::Image, 
+        app: &libadwaita::Application,
+        vol_icon_bar: &gtk4::Image,
         ctx: AppContext,
         on_state_change: impl Fn() + 'static,
     ) -> Self {
@@ -53,7 +57,7 @@ impl QuickSettingsPopup {
         let qs_container = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
         qs_container.add_css_class("qs-panel");
         qs_container.set_width_request(380);
-        
+
         // WICHTIG: Valign auf End sorgt dafür, dass das Fenster nach oben wächst,
         // wenn es am unteren Rand verankert ist.
         qs_container.set_valign(gtk4::Align::End);
@@ -127,10 +131,31 @@ impl QuickSettingsPopup {
         qs_stack.add_named(&wifi_page.container, Some("wifi"));
         qs_stack.add_named(&bluetooth_page.container, Some("bluetooth"));
         qs_stack.add_named(&nightlight_page.container, Some("nightlight"));
-        
+
         qs_container.append(&qs_stack);
         base.set_content(&qs_container);
 
-        Self { base, container: qs_container }
+        // --- KEYBOARD NAVIGATION ---
+        let base_kb = base.clone();
+        let stack_kb = qs_stack.clone();
+        let key_controller = gtk4::EventControllerKey::new();
+        key_controller.connect_key_pressed(move |_, key, _, _| {
+            if key == gtk4::gdk::Key::Escape {
+                let current = stack_kb.visible_child_name();
+                if current.as_deref() == Some("main") {
+                    base_kb.close();
+                } else {
+                    stack_kb.set_visible_child_name("main");
+                }
+                return gtk4::glib::Propagation::Stop;
+            }
+            gtk4::glib::Propagation::Proceed
+        });
+        base.window.add_controller(key_controller);
+
+        Self {
+            base,
+            container: qs_container,
+        }
     }
 }

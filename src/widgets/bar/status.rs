@@ -1,6 +1,7 @@
-use gtk4::prelude::*;
-use crate::widgets::Island;
 use crate::app_context::AppContext;
+use crate::widgets::icons;
+use crate::widgets::Island;
+use gtk4::prelude::*;
 
 pub struct BarStatus {
     pub container: gtk4::Box,
@@ -16,7 +17,6 @@ impl BarStatus {
         let bt_icon = gtk4::Image::from_icon_name("bluetooth-symbolic");
         let vol_icon = gtk4::Image::from_icon_name("audio-volume-high-symbolic");
         let battery_icon = gtk4::Image::from_icon_name("battery-full-symbolic");
-        // Notification icon, initially hidden
         let notif_icon = gtk4::Image::from_icon_name("preferences-system-notifications-symbolic");
         notif_icon.set_visible(false);
 
@@ -26,7 +26,6 @@ impl BarStatus {
         island.append(&battery_icon);
         island.append(&notif_icon);
 
-        // Subscriptions
         ctx.notifications.subscribe(move |data| {
             notif_icon.set_visible(!data.notifications.is_empty());
         });
@@ -34,11 +33,11 @@ impl BarStatus {
         ctx.network.subscribe(move |data| {
             wifi_icon.set_visible(data.is_wifi_enabled);
             if data.is_wifi_enabled {
-                let icon_name = if !data.is_wifi_connected { "network-wireless-offline-symbolic" }
-                else if data.active_strength > 80 { "network-wireless-signal-excellent-symbolic" }
-                else if data.active_strength > 60 { "network-wireless-signal-good-symbolic" }
-                else if data.active_strength > 40 { "network-wireless-signal-ok-symbolic" }
-                else { "network-wireless-signal-weak-symbolic" };
+                let icon_name = if !data.is_wifi_connected {
+                    "network-wireless-offline-symbolic"
+                } else {
+                    icons::wifi_signal_icon(data.active_strength)
+                };
                 wifi_icon.set_icon_name(Some(icon_name));
             }
         });
@@ -47,7 +46,11 @@ impl BarStatus {
             bt_icon.set_visible(data.is_powered);
             if data.is_powered {
                 let any_connected = data.devices.iter().any(|d| d.is_connected);
-                let icon_name = if any_connected { "bluetooth-active-symbolic" } else { "bluetooth-symbolic" };
+                let icon_name = if any_connected {
+                    "bluetooth-active-symbolic"
+                } else {
+                    "bluetooth-symbolic"
+                };
                 bt_icon.set_icon_name(Some(icon_name));
             }
         });
@@ -55,22 +58,16 @@ impl BarStatus {
         ctx.power.subscribe(move |data| {
             battery_icon.set_visible(data.has_battery);
             if data.has_battery {
-                let icon_name = if data.is_charging { "battery-full-charging-symbolic" }
-                else if data.battery_percentage < 10.0 { "battery-empty-symbolic" }
-                else if data.battery_percentage < 30.0 { "battery-low-symbolic" }
-                else if data.battery_percentage < 60.0 { "battery-good-symbolic" }
-                else { "battery-full-symbolic" };
-                battery_icon.set_icon_name(Some(icon_name));
+                battery_icon.set_icon_name(Some(icons::battery_icon(
+                    data.battery_percentage,
+                    data.is_charging,
+                )));
             }
         });
 
         let vol_icon_clone = vol_icon.clone();
         ctx.audio.subscribe(move |data| {
-            let icon_name = if data.is_muted || data.volume <= 0.01 { "audio-volume-muted-symbolic" }
-            else if data.volume < 0.33 { "audio-volume-low-symbolic" }
-            else if data.volume < 0.66 { "audio-volume-medium-symbolic" }
-            else { "audio-volume-high-symbolic" };
-            vol_icon_clone.set_icon_name(Some(icon_name));
+            vol_icon_clone.set_icon_name(Some(icons::volume_icon(data.volume, data.is_muted)));
         });
 
         Self {

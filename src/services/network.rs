@@ -89,8 +89,17 @@ impl NetworkService {
         let (cmd_tx, cmd_rx) = bounded(10);
 
         tokio::spawn(async move {
-            let connection = Connection::system().await.unwrap();
-            let proxy = NetworkManagerProxy::new(&connection).await.unwrap();
+            // Retry connection setup with backoff
+            let (connection, proxy) = loop {
+                match Connection::system().await {
+                    Ok(conn) => match NetworkManagerProxy::new(&conn).await {
+                        Ok(proxy) => break (conn, proxy),
+                        Err(e) => eprintln!("[NetworkService] Failed to create proxy: {e}"),
+                    },
+                    Err(e) => eprintln!("[NetworkService] Failed to connect to D-Bus: {e}"),
+                }
+                tokio::time::sleep(Duration::from_secs(5)).await;
+            };
 
             let mut wifi_device_path = None;
             if let Ok(devices) = proxy.get_devices().await {
@@ -121,18 +130,26 @@ impl NetworkService {
                     Some(_) = wifi_changed.next() => { should_update = true; }
                     Some(cmd) = cmd_rx.next() => {
                         match cmd {
-                            NetworkCmd::ToggleWifi(on) => { let _ = proxy.set_wireless_enabled(on).await; }
+                            NetworkCmd::ToggleWifi(on) => {
+                                if let Err(e) = proxy.set_wireless_enabled(on).await {
+                                    eprintln!("[NetworkService] Failed to toggle WiFi: {e}");
+                                }
+                            }
                             NetworkCmd::ScanWifi => {
                                 if let Some(path) = &wifi_device_path {
                                     if let Ok(wifi_proxy) = WirelessDeviceProxy::builder(&connection).path(path).unwrap().build().await {
-                                        let _ = wifi_proxy.request_scan(HashMap::new()).await;
+                                        if let Err(e) = wifi_proxy.request_scan(HashMap::new()).await {
+                                            eprintln!("[NetworkService] Failed to scan WiFi: {e}");
+                                        }
                                         full_scan = true;
                                     }
                                 }
                             }
                             NetworkCmd::ConnectToAp(ap_path_str) => {
                                 if let (Some(dev_path), Ok(ap_path)) = (&wifi_device_path, OwnedObjectPath::try_from(ap_path_str)) {
-                                    let _ = proxy.activate_connection(OwnedObjectPath::try_from("/").unwrap(), dev_path.clone(), ap_path).await;
+                                    if let Err(e) = proxy.activate_connection(OwnedObjectPath::try_from("/").unwrap(), dev_path.clone(), ap_path).await {
+                                        eprintln!("[NetworkService] Failed to connect to AP: {e}");
+                                    }
                                 }
                             }
                             NetworkCmd::ConnectToApWithPassword(ap_path_str, ssid, password) => {
@@ -149,7 +166,9 @@ impl NetworkService {
                                     security_set.insert("key-mgmt", zbus::zvariant::Value::from("wpa-psk"));
                                     security_set.insert("psk", zbus::zvariant::Value::from(password));
                                     settings.insert("802-11-wireless-security", security_set);
-                                    let _ = proxy.add_and_activate_connection(settings, dev_path.clone(), ap_path).await;
+                                    if let Err(e) = proxy.add_and_activate_connection(settings, dev_path.clone(), ap_path).await {
+                                        eprintln!("[NetworkService] Failed to connect with password: {e}");
+                                    }
                                 }
                             }
                             NetworkCmd::DisconnectWifi => {
@@ -157,7 +176,9 @@ impl NetworkService {
                                     if let Ok(dev_proxy) = DeviceProxy::builder(&connection).path(path.clone()).unwrap().build().await {
                                         if let Ok(active_conn_path) = dev_proxy.active_connection().await {
                                             if active_conn_path.to_string() != "/" {
-                                                let _ = proxy.deactivate_connection(active_conn_path).await;
+                                                if let Err(e) = proxy.deactivate_connection(active_conn_path).await {
+                                                    eprintln!("[NetworkService] Failed to disconnect: {e}");
+                                                }
                                             }
                                         }
                                     }

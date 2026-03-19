@@ -5,7 +5,7 @@ use crate::services::bluetooth::BluetoothCmd;
 use crate::services::network::NetworkCmd;
 use crate::services::nightlight::NightlightCmd;
 use crate::services::power::PowerData;
-use crate::widgets::QsTile;
+use crate::widgets::{icons, QsTile};
 use gtk4::prelude::*;
 use std::rc::Rc;
 
@@ -186,14 +186,8 @@ impl MainPage {
             if data.is_wifi_enabled {
                 let icon_name = if !data.is_wifi_connected {
                     "network-wireless-offline-symbolic"
-                } else if data.active_strength > 80 {
-                    "network-wireless-signal-excellent-symbolic"
-                } else if data.active_strength > 60 {
-                    "network-wireless-signal-good-symbolic"
-                } else if data.active_strength > 40 {
-                    "network-wireless-signal-ok-symbolic"
                 } else {
-                    "network-wireless-signal-weak-symbolic"
+                    icons::wifi_signal_icon(data.active_strength)
                 };
                 wifi_tile_c.set_icon(icon_name);
             } else {
@@ -247,15 +241,7 @@ impl MainPage {
                 vol_slider_c.set_value(data.volume);
                 *is_updating_rx.borrow_mut() = false;
 
-                let icon_name = if data.is_muted || data.volume <= 0.01 {
-                    "audio-volume-muted-symbolic"
-                } else if data.volume < 0.33 {
-                    "audio-volume-low-symbolic"
-                } else if data.volume < 0.66 {
-                    "audio-volume-medium-symbolic"
-                } else {
-                    "audio-volume-high-symbolic"
-                };
+                let icon_name = icons::volume_icon(data.volume, data.is_muted);
                 vol_icon_c.set_icon_name(Some(icon_name));
                 vol_icon_bar_c.set_icon_name(Some(icon_name));
             }
@@ -341,22 +327,13 @@ impl MainPage {
         data: &PowerData,
     ) {
         if data.has_battery {
-            // Echte Daten vorhanden: alles anzeigen und aktualisieren
             btn.set_visible(true);
             icon.set_visible(true);
             label.set_text(&format!("{:.0}%", data.battery_percentage));
-            let icon_name = if data.is_charging {
-                "battery-full-charging-symbolic"
-            } else if data.battery_percentage < 10.0 {
-                "battery-empty-symbolic"
-            } else if data.battery_percentage < 30.0 {
-                "battery-low-symbolic"
-            } else if data.battery_percentage < 60.0 {
-                "battery-good-symbolic"
-            } else {
-                "battery-full-symbolic"
-            };
-            icon.set_icon_name(Some(icon_name));
+            icon.set_icon_name(Some(icons::battery_icon(
+                data.battery_percentage,
+                data.is_charging,
+            )));
         } else {
             btn.set_visible(false);
         }

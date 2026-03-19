@@ -1,12 +1,12 @@
-pub mod launcher;
 pub mod center;
+pub mod launcher;
 pub mod status;
 
 use crate::app_context::AppContext;
-use launcher::BarLauncher;
-use center::BarCenter;
-use status::BarStatus;
 use crate::widgets::animations::SlideAnimator;
+use center::BarCenter;
+use launcher::BarLauncher;
+use status::BarStatus;
 
 use gtk4::glib;
 use gtk4::prelude::*;
@@ -107,7 +107,7 @@ impl Bar {
 
     pub fn check_auto_hide(&self) {
         let should_be_visible = *self.popup_open.borrow() || *self.is_hovered.borrow();
-        
+
         // Timer für das Verstecken immer stoppen, wenn sich der Status ändert
         if let Some(src) = self.hide_timeout.borrow_mut().take() {
             src.remove();
@@ -117,7 +117,12 @@ impl Bar {
             // SHOW
             if !*self.is_visible.borrow() {
                 *self.is_visible.borrow_mut() = true;
-                SlideAnimator::slide_margin(&self.window, Edge::Bottom, 0, self.anim_source.clone());
+                SlideAnimator::slide_margin(
+                    &self.window,
+                    Edge::Bottom,
+                    0,
+                    self.anim_source.clone(),
+                );
             }
         } else {
             // HIDE (mit Delay)
@@ -126,17 +131,18 @@ impl Bar {
             let anim_source_for_cb = self.anim_source.clone();
             let window_anim = self.window.clone();
 
-            let src = glib::timeout_add_local_once(Duration::from_millis(HIDE_DELAY_MS), move || {
-                *is_visible_for_cb.borrow_mut() = false;
-                *hide_timeout_for_cb.borrow_mut() = None;
-                
-                SlideAnimator::slide_margin(
-                    &window_anim, 
-                    Edge::Bottom, 
-                    -(BAR_HEIGHT - PEEK_PX), 
-                    anim_source_for_cb
-                );
-            });
+            let src =
+                glib::timeout_add_local_once(Duration::from_millis(HIDE_DELAY_MS), move || {
+                    *is_visible_for_cb.borrow_mut() = false;
+                    *hide_timeout_for_cb.borrow_mut() = None;
+
+                    SlideAnimator::slide_margin(
+                        &window_anim,
+                        Edge::Bottom,
+                        -(BAR_HEIGHT - PEEK_PX),
+                        anim_source_for_cb,
+                    );
+                });
             *self.hide_timeout.borrow_mut() = Some(src);
         }
     }

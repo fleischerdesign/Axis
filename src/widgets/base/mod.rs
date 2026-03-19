@@ -14,7 +14,7 @@ pub struct PopupBase {
 impl PopupBase {
     pub fn new(app: &libadwaita::Application, title: &str, anchor_right: bool) -> Self {
         let is_open = Rc::new(RefCell::new(false));
-        
+
         let window = gtk4::Window::builder()
             .application(app)
             .title(title)
@@ -25,7 +25,7 @@ impl PopupBase {
         window.set_layer(Layer::Overlay);
         window.set_keyboard_mode(KeyboardMode::OnDemand);
         window.set_anchor(Edge::Bottom, true);
-        
+
         if anchor_right {
             window.set_anchor(Edge::Right, true);
             window.set_margin(Edge::Right, 10);
@@ -33,17 +33,21 @@ impl PopupBase {
             window.set_anchor(Edge::Left, true);
             window.set_margin(Edge::Left, 10);
         }
-        
+
         window.set_margin(Edge::Bottom, 64);
 
         let revealer = gtk4::Revealer::builder()
             .transition_type(gtk4::RevealerTransitionType::Crossfade)
             .transition_duration(250)
             .build();
-            
+
         window.set_child(Some(&revealer));
 
-        Self { window, revealer, is_open }
+        Self {
+            window,
+            revealer,
+            is_open,
+        }
     }
 
     pub fn set_content(&self, content: &impl IsA<gtk4::Widget>) {
@@ -51,17 +55,27 @@ impl PopupBase {
     }
 
     pub fn open(&self) {
-        if *self.is_open.borrow() { return; }
+        if *self.is_open.borrow() {
+            return;
+        }
         *self.is_open.borrow_mut() = true;
         self.window.set_visible(true);
         self.revealer.set_reveal_child(true);
+
+        // Grab focus on the popup content so keyboard events are captured
+        let window = self.window.clone();
+        gtk4::glib::timeout_add_local_once(Duration::from_millis(50), move || {
+            window.grab_focus();
+        });
     }
 
     pub fn close(&self) {
-        if !*self.is_open.borrow() { return; }
+        if !*self.is_open.borrow() {
+            return;
+        }
         *self.is_open.borrow_mut() = false;
         self.revealer.set_reveal_child(false);
-        
+
         let win = self.window.clone();
         gtk4::glib::timeout_add_local(Duration::from_millis(280), move || {
             win.set_visible(false);

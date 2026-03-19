@@ -35,15 +35,7 @@ impl NotificationCard {
         container.set_hexpand(false);
         container.set_halign(gtk4::Align::End);
 
-        // Fast unsichtbarer Hintergrund, damit GTK den Bereich als "klickbar" ansieht
-        let wrap_provider = gtk4::CssProvider::new();
-        wrap_provider
-            .load_from_string(".notification-wrapper { background-color: rgba(0, 0, 0, 0.01); }");
-        gtk4::style_context_add_provider_for_display(
-            &gtk4::gdk::Display::default().expect("No display"),
-            &wrap_provider,
-            gtk4::STYLE_PROVIDER_PRIORITY_USER,
-        );
+        // CSS-Klasse definiert im Haupt-Stylesheet (style.css)
         container.add_css_class("notification-wrapper");
 
         // INNERE KARTE: Das eigentliche visuelle Widget

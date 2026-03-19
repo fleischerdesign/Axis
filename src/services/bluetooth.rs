@@ -68,9 +68,21 @@ impl BluetoothService {
         let (cmd_tx, cmd_rx) = bounded(10);
 
         tokio::spawn(async move {
-            let connection = Connection::system().await.unwrap();
-            let adapter_proxy = BluetoothAdapterProxy::new(&connection).await.unwrap();
-            let obj_manager = ObjectManagerProxy::new(&connection).await.unwrap();
+            // Retry connection setup with backoff
+            let (connection, adapter_proxy, obj_manager) = loop {
+                match Connection::system().await {
+                    Ok(conn) => {
+                        let adapter = BluetoothAdapterProxy::new(&conn).await;
+                        let obj_mgr = ObjectManagerProxy::new(&conn).await;
+                        if let (Ok(a), Ok(o)) = (adapter, obj_mgr) {
+                            break (conn, a, o);
+                        }
+                        eprintln!("[BluetoothService] Failed to create proxies, retrying...");
+                    }
+                    Err(e) => eprintln!("[BluetoothService] Failed to connect to D-Bus: {e}"),
+                }
+                tokio::time::sleep(Duration::from_secs(5)).await;
+            };
 
             let mut powered_changed = adapter_proxy.receive_powered_changed().await;
             let mut interfaces_added = obj_manager.receive_interfaces_added().await.unwrap();
@@ -91,29 +103,39 @@ impl BluetoothService {
                     Some(_) = interfaces_removed.next() => { should_update = true; }
                     Some(cmd) = cmd_rx.next() => {
                         match cmd {
-                            BluetoothCmd::TogglePower(on) => { 
-                                let _ = adapter_proxy.set_powered(on).await; 
+                            BluetoothCmd::TogglePower(on) => {
+                                if let Err(e) = adapter_proxy.set_powered(on).await {
+                                    eprintln!("[BluetoothService] Failed to toggle power: {e}");
+                                }
                                 if !on { is_discovering = false; }
                             }
-                            BluetoothCmd::Scan => { 
-                                let _ = adapter_proxy.start_discovery().await;
+                            BluetoothCmd::Scan => {
+                                if let Err(e) = adapter_proxy.start_discovery().await {
+                                    eprintln!("[BluetoothService] Failed to start discovery: {e}");
+                                }
                                 is_discovering = true;
                             }
                             BluetoothCmd::StopScan => {
-                                let _ = adapter_proxy.stop_discovery().await;
+                                if let Err(e) = adapter_proxy.stop_discovery().await {
+                                    eprintln!("[BluetoothService] Failed to stop discovery: {e}");
+                                }
                                 is_discovering = false;
                             }
                             BluetoothCmd::Connect(path_str) => {
                                 if let Ok(path) = OwnedObjectPath::try_from(path_str) {
                                     if let Ok(dev_proxy) = BluetoothDeviceProxy::builder(&connection).path(path).unwrap().build().await {
-                                        let _ = dev_proxy.connect().await;
+                                        if let Err(e) = dev_proxy.connect().await {
+                                            eprintln!("[BluetoothService] Failed to connect device: {e}");
+                                        }
                                     }
                                 }
                             }
                             BluetoothCmd::Disconnect(path_str) => {
                                 if let Ok(path) = OwnedObjectPath::try_from(path_str) {
                                     if let Ok(dev_proxy) = BluetoothDeviceProxy::builder(&connection).path(path).unwrap().build().await {
-                                        let _ = dev_proxy.disconnect().await;
+                                        if let Err(e) = dev_proxy.disconnect().await {
+                                            eprintln!("[BluetoothService] Failed to disconnect device: {e}");
+                                        }
                                     }
                                 }
                             }

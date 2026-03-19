@@ -41,37 +41,46 @@ impl NiriService {
     pub fn spawn() -> Receiver<NiriData> {
         let (data_tx, data_rx) = bounded(10);
 
-        thread::spawn(move || loop {
-            let client_event = Socket::connect();
-            let client_query = Socket::connect();
+        thread::spawn(move || {
+            let mut reconnect_delay = Duration::from_secs(1);
+            let max_delay = Duration::from_secs(30);
 
-            if let (Ok(mut events_sock), Ok(mut query_sock)) = (client_event, client_query) {
-                println!("Niri: Connected (Dual Socket Mode)");
+            loop {
+                let client_event = Socket::connect();
+                let client_query = Socket::connect();
 
-                if let Some(data) = Self::fetch_full_state(&mut query_sock) {
-                    let _ = data_tx.send_blocking(data);
-                }
+                if let (Ok(mut events_sock), Ok(mut query_sock)) = (client_event, client_query) {
+                    reconnect_delay = Duration::from_secs(1);
+                    println!("[NiriService] Connected");
 
-                if let Ok(Ok(Response::Handled)) = events_sock.send(Request::EventStream) {
-                    let mut read_event = events_sock.read_events();
+                    if let Some(data) = Self::fetch_full_state(&mut query_sock) {
+                        let _ = data_tx.send_blocking(data);
+                    }
 
-                    while let Ok(event) = read_event() {
-                        match event {
-                            Event::WorkspacesChanged { .. }
-                            | Event::WorkspaceActivated { .. }
-                            | Event::WindowsChanged { .. }
-                            | Event::WindowOpenedOrChanged { .. }
-                            | Event::WindowClosed { .. } => {
-                                if let Some(data) = Self::fetch_full_state(&mut query_sock) {
-                                    let _ = data_tx.send_blocking(data);
+                    if let Ok(Ok(Response::Handled)) = events_sock.send(Request::EventStream) {
+                        let mut read_event = events_sock.read_events();
+
+                        while let Ok(event) = read_event() {
+                            match event {
+                                Event::WorkspacesChanged { .. }
+                                | Event::WorkspaceActivated { .. }
+                                | Event::WindowsChanged { .. }
+                                | Event::WindowOpenedOrChanged { .. }
+                                | Event::WindowClosed { .. } => {
+                                    if let Some(data) = Self::fetch_full_state(&mut query_sock) {
+                                        let _ = data_tx.send_blocking(data);
+                                    }
                                 }
+                                _ => {}
                             }
-                            _ => {}
                         }
                     }
+                    eprintln!("[NiriService] Connection lost, reconnecting...");
                 }
+
+                thread::sleep(reconnect_delay);
+                reconnect_delay = (reconnect_delay * 2).min(max_delay);
             }
-            thread::sleep(Duration::from_secs(1));
         });
 
         data_rx

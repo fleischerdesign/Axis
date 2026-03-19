@@ -1,4 +1,5 @@
 use crate::app_context::AppContext;
+use crate::widgets::icons;
 use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use std::cell::RefCell;
@@ -170,15 +171,7 @@ impl OsdManager {
             *last_mute.borrow_mut() = Some(data.is_muted);
 
             if changed {
-                let icon_name = if data.is_muted || data.volume <= 0.01 {
-                    "audio-volume-muted-symbolic"
-                } else if data.volume < 0.33 {
-                    "audio-volume-low-symbolic"
-                } else if data.volume < 0.66 {
-                    "audio-volume-medium-symbolic"
-                } else {
-                    "audio-volume-high-symbolic"
-                };
+                let icon_name = icons::volume_icon(data.volume, data.is_muted);
 
                 if !win_vol.is_visible() {
                     win_vol.set_visible(true);
@@ -213,11 +206,11 @@ impl OsdManager {
 
             if changed {
                 let icon_name = if current_val < 0.33 {
-                    "display-brightness-symbolic"
+                    "display-brightness-low-symbolic"
                 } else if current_val < 0.66 {
                     "display-brightness-symbolic"
                 } else {
-                    "display-brightness-symbolic"
+                    "display-brightness-high-symbolic"
                 };
 
                 if !win_bright.is_visible() {

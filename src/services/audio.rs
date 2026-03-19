@@ -51,13 +51,22 @@ impl AudioService {
                 context
                     .borrow_mut()
                     .set_state_callback(Some(Box::new(move || {
+                        // SAFETY: `ctx_ref` is an Rc<RefCell<Context>> cloned from the
+                        // original. The callback is only invoked while the Context is alive
+                        // (PA guarantees this on its mainloop thread). We only read state
+                        // (no mutation), so there is no aliasing conflict.
                         let state = unsafe { (*ctx_ref.as_ptr()).get_state() };
                         match state {
                             ContextState::Ready
                             | ContextState::Failed
-                            | ContextState::Terminated => unsafe {
-                                (*ml_ref.as_ptr()).signal(false);
-                            },
+                            | ContextState::Terminated => {
+                                // SAFETY: `ml_ref` is an Rc<RefCell<Mainloop>> cloned from the
+                                // original. signal() is thread-safe and only wakes the mainloop
+                                // to re-check state — no borrow of the RefCell happens here.
+                                unsafe {
+                                    (*ml_ref.as_ptr()).signal(false);
+                                }
+                            }
                             _ => {}
                         }
                     })));
@@ -125,7 +134,7 @@ impl AudioService {
                             ((new_vol * Volume::NORMAL.0 as f64) as u32).min(Volume::NORMAL.0 * 2),
                         );
                         let mut cv = ChannelVolumes::default();
-                        cv.set(2, pulse_vol);
+                        cv.set(ChannelVolumes::CHANNELS_MAX, pulse_vol);
                         context.borrow().introspect().set_sink_volume_by_name(
                             "@DEFAULT_SINK@",
                             &cv,

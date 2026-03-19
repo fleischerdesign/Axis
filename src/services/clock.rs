@@ -10,7 +10,9 @@ impl ClockService {
         let (tx, rx) = bounded(10);
 
         thread::spawn(move || loop {
-            let _ = tx.send_blocking(Local::now());
+            if tx.send_blocking(Local::now()).is_err() {
+                break;
+            }
             thread::sleep(Duration::from_millis(1000));
         });
 

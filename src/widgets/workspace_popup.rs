@@ -4,11 +4,13 @@ use crate::shell::ShellPopup;
 use crate::widgets::base::PopupBase;
 use gtk4::prelude::*;
 use gtk4_layer_shell::LayerShell;
+use std::cell::Cell;
 use std::rc::Rc;
 
 pub struct WorkspacePopup {
     pub base: PopupBase,
     ctx: AppContext,
+    focused_index: Rc<Cell<usize>>,
 }
 
 impl ShellPopup for WorkspacePopup {
@@ -41,6 +43,7 @@ impl WorkspacePopup {
     ) -> Self {
         let base = PopupBase::new(app, "AXIS Workspace Popup", false);
         let on_state_change = Rc::new(on_state_change);
+        let focused_index = Rc::new(Cell::new(0));
 
         // State-Change an den Controller melden
         let on_change_c = on_state_change.clone();
@@ -56,6 +59,54 @@ impl WorkspacePopup {
         shelf.add_css_class("workspace-shelf");
         base.set_content(&shelf);
 
+        // --- KEYBOARD NAVIGATION ---
+        let base_close = base.clone();
+        let shelf_kb = shelf.clone();
+        let focused_index_kb = focused_index.clone();
+        let key_controller = gtk4::EventControllerKey::new();
+        key_controller.connect_key_pressed(move |_, key, _, _| {
+            match key {
+                gtk4::gdk::Key::Escape => {
+                    base_close.close();
+                    return gtk4::glib::Propagation::Stop;
+                }
+                gtk4::gdk::Key::Right | gtk4::gdk::Key::Tab => {
+                    let count = Self::child_count(&shelf_kb);
+                    if count > 0 {
+                        let next = (focused_index_kb.get() + 1) % count;
+                        focused_index_kb.set(next);
+                        Self::focus_child_at(&shelf_kb, next);
+                    }
+                    return gtk4::glib::Propagation::Stop;
+                }
+                gtk4::gdk::Key::Left => {
+                    let count = Self::child_count(&shelf_kb);
+                    if count > 0 {
+                        let prev = if focused_index_kb.get() == 0 {
+                            count - 1
+                        } else {
+                            focused_index_kb.get() - 1
+                        };
+                        focused_index_kb.set(prev);
+                        Self::focus_child_at(&shelf_kb, prev);
+                    }
+                    return gtk4::glib::Propagation::Stop;
+                }
+                gtk4::gdk::Key::Return | gtk4::gdk::Key::KP_Enter => {
+                    // Activate the currently focused child
+                    if let Some(child) = Self::child_at(&shelf_kb, focused_index_kb.get()) {
+                        if let Some(btn) = child.downcast_ref::<gtk4::Button>() {
+                            btn.emit_clicked();
+                        }
+                    }
+                    return gtk4::glib::Propagation::Stop;
+                }
+                _ => {}
+            }
+            gtk4::glib::Propagation::Proceed
+        });
+        base.window.add_controller(key_controller);
+
         let shelf_c = shelf.clone();
         let window_c = base.window.clone();
         let is_open_c = base.is_open.clone();
@@ -70,11 +121,15 @@ impl WorkspacePopup {
             }
         });
 
-        Self { base, ctx }
+        Self {
+            base,
+            ctx,
+            focused_index,
+        }
     }
 
     fn on_open(&self) {
-        // Shelf-Inhalt vor dem Anzeigen rendern
+        self.focused_index.set(0);
         if let Some(shelf) = self
             .base
             .revealer
@@ -86,6 +141,32 @@ impl WorkspacePopup {
                 move || base.close()
             });
             Self::render_shelf(&shelf, &self.ctx.niri.get(), &self.base.window, close_popup);
+            // Focus first workspace card on open
+            gtk4::glib::timeout_add_local_once(std::time::Duration::from_millis(50), move || {});
+        }
+    }
+
+    fn child_count(shelf: &gtk4::Box) -> usize {
+        let mut count = 0;
+        let mut child = shelf.first_child();
+        while child.is_some() {
+            count += 1;
+            child = child.and_then(|c| c.next_sibling());
+        }
+        count
+    }
+
+    fn child_at(shelf: &gtk4::Box, index: usize) -> Option<gtk4::Widget> {
+        let mut current = shelf.first_child()?;
+        for _ in 0..index {
+            current = current.next_sibling()?;
+        }
+        Some(current)
+    }
+
+    fn focus_child_at(shelf: &gtk4::Box, index: usize) {
+        if let Some(child) = Self::child_at(shelf, index) {
+            child.grab_focus();
         }
     }
 

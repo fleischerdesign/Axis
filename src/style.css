@@ -3,10 +3,21 @@ window {
     background: transparent;
 }
 
-/* Fokus-Ringe (blaue Rahmen) deaktivieren, da wir eigene Auswahl-Logik haben */
+/* Fokus-Ringe deaktivieren, da wir eigene Auswahl-Logik haben */
 *:focus {
     outline: none;
     box-shadow: none;
+}
+
+/* Sichtbare Fokus-Indikatoren nur bei Tastatur-Navigation */
+button:focus-visible,
+entry:focus-visible {
+    outline: 2px solid #3584e4;
+    outline-offset: 2px;
+}
+
+.qs-entry:focus-visible {
+    outline: none; /* Hat eigenen blauen Border+Glow via .qs-entry:focus */
 }
 
 /* The Island Component */
@@ -434,4 +445,9 @@ levelbar.osd-level-bar block.filled {
 
 levelbar.osd-level-bar block.empty {
     background-color: transparent;
+}
+
+/* Notification wrapper (gestures need a clickable background) */
+.notification-wrapper {
+    background-color: rgba(0, 0, 0, 0.01);
 }
