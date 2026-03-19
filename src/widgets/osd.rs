@@ -9,7 +9,6 @@ struct OsdModule {
     container: gtk4::Revealer,
     level_bar: gtk4::LevelBar,
     icon: gtk4::Image,
-    hide_timeout: Rc<RefCell<Option<gtk4::glib::SourceId>>>,
 }
 
 impl OsdModule {
@@ -51,44 +50,21 @@ impl OsdModule {
             container,
             level_bar,
             icon,
-            hide_timeout: Rc::new(RefCell::new(None)),
         }
     }
 
-    fn update(&self, value: f64, icon_name: &str, window: &gtk4::ApplicationWindow) {
-        if let Some(src) = self.hide_timeout.borrow_mut().take() {
-            src.remove();
-        }
-
+    fn show(&self, value: f64, icon_name: &str) {
         self.level_bar.set_value(value);
         self.icon.set_icon_name(Some(icon_name));
-
-        if !window.is_visible() {
-            window.set_visible(true);
-        }
-
         self.container.set_reveal_child(true);
+    }
 
-        let rev_hide = self.container.clone();
-        let hide_timeout_c = self.hide_timeout.clone();
-        let win = window.clone();
+    fn hide(&self) {
+        self.container.set_reveal_child(false);
+    }
 
-        let src = gtk4::glib::timeout_add_local_once(Duration::from_secs(2), move || {
-            rev_hide.set_reveal_child(false);
-
-            // Wenn nach dem Ausfaden kein OSD mehr aktiv ist, verstecken wir das Fenster
-            let win_c = win.clone();
-            gtk4::glib::timeout_add_local_once(Duration::from_millis(300), move || {
-                // Hier prüfen wir später, ob noch andere Module aktiv sind (via Manager)
-                // Aber fürs Erste: Wenn dieser Revealer zu ist, ist das Fenster potenziell versteckbar
-                if !rev_hide.reveals_child() {
-                    let _ = win_c.is_visible(); // Nur um win_c zu nutzen
-                }
-            });
-            *hide_timeout_c.borrow_mut() = None;
-        });
-
-        *self.hide_timeout.borrow_mut() = Some(src);
+    fn is_active(&self) -> bool {
+        self.container.reveals_child()
     }
 }
 
@@ -96,6 +72,7 @@ pub struct OsdManager {
     window: gtk4::ApplicationWindow,
     vol_module: Rc<OsdModule>,
     bright_module: Rc<OsdModule>,
+    hide_timeout: Rc<RefCell<Option<gtk4::glib::SourceId>>>,
 }
 
 impl OsdManager {
@@ -108,7 +85,7 @@ impl OsdManager {
         window.init_layer_shell();
         window.set_layer(Layer::Overlay);
         window.set_anchor(Edge::Right, true);
-        window.set_margin(Edge::Right, 10); // Synchron mit QS/Launcher
+        window.set_margin(Edge::Right, 10);
         window.set_keyboard_mode(gtk4_layer_shell::KeyboardMode::None);
         window.set_can_focus(false);
 
@@ -126,11 +103,42 @@ impl OsdManager {
             window,
             vol_module,
             bright_module,
+            hide_timeout: Rc::new(RefCell::new(None)),
         });
 
         manager.setup_subscriptions(ctx);
 
         manager
+    }
+
+    fn reset_hide_timeout(&self) {
+        // Bestehenden Timeout canceln
+        if let Some(src) = self.hide_timeout.borrow_mut().take() {
+            src.remove();
+        }
+
+        let win = self.window.clone();
+        let vol = self.vol_module.clone();
+        let bright = self.bright_module.clone();
+        let timeout_ref = self.hide_timeout.clone();
+
+        let src = gtk4::glib::timeout_add_local_once(Duration::from_secs(2), move || {
+            // Beide Module ausblenden
+            vol.hide();
+            bright.hide();
+
+            // Nach Revealer-Animation das Fenster verstecken
+            let win_c = win.clone();
+            gtk4::glib::timeout_add_local_once(Duration::from_millis(300), move || {
+                if !vol.is_active() && !bright.is_active() {
+                    win_c.set_visible(false);
+                }
+            });
+
+            *timeout_ref.borrow_mut() = None;
+        });
+
+        *self.hide_timeout.borrow_mut() = Some(src);
     }
 
     fn setup_subscriptions(&self, ctx: AppContext) {
@@ -139,6 +147,7 @@ impl OsdManager {
         let last_vol = Rc::new(RefCell::new(None::<f64>));
         let last_mute = Rc::new(RefCell::new(None::<bool>));
 
+        let manager_vol = self.clone();
         ctx.audio.subscribe(move |data| {
             let mut changed = false;
             if let Some(lv) = *last_vol.borrow() {
@@ -171,7 +180,11 @@ impl OsdManager {
                     "audio-volume-high-symbolic"
                 };
 
-                vol_mod.update(data.volume, icon_name, &win_vol);
+                if !win_vol.is_visible() {
+                    win_vol.set_visible(true);
+                }
+                vol_mod.show(data.volume, icon_name);
+                manager_vol.reset_hide_timeout();
             }
         });
 
@@ -179,6 +192,7 @@ impl OsdManager {
         let bright_mod = self.bright_module.clone();
         let last_bright = Rc::new(RefCell::new(None::<f64>));
 
+        let manager_bright = self.clone();
         ctx.backlight.subscribe(move |data| {
             if !data.initialized {
                 return;
@@ -206,22 +220,23 @@ impl OsdManager {
                     "display-brightness-symbolic"
                 };
 
-                bright_mod.update(current_val, icon_name, &win_bright);
+                if !win_bright.is_visible() {
+                    win_bright.set_visible(true);
+                }
+                bright_mod.show(current_val, icon_name);
+                manager_bright.reset_hide_timeout();
             }
         });
+    }
+}
 
-        // Timer zum Verstecken des Fensters, wenn gar nichts mehr aktiv ist
-        let win_final = self.window.clone();
-        let vol_final = self.vol_module.clone();
-        let bright_final = self.bright_module.clone();
-        gtk4::glib::timeout_add_local(Duration::from_millis(500), move || {
-            if win_final.is_visible()
-                && !vol_final.container.reveals_child()
-                && !bright_final.container.reveals_child()
-            {
-                win_final.set_visible(false);
-            }
-            gtk4::glib::ControlFlow::Continue
-        });
+impl Clone for OsdManager {
+    fn clone(&self) -> Self {
+        Self {
+            window: self.window.clone(),
+            vol_module: self.vol_module.clone(),
+            bright_module: self.bright_module.clone(),
+            hide_timeout: self.hide_timeout.clone(),
+        }
     }
 }
