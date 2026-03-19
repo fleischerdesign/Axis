@@ -1,11 +1,11 @@
-use gtk4::prelude::*;
-use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use crate::app_context::AppContext;
 use crate::widgets::notification::NotificationCard;
-use std::time::Duration;
-use std::rc::Rc;
+use gtk4::prelude::*;
+use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
+use std::rc::Rc;
+use std::time::Duration;
 
 pub struct NotificationToastManager {
     window: gtk4::ApplicationWindow,
@@ -72,7 +72,7 @@ impl NotificationToastManager {
 
     fn add_toast(&self, data: &crate::services::notifications::Notification) {
         let card = NotificationCard::new(data, self.ctx.clone());
-        
+
         let revealer = gtk4::Revealer::builder()
             .transition_type(gtk4::RevealerTransitionType::Crossfade)
             .transition_duration(250)
@@ -80,8 +80,10 @@ impl NotificationToastManager {
 
         revealer.set_child(Some(&card.container));
         self.container.append(&revealer);
-        
-        self.active_toasts.borrow_mut().insert(data.id, revealer.clone());
+
+        self.active_toasts
+            .borrow_mut()
+            .insert(data.id, revealer.clone());
 
         if !self.window.is_visible() {
             self.window.set_visible(true);
@@ -98,10 +100,10 @@ impl NotificationToastManager {
         gtk4::glib::timeout_add_local_once(Duration::from_secs(5), move || {
             if let Some(revealer) = active_toasts_c.borrow_mut().remove(&id) {
                 revealer.set_reveal_child(false);
-                
+
                 let container_cc = container_c.clone();
                 let window_cc = window_c.clone();
-                
+
                 gtk4::glib::timeout_add_local_once(Duration::from_millis(280), move || {
                     container_cc.remove(&revealer);
                     if container_cc.first_child().is_none() {
@@ -115,10 +117,10 @@ impl NotificationToastManager {
     fn remove_toast_by_id(&self, id: u32) {
         if let Some(revealer) = self.active_toasts.borrow_mut().remove(&id) {
             revealer.set_reveal_child(false);
-            
+
             let container_c = self.container.clone();
             let window_c = self.window.clone();
-            
+
             gtk4::glib::timeout_add_local_once(Duration::from_millis(280), move || {
                 container_c.remove(&revealer);
                 if container_c.first_child().is_none() {

@@ -202,10 +202,13 @@ impl LauncherPopup {
                     list_c.select_row(Some(&row));
 
                     // Scroll so the selected row is centered in the viewport.
-                    // translate_coordinates() gives the real Y offset of the row
+                    // compute_point() gives the real Y offset of the row
                     // within the list — no hardcoded heights needed.
                     let adj = scrolled_c.vadjustment();
-                    if let Some((_, row_y)) = row.translate_coordinates(&list_c, 0.0, 0.0) {
+                    if let Some(point) =
+                        row.compute_point(&list_c, &gtk4::graphene::Point::new(0.0, 0.0))
+                    {
+                        let row_y = point.y() as f64;
                         let row_h = row.height() as f64;
                         let page = adj.page_size();
                         let target =

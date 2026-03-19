@@ -1,10 +1,10 @@
-use gtk4::prelude::*;
-use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use crate::app_context::AppContext;
 use crate::widgets::notification::NotificationCard;
-use std::rc::Rc;
+use gtk4::prelude::*;
+use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 use std::time::Duration;
 
 const ARCHIVE_MARGIN_BOTTOM: i32 = 76;
@@ -47,22 +47,22 @@ impl NotificationArchiveManager {
         main_revealer.set_child(Some(&list_box));
         window.set_child(Some(&main_revealer));
 
-        let manager = Rc::new(Self { 
-            window, 
+        let manager = Rc::new(Self {
+            window,
             main_revealer,
-            list_box, 
+            list_box,
             qs_content: qs_content.clone(),
             hide_timeout: Rc::new(RefCell::new(None)),
             active_items: Rc::new(RefCell::new(HashMap::new())),
             ctx: ctx.clone(),
         });
-        
+
         // Dynamische Höhenanpassung
         let window_c = manager.window.clone();
         let qs_c = manager.qs_content.clone();
         manager.window.add_tick_callback(move |_, _| {
             if window_c.is_visible() {
-                let height = qs_c.allocated_height();
+                let height = qs_c.height();
                 if height > 50 {
                     window_c.set_margin(Edge::Bottom, height + ARCHIVE_MARGIN_BOTTOM);
                 }
@@ -92,11 +92,12 @@ impl NotificationArchiveManager {
             src.remove();
         }
 
-        let height = self.qs_content.allocated_height();
+        let height = self.qs_content.height();
         if height > 50 {
-            self.window.set_margin(Edge::Bottom, height + ARCHIVE_MARGIN_BOTTOM);
+            self.window
+                .set_margin(Edge::Bottom, height + ARCHIVE_MARGIN_BOTTOM);
         }
-        
+
         if self.active_items.borrow().is_empty() {
             return;
         }
@@ -137,9 +138,9 @@ impl NotificationArchiveManager {
         for id in to_remove {
             if let Some(revealer) = active_items.remove(&id) {
                 revealer.set_reveal_child(false);
-                
+
                 let list_box_c = self.list_box.clone();
-                
+
                 // Nach der Animation komplett aus dem DOM entfernen
                 gtk4::glib::timeout_add_local_once(Duration::from_millis(280), move || {
                     list_box_c.remove(&revealer);
@@ -150,7 +151,7 @@ impl NotificationArchiveManager {
         // Wenn wir in sync() sind und keine aktiven Items mehr haben,
         // FENSTER KOMPLETT VERSTECKEN! Sonst bleiben Layer-Shell Artefakte hängen.
         if active_items.is_empty() {
-             self.hide_archive();
+            self.hide_archive();
         }
 
         // 2. Neue Nachrichten hinzufügen (Sanftes Fade-In)
@@ -158,7 +159,7 @@ impl NotificationArchiveManager {
         for n in &data.notifications {
             if !active_items.contains_key(&n.id) {
                 let card = NotificationCard::new(n, self.ctx.clone());
-                
+
                 // Jede Karte bekommt ihren eigenen Revealer
                 let revealer = gtk4::Revealer::builder()
                     .transition_type(gtk4::RevealerTransitionType::Crossfade)
@@ -168,9 +169,9 @@ impl NotificationArchiveManager {
 
                 revealer.set_child(Some(&card.container));
                 self.list_box.append(&revealer);
-                
+
                 active_items.insert(n.id, revealer.clone());
-                
+
                 // Einblenden
                 gtk4::glib::timeout_add_local_once(Duration::from_millis(10), move || {
                     revealer.set_reveal_child(true);
@@ -179,7 +180,10 @@ impl NotificationArchiveManager {
         }
 
         // Wenn wir neue Nachrichten bekommen haben und das QS offen ist, müssen wir das Archiv sichtbar machen
-        if !active_items.is_empty() && self.window.is_visible() && !self.main_revealer.reveals_child() {
+        if !active_items.is_empty()
+            && self.window.is_visible()
+            && !self.main_revealer.reveals_child()
+        {
             self.main_revealer.set_reveal_child(true);
         }
     }

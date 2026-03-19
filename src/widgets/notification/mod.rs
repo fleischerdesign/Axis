@@ -1,16 +1,16 @@
-pub mod toast;
 pub mod archive;
+pub mod toast;
 
-use gtk4::prelude::*;
-use crate::services::notifications::Notification;
 use crate::app_context::AppContext;
 use crate::services::notifications::server::NotificationCmd;
+use crate::services::notifications::Notification;
+use gtk4::prelude::*;
 
 // Helper für relative Zeitstempel
 fn format_time(timestamp: i64) -> String {
     let now = chrono::Local::now().timestamp();
     let diff = now - timestamp;
-    
+
     if diff < 60 {
         "jetzt".to_string()
     } else if diff < 3600 {
@@ -37,14 +37,19 @@ impl NotificationCard {
 
         // Fast unsichtbarer Hintergrund, damit GTK den Bereich als "klickbar" ansieht
         let wrap_provider = gtk4::CssProvider::new();
-        wrap_provider.load_from_data(".notification-wrapper { background-color: rgba(0, 0, 0, 0.01); }");
-        container.style_context().add_provider(&wrap_provider, gtk4::STYLE_PROVIDER_PRIORITY_USER);
+        wrap_provider
+            .load_from_string(".notification-wrapper { background-color: rgba(0, 0, 0, 0.01); }");
+        gtk4::style_context_add_provider_for_display(
+            &gtk4::gdk::Display::default().expect("No display"),
+            &wrap_provider,
+            gtk4::STYLE_PROVIDER_PRIORITY_USER,
+        );
         container.add_css_class("notification-wrapper");
 
         // INNERE KARTE: Das eigentliche visuelle Widget
         let card = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
         card.add_css_class("notification-card");
-        
+
         let instance_class = format!("notification-card-{}", data.id);
         card.add_css_class(&instance_class);
 
@@ -58,7 +63,7 @@ impl NotificationCard {
             gtk4::Image::from_icon_name("dialog-information-symbolic")
         };
         app_icon.set_pixel_size(16);
-        
+
         let app_label = gtk4::Label::builder()
             .label(&data.app_name)
             .halign(gtk4::Align::Start)
@@ -145,7 +150,7 @@ impl NotificationCard {
                     .label(&action.label)
                     .css_classes(vec!["notification-action-btn".to_string()])
                     .build();
-                
+
                 let tx = ctx.notifications_tx.clone();
                 let key = action.key.clone();
                 let id_action = data.id;
@@ -170,7 +175,7 @@ impl NotificationCard {
         let tx_click = ctx.notifications_tx.clone();
         let id_click = data.id;
         let has_default = data.actions.iter().any(|a| a.key == "default");
-        
+
         let was_swiped_click = was_swiped.clone();
         click.connect_pressed(move |_, _, _, _| {
             if was_swiped_click.get() {
@@ -186,14 +191,18 @@ impl NotificationCard {
         // --- SWIPE TO DISMISS GESTURES ---
         // Der Provider wird auf die innere Karte angewandt
         let provider = gtk4::CssProvider::new();
-        card.style_context().add_provider(&provider, gtk4::STYLE_PROVIDER_PRIORITY_USER);
+        gtk4::style_context_add_provider_for_display(
+            &gtk4::gdk::Display::default().expect("No display"),
+            &provider,
+            gtk4::STYLE_PROVIDER_PRIORITY_USER,
+        );
 
         // 1. MOUSE / TOUCH DRAG (Klicken & Ziehen)
         let drag = gtk4::GestureDrag::new();
         drag.set_propagation_phase(gtk4::PropagationPhase::Capture);
         let tx_drag = ctx.notifications_tx.clone();
         let id_drag = data.id;
-        
+
         let is_dragging_drag = is_dragging.clone();
         drag.connect_drag_begin(move |_, _, _| {
             is_dragging_drag.set(true);
@@ -205,19 +214,21 @@ impl NotificationCard {
             let x = offset_x.clamp(-380.0, 380.0);
             let progress = (x.abs() / 150.0).clamp(0.0, 1.0);
             let opacity = 1.0 - progress;
-            
+
             let css = format!(
-                ".{} {{ transform: translateX({}px); opacity: {:.2}; transition: none; }}", 
-                class_c, x.round() as i32, opacity
+                ".{} {{ transform: translateX({}px); opacity: {:.2}; transition: none; }}",
+                class_c,
+                x.round() as i32,
+                opacity
             );
-            provider_c.load_from_data(css.as_str());
+            provider_c.load_from_string(css.as_str());
         });
 
         let provider_drag_end = provider.clone();
         let class_drag_end = instance_class.clone();
         let was_swiped_drag = was_swiped.clone();
         let is_dragging_end = is_dragging.clone();
-        
+
         drag.connect_drag_end(move |_, offset_x, _| {
             is_dragging_end.set(false);
             
@@ -234,29 +245,31 @@ impl NotificationCard {
                     ".{} {{ transform: translateX(0px); opacity: 1.0; transition: all 0.2s ease-out; }}", 
                     class_drag_end
                 );
-                provider_drag_end.load_from_data(css.as_str());
+                provider_drag_end.load_from_string(css.as_str());
             }
         });
         container.add_controller(drag);
 
         // 2. TRACKPAD SWIPE (2-Finger Scroll für Touchpads)
         let scroll = gtk4::EventControllerScroll::new(
-            gtk4::EventControllerScrollFlags::HORIZONTAL | gtk4::EventControllerScrollFlags::KINETIC
+            gtk4::EventControllerScrollFlags::HORIZONTAL
+                | gtk4::EventControllerScrollFlags::KINETIC,
         );
         scroll.set_propagation_phase(gtk4::PropagationPhase::Capture);
         scroll.connect_scroll_begin(|_| {});
 
         let acc_dx = std::rc::Rc::new(std::cell::Cell::new(0.0));
-        let scroll_timeout = std::rc::Rc::new(std::cell::RefCell::new(None::<gtk4::glib::SourceId>));
+        let scroll_timeout =
+            std::rc::Rc::new(std::cell::RefCell::new(None::<gtk4::glib::SourceId>));
         let tx_scroll = ctx.notifications_tx.clone();
         let id_scroll = data.id;
-        
+
         let acc_dx_c = acc_dx.clone();
         let provider_scroll_c = provider.clone();
         let timeout_c = scroll_timeout.clone();
         let class_scroll = instance_class.clone();
         let is_dragging_scroll = is_dragging.clone();
-        
+
         scroll.connect_scroll(move |_, dx, _| {
             if is_dragging_scroll.get() {
                 return gtk4::glib::Propagation::Stop;
@@ -275,7 +288,7 @@ impl NotificationCard {
                 ".{} {{ transform: translateX({}px); opacity: {:.2}; transition: none; }}", 
                 class_scroll, x.round() as i32, opacity
             );
-            provider_scroll_c.load_from_data(css.as_str());
+            provider_scroll_c.load_from_string(css.as_str());
 
             if x.abs() > 120.0 {
                 let _ = tx_scroll.try_send(NotificationCmd::Close(id_scroll));
@@ -296,7 +309,7 @@ impl NotificationCard {
                     ".{} {{ transform: translateX(0px); opacity: 1.0; transition: all 0.3s ease-out; }}", 
                     class_scroll_end
                 );
-                prov_end.load_from_data(css.as_str());
+                prov_end.load_from_string(css.as_str());
                 acc_end.set(0.0);
                 *timeout_end.borrow_mut() = None;
             });
@@ -312,7 +325,7 @@ impl NotificationCard {
                 ".{} {{ transform: translateX(0px); opacity: 1.0; transition: all 0.3s ease-out; }}", 
                 class_end
             );
-            provider_end.load_from_data(css.as_str());
+            provider_end.load_from_string(css.as_str());
             acc_dx.set(0.0);
         });
 
