@@ -6,13 +6,19 @@ pub struct ListRow {
 }
 
 impl ListRow {
-    pub fn new(label: &str, icon: &str, active: bool, sublabel: Option<&str>, show_check: bool) -> Self {
+    pub fn new(
+        label: &str,
+        icon: &str,
+        active: bool,
+        sublabel: Option<&str>,
+        show_check: bool,
+    ) -> Self {
         let container = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
         let button = gtk4::Button::builder()
             .css_classes(vec!["list-row".to_string()])
             .focusable(false)
             .build();
-        
+
         if active {
             button.add_css_class("active");
         }

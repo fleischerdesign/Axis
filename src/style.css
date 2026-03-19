@@ -141,8 +141,25 @@ window {
     padding: 0;
 }
 
-.qs-list row:hover, .qs-list row:selected {
+/* Quick Settings: Selektion komplett ausblenden (Buttons haben eigene Styles) */
+.qs-list:not(.launcher-list) row:hover,
+.qs-list:not(.launcher-list) row:selected {
     background: transparent;
+}
+
+/* Launcher: Selektion sichtbar machen */
+.launcher-list row.launcher-row {
+    border-radius: 8px;
+    transition: background 100ms ease;
+}
+
+.launcher-list row.launcher-row:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.launcher-list row.launcher-row:selected {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #3584e4;
 }
 
 .list-row.active {
