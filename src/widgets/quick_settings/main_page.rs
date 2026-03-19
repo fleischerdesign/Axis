@@ -357,8 +357,8 @@ impl MainPage {
                 "battery-full-symbolic"
             };
             icon.set_icon_name(Some(icon_name));
+        } else {
+            btn.set_visible(false);
         }
-        // has_battery == false: entweder noch kein Update vom Service,
-        // oder Gerät hat wirklich keine Batterie → Button bleibt wie er ist
     }
 }
