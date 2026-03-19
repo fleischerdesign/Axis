@@ -142,8 +142,8 @@ window {
 }
 
 /* Quick Settings: Selektion komplett ausblenden (Buttons haben eigene Styles) */
-.qs-list:not(.launcher-list) row:hover,
-.qs-list:not(.launcher-list) row:selected {
+.qs-list:not(.launcher-list) row:not(.qs-wifi-item):hover,
+.qs-list:not(.launcher-list) row:not(.qs-wifi-item):selected {
     background: transparent;
 }
 
@@ -190,6 +190,15 @@ window {
 .launcher-details {
     border-left: 1px solid rgba(255, 255, 255, 0.1);
     padding: 12px;
+}
+
+.qs-list .qs-wifi-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+}
+
+.qs-list .qs-wifi-item .list-row:hover {
+    background: transparent;
 }
 
 .qs-wifi-item.expanded .list-row {

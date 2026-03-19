@@ -105,7 +105,6 @@ fn build_ap_row(
 
     let auth_revealer = build_auth_revealer(&ap.path, &ap.ssid, tx);
     row.container.append(&auth_revealer);
-    row.container.add_css_class("qs-wifi-item");
 
     let tx = tx.clone();
     let path = ap.path.clone();
@@ -196,7 +195,13 @@ impl WifiPage {
             }
 
             for ap in &data.access_points {
-                list_c.append(&build_ap_row(ap, &tx));
+                let list_row = gtk4::ListBoxRow::builder()
+                    .css_classes(vec!["qs-wifi-item".to_string()])
+                    .selectable(false)
+                    .activatable(false)
+                    .build();
+                list_row.set_child(Some(&build_ap_row(ap, &tx)));
+                list_c.append(&list_row);
             }
 
             if data.access_points.is_empty() && data.is_wifi_enabled {
