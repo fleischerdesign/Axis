@@ -1,5 +1,8 @@
 use async_channel::{bounded, Receiver};
-use niri_ipc::{socket::Socket, Output, Request, Response, Window, Workspace, Event};
+use niri_ipc::{
+    socket::Socket, Action, Event, Output, Request, Response, Window, Workspace,
+    WorkspaceReferenceArg,
+};
 use std::collections::HashMap;
 use std::thread;
 use std::time::Duration;
@@ -13,11 +16,16 @@ pub struct NiriData {
 
 impl PartialEq for NiriData {
     fn eq(&self, other: &Self) -> bool {
-        if self.workspaces.len() != other.workspaces.len() || self.windows.len() != other.windows.len() {
+        if self.workspaces.len() != other.workspaces.len()
+            || self.windows.len() != other.windows.len()
+        {
             return false;
         }
         // Vergleich der Workspaces
-        let ws_eq = self.workspaces.iter().zip(&other.workspaces)
+        let ws_eq = self
+            .workspaces
+            .iter()
+            .zip(&other.workspaces)
             .all(|(a, b)| a.id == b.id && a.is_active == b.is_active);
         // Vergleich der Fenster (IDs und Fokus reichen für UI-Update-Trigger)
         let win_eq = self.windows.iter().zip(&other.windows).all(|(a, b)| {
@@ -33,39 +41,37 @@ impl NiriService {
     pub fn spawn() -> Receiver<NiriData> {
         let (data_tx, data_rx) = bounded(10);
 
-        thread::spawn(move || {
-            loop {
-                let client_event = Socket::connect();
-                let client_query = Socket::connect();
+        thread::spawn(move || loop {
+            let client_event = Socket::connect();
+            let client_query = Socket::connect();
 
-                if let (Ok(mut events_sock), Ok(mut query_sock)) = (client_event, client_query) {
-                    println!("Niri: Connected (Dual Socket Mode)");
-                    
-                    if let Some(data) = Self::fetch_full_state(&mut query_sock) {
-                        let _ = data_tx.send_blocking(data);
-                    }
+            if let (Ok(mut events_sock), Ok(mut query_sock)) = (client_event, client_query) {
+                println!("Niri: Connected (Dual Socket Mode)");
 
-                    if let Ok(Ok(Response::Handled)) = events_sock.send(Request::EventStream) {
-                        let mut read_event = events_sock.read_events();
-                        
-                        while let Ok(event) = read_event() {
-                            match event {
-                                Event::WorkspacesChanged { .. } | 
-                                Event::WorkspaceActivated { .. } |
-                                Event::WindowsChanged { .. } |
-                                Event::WindowOpenedOrChanged { .. } |
-                                Event::WindowClosed { .. } => {
-                                    if let Some(data) = Self::fetch_full_state(&mut query_sock) {
-                                        let _ = data_tx.send_blocking(data);
-                                    }
+                if let Some(data) = Self::fetch_full_state(&mut query_sock) {
+                    let _ = data_tx.send_blocking(data);
+                }
+
+                if let Ok(Ok(Response::Handled)) = events_sock.send(Request::EventStream) {
+                    let mut read_event = events_sock.read_events();
+
+                    while let Ok(event) = read_event() {
+                        match event {
+                            Event::WorkspacesChanged { .. }
+                            | Event::WorkspaceActivated { .. }
+                            | Event::WindowsChanged { .. }
+                            | Event::WindowOpenedOrChanged { .. }
+                            | Event::WindowClosed { .. } => {
+                                if let Some(data) = Self::fetch_full_state(&mut query_sock) {
+                                    let _ = data_tx.send_blocking(data);
                                 }
-                                _ => {}
                             }
+                            _ => {}
                         }
                     }
                 }
-                thread::sleep(Duration::from_secs(1));
             }
+            thread::sleep(Duration::from_secs(1));
         });
 
         data_rx
@@ -90,5 +96,15 @@ impl NiriService {
         } else {
             None
         }
+    }
+
+    pub fn switch_to_workspace(ws_id: u64) {
+        thread::spawn(move || {
+            if let Ok(mut sock) = Socket::connect() {
+                let _ = sock.send(Request::Action(Action::FocusWorkspace {
+                    reference: WorkspaceReferenceArg::Id(ws_id),
+                }));
+            }
+        });
     }
 }

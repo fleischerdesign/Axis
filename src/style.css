@@ -250,6 +250,9 @@ window {
     padding: 16px;
     border-radius: 20px;
     transition: all 0.2s;
+    background: none;
+    border: none;
+    box-shadow: none;
 }
 
 .workspace-card.active {

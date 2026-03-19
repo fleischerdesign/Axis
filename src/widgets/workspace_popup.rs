@@ -1,4 +1,5 @@
 use crate::app_context::AppContext;
+use crate::services::niri::NiriService;
 use crate::shell::ShellPopup;
 use crate::widgets::base::PopupBase;
 use gtk4::prelude::*;
@@ -11,8 +12,12 @@ pub struct WorkspacePopup {
 }
 
 impl ShellPopup for WorkspacePopup {
-    fn id(&self) -> &str { "ws" }
-    fn is_open(&self) -> bool { *self.base.is_open.borrow() }
+    fn id(&self) -> &str {
+        "ws"
+    }
+    fn is_open(&self) -> bool {
+        *self.base.is_open.borrow()
+    }
 
     fn close(&self) {
         self.base.close();
@@ -29,7 +34,11 @@ impl ShellPopup for WorkspacePopup {
 }
 
 impl WorkspacePopup {
-    pub fn new(app: &libadwaita::Application, ctx: AppContext, on_state_change: impl Fn() + 'static) -> Self {
+    pub fn new(
+        app: &libadwaita::Application,
+        ctx: AppContext,
+        on_state_change: impl Fn() + 'static,
+    ) -> Self {
         let base = PopupBase::new(app, "Carp Workspace Popup", false);
         let on_state_change = Rc::new(on_state_change);
 
@@ -50,34 +59,54 @@ impl WorkspacePopup {
         let shelf_c = shelf.clone();
         let window_c = base.window.clone();
         let is_open_c = base.is_open.clone();
+        let close_popup = Rc::new({
+            let base = base.clone();
+            move || base.close()
+        });
+        let close_popup_c = close_popup.clone();
         ctx.niri.subscribe(move |data| {
             if *is_open_c.borrow() {
-                Self::render_shelf(&shelf_c, data, &window_c);
+                Self::render_shelf(&shelf_c, data, &window_c, close_popup_c.clone());
             }
         });
 
-        Self { 
-            base, 
-            ctx, 
-        }
+        Self { base, ctx }
     }
 
     fn on_open(&self) {
         // Shelf-Inhalt vor dem Anzeigen rendern
-        if let Some(shelf) = self.base.revealer.child().and_then(|c| c.downcast::<gtk4::Box>().ok()) {
-            Self::render_shelf(&shelf, &self.ctx.niri.get(), &self.base.window);
+        if let Some(shelf) = self
+            .base
+            .revealer
+            .child()
+            .and_then(|c| c.downcast::<gtk4::Box>().ok())
+        {
+            let close_popup = Rc::new({
+                let base = self.base.clone();
+                move || base.close()
+            });
+            Self::render_shelf(&shelf, &self.ctx.niri.get(), &self.base.window, close_popup);
         }
     }
 
-    fn render_shelf(shelf: &gtk4::Box, data: &crate::services::niri::NiriData, window: &gtk4::Window) {
-        while let Some(child) = shelf.first_child() { shelf.remove(&child); }
+    fn render_shelf(
+        shelf: &gtk4::Box,
+        data: &crate::services::niri::NiriData,
+        window: &gtk4::Window,
+        close_popup: Rc<dyn Fn()>,
+    ) {
+        while let Some(child) = shelf.first_child() {
+            shelf.remove(&child);
+        }
         let mut workspaces = data.workspaces.clone();
         workspaces.sort_by_key(|w| w.id);
         let mut windows = data.windows.clone();
         windows.sort_by_key(|w| w.layout.pos_in_scrolling_layout.unwrap_or((0, 0)));
 
         for ws in workspaces {
-            let (m_w, m_h) = data.outputs.get(ws.output.as_deref().unwrap_or(""))
+            let (m_w, m_h) = data
+                .outputs
+                .get(ws.output.as_deref().unwrap_or(""))
                 .and_then(|o| o.logical.as_ref())
                 .map(|l| (l.width as f64, l.height as f64))
                 .unwrap_or((1920.0, 1080.0));
@@ -86,14 +115,22 @@ impl WorkspacePopup {
             let margin = 15.0;
             let card_h = ((card_w - margin * 2.0) / (m_w / m_h)) + margin * 2.0;
 
-            let card = gtk4::Box::builder().orientation(gtk4::Orientation::Vertical)
-                .width_request(card_w as i32).css_classes(vec!["workspace-card".to_string()]).build();
-            if ws.is_active { card.add_css_class("active"); }
+            let card = gtk4::Box::builder()
+                .orientation(gtk4::Orientation::Vertical)
+                .width_request(card_w as i32)
+                .css_classes(vec!["workspace-card".to_string()])
+                .build();
+            if ws.is_active {
+                card.add_css_class("active");
+            }
 
             let preview_scroll = gtk4::ScrolledWindow::builder()
-                .width_request(card_w as i32).height_request(card_h as i32)
-                .hscrollbar_policy(gtk4::PolicyType::Never).vscrollbar_policy(gtk4::PolicyType::Never)
-                .css_classes(vec!["workspace-preview".to_string()]).build();
+                .width_request(card_w as i32)
+                .height_request(card_h as i32)
+                .hscrollbar_policy(gtk4::PolicyType::Never)
+                .vscrollbar_policy(gtk4::PolicyType::Never)
+                .css_classes(vec!["workspace-preview".to_string()])
+                .build();
 
             let preview_inner = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
             preview_inner.set_halign(gtk4::Align::Center);
@@ -109,7 +146,9 @@ impl WorkspacePopup {
             let mut last_col_idx = None;
 
             for win in &windows {
-                if win.workspace_id != Some(ws.id) { continue; }
+                if win.workspace_id != Some(ws.id) {
+                    continue;
+                }
                 let (w_px, h_px) = win.layout.tile_size;
                 let col_idx = win.layout.pos_in_scrolling_layout.map(|p| p.0).unwrap_or(0);
 
@@ -125,9 +164,13 @@ impl WorkspacePopup {
                     let win_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
                     win_box.set_size_request((w_px * scale) as i32, (h_px * scale) as i32);
                     win_box.add_css_class("preview-window");
-                    if win.is_focused { win_box.add_css_class("focused"); }
+                    if win.is_focused {
+                        win_box.add_css_class("focused");
+                    }
 
-                    let app_icon = gtk4::Image::from_icon_name(win.app_id.as_deref().unwrap_or("application-x-executable"));
+                    let app_icon = gtk4::Image::from_icon_name(
+                        win.app_id.as_deref().unwrap_or("application-x-executable"),
+                    );
                     app_icon.set_pixel_size(((h_px * scale) / 2.0) as i32);
                     app_icon.set_halign(gtk4::Align::Center);
                     app_icon.set_valign(gtk4::Align::Center);
@@ -140,9 +183,22 @@ impl WorkspacePopup {
 
             card.append(&preview_scroll);
             card.append(&gtk4::Label::new(Some(&format!("Workspace {}", ws.id))));
-            shelf.append(&card);
+
+            let ws_id = ws.id;
+            let close_popup_ws = close_popup.clone();
+            let btn = gtk4::Button::new();
+            btn.add_css_class("workspace-card");
+            btn.set_child(Some(&card));
+            btn.connect_clicked(move |_| {
+                NiriService::switch_to_workspace(ws_id);
+                close_popup_ws();
+            });
+
+            shelf.append(&btn);
         }
 
-        if window.is_visible() { window.set_default_size(1, 1); }
+        if window.is_visible() {
+            window.set_default_size(1, 1);
+        }
     }
 }
