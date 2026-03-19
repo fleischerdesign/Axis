@@ -41,7 +41,7 @@ impl LauncherPopup {
         ctx: AppContext,
         on_state_change: impl Fn() + 'static,
     ) -> Self {
-        let base = PopupBase::new(app, "Carp Launcher", false);
+        let base = PopupBase::new(app, "AXIS Launcher", false);
 
         let on_change = Rc::new(on_state_change);
         let on_change_c = on_change.clone();

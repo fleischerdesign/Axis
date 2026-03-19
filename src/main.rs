@@ -31,7 +31,7 @@ fn main() {
     let _guard = runtime.enter();
 
     let application = libadwaita::Application::builder()
-        .application_id("com.github.carp.shell")
+        .application_id("com.github.axis.shell")
         .build();
 
     application.connect_activate(build_ui);

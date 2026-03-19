@@ -34,7 +34,7 @@
             pkgs.wlsunset
           ];
           shellHook = ''
-            echo "Entering Carp development environment..."
+            echo "Entering AXIS development environment..."
           '';
         };
       }

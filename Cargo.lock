@@ -161,6 +161,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
+name = "axis"
+version = "0.1.0"
+dependencies = [
+ "async-channel",
+ "brightness",
+ "chrono",
+ "futures-channel",
+ "futures-executor",
+ "futures-util",
+ "gtk4",
+ "gtk4-layer-shell",
+ "inotify",
+ "libadwaita",
+ "libpulse-binding",
+ "niri-ipc",
+ "serde",
+ "tokio",
+ "zbus",
+ "zvariant",
+]
+
+[[package]]
 name = "bitflags"
 version = "2.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -227,28 +249,6 @@ dependencies = [
  "glib-sys",
  "libc",
  "system-deps",
-]
-
-[[package]]
-name = "carp"
-version = "0.1.0"
-dependencies = [
- "async-channel",
- "brightness",
- "chrono",
- "futures-channel",
- "futures-executor",
- "futures-util",
- "gtk4",
- "gtk4-layer-shell",
- "inotify",
- "libadwaita",
- "libpulse-binding",
- "niri-ipc",
- "serde",
- "tokio",
- "zbus",
- "zvariant",
 ]
 
 [[package]]

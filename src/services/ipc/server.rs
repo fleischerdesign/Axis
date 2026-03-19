@@ -18,7 +18,7 @@ impl ShellIpcServer {
     }
 }
 
-#[interface(name = "org.carp.Shell")]
+#[interface(name = "org.axis.Shell")]
 impl ShellIpcServer {
     /// Öffnet oder schließt den App-Launcher
     async fn toggle_launcher(&self) {

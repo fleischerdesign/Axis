@@ -36,7 +36,7 @@ impl AudioService {
                 }
             };
 
-            let context = match Context::new(&*mainloop.borrow(), "carp-audio") {
+            let context = match Context::new(&*mainloop.borrow(), "axis-audio") {
                 Some(ctx) => Rc::new(RefCell::new(ctx)),
                 None => {
                     eprintln!("[AudioService] Failed to create PulseAudio context");

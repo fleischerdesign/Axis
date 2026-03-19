@@ -43,7 +43,7 @@ impl Bar {
 
         let window = gtk4::ApplicationWindow::builder()
             .application(app)
-            .title("Carp Bottom Bar")
+            .title("AXIS Bottom Bar")
             .build();
 
         window.init_layer_shell();

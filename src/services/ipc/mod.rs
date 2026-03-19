@@ -15,16 +15,16 @@ impl IpcService {
         tokio::spawn(async move {
             let conn_res = Builder::session()
                 .unwrap()
-                .name("org.carp.Shell")
+                .name("org.axis.Shell")
                 .unwrap()
-                .serve_at("/org/carp/Shell", server)
+                .serve_at("/org/axis/Shell", server)
                 .unwrap()
                 .build()
                 .await;
 
             match conn_res {
                 Ok(_conn) => {
-                    println!("IPC: D-Bus Interface 'org.carp.Shell' registered and active");
+                    println!("IPC: D-Bus Interface 'org.axis.Shell' registered and active");
                     // WICHTIG: Wir müssen die Verbindung halten!
                     // Solange dieser Future läuft, bleibt die Verbindung offen.
                     loop {

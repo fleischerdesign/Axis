@@ -42,7 +42,7 @@ impl QuickSettingsPopup {
         ctx: AppContext,
         on_state_change: impl Fn() + 'static,
     ) -> Self {
-        let base = PopupBase::new(app, "Carp Quick Settings", true);
+        let base = PopupBase::new(app, "AXIS Quick Settings", true);
         let on_state_change = Rc::new(on_state_change);
 
         let on_change_c = on_state_change.clone();

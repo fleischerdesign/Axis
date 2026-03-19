@@ -39,7 +39,7 @@ impl WorkspacePopup {
         ctx: AppContext,
         on_state_change: impl Fn() + 'static,
     ) -> Self {
-        let base = PopupBase::new(app, "Carp Workspace Popup", false);
+        let base = PopupBase::new(app, "AXIS Workspace Popup", false);
         let on_state_change = Rc::new(on_state_change);
 
         // State-Change an den Controller melden
