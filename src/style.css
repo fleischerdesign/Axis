@@ -16,8 +16,16 @@ entry:focus-visible {
     outline-offset: 2px;
 }
 
+/* Inset Focus-Ring für Elemente mit border-radius (Tiles, Rows, Cards) */
+.qs-tile button:focus-visible,
+.qs-list row:focus-visible,
+.workspace-card:focus-visible {
+    box-shadow: inset 0 0 0 2px rgba(53, 132, 228, 0.5);
+    outline: none; /* Outline wird an border-radius abgeschnitten */
+}
+
 .qs-entry:focus-visible {
-    outline: none; /* Hat eigenen blauen Border+Glow via .qs-entry:focus */
+    outline: none; /* Hat immer blauen Border+Glow via .qs-entry */
 }
 
 /* The Island Component */
@@ -56,15 +64,18 @@ entry:focus-visible {
     background-color: #3584e4;
 }
 
+.qs-tile.active button:focus-visible {
+    box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.4);
+}
+
 .qs-tile button {
     background: none;
     background-color: transparent;
     border: none;
-    border-radius: 0; /* Wir machen das manuell */
+    border-radius: 0;
     box-shadow: none;
     color: inherit;
     padding: 0 12px;
-    outline: none;
 }
 
 .qs-tile .qs-tile-main {
@@ -190,11 +201,7 @@ entry:focus-visible {
     color: white;
     border-radius: 12px;
     padding: 8px 12px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.qs-entry:focus {
-    border-color: #3584e4;
+    border: 1px solid #3584e4;
     box-shadow: 0 0 0 2px rgba(53, 132, 228, 0.3);
 }
 
@@ -251,10 +258,13 @@ entry:focus-visible {
 }
 
 .volume-slider scale slider {
+    all: unset;
     min-width: 0;
     min-height: 0;
-    opacity: 0;
-    margin: 0;
+}
+
+.volume-slider scale:focus-visible trough {
+    box-shadow: inset 0 0 0 2px rgba(53, 132, 228, 0.5);
 }
 
 .qs-battery-btn {
