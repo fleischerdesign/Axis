@@ -2,7 +2,7 @@ pub mod animations;
 pub mod bar;
 pub mod base;
 pub mod components;
-mod icons;
+pub mod icons;
 mod island;
 pub mod launcher;
 pub mod notification;

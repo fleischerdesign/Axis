@@ -205,18 +205,10 @@ impl OsdManager {
             *last_bright.borrow_mut() = Some(current_val);
 
             if changed {
-                let icon_name = if current_val < 0.33 {
-                    "display-brightness-symbolic"
-                } else if current_val < 0.66 {
-                    "display-brightness-symbolic"
-                } else {
-                    "display-brightness-symbolic"
-                };
-
                 if !win_bright.is_visible() {
                     win_bright.set_visible(true);
                 }
-                bright_mod.show(current_val, icon_name);
+                bright_mod.show(current_val, "display-brightness-symbolic");
                 manager_bright.reset_hide_timeout();
             }
         });

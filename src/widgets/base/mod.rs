@@ -1,3 +1,4 @@
+use crate::constants::REVEALER_TRANSITION_MS;
 use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 use std::cell::RefCell;
@@ -77,10 +78,13 @@ impl PopupBase {
         self.revealer.set_reveal_child(false);
 
         let win = self.window.clone();
-        gtk4::glib::timeout_add_local(Duration::from_millis(280), move || {
-            win.set_visible(false);
-            gtk4::glib::ControlFlow::Break
-        });
+        gtk4::glib::timeout_add_local(
+            Duration::from_millis(REVEALER_TRANSITION_MS as u64),
+            move || {
+                win.set_visible(false);
+                gtk4::glib::ControlFlow::Break
+            },
+        );
     }
 
     pub fn toggle(&self) {

@@ -1,4 +1,5 @@
 use crate::app_context::AppContext;
+use crate::constants::REVEALER_TRANSITION_MS;
 use crate::widgets::notification::NotificationCard;
 use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, Layer, LayerShell};
@@ -117,10 +118,13 @@ impl NotificationArchiveManager {
         self.main_revealer.set_reveal_child(false);
         let win = self.window.clone();
         let hide_timeout_c = self.hide_timeout.clone();
-        let src = gtk4::glib::timeout_add_local_once(Duration::from_millis(260), move || {
-            win.set_visible(false);
-            *hide_timeout_c.borrow_mut() = None;
-        });
+        let src = gtk4::glib::timeout_add_local_once(
+            Duration::from_millis(REVEALER_TRANSITION_MS as u64),
+            move || {
+                win.set_visible(false);
+                *hide_timeout_c.borrow_mut() = None;
+            },
+        );
         *self.hide_timeout.borrow_mut() = Some(src);
     }
 
@@ -142,9 +146,12 @@ impl NotificationArchiveManager {
                 let list_box_c = self.list_box.clone();
 
                 // Nach der Animation komplett aus dem DOM entfernen
-                gtk4::glib::timeout_add_local_once(Duration::from_millis(280), move || {
-                    list_box_c.remove(&revealer);
-                });
+                gtk4::glib::timeout_add_local_once(
+                    Duration::from_millis(REVEALER_TRANSITION_MS as u64),
+                    move || {
+                        list_box_c.remove(&revealer);
+                    },
+                );
             }
         }
 

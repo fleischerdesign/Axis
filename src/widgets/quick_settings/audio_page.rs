@@ -1,6 +1,8 @@
 use crate::app_context::AppContext;
 use crate::services::audio::{AudioCmd, SinkInputData};
 use crate::widgets::icons;
+use crate::widgets::quick_settings::components::header::QsSubPageHeader;
+use crate::widgets::quick_settings::components::slider::QsSlider;
 use gtk4::prelude::*;
 use std::cell::Cell;
 use std::rc::Rc;
@@ -13,56 +15,23 @@ impl AudioPage {
     pub fn new(ctx: AppContext, on_back: impl Fn() + 'static) -> Self {
         let container = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
 
-        // --- HEADER ---
-        let header = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
-        let back_btn = gtk4::Button::builder()
-            .icon_name("go-previous-symbolic")
-            .css_classes(vec!["qs-back-btn".to_string()])
-            .build();
+        let header = QsSubPageHeader::new("Audio");
+        header.connect_back(on_back);
+        container.append(&header.container);
 
-        let title = gtk4::Label::builder()
-            .label("Audio")
-            .halign(gtk4::Align::Start)
-            .css_classes(vec!["qs-subpage-title".to_string()])
-            .build();
-
-        header.append(&back_btn);
-        header.append(&title);
-        container.append(&header);
-
-        back_btn.connect_clicked(move |_| {
-            on_back();
-        });
-
-        // --- MASTER SLIDER (pill style like main page) ---
+        // --- MASTER SLIDER ---
         let master_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
         master_row.add_css_class("audio-master-row");
 
-        let master_overlay = gtk4::Overlay::new();
-        master_overlay.add_css_class("volume-slider");
-        master_overlay.set_hexpand(true);
-
-        let master_slider = gtk4::Scale::with_range(gtk4::Orientation::Horizontal, 0.0, 1.0, 0.01);
-        master_slider.set_hexpand(true);
-
-        let master_icon = gtk4::Image::from_icon_name("audio-volume-high-symbolic");
-        master_icon.set_pixel_size(22);
-        master_icon.set_margin_start(22);
-        master_icon.set_halign(gtk4::Align::Start);
-        master_icon.set_valign(gtk4::Align::Center);
-        master_icon.set_can_target(false);
-
-        master_overlay.set_child(Some(&master_slider));
-        master_overlay.add_overlay(&master_icon);
-
-        master_row.append(&master_overlay);
+        let master = QsSlider::new("audio-volume-high-symbolic", 0.0, 1.0, 0.01);
+        master_row.append(&master.overlay);
         container.append(&master_row);
 
-        // Master slider reactive bindings (debounce like main page)
+        // Master slider reactive bindings
         let is_updating = Rc::new(std::cell::RefCell::new(false));
 
-        let master_slider_c = master_slider.clone();
-        let master_icon_c = master_icon.clone();
+        let master_slider_c = master.slider.clone();
+        let master_icon_c = master.icon.clone();
         let is_updating_rx = is_updating.clone();
         ctx.audio.subscribe(move |data| {
             if !*is_updating_rx.borrow() {
@@ -76,7 +45,7 @@ impl AudioPage {
 
         let ctx_audio = ctx.clone();
         let is_updating_cmd = is_updating.clone();
-        master_slider.connect_value_changed(move |s| {
+        master.slider.connect_value_changed(move |s| {
             if *is_updating_cmd.borrow() {
                 return;
             }

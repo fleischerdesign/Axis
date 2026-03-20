@@ -1,4 +1,5 @@
 use crate::app_context::AppContext;
+use crate::constants::REVEALER_TRANSITION_MS;
 use crate::widgets::notification::NotificationCard;
 use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, Layer, LayerShell};
@@ -104,12 +105,15 @@ impl NotificationToastManager {
                 let container_cc = container_c.clone();
                 let window_cc = window_c.clone();
 
-                gtk4::glib::timeout_add_local_once(Duration::from_millis(280), move || {
-                    container_cc.remove(&revealer);
-                    if container_cc.first_child().is_none() {
-                        window_cc.set_visible(false);
-                    }
-                });
+                gtk4::glib::timeout_add_local_once(
+                    Duration::from_millis(REVEALER_TRANSITION_MS as u64),
+                    move || {
+                        container_cc.remove(&revealer);
+                        if container_cc.first_child().is_none() {
+                            window_cc.set_visible(false);
+                        }
+                    },
+                );
             }
         });
     }
@@ -121,12 +125,15 @@ impl NotificationToastManager {
             let container_c = self.container.clone();
             let window_c = self.window.clone();
 
-            gtk4::glib::timeout_add_local_once(Duration::from_millis(280), move || {
-                container_c.remove(&revealer);
-                if container_c.first_child().is_none() {
-                    window_c.set_visible(false);
-                }
-            });
+            gtk4::glib::timeout_add_local_once(
+                Duration::from_millis(REVEALER_TRANSITION_MS as u64),
+                move || {
+                    container_c.remove(&revealer);
+                    if container_c.first_child().is_none() {
+                        window_c.set_visible(false);
+                    }
+                },
+            );
         }
     }
 }

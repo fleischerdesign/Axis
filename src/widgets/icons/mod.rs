@@ -1,3 +1,8 @@
+pub mod base;
+pub mod wifi;
+pub mod bt;
+pub mod battery;
+
 pub fn wifi_signal_icon(strength: u8) -> &'static str {
     if strength > 75 {
         "network-wireless-signal-excellent-symbolic"

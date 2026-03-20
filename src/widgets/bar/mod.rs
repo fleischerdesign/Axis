@@ -3,6 +3,7 @@ pub mod launcher;
 pub mod status;
 
 use crate::app_context::AppContext;
+use crate::constants::{BAR_HEIGHT, BAR_HIDE_DELAY_MS, BAR_PEEK_PX};
 use crate::widgets::animations::SlideAnimator;
 use center::BarCenter;
 use launcher::BarLauncher;
@@ -14,10 +15,6 @@ use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
-
-const BAR_HEIGHT: i32 = 54;
-const PEEK_PX: i32 = 1;
-const HIDE_DELAY_MS: u64 = 300;
 
 #[derive(Clone)]
 pub struct Bar {
@@ -52,7 +49,7 @@ impl Bar {
         window.set_anchor(Edge::Left, true);
         window.set_anchor(Edge::Right, true);
         window.set_exclusive_zone(-1);
-        window.set_margin(Edge::Bottom, -(BAR_HEIGHT - PEEK_PX));
+        window.set_margin(Edge::Bottom, -(BAR_HEIGHT - BAR_PEEK_PX));
 
         // Sub-Komponenten initialisieren
         let launcher = BarLauncher::new();
@@ -132,14 +129,14 @@ impl Bar {
             let window_anim = self.window.clone();
 
             let src =
-                glib::timeout_add_local_once(Duration::from_millis(HIDE_DELAY_MS), move || {
+                glib::timeout_add_local_once(Duration::from_millis(BAR_HIDE_DELAY_MS), move || {
                     *is_visible_for_cb.borrow_mut() = false;
                     *hide_timeout_for_cb.borrow_mut() = None;
 
                     SlideAnimator::slide_margin(
                         &window_anim,
                         Edge::Bottom,
-                        -(BAR_HEIGHT - PEEK_PX),
+                        -(BAR_HEIGHT - BAR_PEEK_PX),
                         anim_source_for_cb,
                     );
                 });

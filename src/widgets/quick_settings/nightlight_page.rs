@@ -1,5 +1,6 @@
 use crate::app_context::AppContext;
 use crate::services::nightlight::NightlightCmd;
+use crate::widgets::quick_settings::components::header::QsSubPageHeader;
 use crate::widgets::QsTile;
 use gtk4::prelude::*;
 use std::cell::Cell;
@@ -18,23 +19,10 @@ impl NightlightPage {
     ) -> Self {
         let container = gtk4::Box::new(gtk4::Orientation::Vertical, 16);
 
-        // --- HEADER ---
-        let header = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
+        let header = QsSubPageHeader::new("Night Light");
+        container.append(&header.container);
 
-        let back_btn = gtk4::Button::builder()
-            .icon_name("go-previous-symbolic")
-            .css_classes(vec!["qs-back-btn".to_string()])
-            .build();
-
-        let title = gtk4::Label::builder()
-            .label("Night Light")
-            .halign(gtk4::Align::Start)
-            .css_classes(vec!["qs-subpage-title".to_string()])
-            .build();
-
-        header.append(&back_btn);
-        header.append(&title);
-        container.append(&header);
+        // back_btn wiring moved to end of function
 
         // --- CONTENT BOX (The "Box" like in BT/WiFi) ---
         let list = gtk4::ListBox::builder()
@@ -225,7 +213,7 @@ impl NightlightPage {
             updating_c.set(false);
         });
 
-        back_btn.connect_clicked(move |_| back_callback());
+        header.connect_back(back_callback);
 
         Self { container }
     }

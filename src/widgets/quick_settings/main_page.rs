@@ -4,13 +4,13 @@ use crate::services::backlight::BacklightCmd;
 use crate::services::bluetooth::BluetoothCmd;
 use crate::services::network::NetworkCmd;
 use crate::services::nightlight::NightlightCmd;
-use crate::services::niri::NiriService;
-use crate::services::power::PowerData;
+use crate::widgets::icons::bt::BtIcon;
+use crate::widgets::icons::wifi::WifiIcon;
+use crate::widgets::quick_settings::components::battery_button::BatteryButton;
+use crate::widgets::quick_settings::components::power_actions::PowerActionStack;
 use crate::widgets::{icons, QsTile};
 use gtk4::prelude::*;
-use std::cell::Cell;
 use std::rc::Rc;
-use zbus;
 
 #[derive(Clone)]
 pub struct MainPage {
@@ -19,8 +19,7 @@ pub struct MainPage {
     pub eth_tile: Rc<QsTile>,
     pub bt_tile: Rc<QsTile>,
     pub nl_tile: Rc<QsTile>,
-    action_stack: gtk4::Stack,
-    power_expanded: Rc<Cell<bool>>,
+    power_actions: Rc<PowerActionStack>,
 }
 
 impl MainPage {
@@ -115,64 +114,16 @@ impl MainPage {
         // --- BOTTOM ROW ---
         let bottom_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
 
-        let battery_content = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
-        let battery_icon = gtk4::Image::from_icon_name("battery-full-symbolic");
-        let battery_label = gtk4::Label::new(Some("...%"));
-        battery_content.append(&battery_icon);
-        battery_content.append(&battery_label);
-        let battery_btn = gtk4::Button::builder()
-            .child(&battery_content)
-            .css_classes(vec!["qs-battery-btn".to_string()])
-            .build();
+        let battery = BatteryButton::new(&ctx);
 
-        // Stack for crossfade between normal and power actions
-        let action_stack = gtk4::Stack::builder()
-            .transition_type(gtk4::StackTransitionType::Crossfade)
-            .transition_duration(200)
-            .build();
-
-        // Normal actions (visible by default)
-        let normal_actions = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
-
-        let screenshot_btn = Self::create_bottom_btn("camera-photo-symbolic");
-        let settings_btn = Self::create_bottom_btn("emblem-system-symbolic");
-        settings_btn.set_sensitive(false);
-        settings_btn.set_tooltip_text(Some("Coming soon"));
-        let lock_btn = Self::create_bottom_btn("system-lock-screen-symbolic");
-        lock_btn.set_sensitive(false);
-        lock_btn.set_tooltip_text(Some("Coming soon"));
-        let power_btn = Self::create_bottom_btn("system-shutdown-symbolic");
-
-        normal_actions.append(&screenshot_btn);
-        normal_actions.append(&settings_btn);
-        normal_actions.append(&lock_btn);
-        normal_actions.append(&power_btn);
-
-        // Power actions
-        let power_actions = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
-
-        let sleep_btn = Self::create_power_btn("media-playback-pause-symbolic", "sleep");
-        sleep_btn.set_tooltip_text(Some("Sleep"));
-        let shutdown_btn = Self::create_power_btn("system-shutdown-symbolic", "shutdown");
-        shutdown_btn.set_tooltip_text(Some("Shut Down"));
-        let restart_btn = Self::create_power_btn("system-reboot-symbolic", "restart");
-        restart_btn.set_tooltip_text(Some("Restart"));
-        let close_btn = Self::create_bottom_btn("window-close-symbolic");
-
-        power_actions.append(&sleep_btn);
-        power_actions.append(&shutdown_btn);
-        power_actions.append(&restart_btn);
-        power_actions.append(&close_btn);
-
-        action_stack.add_named(&normal_actions, Some("normal"));
-        action_stack.add_named(&power_actions, Some("power"));
+        let power_actions = Rc::new(PowerActionStack::new());
 
         let spacer = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
         spacer.set_hexpand(true);
 
-        bottom_row.append(&battery_btn);
+        bottom_row.append(&battery.btn);
         bottom_row.append(&spacer);
-        bottom_row.append(&action_stack);
+        bottom_row.append(&power_actions.stack);
 
         container.append(&grid);
         container.append(&vol_row);
@@ -239,35 +190,22 @@ impl MainPage {
         ctx.network.subscribe(move |data| {
             wifi_tile_c.set_active(data.is_wifi_enabled);
             eth_tile_c.set_active(data.is_ethernet_connected);
+        });
 
-            if data.is_wifi_enabled {
-                let icon_name = if !data.is_wifi_connected {
-                    "network-wireless-offline-symbolic"
-                } else {
-                    icons::wifi_signal_icon(data.active_strength)
-                };
-                wifi_tile_c.set_icon(icon_name);
-            } else {
-                wifi_tile_c.set_icon("network-wireless-disabled-symbolic");
-            }
+        let wifi_tile_c2 = wifi_tile.clone();
+        WifiIcon::on_change(&ctx, move |name, _visible| {
+            wifi_tile_c2.set_icon(name);
         });
 
         // Bluetooth → Tile-State
         let bt_tile_c = bt_tile.clone();
         ctx.bluetooth.subscribe(move |data| {
             bt_tile_c.set_active(data.is_powered);
+        });
 
-            if data.is_powered {
-                let any_connected = data.devices.iter().any(|d| d.is_connected);
-                let icon_name = if any_connected {
-                    "bluetooth-active-symbolic"
-                } else {
-                    "bluetooth-symbolic"
-                };
-                bt_tile_c.set_icon(icon_name);
-            } else {
-                bt_tile_c.set_icon("bluetooth-disabled-symbolic");
-            }
+        let bt_tile_c2 = bt_tile.clone();
+        BtIcon::on_change(&ctx, move |name, _visible| {
+            bt_tile_c2.set_icon(name);
         });
 
         // Nightlight → Tile-State
@@ -309,12 +247,7 @@ impl MainPage {
         // Initial style
         Self::update_highlight_style(&vol_slider, ctx.audio.get().volume, Some(&vol_arrow_c));
 
-        // Power → Batterie-Button
-        // battery_btn per Referenz über den battery_content-Parent erreichbar machen
-        let battery_btn_c = battery_btn.clone();
-        ctx.power.subscribe(move |data| {
-            Self::update_battery(&battery_label, &battery_icon, &battery_btn_c, data);
-        });
+        // BatteryButton subscribes to power data internally
 
         // Slider → AudioCmd (Gegenseite)
         let ctx_audio = ctx.clone();
@@ -368,46 +301,7 @@ impl MainPage {
                 .send_blocking(BacklightCmd::SetBrightness(val));
         });
 
-        // --- BOTTOM BUTTON ACTIONS ---
-
-        // Screenshot → Niri Screenshot UI
-        screenshot_btn.connect_clicked(move |_| {
-            NiriService::spawn_action(niri_ipc::Action::Screenshot {
-                show_pointer: false,
-                path: None,
-            });
-        });
-
-        // Power menu expand/collapse
-        let power_expanded = Rc::new(Cell::new(false));
-        let stack_expand = action_stack.clone();
-        let power_expanded_c = power_expanded.clone();
-
-        power_btn.connect_clicked(move |_| {
-            stack_expand.set_visible_child_name("power");
-            power_expanded_c.set(true);
-        });
-
-        let stack_collapse = action_stack.clone();
-        let power_expanded_c = power_expanded.clone();
-
-        close_btn.connect_clicked(move |_| {
-            stack_collapse.set_visible_child_name("normal");
-            power_expanded_c.set(false);
-        });
-
-        // Power actions via D-Bus logind
-        sleep_btn.connect_clicked(move |_| {
-            Self::power_action("Suspend");
-        });
-
-        shutdown_btn.connect_clicked(move |_| {
-            Self::power_action("PowerOff");
-        });
-
-        restart_btn.connect_clicked(move |_| {
-            Self::power_action("Reboot");
-        });
+        // PowerActionStack wires its own button actions internally
 
         Self {
             container,
@@ -415,84 +309,21 @@ impl MainPage {
             eth_tile,
             bt_tile,
             nl_tile,
-            action_stack,
-            power_expanded,
-        }
-    }
-
-    fn create_bottom_btn(icon: &str) -> gtk4::Button {
-        gtk4::Button::builder()
-            .icon_name(icon)
-            .css_classes(vec!["qs-bottom-btn".to_string()])
-            .halign(gtk4::Align::Center)
-            .valign(gtk4::Align::Center)
-            .build()
-    }
-
-    fn create_power_btn(icon: &str, css_class: &str) -> gtk4::Button {
-        gtk4::Button::builder()
-            .icon_name(icon)
-            .css_classes(vec![
-                "qs-power-btn".to_string(),
-                css_class.to_string(),
-            ])
-            .halign(gtk4::Align::Center)
-            .valign(gtk4::Align::Center)
-            .build()
-    }
-
-    fn update_battery(
-        label: &gtk4::Label,
-        icon: &gtk4::Image,
-        btn: &gtk4::Button,
-        data: &PowerData,
-    ) {
-        if data.has_battery {
-            btn.set_visible(true);
-            icon.set_visible(true);
-            label.set_text(&format!("{:.0}%", data.battery_percentage));
-            icon.set_icon_name(Some(icons::battery_icon(
-                data.battery_percentage,
-                data.is_charging,
-            )));
-        } else {
-            btn.set_visible(false);
+            power_actions,
         }
     }
 
     pub fn is_power_expanded(&self) -> bool {
-        self.power_expanded.get()
+        self.power_actions.is_power_expanded()
     }
 
     pub fn collapse_power_menu(&self) {
-        self.action_stack.set_visible_child_name("normal");
-        self.power_expanded.set(false);
-    }
-
-    fn power_action(method: &str) {
-        let method = method.to_string();
-        gtk4::glib::spawn_future_local(async move {
-            if let Ok(conn) = zbus::Connection::system().await {
-                let _ = conn
-                    .call_method(
-                        Some("org.freedesktop.login1"),
-                        "/org/freedesktop/login1",
-                        Some("org.freedesktop.login1.Manager"),
-                        method.as_str(),
-                        &(true,),
-                    )
-                    .await;
-            }
-        });
+        self.power_actions.collapse_power_menu();
     }
 
     /// When volume < max, round the highlight's right edge so it looks clean.
     /// At 100%, remove the class so it flattens against the separator/arrow.
-    fn update_highlight_style(
-        scale: &gtk4::Scale,
-        value: f64,
-        arrow: Option<&gtk4::Button>,
-    ) {
+    fn update_highlight_style(scale: &gtk4::Scale, value: f64, arrow: Option<&gtk4::Button>) {
         if value < 0.99 {
             scale.add_css_class("highlight-partial");
             if let Some(btn) = arrow {

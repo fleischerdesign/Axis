@@ -1,6 +1,8 @@
 use crate::app_context::AppContext;
 use crate::services::network::NetworkCmd;
+use crate::widgets::components::scrolled_list::ScrolledList;
 use crate::widgets::icons::wifi_signal_icon;
+use crate::widgets::quick_settings::components::header::QsSubPageHeader;
 use crate::widgets::quick_settings::components::tile::QsTile;
 use crate::widgets::ListRow;
 use gtk4::prelude::*;
@@ -134,43 +136,18 @@ impl WifiPage {
     ) -> Self {
         let container = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
 
-        // --- HEADER ---
-        let header = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
-        let back_btn = gtk4::Button::builder()
-            .icon_name("go-previous-symbolic")
-            .css_classes(vec!["qs-back-btn".to_string()])
-            .build();
+        let header = QsSubPageHeader::new("Wi-Fi Netzwerke");
+        container.append(&header.container);
 
-        let title = gtk4::Label::builder()
-            .label("Wi-Fi Netzwerke")
-            .halign(gtk4::Align::Start)
-            .css_classes(vec!["qs-subpage-title".to_string()])
-            .build();
-
-        header.append(&back_btn);
-        header.append(&title);
-        container.append(&header);
-
-        // --- LIST ---
-        let list = gtk4::ListBox::builder()
-            .css_classes(vec!["qs-list".to_string()])
-            .selection_mode(gtk4::SelectionMode::None)
-            .build();
-
-        let scrolled = gtk4::ScrolledWindow::builder()
-            .hscrollbar_policy(gtk4::PolicyType::Never)
-            .vscrollbar_policy(gtk4::PolicyType::Automatic)
-            .vexpand(true)
-            .min_content_height(300)
-            .build();
-        scrolled.set_child(Some(&list));
-        container.append(&scrolled);
+        let scrolled_list = ScrolledList::new(300);
+        scrolled_list.list.add_css_class("qs-list");
+        container.append(&scrolled_list.scrolled);
 
         // --- LOGIC ---
         let on_back = Rc::new(on_back);
-        back_btn.connect_clicked(move |_| on_back());
+        header.connect_back(move || on_back());
 
-        let list_c = list.clone();
+        let list_c = scrolled_list.list;
         let wifi_tile_c = wifi_tile.clone();
         let eth_tile_c = eth_tile.clone();
         let tx = ctx.network_tx.clone();
