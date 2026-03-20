@@ -34,37 +34,28 @@ impl AudioPage {
             on_back();
         });
 
-        // --- MASTER SLIDER ---
+        // --- MASTER SLIDER (pill style like main page) ---
         let master_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
         master_row.add_css_class("audio-master-row");
 
-        let master_icon = gtk4::Image::from_icon_name("audio-volume-high-symbolic");
-        master_icon.set_pixel_size(18);
-        master_icon.set_margin_start(4);
-        master_icon.set_valign(gtk4::Align::Center);
+        let master_overlay = gtk4::Overlay::new();
+        master_overlay.add_css_class("volume-slider");
+        master_overlay.set_hexpand(true);
 
         let master_slider = gtk4::Scale::with_range(gtk4::Orientation::Horizontal, 0.0, 1.0, 0.01);
         master_slider.set_hexpand(true);
-        master_slider.set_margin_start(8);
-        master_slider.set_margin_end(8);
 
-        let master_pct = gtk4::Label::builder()
-            .label("100%")
-            .css_classes(vec!["audio-pct-label".to_string()])
-            .width_chars(4)
-            .xalign(1.0)
-            .build();
+        let master_icon = gtk4::Image::from_icon_name("audio-volume-high-symbolic");
+        master_icon.set_pixel_size(22);
+        master_icon.set_margin_start(22);
+        master_icon.set_halign(gtk4::Align::Start);
+        master_icon.set_valign(gtk4::Align::Center);
+        master_icon.set_can_target(false);
 
-        let master_mute = gtk4::Button::builder()
-            .icon_name("audio-volume-high-symbolic")
-            .css_classes(vec!["audio-mute-btn".to_string()])
-            .tooltip_text("Mute")
-            .build();
+        master_overlay.set_child(Some(&master_slider));
+        master_overlay.add_overlay(&master_icon);
 
-        master_row.append(&master_icon);
-        master_row.append(&master_slider);
-        master_row.append(&master_pct);
-        master_row.append(&master_mute);
+        master_row.append(&master_overlay);
         container.append(&master_row);
 
         // Master slider reactive bindings (debounce like main page)
@@ -72,7 +63,6 @@ impl AudioPage {
 
         let master_slider_c = master_slider.clone();
         let master_icon_c = master_icon.clone();
-        let master_pct_c = master_pct.clone();
         let is_updating_rx = is_updating.clone();
         ctx.audio.subscribe(move |data| {
             if !*is_updating_rx.borrow() {
@@ -82,7 +72,6 @@ impl AudioPage {
             }
             let icon_name = icons::volume_icon(data.volume, data.is_muted);
             master_icon_c.set_icon_name(Some(icon_name));
-            master_pct_c.set_text(&format!("{:.0}%", (data.volume * 100.0).round()));
         });
 
         let ctx_audio = ctx.clone();
@@ -94,22 +83,6 @@ impl AudioPage {
             let _ = ctx_audio
                 .audio_tx
                 .send_blocking(AudioCmd::SetVolume(s.value()));
-        });
-
-        // Mute toggle
-        let ctx_audio_m = ctx.clone();
-        let audio_store_m = ctx.audio.clone();
-        master_mute.connect_clicked(move |btn| {
-            let data = audio_store_m.get();
-            let new_mute = !data.is_muted;
-            btn.set_icon_name(if new_mute {
-                "audio-volume-muted-symbolic"
-            } else {
-                "audio-volume-high-symbolic"
-            });
-            let _ = ctx_audio_m
-                .audio_tx
-                .send_blocking(AudioCmd::SetMute(new_mute));
         });
 
         // --- SEPARATOR ---
@@ -167,14 +140,27 @@ impl AudioPage {
     }
 
     fn build_app_row(input: &SinkInputData, ctx: &AppContext) -> gtk4::Box {
-        let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 10);
+        let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
         row.add_css_class("audio-app-row");
         row.set_margin_top(4);
         row.set_margin_bottom(4);
 
-        let icon = gtk4::Image::from_icon_name(&input.icon_name);
-        icon.set_pixel_size(18);
-        icon.set_valign(gtk4::Align::Center);
+        let slider_overlay = gtk4::Overlay::new();
+        slider_overlay.add_css_class("volume-slider");
+        slider_overlay.set_hexpand(true);
+
+        let slider = gtk4::Scale::with_range(gtk4::Orientation::Horizontal, 0.0, 1.0, 0.01);
+        slider.set_hexpand(true);
+        slider.set_value(input.volume);
+
+        let overlay_content = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+        overlay_content.set_halign(gtk4::Align::Start);
+        overlay_content.set_valign(gtk4::Align::Center);
+        overlay_content.set_margin_start(22);
+        overlay_content.set_can_target(false);
+
+        let app_icon = gtk4::Image::from_icon_name(&input.icon_name);
+        app_icon.set_pixel_size(18);
 
         let name_label = gtk4::Label::builder()
             .label(&input.name)
@@ -184,47 +170,19 @@ impl AudioPage {
             .css_classes(vec!["audio-app-name".to_string()])
             .build();
 
-        let slider = gtk4::Scale::with_range(gtk4::Orientation::Horizontal, 0.0, 1.0, 0.01);
-        slider.set_hexpand(true);
-        slider.set_value(input.volume);
+        overlay_content.append(&app_icon);
+        overlay_content.append(&name_label);
 
-        let mute_btn = gtk4::Button::builder()
-            .icon_name(if input.is_muted {
-                "audio-volume-muted-symbolic"
-            } else {
-                icons::volume_icon(input.volume, input.is_muted)
-            })
-            .css_classes(vec!["audio-app-mute".to_string()])
-            .tooltip_text("Mute")
-            .build();
+        slider_overlay.set_child(Some(&slider));
+        slider_overlay.add_overlay(&overlay_content);
 
-        row.append(&icon);
-        row.append(&name_label);
-        row.append(&slider);
-        row.append(&mute_btn);
+        row.append(&slider_overlay);
 
         // Slider → SetSinkInputVolume
         let tx = ctx.audio_tx.clone();
         let app_index = input.index;
         slider.connect_value_changed(move |s| {
             let _ = tx.send_blocking(AudioCmd::SetSinkInputVolume(app_index, s.value()));
-        });
-
-        // Mute toggle
-        let tx_m = ctx.audio_tx.clone();
-        let app_index_m = input.index;
-        let slider_c = slider.clone();
-        let mute_btn_c = mute_btn.clone();
-        let was_muted = Rc::new(Cell::new(input.is_muted));
-        mute_btn.connect_clicked(move |_| {
-            let new_mute = !was_muted.get();
-            was_muted.set(new_mute);
-            mute_btn_c.set_icon_name(if new_mute {
-                "audio-volume-muted-symbolic"
-            } else {
-                icons::volume_icon(slider_c.value(), false)
-            });
-            let _ = tx_m.send_blocking(AudioCmd::SetSinkInputMute(app_index_m, new_mute));
         });
 
         row

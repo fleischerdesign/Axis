@@ -329,101 +329,31 @@ entry:focus-visible {
 /* Audio page — master slider row */
 .audio-master-row {
     background-color: #303030;
-    border-radius: 16px;
-    padding: 8px 12px;
-}
-
-.audio-master-row scale trough {
-    min-height: 12px;
     border-radius: 999px;
-    background-color: rgba(255, 255, 255, 0.1);
-    border: none;
+    min-height: 44px;
 }
 
-.audio-master-row scale highlight {
-    min-height: 12px;
-    border-radius: 999px;
-    background-color: #3584e4;
-}
-
-.audio-master-row scale slider {
-    all: unset;
-    min-width: 0;
-    min-height: 0;
-}
-
-.audio-master-row scale:focus-visible trough {
-    box-shadow: inset 0 0 0 2px rgba(53, 132, 228, 0.5);
-}
-
-.audio-pct-label {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.6);
-    margin: 0 8px;
-    min-width: 40px;
-}
-
-.audio-mute-btn {
-    background: transparent;
-    border: none;
-    border-radius: 999px;
-    min-width: 32px;
-    min-height: 32px;
-    padding: 0;
-}
-
-.audio-mute-btn:hover {
-    background-color: rgba(255, 255, 255, 0.1);
+.audio-master-row .volume-slider scale trough,
+.audio-master-row .volume-slider scale contents {
+    background-color: transparent;
 }
 
 /* Audio page — per-app rows */
 .audio-app-row {
     background-color: #303030;
-    border-radius: 12px;
-    padding: 6px 10px;
-}
-
-.audio-app-row scale trough {
-    min-height: 8px;
     border-radius: 999px;
-    background-color: rgba(255, 255, 255, 0.1);
-    border: none;
+    min-height: 44px;
 }
 
-.audio-app-row scale highlight {
-    min-height: 8px;
-    border-radius: 999px;
-    background-color: #3584e4;
-}
-
-.audio-app-row scale slider {
-    all: unset;
-    min-width: 0;
-    min-height: 0;
-}
-
-.audio-app-row scale:focus-visible trough {
-    box-shadow: inset 0 0 0 2px rgba(53, 132, 228, 0.5);
+.audio-app-row .volume-slider scale trough,
+.audio-app-row .volume-slider scale contents {
+    background-color: transparent;
 }
 
 .audio-app-name {
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
-    min-width: 60px;
-    max-width: 120px;
-}
-
-.audio-app-mute {
-    background: transparent;
-    border: none;
-    border-radius: 999px;
-    min-width: 28px;
-    min-height: 28px;
-    padding: 0;
-}
-
-.audio-app-mute:hover {
-    background-color: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.9);
 }
 
 .qs-battery-btn {
