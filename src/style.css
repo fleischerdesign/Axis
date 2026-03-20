@@ -93,16 +93,11 @@ entry:focus-visible {
 .qs-tile .qs-tile-arrow {
     border-radius: 0 16px 16px 0;
     padding: 0 8px;
+    box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.1);
 }
 
 .qs-tile .qs-tile-arrow:hover {
     background-color: rgba(255, 255, 255, 0.1);
-}
-
-.qs-tile-separator {
-    background-color: rgba(255, 255, 255, 0.1);
-    margin: 12px 0;
-    min-width: 1px;
 }
 
 .qs-tile-label {
@@ -293,25 +288,11 @@ entry:focus-visible {
     border-radius: 999px;
 }
 
-.volume-slider-row .qs-tile-separator {
-    min-height: 100%;
-    margin: 0;
-    width: 1px;
-    background-color: rgba(255, 255, 255, 0.1);
-    align-self: stretch;
-}
-
-.volume-slider-row .qs-tile-separator.max {
-    opacity: 0;
-    width: 0;
-    min-width: 0;
-}
-
 .volume-slider-row .qs-tile-arrow {
     border-radius: 0 999px 999px 0;
     padding: 0 12px;
     background: transparent;
-    border: none;
+    box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.1);
 }
 
 .volume-slider-row .qs-tile-arrow.max {

@@ -77,20 +77,15 @@ impl MainPage {
         slider_overlay.set_child(Some(&vol_slider));
         slider_overlay.add_overlay(&vol_icon);
 
-        let vol_arrow_sep = gtk4::Separator::new(gtk4::Orientation::Vertical);
-        vol_arrow_sep.add_css_class("qs-tile-separator");
-
         let vol_arrow = gtk4::Button::builder()
             .icon_name("go-next-symbolic")
             .css_classes(vec!["qs-tile-arrow".to_string()])
             .build();
 
         vol_row.append(&slider_overlay);
-        vol_row.append(&vol_arrow_sep);
         vol_row.append(&vol_arrow);
 
         let vol_arrow_c = vol_arrow.clone();
-        let vol_sep_c = vol_arrow_sep.clone();
         vol_arrow.connect_clicked(move |_| {
             open_audio();
         });
@@ -293,7 +288,6 @@ impl MainPage {
         let is_first_rx = is_first_update.clone();
 
         let vol_arrow_sub = vol_arrow_c.clone();
-        let vol_sep_sub = vol_sep_c.clone();
         ctx.audio.subscribe(move |data| {
             let current = vol_slider_c.value();
             let diff = (current - data.volume).abs();
@@ -309,11 +303,11 @@ impl MainPage {
                 vol_icon_c.set_icon_name(Some(icon_name));
                 vol_icon_bar_c.set_icon_name(Some(icon_name));
             }
-            Self::update_highlight_style(&vol_slider_c, data.volume, Some(&vol_arrow_sub), Some(&vol_sep_sub));
+            Self::update_highlight_style(&vol_slider_c, data.volume, Some(&vol_arrow_sub));
         });
 
         // Initial style
-        Self::update_highlight_style(&vol_slider, ctx.audio.get().volume, Some(&vol_arrow_c), Some(&vol_sep_c));
+        Self::update_highlight_style(&vol_slider, ctx.audio.get().volume, Some(&vol_arrow_c));
 
         // Power → Batterie-Button
         // battery_btn per Referenz über den battery_content-Parent erreichbar machen
@@ -326,13 +320,12 @@ impl MainPage {
         let ctx_audio = ctx.clone();
         let is_updating_cmd = is_updating.clone();
         let vol_arrow_chg = vol_arrow_c;
-        let vol_sep_chg = vol_sep_c;
         vol_slider.connect_value_changed(move |s| {
             if *is_updating_cmd.borrow() {
                 return;
             }
             let val = s.value();
-            Self::update_highlight_style(s, val, Some(&vol_arrow_chg), Some(&vol_sep_chg));
+            Self::update_highlight_style(s, val, Some(&vol_arrow_chg));
             let _ = ctx_audio.audio_tx.send_blocking(AudioCmd::SetVolume(val));
         });
 
@@ -358,7 +351,7 @@ impl MainPage {
                 *brightness_is_updating_rx.borrow_mut() = true;
                 brightness_slider_c.set_value(data.percentage);
                 *brightness_is_updating_rx.borrow_mut() = false;
-                Self::update_highlight_style(&brightness_slider_c, data.percentage, None, None);
+                Self::update_highlight_style(&brightness_slider_c, data.percentage, None);
             }
         });
 
@@ -369,7 +362,7 @@ impl MainPage {
                 return;
             }
             let val = s.value();
-            Self::update_highlight_style(s, val, None, None);
+            Self::update_highlight_style(s, val, None);
             let _ = ctx_backlight
                 .backlight_tx
                 .send_blocking(BacklightCmd::SetBrightness(val));
@@ -499,23 +492,16 @@ impl MainPage {
         scale: &gtk4::Scale,
         value: f64,
         arrow: Option<&gtk4::Button>,
-        separator: Option<&gtk4::Separator>,
     ) {
         if value < 0.99 {
             scale.add_css_class("highlight-partial");
             if let Some(btn) = arrow {
                 btn.remove_css_class("max");
             }
-            if let Some(sep) = separator {
-                sep.remove_css_class("max");
-            }
         } else {
             scale.remove_css_class("highlight-partial");
             if let Some(btn) = arrow {
                 btn.add_css_class("max");
-            }
-            if let Some(sep) = separator {
-                sep.add_css_class("max");
             }
         }
     }

@@ -85,12 +85,6 @@ impl AudioPage {
                 .send_blocking(AudioCmd::SetVolume(s.value()));
         });
 
-        // --- SEPARATOR ---
-        let sep = gtk4::Separator::new(gtk4::Orientation::Horizontal);
-        sep.set_margin_top(4);
-        sep.set_margin_bottom(4);
-        container.append(&sep);
-
         // --- APP LIST ---
         let list_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
 

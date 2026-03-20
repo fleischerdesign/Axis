@@ -40,9 +40,6 @@ impl QsTile {
                 .icon_name("go-next-symbolic")
                 .css_classes(vec!["qs-tile-arrow".to_string()])
                 .build();
-            let separator = gtk4::Separator::new(gtk4::Orientation::Vertical);
-            separator.add_css_class("qs-tile-separator");
-            container.append(&separator);
             container.append(&arrow);
             arrow_btn = Some(arrow);
         }
