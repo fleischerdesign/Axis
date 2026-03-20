@@ -90,6 +90,7 @@ impl MainPage {
         vol_row.append(&vol_arrow);
 
         let vol_arrow_c = vol_arrow.clone();
+        let vol_sep_c = vol_arrow_sep.clone();
         vol_arrow.connect_clicked(move |_| {
             open_audio();
         });
@@ -292,6 +293,7 @@ impl MainPage {
         let is_first_rx = is_first_update.clone();
 
         let vol_arrow_sub = vol_arrow_c.clone();
+        let vol_sep_sub = vol_sep_c.clone();
         ctx.audio.subscribe(move |data| {
             let current = vol_slider_c.value();
             let diff = (current - data.volume).abs();
@@ -307,11 +309,11 @@ impl MainPage {
                 vol_icon_c.set_icon_name(Some(icon_name));
                 vol_icon_bar_c.set_icon_name(Some(icon_name));
             }
-            Self::update_highlight_style(&vol_slider_c, data.volume, Some(&vol_arrow_sub));
+            Self::update_highlight_style(&vol_slider_c, data.volume, Some(&vol_arrow_sub), Some(&vol_sep_sub));
         });
 
         // Initial style
-        Self::update_highlight_style(&vol_slider, ctx.audio.get().volume, Some(&vol_arrow_c));
+        Self::update_highlight_style(&vol_slider, ctx.audio.get().volume, Some(&vol_arrow_c), Some(&vol_sep_c));
 
         // Power → Batterie-Button
         // battery_btn per Referenz über den battery_content-Parent erreichbar machen
@@ -324,12 +326,13 @@ impl MainPage {
         let ctx_audio = ctx.clone();
         let is_updating_cmd = is_updating.clone();
         let vol_arrow_chg = vol_arrow_c;
+        let vol_sep_chg = vol_sep_c;
         vol_slider.connect_value_changed(move |s| {
             if *is_updating_cmd.borrow() {
                 return;
             }
             let val = s.value();
-            Self::update_highlight_style(s, val, Some(&vol_arrow_chg));
+            Self::update_highlight_style(s, val, Some(&vol_arrow_chg), Some(&vol_sep_chg));
             let _ = ctx_audio.audio_tx.send_blocking(AudioCmd::SetVolume(val));
         });
 
@@ -355,7 +358,7 @@ impl MainPage {
                 *brightness_is_updating_rx.borrow_mut() = true;
                 brightness_slider_c.set_value(data.percentage);
                 *brightness_is_updating_rx.borrow_mut() = false;
-                Self::update_highlight_style(&brightness_slider_c, data.percentage, None);
+                Self::update_highlight_style(&brightness_slider_c, data.percentage, None, None);
             }
         });
 
@@ -366,7 +369,7 @@ impl MainPage {
                 return;
             }
             let val = s.value();
-            Self::update_highlight_style(s, val, None);
+            Self::update_highlight_style(s, val, None, None);
             let _ = ctx_backlight
                 .backlight_tx
                 .send_blocking(BacklightCmd::SetBrightness(val));
@@ -492,16 +495,27 @@ impl MainPage {
 
     /// When volume < max, round the highlight's right edge so it looks clean.
     /// At 100%, remove the class so it flattens against the separator/arrow.
-    fn update_highlight_style(scale: &gtk4::Scale, value: f64, arrow: Option<&gtk4::Button>) {
+    fn update_highlight_style(
+        scale: &gtk4::Scale,
+        value: f64,
+        arrow: Option<&gtk4::Button>,
+        separator: Option<&gtk4::Separator>,
+    ) {
         if value < 0.99 {
             scale.add_css_class("highlight-partial");
             if let Some(btn) = arrow {
                 btn.remove_css_class("max");
             }
+            if let Some(sep) = separator {
+                sep.remove_css_class("max");
+            }
         } else {
             scale.remove_css_class("highlight-partial");
             if let Some(btn) = arrow {
                 btn.add_css_class("max");
+            }
+            if let Some(sep) = separator {
+                sep.add_css_class("max");
             }
         }
     }

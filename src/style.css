@@ -301,6 +301,12 @@ entry:focus-visible {
     align-self: stretch;
 }
 
+.volume-slider-row .qs-tile-separator.max {
+    opacity: 0;
+    width: 0;
+    min-width: 0;
+}
+
 .volume-slider-row .qs-tile-arrow {
     border-radius: 0 999px 999px 0;
     padding: 0 12px;
