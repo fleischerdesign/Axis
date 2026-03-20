@@ -106,7 +106,7 @@ impl LauncherPopup {
         detail_box.add_css_class("launcher-details");
         let detail_title = gtk4::Label::builder()
             .halign(gtk4::Align::Start)
-            .css_classes(vec!["qs-subpage-title"])
+            .css_classes(vec!["subpage-title"])
             .wrap(true)
             .build();
         let detail_desc = gtk4::Label::builder()

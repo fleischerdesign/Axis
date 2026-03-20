@@ -1,19 +1,19 @@
 use gtk4::prelude::*;
 
-pub struct QsTile {
+pub struct ToggleTile {
     pub container: gtk4::Box,
     pub main_btn: gtk4::Button,
     pub arrow_btn: Option<gtk4::Button>,
     pub icon_img: gtk4::Image,
 }
 
-impl QsTile {
+impl ToggleTile {
     pub fn new(label: &str, icon: &str, has_arrow: bool) -> Self {
         let container = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
-        container.add_css_class("qs-tile");
+        container.add_css_class("tile");
 
         let main_btn = gtk4::Button::builder()
-            .css_classes(vec!["qs-tile-main".to_string()])
+            .css_classes(vec!["tile-main".to_string()])
             .hexpand(true)
             .build();
         if !has_arrow {
@@ -26,7 +26,7 @@ impl QsTile {
         let text_label = gtk4::Label::builder()
             .label(label)
             .halign(gtk4::Align::Start)
-            .css_classes(vec!["qs-tile-label".to_string()])
+            .css_classes(vec!["tile-label".to_string()])
             .build();
 
         main_content.append(&icon_img);
@@ -38,7 +38,7 @@ impl QsTile {
         if has_arrow {
             let arrow = gtk4::Button::builder()
                 .icon_name("go-next-symbolic")
-                .css_classes(vec!["qs-tile-arrow".to_string()])
+                .css_classes(vec!["tile-arrow".to_string()])
                 .build();
             container.append(&arrow);
             arrow_btn = Some(arrow);

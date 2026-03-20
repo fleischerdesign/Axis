@@ -1,8 +1,8 @@
 use crate::app_context::AppContext;
 use crate::services::audio::{AudioCmd, SinkInputData};
+use crate::widgets::components::icon_slider::IconSlider;
 use crate::widgets::icons;
-use crate::widgets::quick_settings::components::header::QsSubPageHeader;
-use crate::widgets::quick_settings::components::slider::QsSlider;
+use crate::widgets::components::subpage_header::SubPageHeader;
 use gtk4::prelude::*;
 use std::cell::Cell;
 use std::rc::Rc;
@@ -15,7 +15,7 @@ impl AudioPage {
     pub fn new(ctx: AppContext, on_back: impl Fn() + 'static) -> Self {
         let container = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
 
-        let header = QsSubPageHeader::new("Audio");
+        let header = SubPageHeader::new("Audio");
         header.connect_back(on_back);
         container.append(&header.container);
 
@@ -23,7 +23,8 @@ impl AudioPage {
         let master_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
         master_row.add_css_class("audio-master-row");
 
-        let master = QsSlider::new("audio-volume-high-symbolic", 0.0, 1.0, 0.01);
+        let master = IconSlider::new("audio-volume-high-symbolic", 0.0, 1.0, 0.01);
+        master.overlay.add_css_class("volume-slider");
         master_row.append(&master.overlay);
         container.append(&master_row);
 

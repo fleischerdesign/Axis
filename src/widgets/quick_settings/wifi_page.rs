@@ -2,8 +2,8 @@ use crate::app_context::AppContext;
 use crate::services::network::NetworkCmd;
 use crate::widgets::components::scrolled_list::ScrolledList;
 use crate::widgets::icons::wifi_signal_icon;
-use crate::widgets::quick_settings::components::header::QsSubPageHeader;
-use crate::widgets::quick_settings::components::tile::QsTile;
+use crate::widgets::components::subpage_header::SubPageHeader;
+use crate::widgets::ToggleTile;
 use crate::widgets::ListRow;
 use gtk4::prelude::*;
 use std::rc::Rc;
@@ -131,12 +131,12 @@ impl WifiPage {
     pub fn new(
         ctx: AppContext,
         on_back: impl Fn() + 'static,
-        wifi_tile: Rc<QsTile>,
-        eth_tile: Rc<QsTile>,
+        wifi_tile: Rc<ToggleTile>,
+        eth_tile: Rc<ToggleTile>,
     ) -> Self {
         let container = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
 
-        let header = QsSubPageHeader::new("Wi-Fi Netzwerke");
+        let header = SubPageHeader::new("Wi-Fi Netzwerke");
         container.append(&header.container);
 
         let scrolled_list = ScrolledList::new(300);

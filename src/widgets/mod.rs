@@ -12,9 +12,9 @@ mod workspace_popup;
 
 pub use bar::Bar;
 pub use components::list_row::ListRow;
+pub use components::toggle_tile::ToggleTile;
 pub use island::Island;
 pub use launcher::launcher_popup::LauncherPopup;
 pub use notification::toast::NotificationToastManager;
-pub use quick_settings::components::tile::QsTile;
 pub use quick_settings::QuickSettingsPopup;
 pub use workspace_popup::WorkspacePopup;

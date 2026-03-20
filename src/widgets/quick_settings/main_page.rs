@@ -4,21 +4,22 @@ use crate::services::backlight::BacklightCmd;
 use crate::services::bluetooth::BluetoothCmd;
 use crate::services::network::NetworkCmd;
 use crate::services::nightlight::NightlightCmd;
+use crate::widgets::components::icon_slider::IconSlider;
 use crate::widgets::icons::bt::BtIcon;
 use crate::widgets::icons::wifi::WifiIcon;
 use crate::widgets::quick_settings::components::battery_button::BatteryButton;
 use crate::widgets::quick_settings::components::power_actions::PowerActionStack;
-use crate::widgets::{icons, QsTile};
+use crate::widgets::{icons, ToggleTile};
 use gtk4::prelude::*;
 use std::rc::Rc;
 
 #[derive(Clone)]
 pub struct MainPage {
     pub container: gtk4::Box,
-    pub wifi_tile: Rc<QsTile>,
-    pub eth_tile: Rc<QsTile>,
-    pub bt_tile: Rc<QsTile>,
-    pub nl_tile: Rc<QsTile>,
+    pub wifi_tile: Rc<ToggleTile>,
+    pub eth_tile: Rc<ToggleTile>,
+    pub bt_tile: Rc<ToggleTile>,
+    pub nl_tile: Rc<ToggleTile>,
     power_actions: Rc<PowerActionStack>,
 }
 
@@ -39,15 +40,15 @@ impl MainPage {
         grid.set_row_spacing(12);
         grid.set_column_homogeneous(true);
 
-        let wifi_tile = Rc::new(QsTile::new(
+        let wifi_tile = Rc::new(ToggleTile::new(
             "Wi-Fi",
             "network-wireless-signal-excellent-symbolic",
             true,
         ));
-        let eth_tile = Rc::new(QsTile::new("Ethernet", "network-wired-symbolic", false));
-        let bt_tile = Rc::new(QsTile::new("Bluetooth", "bluetooth-active-symbolic", true));
-        let nl_tile = Rc::new(QsTile::new("Night Light", "night-light-symbolic", true));
-        let airplane_tile = QsTile::new("Airplane", "airplane-mode-symbolic", false);
+        let eth_tile = Rc::new(ToggleTile::new("Ethernet", "network-wired-symbolic", false));
+        let bt_tile = Rc::new(ToggleTile::new("Bluetooth", "bluetooth-active-symbolic", true));
+        let nl_tile = Rc::new(ToggleTile::new("Night Light", "night-light-symbolic", true));
+        let airplane_tile = ToggleTile::new("Airplane", "airplane-mode-symbolic", false);
 
         grid.attach(&wifi_tile.container, 0, 0, 1, 1);
         grid.attach(&eth_tile.container, 1, 0, 1, 1);
@@ -59,57 +60,26 @@ impl MainPage {
         let vol_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
         vol_row.add_css_class("volume-slider-row");
 
-        let slider_overlay = gtk4::Overlay::new();
-        slider_overlay.add_css_class("volume-slider");
-        slider_overlay.set_hexpand(true);
-
-        let vol_slider = gtk4::Scale::with_range(gtk4::Orientation::Horizontal, 0.0, 1.0, 0.01);
-        vol_slider.set_hexpand(true);
-
-        let vol_icon = gtk4::Image::from_icon_name("audio-volume-high-symbolic");
-        vol_icon.set_pixel_size(22);
-        vol_icon.set_margin_start(22);
-        vol_icon.set_halign(gtk4::Align::Start);
-        vol_icon.set_valign(gtk4::Align::Center);
-        vol_icon.set_can_target(false);
-
-        slider_overlay.set_child(Some(&vol_slider));
-        slider_overlay.add_overlay(&vol_icon);
+        let volume = IconSlider::new("audio-volume-high-symbolic", 0.0, 1.0, 0.01);
+        volume.overlay.add_css_class("volume-slider");
 
         let vol_arrow = gtk4::Button::builder()
             .icon_name("go-next-symbolic")
-            .css_classes(vec!["qs-tile-arrow".to_string()])
+            .css_classes(vec!["tile-arrow".to_string()])
             .build();
 
-        vol_row.append(&slider_overlay);
+        vol_row.append(&volume.overlay);
         vol_row.append(&vol_arrow);
 
-        let vol_arrow_c = vol_arrow.clone();
         vol_arrow.connect_clicked(move |_| {
             open_audio();
         });
+        let vol_arrow_c = vol_arrow.clone();
 
         // --- BRIGHTNESS SLIDER ---
-        let brightness_overlay = gtk4::Overlay::new();
-        brightness_overlay.add_css_class("volume-slider");
-        brightness_overlay.set_hexpand(true);
-
-        let brightness_slider =
-            gtk4::Scale::with_range(gtk4::Orientation::Horizontal, 0.0, 100.0, 1.0);
-        brightness_slider.set_hexpand(true);
-
-        let brightness_icon = gtk4::Image::from_icon_name("display-brightness-symbolic");
-        brightness_icon.set_pixel_size(22);
-        brightness_icon.set_margin_start(22);
-        brightness_icon.set_halign(gtk4::Align::Start);
-        brightness_icon.set_valign(gtk4::Align::Center);
-        brightness_icon.set_can_target(false);
-
-        brightness_overlay.set_child(Some(&brightness_slider));
-        brightness_overlay.add_overlay(&brightness_icon);
-
-        // Hide brightness initially until we know if there's a backlight
-        brightness_overlay.set_visible(false);
+        let brightness = IconSlider::new("display-brightness-symbolic", 0.0, 100.0, 1.0);
+        brightness.overlay.add_css_class("volume-slider");
+        brightness.overlay.set_visible(false);
 
         // --- BOTTOM ROW ---
         let bottom_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
@@ -127,7 +97,7 @@ impl MainPage {
 
         container.append(&grid);
         container.append(&vol_row);
-        container.append(&brightness_overlay);
+        container.append(&brightness.overlay);
         container.append(&bottom_row);
 
         // --- BUTTON ACTIONS ---
@@ -219,33 +189,32 @@ impl MainPage {
         let is_updating = Rc::new(std::cell::RefCell::new(false));
         let is_first_update = Rc::new(std::cell::RefCell::new(true));
 
-        let vol_slider_c = vol_slider.clone();
-        let vol_icon_c = vol_icon.clone();
+        let volume_c = volume.clone();
         let vol_icon_bar_c = vol_icon_bar.clone();
         let is_updating_rx = is_updating.clone();
         let is_first_rx = is_first_update.clone();
 
         let vol_arrow_sub = vol_arrow_c.clone();
         ctx.audio.subscribe(move |data| {
-            let current = vol_slider_c.value();
+            let current = volume_c.slider.value();
             let diff = (current - data.volume).abs();
             let is_first = *is_first_rx.borrow();
 
             if is_first || diff > 0.01 {
                 *is_first_rx.borrow_mut() = false;
                 *is_updating_rx.borrow_mut() = true;
-                vol_slider_c.set_value(data.volume);
+                volume_c.set_value(data.volume);
                 *is_updating_rx.borrow_mut() = false;
 
                 let icon_name = icons::volume_icon(data.volume, data.is_muted);
-                vol_icon_c.set_icon_name(Some(icon_name));
+                volume_c.set_icon(icon_name);
                 vol_icon_bar_c.set_icon_name(Some(icon_name));
             }
-            Self::update_highlight_style(&vol_slider_c, data.volume, Some(&vol_arrow_sub));
+            Self::update_highlight_style(&volume_c.slider, data.volume, Some(&vol_arrow_sub));
         });
 
         // Initial style
-        Self::update_highlight_style(&vol_slider, ctx.audio.get().volume, Some(&vol_arrow_c));
+        Self::update_highlight_style(&volume.slider, ctx.audio.get().volume, Some(&vol_arrow_c));
 
         // BatteryButton subscribes to power data internally
 
@@ -253,7 +222,7 @@ impl MainPage {
         let ctx_audio = ctx.clone();
         let is_updating_cmd = is_updating.clone();
         let vol_arrow_chg = vol_arrow_c;
-        vol_slider.connect_value_changed(move |s| {
+        volume.slider.connect_value_changed(move |s| {
             if *is_updating_cmd.borrow() {
                 return;
             }
@@ -263,8 +232,8 @@ impl MainPage {
         });
 
         // --- BRIGHTNESS SLIDER REACTIVE ---
-        let brightness_slider_c = brightness_slider.clone();
-        let brightness_overlay_c = brightness_overlay.clone();
+        let brightness_c = brightness.clone();
+        let brightness_overlay_c = brightness.overlay.clone();
         let brightness_is_updating = Rc::new(std::cell::RefCell::new(false));
 
         // Brightness → Slider (vereinfachter Debounce)
@@ -277,20 +246,20 @@ impl MainPage {
 
             brightness_overlay_c.set_visible(data.has_backlight);
 
-            let current = brightness_slider_c.value();
+            let current = brightness_c.slider.value();
             let diff = (current - data.percentage).abs();
 
             if diff > 0.5 {
                 *brightness_is_updating_rx.borrow_mut() = true;
-                brightness_slider_c.set_value(data.percentage);
+                brightness_c.set_value(data.percentage);
                 *brightness_is_updating_rx.borrow_mut() = false;
-                Self::update_highlight_style(&brightness_slider_c, data.percentage, None);
+                Self::update_highlight_style(&brightness_c.slider, data.percentage, None);
             }
         });
 
         // Brightness Slider → BacklightCmd
         let ctx_backlight = ctx.clone();
-        brightness_slider.connect_value_changed(move |s| {
+        brightness.slider.connect_value_changed(move |s| {
             if *brightness_is_updating.borrow() {
                 return;
             }

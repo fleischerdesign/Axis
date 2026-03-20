@@ -1,8 +1,8 @@
 use crate::app_context::AppContext;
 use crate::services::bluetooth::BluetoothCmd;
 use crate::widgets::components::scrolled_list::ScrolledList;
-use crate::widgets::quick_settings::components::header::QsSubPageHeader;
-use crate::widgets::quick_settings::components::tile::QsTile;
+use crate::widgets::components::subpage_header::SubPageHeader;
+use crate::widgets::ToggleTile;
 use crate::widgets::ListRow;
 use gtk4::prelude::*;
 use std::rc::Rc;
@@ -12,10 +12,10 @@ pub struct BluetoothPage {
 }
 
 impl BluetoothPage {
-    pub fn new(ctx: AppContext, on_back: impl Fn() + 'static, parent_tile: Rc<QsTile>) -> Self {
+    pub fn new(ctx: AppContext, on_back: impl Fn() + 'static, parent_tile: Rc<ToggleTile>) -> Self {
         let container = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
 
-        let header = QsSubPageHeader::new("Bluetooth");
+        let header = SubPageHeader::new("Bluetooth");
         container.append(&header.container);
 
         let scrolled_list = ScrolledList::new(300);

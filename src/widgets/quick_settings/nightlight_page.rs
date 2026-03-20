@@ -1,7 +1,7 @@
 use crate::app_context::AppContext;
 use crate::services::nightlight::NightlightCmd;
-use crate::widgets::quick_settings::components::header::QsSubPageHeader;
-use crate::widgets::QsTile;
+use crate::widgets::components::subpage_header::SubPageHeader;
+use crate::widgets::ToggleTile;
 use gtk4::prelude::*;
 use std::cell::Cell;
 use std::rc::Rc;
@@ -14,12 +14,12 @@ impl NightlightPage {
     pub fn new(
         ctx: AppContext,
         back_callback: impl Fn() + 'static,
-        nl_tile: Rc<QsTile>,
+        nl_tile: Rc<ToggleTile>,
         nightlight_tx: async_channel::Sender<NightlightCmd>,
     ) -> Self {
         let container = gtk4::Box::new(gtk4::Orientation::Vertical, 16);
 
-        let header = QsSubPageHeader::new("Night Light");
+        let header = SubPageHeader::new("Night Light");
         container.append(&header.container);
 
         // back_btn wiring moved to end of function
@@ -106,7 +106,7 @@ impl NightlightPage {
             &gtk4::Label::builder()
                 .label("Manual Schedule")
                 .halign(gtk4::Align::Start)
-                .css_classes(vec!["qs-tile-label".to_string()])
+                .css_classes(vec!["tile-label".to_string()])
                 .build(),
         );
 
