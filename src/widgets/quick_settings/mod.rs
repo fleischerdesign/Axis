@@ -1,3 +1,4 @@
+mod audio_page;
 mod bluetooth_page;
 pub mod components;
 mod main_page;
@@ -8,6 +9,7 @@ use crate::app_context::AppContext;
 use crate::shell::ShellPopup;
 use crate::widgets::base::PopupBase;
 use crate::widgets::quick_settings::nightlight_page::NightlightPage;
+use audio_page::AudioPage;
 use bluetooth_page::BluetoothPage;
 use main_page::MainPage;
 use wifi_page::WifiPage;
@@ -90,12 +92,18 @@ impl QuickSettingsPopup {
             stack_nl.set_visible_child_name("nightlight");
         };
 
+        let stack_audio = qs_stack.clone();
+        let open_audio = move || {
+            stack_audio.set_visible_child_name("audio");
+        };
+
         let main_page = MainPage::new(
             ctx.clone(),
             vol_icon_bar.clone(),
             open_wifi,
             open_bt,
             open_nl,
+            open_audio,
         );
 
         let stack_back = qs_stack.clone();
@@ -127,10 +135,19 @@ impl QuickSettingsPopup {
             ctx.nightlight_tx.clone(),
         );
 
+        let stack_back_audio = qs_stack.clone();
+        let audio_page = AudioPage::new(
+            ctx.clone(),
+            move || {
+                stack_back_audio.set_visible_child_name("main");
+            },
+        );
+
         qs_stack.add_named(&main_page.container, Some("main"));
         qs_stack.add_named(&wifi_page.container, Some("wifi"));
         qs_stack.add_named(&bluetooth_page.container, Some("bluetooth"));
         qs_stack.add_named(&nightlight_page.container, Some("nightlight"));
+        qs_stack.add_named(&audio_page.container, Some("audio"));
 
         qs_container.append(&qs_stack);
         base.set_content(&qs_container);

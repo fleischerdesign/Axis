@@ -254,7 +254,6 @@ entry:focus-visible {
 
 .volume-slider scale highlight {
     min-height: 44px;
-    border-radius: 999px;
     background-color: #3584e4;
 }
 
@@ -266,6 +265,151 @@ entry:focus-visible {
 
 .volume-slider scale:focus-visible trough {
     box-shadow: inset 0 0 0 2px rgba(53, 132, 228, 0.5);
+}
+
+/* Volume slider row (slider + arrow = one pill) */
+.volume-slider-row {
+    background-color: #303030;
+    border-radius: 999px;
+    min-height: 44px;
+}
+
+/* Hide the trough background — only the blue highlight is visible */
+.volume-slider-row .volume-slider scale trough,
+.volume-slider-row .volume-slider scale contents {
+    background-color: transparent;
+    border-radius: 999px 0 0 999px;
+}
+
+/* Default for highlight in the row: flat right side to connect to separator */
+.volume-slider-row .volume-slider scale highlight {
+    border-radius: 999px 0 0 999px;
+}
+
+/* ROUND right side ONLY when partial (< 100%) */
+.volume-slider-row .volume-slider scale.highlight-partial trough,
+.volume-slider-row .volume-slider scale.highlight-partial contents,
+.volume-slider-row .volume-slider scale.highlight-partial highlight {
+    border-radius: 999px;
+}
+
+.volume-slider-row .qs-tile-separator {
+    min-height: 100%;
+    margin: 0;
+    width: 1px;
+    background-color: rgba(255, 255, 255, 0.1);
+    align-self: stretch;
+}
+
+.volume-slider-row .qs-tile-arrow {
+    border-radius: 0 999px 999px 0;
+    padding: 0 12px;
+    background: transparent;
+    border: none;
+}
+
+.volume-slider-row .qs-tile-arrow:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Audio page — master slider row */
+.audio-master-row {
+    background-color: #303030;
+    border-radius: 16px;
+    padding: 8px 12px;
+}
+
+.audio-master-row scale trough {
+    min-height: 12px;
+    border-radius: 999px;
+    background-color: rgba(255, 255, 255, 0.1);
+    border: none;
+}
+
+.audio-master-row scale highlight {
+    min-height: 12px;
+    border-radius: 999px;
+    background-color: #3584e4;
+}
+
+.audio-master-row scale slider {
+    all: unset;
+    min-width: 0;
+    min-height: 0;
+}
+
+.audio-master-row scale:focus-visible trough {
+    box-shadow: inset 0 0 0 2px rgba(53, 132, 228, 0.5);
+}
+
+.audio-pct-label {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
+    margin: 0 8px;
+    min-width: 40px;
+}
+
+.audio-mute-btn {
+    background: transparent;
+    border: none;
+    border-radius: 999px;
+    min-width: 32px;
+    min-height: 32px;
+    padding: 0;
+}
+
+.audio-mute-btn:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Audio page — per-app rows */
+.audio-app-row {
+    background-color: #303030;
+    border-radius: 12px;
+    padding: 6px 10px;
+}
+
+.audio-app-row scale trough {
+    min-height: 8px;
+    border-radius: 999px;
+    background-color: rgba(255, 255, 255, 0.1);
+    border: none;
+}
+
+.audio-app-row scale highlight {
+    min-height: 8px;
+    border-radius: 999px;
+    background-color: #3584e4;
+}
+
+.audio-app-row scale slider {
+    all: unset;
+    min-width: 0;
+    min-height: 0;
+}
+
+.audio-app-row scale:focus-visible trough {
+    box-shadow: inset 0 0 0 2px rgba(53, 132, 228, 0.5);
+}
+
+.audio-app-name {
+    font-size: 12px;
+    font-weight: 600;
+    min-width: 60px;
+    max-width: 120px;
+}
+
+.audio-app-mute {
+    background: transparent;
+    border: none;
+    border-radius: 999px;
+    min-width: 28px;
+    min-height: 28px;
+    padding: 0;
+}
+
+.audio-app-mute:hover {
+    background-color: rgba(255, 255, 255, 0.1);
 }
 
 .qs-battery-btn {

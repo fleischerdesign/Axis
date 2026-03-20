@@ -175,9 +175,6 @@ impl LauncherPopup {
         let d_desc = detail_desc.clone();
         let d_rev = detail_revealer.clone();
         let win_c = base.window.clone();
-        let tx_row = ctx.launcher_tx.clone();
-        let base_row = base.clone();
-
         ctx.launcher.subscribe(move |data| {
             match data.update_kind {
                 // Full rebuild: new search results arrived.
