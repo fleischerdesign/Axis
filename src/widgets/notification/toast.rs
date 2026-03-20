@@ -1,5 +1,5 @@
 use crate::app_context::AppContext;
-use crate::constants::REVEALER_TRANSITION_MS;
+use crate::widgets::components::revealer_handle;
 use crate::widgets::notification::NotificationCard;
 use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, Layer, LayerShell};
@@ -50,7 +50,6 @@ impl NotificationToastManager {
     }
 
     fn sync(&self, data: &crate::services::notifications::NotificationData) {
-        // 1. Neue Toasts hinzufügen
         if data.last_id > self.last_shown_id.get() {
             if let Some(n) = data.notifications.iter().find(|n| n.id == data.last_id) {
                 self.last_shown_id.set(data.last_id);
@@ -58,7 +57,6 @@ impl NotificationToastManager {
             }
         }
 
-        // 2. Nicht mehr vorhandene Toasts entfernen (Reaktive UI)
         let mut to_remove = Vec::new();
         for id in self.active_toasts.borrow().keys() {
             if !data.notifications.iter().any(|n| n.id == *id) {
@@ -74,11 +72,7 @@ impl NotificationToastManager {
     fn add_toast(&self, data: &crate::services::notifications::Notification) {
         let card = NotificationCard::new(data, self.ctx.clone());
 
-        let revealer = gtk4::Revealer::builder()
-            .transition_type(gtk4::RevealerTransitionType::Crossfade)
-            .transition_duration(250)
-            .build();
-
+        let revealer = revealer_handle::create_revealer();
         revealer.set_child(Some(&card.container));
         self.container.append(&revealer);
 
@@ -92,7 +86,7 @@ impl NotificationToastManager {
 
         revealer.set_reveal_child(true);
 
-        // Auto-Entfernung nach 5 Sekunden (NUR lokal als Toast verstecken, NICHT global löschen!)
+        // Auto-Entfernung nach 5 Sekunden
         let id = data.id;
         let active_toasts_c = self.active_toasts.clone();
         let container_c = self.container.clone();
@@ -100,19 +94,18 @@ impl NotificationToastManager {
 
         gtk4::glib::timeout_add_local_once(Duration::from_secs(5), move || {
             if let Some(revealer) = active_toasts_c.borrow_mut().remove(&id) {
-                revealer.set_reveal_child(false);
-
-                let container_cc = container_c.clone();
-                let window_cc = window_c.clone();
-
-                gtk4::glib::timeout_add_local_once(
-                    Duration::from_millis(REVEALER_TRANSITION_MS as u64),
-                    move || {
-                        container_cc.remove(&revealer);
-                        if container_cc.first_child().is_none() {
-                            window_cc.set_visible(false);
+                revealer_handle::animate_out(
+                    &revealer,
+                    &container_c,
+                    Some({
+                        let cc = container_c.clone();
+                        let wc = window_c.clone();
+                        move || {
+                            if cc.first_child().is_none() {
+                                wc.set_visible(false);
+                            }
                         }
-                    },
+                    }),
                 );
             }
         });
@@ -120,19 +113,18 @@ impl NotificationToastManager {
 
     fn remove_toast_by_id(&self, id: u32) {
         if let Some(revealer) = self.active_toasts.borrow_mut().remove(&id) {
-            revealer.set_reveal_child(false);
-
-            let container_c = self.container.clone();
-            let window_c = self.window.clone();
-
-            gtk4::glib::timeout_add_local_once(
-                Duration::from_millis(REVEALER_TRANSITION_MS as u64),
-                move || {
-                    container_c.remove(&revealer);
-                    if container_c.first_child().is_none() {
-                        window_c.set_visible(false);
+            revealer_handle::animate_out(
+                &revealer,
+                &self.container,
+                Some({
+                    let cc = self.container.clone();
+                    let wc = self.window.clone();
+                    move || {
+                        if cc.first_child().is_none() {
+                            wc.set_visible(false);
+                        }
                     }
-                },
+                }),
             );
         }
     }
