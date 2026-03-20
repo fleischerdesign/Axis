@@ -138,12 +138,17 @@ impl QuickSettingsPopup {
         // --- KEYBOARD NAVIGATION ---
         let base_kb = base.clone();
         let stack_kb = qs_stack.clone();
+        let main_page_kb = main_page.clone();
         let key_controller = gtk4::EventControllerKey::new();
         key_controller.connect_key_pressed(move |_, key, _, _| {
             if key == gtk4::gdk::Key::Escape {
                 let current = stack_kb.visible_child_name();
                 if current.as_deref() == Some("main") {
-                    base_kb.close();
+                    if main_page_kb.is_power_expanded() {
+                        main_page_kb.collapse_power_menu();
+                    } else {
+                        base_kb.close();
+                    }
                 } else {
                     stack_kb.set_visible_child_name("main");
                 }

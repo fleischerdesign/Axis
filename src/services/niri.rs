@@ -108,11 +108,15 @@ impl NiriService {
     }
 
     pub fn switch_to_workspace(ws_id: u64) {
+        Self::spawn_action(Action::FocusWorkspace {
+            reference: WorkspaceReferenceArg::Id(ws_id),
+        });
+    }
+
+    pub fn spawn_action(action: Action) {
         thread::spawn(move || {
             if let Ok(mut sock) = Socket::connect() {
-                let _ = sock.send(Request::Action(Action::FocusWorkspace {
-                    reference: WorkspaceReferenceArg::Id(ws_id),
-                }));
+                let _ = sock.send(Request::Action(action));
             }
         });
     }

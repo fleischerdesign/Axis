@@ -294,6 +294,35 @@ entry:focus-visible {
     background-color: #3d3d3d;
 }
 
+.qs-bottom-btn:disabled {
+    opacity: 0.35;
+}
+
+/* Power Menu */
+.qs-power-btn {
+    background-color: #303030;
+    min-width: 44px;
+    min-height: 44px;
+    border-radius: 999px;
+    padding: 0;
+}
+
+.qs-power-btn:hover {
+    background-color: #3d3d3d;
+}
+
+.qs-power-btn.sleep:hover {
+    background-color: #3584e4;
+}
+
+.qs-power-btn.shutdown:hover {
+    background-color: #e01b24;
+}
+
+.qs-power-btn.restart:hover {
+    background-color: #e5a50a;
+}
+
 /* Workspace Shelf & Cards */
 .workspace-shelf {
     background-color: #1e1e1e;
