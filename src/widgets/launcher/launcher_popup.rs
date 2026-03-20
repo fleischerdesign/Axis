@@ -80,6 +80,18 @@ impl LauncherPopup {
         scrolled.add_css_class("qs-scrolled");
         scrolled.set_child(Some(&list));
         left_pane.append(&scrolled);
+
+        // Single-click activation on list rows.
+        // connect_row_activated fires on single-click in GTK4,
+        // unlike ListBoxRow::connect_activate which needs double-click.
+        let tx_click = ctx.launcher_tx.clone();
+        let base_click = base.clone();
+        list.connect_row_activated(move |_, row| {
+            let idx = row.index() as usize;
+            let _ = tx_click.send_blocking(LauncherCmd::Activate(Some(idx)));
+            base_click.close();
+        });
+
         container.append(&left_pane);
 
         // --- Detail pane ---
@@ -174,16 +186,8 @@ impl LauncherPopup {
                         list_c.remove(&child);
                     }
 
-                    for (i, item) in data.results.iter().enumerate() {
+                    for item in data.results.iter() {
                         let launcher_row = LauncherRow::new(item);
-                        let tx_inner = tx_row.clone();
-                        let base_inner = base_row.clone();
-
-                        launcher_row.row.connect_activate(move |_| {
-                            let _ = tx_inner.send_blocking(LauncherCmd::Activate(Some(i)));
-                            base_inner.close();
-                        });
-
                         list_c.append(&launcher_row.row);
                     }
                 }
