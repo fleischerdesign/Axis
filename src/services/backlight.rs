@@ -1,10 +1,11 @@
-use async_channel::{bounded, Receiver, Sender};
+use super::Service;
+use crate::store::ServiceStore;
+use async_channel::{bounded, Sender};
 use brightness::blocking::Brightness;
 use inotify::{Inotify, WatchMask};
 use std::fs;
 use std::path::PathBuf;
 use std::thread;
-use super::Service;
 
 const BACKLIGHT_DIR: &str = "/sys/class/backlight";
 
@@ -25,7 +26,7 @@ impl Service for BacklightService {
     type Data = BacklightData;
     type Cmd = BacklightCmd;
 
-    fn spawn() -> (Receiver<Self::Data>, Sender<Self::Cmd>) {
+    fn spawn() -> (ServiceStore<Self::Data>, Sender<Self::Cmd>) {
         let (data_tx, data_rx) = bounded(1);
         let (cmd_tx, cmd_rx) = bounded(16);
 
@@ -107,12 +108,14 @@ impl Service for BacklightService {
             }
         });
 
-        (data_rx, cmd_tx)
+        (
+            ServiceStore::new(data_rx, BacklightService::read_initial()),
+            cmd_tx,
+        )
     }
 }
 
 impl BacklightService {
-
     pub fn read_initial() -> BacklightData {
         if let Some(path) = find_backlight_device() {
             let max = read_sysfs_u32(&path.join("max_brightness")).unwrap_or(1);

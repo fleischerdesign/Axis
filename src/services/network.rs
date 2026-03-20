@@ -1,9 +1,10 @@
 use futures_util::StreamExt;
 use zbus::{proxy, Connection, zvariant::OwnedObjectPath};
-use async_channel::{Sender, Receiver, bounded};
+use async_channel::{Sender, bounded};
 use std::time::Duration;
 use std::collections::{HashMap, HashSet};
 use super::Service;
+use crate::store::ServiceStore;
 
 #[proxy(
     interface = "org.freedesktop.NetworkManager",
@@ -88,7 +89,7 @@ impl Service for NetworkService {
     type Data = NetworkData;
     type Cmd = NetworkCmd;
 
-    fn spawn() -> (Receiver<Self::Data>, Sender<Self::Cmd>) {
+    fn spawn() -> (ServiceStore<Self::Data>, Sender<Self::Cmd>) {
         let (data_tx, data_rx) = bounded(10);
         let (cmd_tx, cmd_rx) = bounded(10);
 
@@ -203,7 +204,7 @@ impl Service for NetworkService {
             }
         });
 
-        (data_rx, cmd_tx)
+        (ServiceStore::new(data_rx, Default::default()), cmd_tx)
     }
 }
 

@@ -1,4 +1,5 @@
-use async_channel::{Receiver, Sender};
+use async_channel::Sender;
+use crate::store::ServiceStore;
 
 /// Unified service trait — every service implements this.
 /// Read-only services use `type Cmd = ()`.
@@ -6,7 +7,7 @@ pub trait Service: 'static {
     type Data: Clone + PartialEq + Send + 'static;
     type Cmd: Send + 'static;
 
-    fn spawn() -> (Receiver<Self::Data>, Sender<Self::Cmd>);
+    fn spawn() -> (ServiceStore<Self::Data>, Sender<Self::Cmd>);
 }
 
 pub mod niri;

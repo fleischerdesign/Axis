@@ -1,11 +1,12 @@
 pub mod server;
 
 use crate::services::notifications::server::{NotificationServer, NotificationCmd, NotificationServerSignals};
-use async_channel::{bounded, Receiver, Sender};
+use async_channel::{bounded, Sender};
 use serde::Serialize;
 use zbus::connection::Builder;
 use zbus::object_server::InterfaceRef;
 use super::Service;
+use crate::store::ServiceStore;
 
 #[derive(Clone, Debug, Default, Serialize, PartialEq)]
 pub struct NotificationAction {
@@ -37,7 +38,7 @@ impl Service for NotificationService {
     type Data = NotificationData;
     type Cmd = NotificationCmd;
 
-    fn spawn() -> (Receiver<Self::Data>, Sender<Self::Cmd>) {
+    fn spawn() -> (ServiceStore<Self::Data>, Sender<Self::Cmd>) {
         let (raw_tx, raw_rx) = bounded::<Notification>(64);
         let (data_tx, data_rx) = bounded::<NotificationData>(64);
         let (cmd_tx, cmd_rx) = bounded::<NotificationCmd>(32);
@@ -110,7 +111,7 @@ impl Service for NotificationService {
             }
         });
 
-        (data_rx, cmd_tx)
+        (ServiceStore::new(data_rx, Default::default()), cmd_tx)
     }
 }
 

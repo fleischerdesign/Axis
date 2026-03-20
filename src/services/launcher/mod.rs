@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::cell::RefCell;
 use std::process::{Command, Stdio};
 use std::os::unix::process::CommandExt;
-use async_channel::{Receiver, Sender};
+use async_channel::Sender;
 use gtk4::glib;
 
 /// Describes what changed in the last update so the UI can avoid
@@ -45,7 +45,7 @@ impl Service for LauncherService {
     type Data = LauncherData;
     type Cmd = LauncherCmd;
 
-    fn spawn() -> (Receiver<Self::Data>, Sender<Self::Cmd>) {
+    fn spawn() -> (ServiceStore<Self::Data>, Sender<Self::Cmd>) {
         let (cmd_tx, cmd_rx) = async_channel::unbounded();
         let store: ServiceStore<LauncherData> = ServiceStore::new_manual(Default::default());
         let service = Self::new();
@@ -130,9 +130,8 @@ impl Service for LauncherService {
             }
         });
 
-        // Dummy receiver — ServiceStore uses new_manual, no auto-subscription
-        let (_, dummy_rx) = async_channel::bounded::<LauncherData>(1);
-        (dummy_rx, cmd_tx)
+        // Return the EXACT ServiceStore the launcher writes to
+        (store, cmd_tx)
     }
 }
 

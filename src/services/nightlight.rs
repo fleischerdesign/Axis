@@ -1,7 +1,8 @@
-use async_channel::{bounded, Receiver, Sender};
+use super::Service;
+use crate::store::ServiceStore;
+use async_channel::{bounded, Sender};
 use std::process::{Child, Command, Stdio};
 use std::thread;
-use super::Service;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct NightlightData {
@@ -44,7 +45,7 @@ impl Service for NightlightService {
     type Data = NightlightData;
     type Cmd = NightlightCmd;
 
-    fn spawn() -> (Receiver<Self::Data>, Sender<Self::Cmd>) {
+    fn spawn() -> (ServiceStore<Self::Data>, Sender<Self::Cmd>) {
         let (data_tx, data_rx) = bounded(100);
         let (cmd_tx, cmd_rx) = bounded(100);
 
@@ -152,12 +153,14 @@ impl Service for NightlightService {
             }
         });
 
-        (data_rx, cmd_tx)
+        (
+            ServiceStore::new(data_rx, NightlightService::read_initial()),
+            cmd_tx,
+        )
     }
 }
 
 impl NightlightService {
-
     fn check_available() -> bool {
         Command::new("which")
             .arg("wlsunset")

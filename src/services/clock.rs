@@ -1,9 +1,10 @@
-use async_channel::{bounded, Receiver, Sender};
+use async_channel::{bounded, Sender};
 use chrono::{DateTime, Local};
 use std::thread;
 use std::time::Duration;
 
 use super::Service;
+use crate::store::ServiceStore;
 
 pub struct ClockService;
 
@@ -11,7 +12,7 @@ impl Service for ClockService {
     type Data = DateTime<Local>;
     type Cmd = ();
 
-    fn spawn() -> (Receiver<Self::Data>, Sender<Self::Cmd>) {
+    fn spawn() -> (ServiceStore<Self::Data>, Sender<Self::Cmd>) {
         let (tx, rx) = bounded(10);
 
         thread::spawn(move || loop {
@@ -22,6 +23,6 @@ impl Service for ClockService {
         });
 
         let (dummy_tx, _) = bounded(1);
-        (rx, dummy_tx)
+        (ServiceStore::new(rx, Local::now()), dummy_tx)
     }
 }

@@ -1,9 +1,10 @@
 use futures_util::StreamExt;
 use zbus::{proxy, Connection, zvariant::{OwnedObjectPath, OwnedValue, Type}};
-use async_channel::{Sender, Receiver, bounded};
+use async_channel::{Sender, bounded};
 use std::collections::HashMap;
 use std::time::Duration;
 use super::Service;
+use crate::store::ServiceStore;
 
 #[proxy(
     interface = "org.bluez.Adapter1",
@@ -67,7 +68,7 @@ impl Service for BluetoothService {
     type Data = BluetoothData;
     type Cmd = BluetoothCmd;
 
-    fn spawn() -> (Receiver<Self::Data>, Sender<Self::Cmd>) {
+    fn spawn() -> (ServiceStore<Self::Data>, Sender<Self::Cmd>) {
         let (data_tx, data_rx) = bounded(10);
         let (cmd_tx, cmd_rx) = bounded(10);
 
@@ -158,7 +159,7 @@ impl Service for BluetoothService {
             }
         });
 
-        (data_rx, cmd_tx)
+        (ServiceStore::new(data_rx, Default::default()), cmd_tx)
     }
 }
 

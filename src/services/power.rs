@@ -1,9 +1,10 @@
-use async_channel::{Receiver, bounded, Sender};
+use async_channel::{bounded, Sender};
 use std::thread;
 use std::time::Duration;
 use zbus::{proxy, Connection};
 
 use super::Service;
+use crate::store::ServiceStore;
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct PowerData {
@@ -32,7 +33,7 @@ impl Service for PowerService {
     type Data = PowerData;
     type Cmd = ();
 
-    fn spawn() -> (Receiver<Self::Data>, Sender<Self::Cmd>) {
+    fn spawn() -> (ServiceStore<Self::Data>, Sender<Self::Cmd>) {
         let (tx, rx) = bounded(10);
 
         thread::spawn(move || {
@@ -68,6 +69,6 @@ impl Service for PowerService {
         });
 
         let (dummy_tx, _) = bounded(1);
-        (rx, dummy_tx)
+        (ServiceStore::new(rx, Default::default()), dummy_tx)
     }
 }

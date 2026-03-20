@@ -18,7 +18,6 @@ use crate::services::power::PowerService;
 use crate::services::launcher::LauncherService;
 use crate::services::ipc::IpcService;
 use crate::services::notifications::NotificationService;
-use crate::store::ServiceStore;
 use crate::widgets::{Bar, QuickSettingsPopup, WorkspacePopup, LauncherPopup, NotificationToastManager, osd::OsdManager};
 use crate::shell::ShellController;
 use gtk4::prelude::*;
@@ -140,41 +139,25 @@ fn setup_click_handler(island: &gtk4::Box, controller: Rc<ShellController>, id: 
 }
 
 fn setup_services() -> AppContext {
-    // Interactive services
-    let (network_rx, network_tx) = NetworkService::spawn();
-    let (bluetooth_rx, bluetooth_tx) = BluetoothService::spawn();
-    let (audio_rx, audio_tx) = AudioService::spawn();
-    let (backlight_rx, backlight_tx) = BacklightService::spawn();
-    let backlight_initial = BacklightService::read_initial();
-    let (nightlight_rx, nightlight_tx) = NightlightService::spawn();
-    let nightlight_initial = NightlightService::read_initial();
-    let (notification_rx, notification_tx) = NotificationService::spawn();
-
-    // Read-only services (Cmd = ())
-    let (power_rx, _) = PowerService::spawn();
-    let (niri_rx, _) = NiriService::spawn();
-    let (clock_rx, _) = ClockService::spawn();
-
-    // Launcher (special lifecycle — Service::spawn() handles start + provider)
-    let (_launcher_rx, launcher_tx) = LauncherService::spawn();
+    let (network, network_tx) = NetworkService::spawn();
+    let (bluetooth, bluetooth_tx) = BluetoothService::spawn();
+    let (audio, audio_tx) = AudioService::spawn();
+    let (backlight, backlight_tx) = BacklightService::spawn();
+    let (nightlight, nightlight_tx) = NightlightService::spawn();
+    let (notifications, notifications_tx) = NotificationService::spawn();
+    let (power, _) = PowerService::spawn();
+    let (niri, _) = NiriService::spawn();
+    let (clock, _) = ClockService::spawn();
+    let (launcher, launcher_tx) = LauncherService::spawn();
 
     AppContext {
-        network: ServiceStore::new(network_rx, Default::default()),
-        network_tx,
-        bluetooth: ServiceStore::new(bluetooth_rx, Default::default()),
-        bluetooth_tx,
-        audio: ServiceStore::new(audio_rx, Default::default()),
-        audio_tx,
-        backlight: ServiceStore::new(backlight_rx, backlight_initial),
-        backlight_tx,
-        nightlight: ServiceStore::new(nightlight_rx, nightlight_initial),
-        nightlight_tx,
-        launcher: ServiceStore::new_manual(Default::default()),
-        launcher_tx,
-        notifications: ServiceStore::new(notification_rx, Default::default()),
-        notifications_tx: notification_tx,
-        power: ServiceStore::new(power_rx, Default::default()),
-        niri: ServiceStore::new(niri_rx, Default::default()),
-        clock: ServiceStore::new(clock_rx, chrono::Local::now()),
+        network, network_tx,
+        bluetooth, bluetooth_tx,
+        audio, audio_tx,
+        backlight, backlight_tx,
+        nightlight, nightlight_tx,
+        launcher, launcher_tx,
+        notifications, notifications_tx,
+        power, niri, clock,
     }
 }

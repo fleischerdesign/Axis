@@ -1,4 +1,4 @@
-use async_channel::{bounded, Receiver, Sender};
+use async_channel::{bounded, Sender};
 use libpulse_binding::callbacks::ListResult;
 use libpulse_binding::context::introspect::{SinkInfo, SinkInputInfo};
 use libpulse_binding::context::subscribe::{Facility, InterestMaskSet, Operation};
@@ -9,6 +9,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::thread;
 use super::Service;
+use crate::store::ServiceStore;
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SinkInputData {
@@ -39,7 +40,7 @@ impl Service for AudioService {
     type Data = AudioData;
     type Cmd = AudioCmd;
 
-    fn spawn() -> (Receiver<Self::Data>, Sender<Self::Cmd>) {
+    fn spawn() -> (ServiceStore<Self::Data>, Sender<Self::Cmd>) {
         let (data_tx, data_rx) = bounded(1);
         let (cmd_tx, cmd_rx) = bounded(16);
 
@@ -193,7 +194,7 @@ impl Service for AudioService {
             }
         });
 
-        (data_rx, cmd_tx)
+        (ServiceStore::new(data_rx, Default::default()), cmd_tx)
     }
 }
 

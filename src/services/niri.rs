@@ -1,4 +1,4 @@
-use async_channel::{bounded, Receiver, Sender};
+use async_channel::{bounded, Sender};
 use niri_ipc::{
     socket::Socket, Action, Event, Output, Request, Response, Window, Workspace,
     WorkspaceReferenceArg,
@@ -8,6 +8,7 @@ use std::thread;
 use std::time::Duration;
 
 use super::Service;
+use crate::store::ServiceStore;
 
 #[derive(Clone, Default, Debug)]
 pub struct NiriData {
@@ -43,7 +44,7 @@ impl Service for NiriService {
     type Data = NiriData;
     type Cmd = ();
 
-    fn spawn() -> (Receiver<Self::Data>, Sender<Self::Cmd>) {
+    fn spawn() -> (ServiceStore<Self::Data>, Sender<Self::Cmd>) {
         let (data_tx, data_rx) = bounded(10);
 
         thread::spawn(move || {
@@ -89,7 +90,7 @@ impl Service for NiriService {
         });
 
         let (dummy_tx, _) = bounded(1);
-        (data_rx, dummy_tx)
+        (ServiceStore::new(data_rx, Default::default()), dummy_tx)
     }
 }
 
