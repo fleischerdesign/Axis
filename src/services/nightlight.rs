@@ -1,7 +1,7 @@
 use async_channel::{bounded, Receiver, Sender};
 use std::process::{Child, Command, Stdio};
 use std::thread;
-use super::traits::Service;
+use super::Service;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct NightlightData {

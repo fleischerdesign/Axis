@@ -6,7 +6,7 @@ mod widgets;
 mod shell;
 
 use crate::app_context::AppContext;
-use crate::services::traits::Service;
+use crate::services::Service;
 use crate::services::audio::AudioService;
 use crate::services::backlight::BacklightService;
 use crate::services::bluetooth::BluetoothService;

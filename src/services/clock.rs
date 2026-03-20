@@ -3,7 +3,7 @@ use chrono::{DateTime, Local};
 use std::thread;
 use std::time::Duration;
 
-use super::traits::Service;
+use super::Service;
 
 pub struct ClockService;
 

@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::thread;
 use std::time::Duration;
 
-use super::traits::Service;
+use super::Service;
 
 #[derive(Clone, Default, Debug)]
 pub struct NiriData {

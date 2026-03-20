@@ -3,7 +3,7 @@ use std::thread;
 use std::time::Duration;
 use zbus::{proxy, Connection};
 
-use super::traits::Service;
+use super::Service;
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct PowerData {

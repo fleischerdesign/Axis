@@ -4,7 +4,7 @@ use inotify::{Inotify, WatchMask};
 use std::fs;
 use std::path::PathBuf;
 use std::thread;
-use super::traits::Service;
+use super::Service;
 
 const BACKLIGHT_DIR: &str = "/sys/class/backlight";
 

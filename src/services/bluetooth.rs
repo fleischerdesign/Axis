@@ -3,7 +3,7 @@ use zbus::{proxy, Connection, zvariant::{OwnedObjectPath, OwnedValue, Type}};
 use async_channel::{Sender, Receiver, bounded};
 use std::collections::HashMap;
 use std::time::Duration;
-use super::traits::Service;
+use super::Service;
 
 #[proxy(
     interface = "org.bluez.Adapter1",

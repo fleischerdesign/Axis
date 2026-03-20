@@ -5,7 +5,7 @@ use async_channel::{bounded, Receiver, Sender};
 use serde::Serialize;
 use zbus::connection::Builder;
 use zbus::object_server::InterfaceRef;
-use super::traits::Service;
+use super::Service;
 
 #[derive(Clone, Debug, Default, Serialize, PartialEq)]
 pub struct NotificationAction {

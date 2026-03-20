@@ -2,7 +2,7 @@ pub mod provider;
 pub mod providers;
 
 use crate::services::launcher::provider::{LauncherItem, LauncherProvider};
-use crate::services::traits::Service;
+use crate::services::Service;
 use crate::store::ServiceStore;
 use std::rc::Rc;
 use std::sync::Arc;

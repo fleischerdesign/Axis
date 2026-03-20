@@ -3,7 +3,7 @@ use zbus::{proxy, Connection, zvariant::OwnedObjectPath};
 use async_channel::{Sender, Receiver, bounded};
 use std::time::Duration;
 use std::collections::{HashMap, HashSet};
-use super::traits::Service;
+use super::Service;
 
 #[proxy(
     interface = "org.freedesktop.NetworkManager",

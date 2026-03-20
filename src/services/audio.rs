@@ -8,7 +8,7 @@ use libpulse_binding::volume::{ChannelVolumes, Volume};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::thread;
-use super::traits::Service;
+use super::Service;
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SinkInputData {
