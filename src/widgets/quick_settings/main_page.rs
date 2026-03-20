@@ -4,6 +4,7 @@ use crate::services::backlight::BacklightCmd;
 use crate::services::bluetooth::BluetoothCmd;
 use crate::services::network::NetworkCmd;
 use crate::services::nightlight::NightlightCmd;
+use crate::widgets::components::debounced_slider::DebouncedSlider;
 use crate::widgets::components::icon_slider::IconSlider;
 use crate::widgets::icons::bt::BtIcon;
 use crate::widgets::icons::wifi::WifiIcon;
@@ -46,7 +47,11 @@ impl MainPage {
             true,
         ));
         let eth_tile = Rc::new(ToggleTile::new("Ethernet", "network-wired-symbolic", false));
-        let bt_tile = Rc::new(ToggleTile::new("Bluetooth", "bluetooth-active-symbolic", true));
+        let bt_tile = Rc::new(ToggleTile::new(
+            "Bluetooth",
+            "bluetooth-active-symbolic",
+            true,
+        ));
         let nl_tile = Rc::new(ToggleTile::new("Night Light", "night-light-symbolic", true));
         let airplane_tile = ToggleTile::new("Airplane", "airplane-mode-symbolic", false);
 
@@ -60,15 +65,36 @@ impl MainPage {
         let vol_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
         vol_row.add_css_class("volume-slider-row");
 
-        let volume = IconSlider::new("audio-volume-high-symbolic", 0.0, 1.0, 0.01);
-        volume.overlay.add_css_class("volume-slider");
+        let volume_slider = DebouncedSlider::new(
+            "audio-volume-high-symbolic",
+            0.0,
+            1.0,
+            0.01,
+            &ctx.audio,
+            &ctx.audio_tx,
+            |d| d.volume,
+            |v| AudioCmd::SetVolume(v),
+            0.01,
+            Some({
+                let vol_icon_bar_c = vol_icon_bar.clone();
+                move |slider: &IconSlider, data: &crate::services::audio::AudioData| {
+                    let icon_name = icons::volume_icon(data.volume, data.is_muted);
+                    slider.set_icon(icon_name);
+                    vol_icon_bar_c.set_icon_name(Some(icon_name));
+                }
+            }),
+        );
+        volume_slider
+            .icon_slider
+            .overlay
+            .add_css_class("volume-slider");
 
         let vol_arrow = gtk4::Button::builder()
             .icon_name("go-next-symbolic")
             .css_classes(vec!["tile-arrow".to_string()])
             .build();
 
-        vol_row.append(&volume.overlay);
+        vol_row.append(&volume_slider.icon_slider.overlay);
         vol_row.append(&vol_arrow);
 
         vol_arrow.connect_clicked(move |_| {
@@ -77,9 +103,23 @@ impl MainPage {
         let vol_arrow_c = vol_arrow.clone();
 
         // --- BRIGHTNESS SLIDER ---
-        let brightness = IconSlider::new("display-brightness-symbolic", 0.0, 100.0, 1.0);
-        brightness.overlay.add_css_class("volume-slider");
-        brightness.overlay.set_visible(false);
+        let brightness_slider = DebouncedSlider::new(
+            "display-brightness-symbolic",
+            0.0,
+            100.0,
+            1.0,
+            &ctx.backlight,
+            &ctx.backlight_tx,
+            |d| d.percentage,
+            |v| BacklightCmd::SetBrightness(v),
+            0.5,
+            None::<fn(&IconSlider, &_)>,
+        );
+        brightness_slider
+            .icon_slider
+            .overlay
+            .add_css_class("volume-slider");
+        brightness_slider.icon_slider.overlay.set_visible(false);
 
         // --- BOTTOM ROW ---
         let bottom_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
@@ -97,7 +137,7 @@ impl MainPage {
 
         container.append(&grid);
         container.append(&vol_row);
-        container.append(&brightness.overlay);
+        container.append(&brightness_slider.icon_slider.overlay);
         container.append(&bottom_row);
 
         // --- BUTTON ACTIONS ---
@@ -185,90 +225,46 @@ impl MainPage {
             nl_tile_c.set_sensitive(data.available);
         });
 
-        // Audio → Slider + Icon (mit Debounce gegen eigene Slider-Änderungen)
-        let is_updating = Rc::new(std::cell::RefCell::new(false));
-        let is_first_update = Rc::new(std::cell::RefCell::new(true));
-
-        let volume_c = volume.clone();
-        let vol_icon_bar_c = vol_icon_bar.clone();
-        let is_updating_rx = is_updating.clone();
-        let is_first_rx = is_first_update.clone();
-
+        // Volume highlight style (on subscribe + on user change)
         let vol_arrow_sub = vol_arrow_c.clone();
+        let volume_slider_c = volume_slider.icon_slider.clone();
         ctx.audio.subscribe(move |data| {
-            let current = volume_c.slider.value();
-            let diff = (current - data.volume).abs();
-            let is_first = *is_first_rx.borrow();
-
-            if is_first || diff > 0.01 {
-                *is_first_rx.borrow_mut() = false;
-                *is_updating_rx.borrow_mut() = true;
-                volume_c.set_value(data.volume);
-                *is_updating_rx.borrow_mut() = false;
-
-                let icon_name = icons::volume_icon(data.volume, data.is_muted);
-                volume_c.set_icon(icon_name);
-                vol_icon_bar_c.set_icon_name(Some(icon_name));
-            }
-            Self::update_highlight_style(&volume_c.slider, data.volume, Some(&vol_arrow_sub));
+            Self::update_highlight_style(
+                &volume_slider_c.slider,
+                data.volume,
+                Some(&vol_arrow_sub),
+            );
         });
+        let vol_arrow_chg = vol_arrow_c.clone();
+        volume_slider
+            .icon_slider
+            .slider
+            .connect_value_changed(move |s| {
+                Self::update_highlight_style(s, s.value(), Some(&vol_arrow_chg));
+            });
 
         // Initial style
-        Self::update_highlight_style(&volume.slider, ctx.audio.get().volume, Some(&vol_arrow_c));
+        Self::update_highlight_style(
+            &volume_slider.icon_slider.slider,
+            ctx.audio.get().volume,
+            Some(&vol_arrow_c),
+        );
 
         // BatteryButton subscribes to power data internally
 
-        // Slider → AudioCmd (Gegenseite)
-        let ctx_audio = ctx.clone();
-        let is_updating_cmd = is_updating.clone();
-        let vol_arrow_chg = vol_arrow_c;
-        volume.slider.connect_value_changed(move |s| {
-            if *is_updating_cmd.borrow() {
-                return;
-            }
-            let val = s.value();
-            Self::update_highlight_style(s, val, Some(&vol_arrow_chg));
-            let _ = ctx_audio.audio_tx.send_blocking(AudioCmd::SetVolume(val));
-        });
-
-        // --- BRIGHTNESS SLIDER REACTIVE ---
-        let brightness_c = brightness.clone();
-        let brightness_overlay_c = brightness.overlay.clone();
-        let brightness_is_updating = Rc::new(std::cell::RefCell::new(false));
-
-        // Brightness → Slider (vereinfachter Debounce)
-        let brightness_is_updating_rx = brightness_is_updating.clone();
-
+        // Brightness visibility + highlight style
+        let brightness_overlay_c = brightness_slider.icon_slider.overlay.clone();
         ctx.backlight.subscribe(move |data| {
-            if !data.initialized {
-                return;
-            }
-
-            brightness_overlay_c.set_visible(data.has_backlight);
-
-            let current = brightness_c.slider.value();
-            let diff = (current - data.percentage).abs();
-
-            if diff > 0.5 {
-                *brightness_is_updating_rx.borrow_mut() = true;
-                brightness_c.set_value(data.percentage);
-                *brightness_is_updating_rx.borrow_mut() = false;
-                Self::update_highlight_style(&brightness_c.slider, data.percentage, None);
+            if data.initialized {
+                brightness_overlay_c.set_visible(data.has_backlight);
             }
         });
-
-        // Brightness Slider → BacklightCmd
-        let ctx_backlight = ctx.clone();
-        brightness.slider.connect_value_changed(move |s| {
-            if *brightness_is_updating.borrow() {
-                return;
-            }
-            let val = s.value();
-            Self::update_highlight_style(s, val, None);
-            let _ = ctx_backlight
-                .backlight_tx
-                .send_blocking(BacklightCmd::SetBrightness(val));
-        });
+        brightness_slider
+            .icon_slider
+            .slider
+            .connect_value_changed(move |s| {
+                Self::update_highlight_style(s, s.value(), None);
+            });
 
         // PowerActionStack wires its own button actions internally
 
