@@ -3,6 +3,7 @@ use zbus::{proxy, Connection, zvariant::{OwnedObjectPath, OwnedValue, Type}};
 use async_channel::{Sender, Receiver, bounded};
 use std::collections::HashMap;
 use std::time::Duration;
+use super::traits::Service;
 
 #[proxy(
     interface = "org.bluez.Adapter1",
@@ -62,8 +63,11 @@ pub enum BluetoothCmd {
 
 pub struct BluetoothService;
 
-impl BluetoothService {
-    pub fn spawn() -> (Receiver<BluetoothData>, Sender<BluetoothCmd>) {
+impl Service for BluetoothService {
+    type Data = BluetoothData;
+    type Cmd = BluetoothCmd;
+
+    fn spawn() -> (Receiver<Self::Data>, Sender<Self::Cmd>) {
         let (data_tx, data_rx) = bounded(10);
         let (cmd_tx, cmd_rx) = bounded(10);
 
@@ -156,6 +160,9 @@ impl BluetoothService {
 
         (data_rx, cmd_tx)
     }
+}
+
+impl BluetoothService {
 
     async fn fetch_data(adapter: &BluetoothAdapterProxy<'_>, obj_manager: &ObjectManagerProxy<'_>, include_devices: bool, old_data: &BluetoothData) -> BluetoothData {
         let is_powered = adapter.powered().await.unwrap_or(false);

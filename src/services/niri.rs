@@ -1,4 +1,4 @@
-use async_channel::{bounded, Receiver};
+use async_channel::{bounded, Receiver, Sender};
 use niri_ipc::{
     socket::Socket, Action, Event, Output, Request, Response, Window, Workspace,
     WorkspaceReferenceArg,
@@ -6,6 +6,8 @@ use niri_ipc::{
 use std::collections::HashMap;
 use std::thread;
 use std::time::Duration;
+
+use super::traits::Service;
 
 #[derive(Clone, Default, Debug)]
 pub struct NiriData {
@@ -37,8 +39,11 @@ impl PartialEq for NiriData {
 
 pub struct NiriService;
 
-impl NiriService {
-    pub fn spawn() -> Receiver<NiriData> {
+impl Service for NiriService {
+    type Data = NiriData;
+    type Cmd = ();
+
+    fn spawn() -> (Receiver<Self::Data>, Sender<Self::Cmd>) {
         let (data_tx, data_rx) = bounded(10);
 
         thread::spawn(move || {
@@ -83,9 +88,12 @@ impl NiriService {
             }
         });
 
-        data_rx
+        let (dummy_tx, _) = bounded(1);
+        (data_rx, dummy_tx)
     }
+}
 
+impl NiriService {
     fn fetch_full_state(client: &mut Socket) -> Option<NiriData> {
         let ws = client.send(Request::Workspaces);
         let wins = client.send(Request::Windows);

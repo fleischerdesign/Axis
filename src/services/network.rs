@@ -3,6 +3,7 @@ use zbus::{proxy, Connection, zvariant::OwnedObjectPath};
 use async_channel::{Sender, Receiver, bounded};
 use std::time::Duration;
 use std::collections::{HashMap, HashSet};
+use super::traits::Service;
 
 #[proxy(
     interface = "org.freedesktop.NetworkManager",
@@ -83,8 +84,11 @@ pub enum NetworkCmd {
 
 pub struct NetworkService;
 
-impl NetworkService {
-    pub fn spawn() -> (Receiver<NetworkData>, Sender<NetworkCmd>) {
+impl Service for NetworkService {
+    type Data = NetworkData;
+    type Cmd = NetworkCmd;
+
+    fn spawn() -> (Receiver<Self::Data>, Sender<Self::Cmd>) {
         let (data_tx, data_rx) = bounded(10);
         let (cmd_tx, cmd_rx) = bounded(10);
 
@@ -201,6 +205,9 @@ impl NetworkService {
 
         (data_rx, cmd_tx)
     }
+}
+
+impl NetworkService {
 
     async fn fetch_data(proxy: &NetworkManagerProxy<'_>, conn: &Connection, wifi_path: Option<&OwnedObjectPath>, include_aps: bool, old_data: &NetworkData) -> NetworkData {
         let state = proxy.state().await.unwrap_or(0);

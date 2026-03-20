@@ -2,13 +2,14 @@ pub mod provider;
 pub mod providers;
 
 use crate::services::launcher::provider::{LauncherItem, LauncherProvider};
-use crate::store::Store;
+use crate::services::traits::Service;
+use crate::store::ServiceStore;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::cell::RefCell;
 use std::process::{Command, Stdio};
 use std::os::unix::process::CommandExt;
-use async_channel::Receiver;
+use async_channel::{Receiver, Sender};
 use gtk4::glib;
 
 /// Describes what changed in the last update so the UI can avoid
@@ -38,30 +39,26 @@ pub enum LauncherCmd {
 
 pub struct LauncherService {
     providers: Rc<RefCell<Vec<Arc<dyn LauncherProvider>>>>,
-    store: Store<LauncherData>,
 }
 
-impl LauncherService {
-    pub fn new(store: Store<LauncherData>) -> Self {
-        Self {
-            providers: Rc::new(RefCell::new(Vec::new())),
-            store,
-        }
-    }
+impl Service for LauncherService {
+    type Data = LauncherData;
+    type Cmd = LauncherCmd;
 
-    pub fn add_provider(&self, provider: Arc<dyn LauncherProvider>) {
-        self.providers.borrow_mut().push(provider);
-    }
+    fn spawn() -> (Receiver<Self::Data>, Sender<Self::Cmd>) {
+        let (cmd_tx, cmd_rx) = async_channel::unbounded();
+        let store: ServiceStore<LauncherData> = ServiceStore::new_manual(Default::default());
+        let service = Self::new();
+        service.add_provider(Arc::new(providers::apps::AppProvider::default()));
 
-    pub fn start(&self, rx: Receiver<LauncherCmd>) {
-        let providers_ref = self.providers.clone();
-        let store = self.store.clone();
+        let providers_ref = service.providers.clone();
+        let data_store = store.store.clone();
 
         glib::spawn_future_local(async move {
-            while let Ok(cmd) = rx.recv().await {
+            while let Ok(cmd) = cmd_rx.recv().await {
                 match cmd {
                     LauncherCmd::SelectNext => {
-                        store.update(|d| {
+                        data_store.update(|d| {
                             if d.results.is_empty() { return; }
                             let next = d.selected_index.map_or(0, |i| (i + 1).min(d.results.len() - 1));
                             d.selected_index = Some(next);
@@ -69,7 +66,7 @@ impl LauncherService {
                         });
                     }
                     LauncherCmd::SelectPrev => {
-                        store.update(|d| {
+                        data_store.update(|d| {
                             if d.results.is_empty() { return; }
                             let prev = d.selected_index.map_or(0, |i| i.saturating_sub(1));
                             d.selected_index = Some(prev);
@@ -77,9 +74,7 @@ impl LauncherService {
                         });
                     }
                     LauncherCmd::Activate(maybe_idx) => {
-                        let data = store.get();
-                        
-                        // Nutze mitgelieferten Index ODER den selektierten ODER den ersten Treffer
+                        let data = data_store.get();
                         let idx_to_activate = maybe_idx
                             .or(data.selected_index)
                             .or_else(|| if !data.results.is_empty() { Some(0) } else { None });
@@ -88,14 +83,13 @@ impl LauncherService {
                             if let Some(item) = data.results.get(idx) {
                                 match &item.action {
                                     crate::services::launcher::provider::LauncherAction::Exec(cmd) => {
-                                        println!("Launcher: Bulletproof Start von '{}'", cmd);
                                         let _ = Command::new("sh")
                                             .arg("-c")
                                             .arg(cmd)
                                             .stdin(Stdio::null())
                                             .stdout(Stdio::null())
                                             .stderr(Stdio::null())
-                                            .process_group(0) 
+                                            .process_group(0)
                                             .spawn();
                                     }
                                     _ => {}
@@ -105,8 +99,8 @@ impl LauncherService {
                     }
                     LauncherCmd::Search(query) => {
                         let query_trimmed = query.trim().to_lowercase();
-                        
-                        store.update(|d| {
+
+                        data_store.update(|d| {
                             d.query = query.clone();
                             d.is_searching = true;
                             if query_trimmed.is_empty() {
@@ -125,7 +119,7 @@ impl LauncherService {
 
                         all_results.sort_by(|a, b| b.score.cmp(&a.score));
 
-                        store.update(|d| {
+                        data_store.update(|d| {
                             d.results = all_results;
                             d.is_searching = false;
                             d.selected_index = if d.results.is_empty() { None } else { Some(0) };
@@ -135,5 +129,21 @@ impl LauncherService {
                 }
             }
         });
+
+        // Dummy receiver — ServiceStore uses new_manual, no auto-subscription
+        let (_, dummy_rx) = async_channel::bounded::<LauncherData>(1);
+        (dummy_rx, cmd_tx)
+    }
+}
+
+impl LauncherService {
+    pub fn new() -> Self {
+        Self {
+            providers: Rc::new(RefCell::new(Vec::new())),
+        }
+    }
+
+    pub fn add_provider(&self, provider: Arc<dyn LauncherProvider>) {
+        self.providers.borrow_mut().push(provider);
     }
 }

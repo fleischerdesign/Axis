@@ -6,6 +6,7 @@ mod widgets;
 mod shell;
 
 use crate::app_context::AppContext;
+use crate::services::traits::Service;
 use crate::services::audio::AudioService;
 use crate::services::backlight::BacklightService;
 use crate::services::bluetooth::BluetoothService;
@@ -17,13 +18,11 @@ use crate::services::power::PowerService;
 use crate::services::launcher::LauncherService;
 use crate::services::ipc::IpcService;
 use crate::services::notifications::NotificationService;
-use crate::services::launcher::providers::apps::AppProvider;
 use crate::store::ServiceStore;
 use crate::widgets::{Bar, QuickSettingsPopup, WorkspacePopup, LauncherPopup, NotificationToastManager, osd::OsdManager};
 use crate::shell::ShellController;
 use gtk4::prelude::*;
 use gtk4::glib;
-use std::sync::Arc;
 use std::rc::Rc;
 use std::cell::RefCell;
 
@@ -141,6 +140,7 @@ fn setup_click_handler(island: &gtk4::Box, controller: Rc<ShellController>, id: 
 }
 
 fn setup_services() -> AppContext {
+    // Interactive services
     let (network_rx, network_tx) = NetworkService::spawn();
     let (bluetooth_rx, bluetooth_tx) = BluetoothService::spawn();
     let (audio_rx, audio_tx) = AudioService::spawn();
@@ -149,19 +149,14 @@ fn setup_services() -> AppContext {
     let (nightlight_rx, nightlight_tx) = NightlightService::spawn();
     let nightlight_initial = NightlightService::read_initial();
     let (notification_rx, notification_tx) = NotificationService::spawn();
-    let power_rx = PowerService::spawn();
-    let niri_rx = NiriService::spawn();
-    let clock_rx = ClockService::spawn();
 
-    let (launcher_tx, launcher_rx) = async_channel::unbounded();
-    let launcher_store = ServiceStore::new_manual(Default::default());
-    let launcher_service = LauncherService::new(launcher_store.store.clone());
-    
-    let launcher_service_init = launcher_service;
-    glib::spawn_future_local(async move {
-        launcher_service_init.add_provider(Arc::new(AppProvider::default()));
-        launcher_service_init.start(launcher_rx);
-    });
+    // Read-only services (Cmd = ())
+    let (power_rx, _) = PowerService::spawn();
+    let (niri_rx, _) = NiriService::spawn();
+    let (clock_rx, _) = ClockService::spawn();
+
+    // Launcher (special lifecycle — Service::spawn() handles start + provider)
+    let (_launcher_rx, launcher_tx) = LauncherService::spawn();
 
     AppContext {
         network: ServiceStore::new(network_rx, Default::default()),
@@ -174,7 +169,7 @@ fn setup_services() -> AppContext {
         backlight_tx,
         nightlight: ServiceStore::new(nightlight_rx, nightlight_initial),
         nightlight_tx,
-        launcher: launcher_store,
+        launcher: ServiceStore::new_manual(Default::default()),
         launcher_tx,
         notifications: ServiceStore::new(notification_rx, Default::default()),
         notifications_tx: notification_tx,

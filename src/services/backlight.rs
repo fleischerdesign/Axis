@@ -4,6 +4,7 @@ use inotify::{Inotify, WatchMask};
 use std::fs;
 use std::path::PathBuf;
 use std::thread;
+use super::traits::Service;
 
 const BACKLIGHT_DIR: &str = "/sys/class/backlight";
 
@@ -20,8 +21,11 @@ pub enum BacklightCmd {
 
 pub struct BacklightService;
 
-impl BacklightService {
-    pub fn spawn() -> (Receiver<BacklightData>, Sender<BacklightCmd>) {
+impl Service for BacklightService {
+    type Data = BacklightData;
+    type Cmd = BacklightCmd;
+
+    fn spawn() -> (Receiver<Self::Data>, Sender<Self::Cmd>) {
         let (data_tx, data_rx) = bounded(1);
         let (cmd_tx, cmd_rx) = bounded(16);
 
@@ -105,6 +109,9 @@ impl BacklightService {
 
         (data_rx, cmd_tx)
     }
+}
+
+impl BacklightService {
 
     pub fn read_initial() -> BacklightData {
         if let Some(path) = find_backlight_device() {

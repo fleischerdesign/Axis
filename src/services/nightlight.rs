@@ -1,6 +1,7 @@
 use async_channel::{bounded, Receiver, Sender};
 use std::process::{Child, Command, Stdio};
 use std::thread;
+use super::traits::Service;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct NightlightData {
@@ -39,8 +40,11 @@ pub enum NightlightCmd {
 
 pub struct NightlightService;
 
-impl NightlightService {
-    pub fn spawn() -> (Receiver<NightlightData>, Sender<NightlightCmd>) {
+impl Service for NightlightService {
+    type Data = NightlightData;
+    type Cmd = NightlightCmd;
+
+    fn spawn() -> (Receiver<Self::Data>, Sender<Self::Cmd>) {
         let (data_tx, data_rx) = bounded(100);
         let (cmd_tx, cmd_rx) = bounded(100);
 
@@ -150,6 +154,9 @@ impl NightlightService {
 
         (data_rx, cmd_tx)
     }
+}
+
+impl NightlightService {
 
     fn check_available() -> bool {
         Command::new("which")

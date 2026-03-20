@@ -1,7 +1,9 @@
-use async_channel::{Receiver, bounded};
+use async_channel::{Receiver, bounded, Sender};
 use std::thread;
 use std::time::Duration;
 use zbus::{proxy, Connection};
+
+use super::traits::Service;
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct PowerData {
@@ -26,8 +28,11 @@ trait UPowerDevice {
 
 pub struct PowerService;
 
-impl PowerService {
-    pub fn spawn() -> Receiver<PowerData> {
+impl Service for PowerService {
+    type Data = PowerData;
+    type Cmd = ();
+
+    fn spawn() -> (Receiver<Self::Data>, Sender<Self::Cmd>) {
         let (tx, rx) = bounded(10);
 
         thread::spawn(move || {
@@ -62,6 +67,7 @@ impl PowerService {
             });
         });
 
-        rx
+        let (dummy_tx, _) = bounded(1);
+        (rx, dummy_tx)
     }
 }

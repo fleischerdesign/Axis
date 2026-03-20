@@ -8,6 +8,7 @@ use libpulse_binding::volume::{ChannelVolumes, Volume};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::thread;
+use super::traits::Service;
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SinkInputData {
@@ -34,8 +35,11 @@ pub enum AudioCmd {
 
 pub struct AudioService;
 
-impl AudioService {
-    pub fn spawn() -> (Receiver<AudioData>, Sender<AudioCmd>) {
+impl Service for AudioService {
+    type Data = AudioData;
+    type Cmd = AudioCmd;
+
+    fn spawn() -> (Receiver<Self::Data>, Sender<Self::Cmd>) {
         let (data_tx, data_rx) = bounded(1);
         let (cmd_tx, cmd_rx) = bounded(16);
 
@@ -191,6 +195,9 @@ impl AudioService {
 
         (data_rx, cmd_tx)
     }
+}
+
+impl AudioService {
 
     /// Fetch default sink volume/mute. Updates shared state + sends AudioData.
     fn fetch_sink(

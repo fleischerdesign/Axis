@@ -5,6 +5,7 @@ use async_channel::{bounded, Receiver, Sender};
 use serde::Serialize;
 use zbus::connection::Builder;
 use zbus::object_server::InterfaceRef;
+use super::traits::Service;
 
 #[derive(Clone, Debug, Default, Serialize, PartialEq)]
 pub struct NotificationAction {
@@ -32,8 +33,11 @@ pub struct NotificationData {
 
 pub struct NotificationService;
 
-impl NotificationService {
-    pub fn spawn() -> (Receiver<NotificationData>, Sender<NotificationCmd>) {
+impl Service for NotificationService {
+    type Data = NotificationData;
+    type Cmd = NotificationCmd;
+
+    fn spawn() -> (Receiver<Self::Data>, Sender<Self::Cmd>) {
         let (raw_tx, raw_rx) = bounded::<Notification>(64);
         let (data_tx, data_rx) = bounded::<NotificationData>(64);
         let (cmd_tx, cmd_rx) = bounded::<NotificationCmd>(32);
@@ -108,4 +112,7 @@ impl NotificationService {
 
         (data_rx, cmd_tx)
     }
+}
+
+impl NotificationService {
 }

@@ -1,12 +1,17 @@
-use async_channel::{bounded, Receiver};
+use async_channel::{bounded, Receiver, Sender};
 use chrono::{DateTime, Local};
 use std::thread;
 use std::time::Duration;
 
+use super::traits::Service;
+
 pub struct ClockService;
 
-impl ClockService {
-    pub fn spawn() -> Receiver<DateTime<Local>> {
+impl Service for ClockService {
+    type Data = DateTime<Local>;
+    type Cmd = ();
+
+    fn spawn() -> (Receiver<Self::Data>, Sender<Self::Cmd>) {
         let (tx, rx) = bounded(10);
 
         thread::spawn(move || loop {
@@ -16,6 +21,7 @@ impl ClockService {
             thread::sleep(Duration::from_millis(1000));
         });
 
-        rx
+        let (dummy_tx, _) = bounded(1);
+        (rx, dummy_tx)
     }
 }
