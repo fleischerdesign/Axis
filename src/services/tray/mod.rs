@@ -151,29 +151,38 @@ async fn fetch_and_emit(
 
 async fn add_item(
     connection: &Connection,
-    bus_name: String,
+    item_id: String,
     item_proxies: &mut HashMap<String, StatusNotifierItemProxy<'static>>,
     tray_data: &mut TrayData,
     event_tx: &Sender<ItemEvent>,
     data_tx: &Sender<TrayData>,
 ) {
-    if item_proxies.contains_key(&bus_name) { return; }
+    if item_proxies.contains_key(&item_id) { return; }
 
-    info!("[tray] Adding tray item: {bus_name}");
+    // Parse destination + path: could be "bus.name" (path defaults to /StatusNotifierItem)
+    // or "bus.name/object/path" (combined from object path registration)
+    let (dest, path) = if item_id.contains('/') {
+        let slash = item_id.find('/').unwrap();
+        (item_id[..slash].to_string(), item_id[slash..].to_string())
+    } else {
+        (item_id.clone(), "/StatusNotifierItem".to_string())
+    };
+
+    info!("[tray] Adding tray item: {dest} {path}");
 
     let proxy = match StatusNotifierItemProxy::builder(connection)
-        .destination(bus_name.clone())
-        .and_then(|b| b.path("/StatusNotifierItem"))
+        .destination(dest)
+        .and_then(|b| b.path(path))
     {
         Ok(b) => match b.build().await {
             Ok(p) => p,
             Err(e) => {
-                error!("[tray] Failed to create proxy for {bus_name}: {e}");
+                error!("[tray] Failed to create proxy for {item_id}: {e}");
                 return;
             }
         },
         Err(e) => {
-            error!("[tray] Failed to create proxy builder for {bus_name}: {e}");
+            error!("[tray] Failed to create proxy builder for {item_id}: {e}");
             return;
         }
     };
@@ -188,10 +197,10 @@ async fn add_item(
 
     info!("[tray] Item details: id={id}, title={title}, icon={icon_name}, status={status}");
 
-    item_proxies.insert(bus_name.clone(), proxy.clone());
+    item_proxies.insert(item_id.clone(), proxy.clone());
 
     tray_data.items.push(TrayItem {
-        bus_name: bus_name.clone(),
+        bus_name: item_id.clone(),
         id,
         title,
         icon_name,
@@ -202,7 +211,7 @@ async fn add_item(
 
     // Spawn per-item signal watcher
     let event_tx_c = event_tx.clone();
-    let bus_name_c = bus_name.clone();
+    let bus_name_c = item_id.clone();
     tokio::spawn(async move {
         let mut icon_changed = proxy.receive_new_icon().await.ok();
         let mut title_changed = proxy.receive_new_title().await.ok();
