@@ -3,6 +3,7 @@ use crate::store::ServiceStore;
 use async_channel::{bounded, Sender};
 use brightness::blocking::Brightness;
 use inotify::{Inotify, WatchMask};
+use log::error;
 use std::fs;
 use std::path::PathBuf;
 use std::thread;
@@ -79,7 +80,7 @@ impl Service for BacklightService {
                 let events = match watcher.read_events_blocking(&mut buf) {
                     Ok(e) => e,
                     Err(e) => {
-                        eprintln!("[BacklightService] inotify read failed: {e}");
+                        error!("[backlight] inotify read failed: {e}");
                         break;
                     }
                 };

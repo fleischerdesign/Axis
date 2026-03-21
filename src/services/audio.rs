@@ -5,9 +5,11 @@ use libpulse_binding::context::subscribe::{Facility, InterestMaskSet, Operation}
 use libpulse_binding::context::{Context, FlagSet as ContextFlagSet, State as ContextState};
 use libpulse_binding::mainloop::threaded::Mainloop;
 use libpulse_binding::volume::{ChannelVolumes, Volume};
+use log::error;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::thread;
+
 use super::Service;
 use crate::store::ServiceStore;
 
@@ -48,7 +50,7 @@ impl Service for AudioService {
             let mainloop = match Mainloop::new() {
                 Some(ml) => Rc::new(RefCell::new(ml)),
                 None => {
-                    eprintln!("[AudioService] Failed to create PulseAudio mainloop");
+                    error!("[audio] Failed to create PulseAudio mainloop");
                     return;
                 }
             };
@@ -56,7 +58,7 @@ impl Service for AudioService {
             let context = match Context::new(&*mainloop.borrow(), "axis-audio") {
                 Some(ctx) => Rc::new(RefCell::new(ctx)),
                 None => {
-                    eprintln!("[AudioService] Failed to create PulseAudio context");
+                    error!("[audio] Failed to create PulseAudio context");
                     return;
                 }
             };
@@ -96,7 +98,7 @@ impl Service for AudioService {
                 match context.borrow().get_state() {
                     ContextState::Ready => break,
                     ContextState::Failed | ContextState::Terminated => {
-                        eprintln!("[AudioService] PulseAudio context failed");
+                        error!("[audio] PulseAudio context failed");
                         mainloop.borrow_mut().unlock();
                         mainloop.borrow_mut().stop();
                         return;
@@ -199,7 +201,6 @@ impl Service for AudioService {
 }
 
 impl AudioService {
-
     /// Fetch default sink volume/mute. Updates shared state + sends AudioData.
     fn fetch_sink(
         ctx_ref: &Rc<RefCell<Context>>,

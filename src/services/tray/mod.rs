@@ -5,6 +5,7 @@ use crate::store::ServiceStore;
 use async_channel::{bounded, Sender};
 use futures_util::StreamExt;
 use item_proxy::StatusNotifierItemProxy;
+use log::{error, info, warn};
 use std::collections::HashMap;
 use zbus::connection::Builder;
 use zbus::interface;
@@ -53,12 +54,12 @@ struct StatusNotifierWatcher {
 #[interface(name = "org.freedesktop.StatusNotifierWatcher")]
 impl StatusNotifierWatcher {
     fn register_status_notifier_item(&self, service: String) {
-        eprintln!("[TrayService] RegisterStatusNotifierItem: {service}");
+        info!("[tray] RegisterStatusNotifierItem: {service}");
         let _ = self.reg_tx.send_blocking(service);
     }
 
     fn register_status_notifier_host(&self, _service: String) {
-        eprintln!("[TrayService] RegisterStatusNotifierHost: {_service}");
+        info!("[tray] RegisterStatusNotifierHost: {_service}");
     }
 
     #[zbus(property)]
@@ -111,7 +112,7 @@ async fn add_item(
 ) {
     if item_proxies.contains_key(&bus_name) { return; }
 
-    eprintln!("[TrayService] Adding tray item: {bus_name}");
+    info!("[tray] Adding tray item: {bus_name}");
 
     let proxy = match StatusNotifierItemProxy::builder(connection)
         .destination(bus_name.clone())
@@ -120,12 +121,12 @@ async fn add_item(
         Ok(b) => match b.build().await {
             Ok(p) => p,
             Err(e) => {
-                eprintln!("[TrayService] Failed to create proxy for {bus_name}: {e}");
+                error!("[tray] Failed to create proxy for {bus_name}: {e}");
                 return;
             }
         },
         Err(e) => {
-            eprintln!("[TrayService] Failed to create proxy builder for {bus_name}: {e}");
+            error!("[tray] Failed to create proxy builder for {bus_name}: {e}");
             return;
         }
     };
@@ -138,7 +139,7 @@ async fn add_item(
         proxy.status().await.unwrap_or_else(|_| "Active".to_string()),
     );
 
-    eprintln!("[TrayService] Item details: id={id}, title={title}, icon={icon_name}, status={status}");
+    info!("[tray] Item details: id={id}, title={title}, icon={icon_name}, status={status}");
 
     item_proxies.insert(bus_name.clone(), proxy.clone());
 
@@ -193,11 +194,11 @@ impl Service for TrayService {
             // --- Single connection for everything ---
             let connection = match Connection::session().await {
                 Ok(c) => {
-                    eprintln!("[TrayService] Connected to session bus");
+                    info!("[tray] Connected to session bus");
                     c
                 },
                 Err(e) => {
-                    eprintln!("[TrayService] Failed to connect to session bus: {e}");
+                    error!("[tray] Failed to connect to session bus: {e}");
                     return;
                 }
             };
@@ -211,14 +212,14 @@ impl Service for TrayService {
                 .at("/StatusNotifierWatcher", watcher)
                 .await
             {
-                eprintln!("[TrayService] Failed to serve watcher interface: {e}");
+                error!("[tray] Failed to serve watcher interface: {e}");
                 return;
             }
 
             // Request watcher bus names
             match connection.request_name("org.freedesktop.StatusNotifierWatcher").await {
-                Ok(_) => eprintln!("[TrayService] Acquired org.freedesktop.StatusNotifierWatcher"),
-                Err(e) => eprintln!("[TrayService] Failed to acquire watcher name: {e}"),
+                Ok(_) => info!("[tray] Acquired org.freedesktop.StatusNotifierWatcher"),
+                Err(e) => error!("[tray] Failed to acquire watcher name: {e}"),
             }
             let _ = connection.request_name("org.kde.StatusNotifierWatcher").await;
 
@@ -227,24 +228,24 @@ impl Service for TrayService {
             let host_name = format!("org.freedesktop.StatusNotifierHost-{pid}");
             match WellKnownName::try_from(host_name.clone()) {
                 Ok(name) => match connection.request_name(name).await {
-                    Ok(_) => eprintln!("[TrayService] Acquired {host_name}"),
-                    Err(e) => eprintln!("[TrayService] Failed to acquire host name: {e}"),
+                    Ok(_) => info!("[tray] Acquired {host_name}"),
+                    Err(e) => error!("[tray] Failed to acquire host name: {e}"),
                 },
-                Err(e) => eprintln!("[TrayService] Invalid host name: {e}"),
+                Err(e) => error!("[tray] Invalid host name: {e}"),
             }
 
             // --- NameOwnerChanged monitoring on same connection ---
             let dbus_proxy = match DBusProxy::new(&connection).await {
                 Ok(p) => p,
                 Err(e) => {
-                    eprintln!("[TrayService] Failed to create DBus proxy: {e}");
+                    error!("[tray] Failed to create DBus proxy: {e}");
                     return;
                 }
             };
             let mut name_changed = match dbus_proxy.receive_name_owner_changed().await {
                 Ok(s) => s,
                 Err(e) => {
-                    eprintln!("[TrayService] Failed to subscribe to name changes: {e}");
+                    error!("[tray] Failed to subscribe to name changes: {e}");
                     return;
                 }
             };
@@ -259,9 +260,9 @@ impl Service for TrayService {
                         }
                     }
                 },
-                Err(e) => eprintln!("[TrayService] Failed to list names: {e}"),
+                Err(e) => error!("[tray] Failed to list names: {e}"),
             }
-            eprintln!("[TrayService] Found {} existing tray items", existing_names.len());
+            info!("[tray] Found {} existing tray items", existing_names.len());
 
             // Event channel from per-item tasks
             let (event_tx, event_rx) = async_channel::unbounded::<ItemEvent>();
@@ -277,7 +278,7 @@ impl Service for TrayService {
 
             let mut cmd_rx = Box::pin(cmd_rx);
 
-            eprintln!("[TrayService] Ready, listening for registrations");
+            info!("[tray] Ready, listening for registrations");
 
             loop {
                 tokio::select! {
@@ -291,7 +292,7 @@ impl Service for TrayService {
                         if let Ok(args) = signal.args() {
                             let name = &*args.name;
                             if name.starts_with("org.freedesktop.StatusNotifierItem-") && args.new_owner().is_none() {
-                                eprintln!("[TrayService] Item disconnected: {name}");
+                                info!("[tray] Item disconnected: {name}");
                                 item_proxies.remove(name);
                                 tray_data.items.retain(|i| i.bus_name != name);
                                 let _ = data_tx.send(tray_data.clone()).await;
@@ -312,7 +313,7 @@ impl Service for TrayService {
                                 let _ = data_tx.send(tray_data.clone()).await;
                             }
                             ItemEvent::Disconnected(bus_name) => {
-                                eprintln!("[TrayService] Item task disconnected: {bus_name}");
+                                warn!("[tray] Item task disconnected: {bus_name}");
                                 item_proxies.remove(&bus_name);
                                 tray_data.items.retain(|i| i.bus_name != bus_name);
                                 let _ = data_tx.send(tray_data.clone()).await;

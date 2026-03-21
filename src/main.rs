@@ -27,9 +27,29 @@ use gtk4::glib;
 use std::rc::Rc;
 use std::cell::RefCell;
 
+fn setup_logging() {
+    fern::Dispatch::new()
+        .format(|out, message, record| {
+            out.finish(format_args!(
+                "[{} {}] {}",
+                chrono::Local::now().format("%H:%M:%S"),
+                record.level(),
+                message
+            ))
+        })
+        .level(log::LevelFilter::Info)
+        .chain(std::io::stderr())
+        .apply()
+        .expect("Failed to set up logging");
+}
+
 fn main() {
+    setup_logging();
+
     let runtime = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
     let _guard = runtime.enter();
+
+    log::info!("AXIS Shell starting");
 
     let application = libadwaita::Application::builder()
         .application_id("com.github.axis.shell")

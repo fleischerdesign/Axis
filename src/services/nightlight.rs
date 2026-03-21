@@ -1,6 +1,7 @@
 use super::Service;
 use crate::store::ServiceStore;
 use async_channel::{bounded, Sender};
+use log::error;
 use std::process::{Child, Command, Stdio};
 use std::thread;
 
@@ -141,7 +142,7 @@ impl Service for NightlightService {
                         }
                         Ok(None) => {} // Still running
                         Err(e) => {
-                            eprintln!("[NightlightService] Error checking wlsunset: {e}");
+                            error!("[nightlight] Error checking wlsunset: {e}");
                             wlsunset_child = None;
                             data.enabled = false;
                             let _ = data_tx.send_blocking(data.clone());

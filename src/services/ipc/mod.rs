@@ -3,6 +3,7 @@ pub mod server;
 use crate::services::ipc::server::{ShellIpcServer, ShellIpcCmd};
 use async_channel::{bounded, Receiver};
 use zbus::connection::Builder;
+use log::error;
 
 pub struct IpcService;
 
@@ -31,7 +32,7 @@ impl IpcService {
                         tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
                     }
                 }
-                Err(e) => eprintln!("IPC: Failed to register D-Bus interface: {:?}", e),
+                Err(e) => error!("[ipc] Failed to register D-Bus interface: {:?}", e),
             }
         });
 

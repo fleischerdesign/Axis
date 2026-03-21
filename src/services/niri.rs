@@ -1,4 +1,5 @@
 use async_channel::{bounded, Sender};
+use log::warn;
 use niri_ipc::{
     socket::Socket, Action, Event, Output, Request, Response, Window, Workspace,
     WorkspaceReferenceArg,
@@ -81,7 +82,7 @@ impl Service for NiriService {
                             }
                         }
                     }
-                    eprintln!("[NiriService] Connection lost, reconnecting...");
+                    warn!("[niri] Connection lost, reconnecting...");
                 }
 
                 thread::sleep(reconnect_delay);

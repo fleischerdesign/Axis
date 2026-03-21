@@ -2,6 +2,8 @@ use async_channel::{bounded, Sender};
 use futures_util::StreamExt;
 use zbus::{proxy, Connection};
 
+use log::error;
+
 use super::Service;
 use crate::store::ServiceStore;
 
@@ -53,9 +55,9 @@ impl Service for PowerService {
                 match Connection::system().await {
                     Ok(conn) => match UPowerDeviceProxy::new(&conn).await {
                         Ok(proxy) => break proxy,
-                        Err(e) => eprintln!("[PowerService] Failed to create proxy: {e}"),
+                        Err(e) => error!("[power] Failed to create proxy: {e}"),
                     },
-                    Err(e) => eprintln!("[PowerService] Failed to connect to D-Bus: {e}"),
+                    Err(e) => error!("[power] Failed to connect to D-Bus: {e}"),
                 }
                 tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             };

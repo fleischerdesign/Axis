@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 use super::Service;
 use crate::store::ServiceStore;
+use log::error;
 
 #[proxy(
     interface = "org.bluez.Adapter1",
@@ -82,9 +83,9 @@ impl Service for BluetoothService {
                         if let (Ok(a), Ok(o)) = (adapter, obj_mgr) {
                             break (conn, a, o);
                         }
-                        eprintln!("[BluetoothService] Failed to create proxies, retrying...");
+                        error!("[bluetooth] Failed to create proxies, retrying...");
                     }
-                    Err(e) => eprintln!("[BluetoothService] Failed to connect to D-Bus: {e}"),
+                    Err(e) => error!("[bluetooth] Failed to connect to D-Bus: {e}"),
                 }
                 tokio::time::sleep(Duration::from_secs(5)).await;
             };
@@ -110,19 +111,19 @@ impl Service for BluetoothService {
                         match cmd {
                             BluetoothCmd::TogglePower(on) => {
                                 if let Err(e) = adapter_proxy.set_powered(on).await {
-                                    eprintln!("[BluetoothService] Failed to toggle power: {e}");
+                                    error!("[bluetooth] Failed to toggle power: {e}");
                                 }
                                 if !on { is_discovering = false; }
                             }
                             BluetoothCmd::Scan => {
                                 if let Err(e) = adapter_proxy.start_discovery().await {
-                                    eprintln!("[BluetoothService] Failed to start discovery: {e}");
+                                    error!("[bluetooth] Failed to start discovery: {e}");
                                 }
                                 is_discovering = true;
                             }
                             BluetoothCmd::StopScan => {
                                 if let Err(e) = adapter_proxy.stop_discovery().await {
-                                    eprintln!("[BluetoothService] Failed to stop discovery: {e}");
+                                    error!("[bluetooth] Failed to stop discovery: {e}");
                                 }
                                 is_discovering = false;
                             }
@@ -130,7 +131,7 @@ impl Service for BluetoothService {
                                 if let Ok(path) = OwnedObjectPath::try_from(path_str) {
                                     if let Ok(dev_proxy) = BluetoothDeviceProxy::builder(&connection).path(path).unwrap().build().await {
                                         if let Err(e) = dev_proxy.connect().await {
-                                            eprintln!("[BluetoothService] Failed to connect device: {e}");
+                                            error!("[bluetooth] Failed to connect device: {e}");
                                         }
                                     }
                                 }
@@ -139,7 +140,7 @@ impl Service for BluetoothService {
                                 if let Ok(path) = OwnedObjectPath::try_from(path_str) {
                                     if let Ok(dev_proxy) = BluetoothDeviceProxy::builder(&connection).path(path).unwrap().build().await {
                                         if let Err(e) = dev_proxy.disconnect().await {
-                                            eprintln!("[BluetoothService] Failed to disconnect device: {e}");
+                                            error!("[bluetooth] Failed to disconnect device: {e}");
                                         }
                                     }
                                 }

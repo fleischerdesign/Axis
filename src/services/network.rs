@@ -5,6 +5,7 @@ use std::time::Duration;
 use std::collections::{HashMap, HashSet};
 use super::Service;
 use crate::store::ServiceStore;
+use log::error;
 
 #[proxy(
     interface = "org.freedesktop.NetworkManager",
@@ -99,9 +100,9 @@ impl Service for NetworkService {
                 match Connection::system().await {
                     Ok(conn) => match NetworkManagerProxy::new(&conn).await {
                         Ok(proxy) => break (conn, proxy),
-                        Err(e) => eprintln!("[NetworkService] Failed to create proxy: {e}"),
+                        Err(e) => error!("[network] Failed to create proxy: {e}"),
                     },
-                    Err(e) => eprintln!("[NetworkService] Failed to connect to D-Bus: {e}"),
+                    Err(e) => error!("[network] Failed to connect to D-Bus: {e}"),
                 }
                 tokio::time::sleep(Duration::from_secs(5)).await;
             };
@@ -137,14 +138,14 @@ impl Service for NetworkService {
                         match cmd {
                             NetworkCmd::ToggleWifi(on) => {
                                 if let Err(e) = proxy.set_wireless_enabled(on).await {
-                                    eprintln!("[NetworkService] Failed to toggle WiFi: {e}");
+                                    error!("[network] Failed to toggle WiFi: {e}");
                                 }
                             }
                             NetworkCmd::ScanWifi => {
                                 if let Some(path) = &wifi_device_path {
                                     if let Ok(wifi_proxy) = WirelessDeviceProxy::builder(&connection).path(path).unwrap().build().await {
                                         if let Err(e) = wifi_proxy.request_scan(HashMap::new()).await {
-                                            eprintln!("[NetworkService] Failed to scan WiFi: {e}");
+                                            error!("[network] Failed to scan WiFi: {e}");
                                         }
                                         full_scan = true;
                                     }
@@ -153,7 +154,7 @@ impl Service for NetworkService {
                             NetworkCmd::ConnectToAp(ap_path_str) => {
                                 if let (Some(dev_path), Ok(ap_path)) = (&wifi_device_path, OwnedObjectPath::try_from(ap_path_str)) {
                                     if let Err(e) = proxy.activate_connection(OwnedObjectPath::try_from("/").unwrap(), dev_path.clone(), ap_path).await {
-                                        eprintln!("[NetworkService] Failed to connect to AP: {e}");
+                                        error!("[network] Failed to connect to AP: {e}");
                                     }
                                 }
                             }
@@ -172,7 +173,7 @@ impl Service for NetworkService {
                                     security_set.insert("psk", zbus::zvariant::Value::from(password));
                                     settings.insert("802-11-wireless-security", security_set);
                                     if let Err(e) = proxy.add_and_activate_connection(settings, dev_path.clone(), ap_path).await {
-                                        eprintln!("[NetworkService] Failed to connect with password: {e}");
+                                        error!("[network] Failed to connect with password: {e}");
                                     }
                                 }
                             }
@@ -182,7 +183,7 @@ impl Service for NetworkService {
                                         if let Ok(active_conn_path) = dev_proxy.active_connection().await {
                                             if active_conn_path.to_string() != "/" {
                                                 if let Err(e) = proxy.deactivate_connection(active_conn_path).await {
-                                                    eprintln!("[NetworkService] Failed to disconnect: {e}");
+                                                    error!("[network] Failed to disconnect: {e}");
                                                 }
                                             }
                                         }
