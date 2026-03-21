@@ -14,11 +14,12 @@ pub enum NotificationCmd {
 
 pub struct NotificationServer {
     tx: Sender<Notification>,
+    cmd_tx: Sender<NotificationCmd>,
 }
 
 impl NotificationServer {
-    pub fn new(tx: Sender<Notification>) -> Self {
-        Self { tx }
+    pub fn new(tx: Sender<Notification>, cmd_tx: Sender<NotificationCmd>) -> Self {
+        Self { tx, cmd_tx }
     }
 }
 
@@ -70,7 +71,9 @@ impl NotificationServer {
         id
     }
 
-    pub fn close_notification(&self, _id: u32) {}
+    pub fn close_notification(&self, id: u32) {
+        let _ = self.cmd_tx.send_blocking(NotificationCmd::Close(id));
+    }
 
     // --- SIGNALE (Zbus 5 Style) ---
     // Wichtig: Kein &self, SignalEmitter als erstes Argument

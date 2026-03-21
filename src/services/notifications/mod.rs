@@ -42,9 +42,10 @@ impl Service for NotificationService {
         let (raw_tx, raw_rx) = bounded::<Notification>(64);
         let (data_tx, data_rx) = bounded::<NotificationData>(64);
         let (cmd_tx, cmd_rx) = bounded::<NotificationCmd>(32);
+        let server_cmd_tx = cmd_tx.clone();
         
         tokio::spawn(async move {
-            let server = NotificationServer::new(raw_tx);
+            let server = NotificationServer::new(raw_tx, server_cmd_tx);
             let conn = Builder::session()
                 .unwrap()
                 .name("org.freedesktop.Notifications")
