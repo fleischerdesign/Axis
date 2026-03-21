@@ -149,6 +149,7 @@ fn build_ui(app: &libadwaita::Application) {
     setup_click_handler(&bar.status_island, shell_ctrl.clone(), "qs");
     setup_click_handler(&bar.center_island, shell_ctrl.clone(), "ws");
 
+    log::info!("UI ready, presenting window");
     bar.window.present();
 }
 

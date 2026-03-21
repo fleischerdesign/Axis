@@ -1,4 +1,5 @@
 use crate::services::launcher::provider::{LauncherAction, LauncherItem, LauncherProvider};
+use log::info;
 use std::future::Future;
 use std::pin::Pin;
 use std::path::PathBuf;
@@ -43,6 +44,7 @@ impl AppProvider {
         }
 
         let apps = self.scan_apps();
+        info!("[launcher] Found {} apps", apps.len());
         let dir_mtimes = self.get_dir_mtimes();
         *self.cache.write().unwrap() = Some(Cache { apps: apps.clone(), dir_mtimes });
         apps

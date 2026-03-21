@@ -1,5 +1,6 @@
-use std::rc::Rc;
+use log::debug;
 use std::cell::RefCell;
+use std::rc::Rc;
 
 pub trait ShellPopup {
     fn id(&self) -> &str;
@@ -34,6 +35,7 @@ impl ShellController {
     }
 
     pub fn toggle(&self, id: &str) {
+        debug!("[shell] Toggle: {id}");
         let popups = self.popups.borrow();
         let mut any_open_after = false;
         let mut new_id = None;
@@ -41,8 +43,8 @@ impl ShellController {
         for p in popups.iter() {
             if p.id() == id {
                 p.toggle();
-                if p.is_open() { 
-                    any_open_after = true; 
+                if p.is_open() {
+                    any_open_after = true;
                     new_id = Some(id.to_string());
                 }
             } else if p.is_open() {
@@ -55,6 +57,7 @@ impl ShellController {
     }
 
     pub fn close_all(&self) {
+        debug!("[shell] Close all");
         let popups = self.popups.borrow();
         for p in popups.iter() {
             if p.is_open() {
