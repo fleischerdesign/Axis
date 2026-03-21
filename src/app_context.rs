@@ -11,6 +11,7 @@ use crate::services::nightlight::{NightlightCmd, NightlightData};
 use crate::services::niri::NiriData;
 use crate::services::notifications::{server::NotificationCmd, NotificationData};
 use crate::services::power::PowerData;
+use crate::services::tray::{TrayCmd, TrayData};
 use crate::store::ServiceStore;
 
 /// Zentraler App-Kontext — wird an alle Widgets weitergegeben.
@@ -48,4 +49,7 @@ pub struct AppContext {
 
     pub dnd: ServiceStore<DndData>,
     pub dnd_tx: Sender<DndCmd>,
+
+    pub tray: ServiceStore<TrayData>,
+    pub tray_tx: Sender<TrayCmd>,
 }

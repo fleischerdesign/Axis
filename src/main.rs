@@ -12,6 +12,7 @@ use crate::services::backlight::BacklightService;
 use crate::services::bluetooth::BluetoothService;
 use crate::services::clock::ClockService;
 use crate::services::dnd::DndService;
+use crate::services::tray::TrayService;
 use crate::services::nightlight::NightlightService;
 use crate::services::network::NetworkService;
 use crate::services::niri::NiriService;
@@ -151,6 +152,7 @@ fn setup_services() -> AppContext {
     let (clock, _) = ClockService::spawn();
     let (launcher, launcher_tx) = LauncherService::spawn();
     let (dnd, dnd_tx) = DndService::spawn();
+    let (tray, tray_tx) = TrayService::spawn();
 
     AppContext {
         network, network_tx,
@@ -162,5 +164,6 @@ fn setup_services() -> AppContext {
         notifications, notifications_tx,
         power, niri, clock,
         dnd, dnd_tx,
+        tray, tray_tx,
     }
 }

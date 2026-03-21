@@ -1,6 +1,7 @@
 pub mod center;
 pub mod launcher;
 pub mod status;
+pub mod tray;
 
 use crate::app_context::AppContext;
 use crate::constants::{BAR_HEIGHT, BAR_HIDE_DELAY_MS, BAR_PEEK_PX};
@@ -8,6 +9,7 @@ use crate::widgets::animations::SlideAnimator;
 use center::BarCenter;
 use launcher::BarLauncher;
 use status::BarStatus;
+use tray::BarTray;
 
 use gtk4::glib;
 use gtk4::prelude::*;
@@ -22,6 +24,7 @@ pub struct Bar {
     pub launcher_island: gtk4::Box,
     pub status_island: gtk4::Box,
     pub center_island: gtk4::Box,
+    pub tray_island: gtk4::Box,
     pub vol_icon: gtk4::Image,
     pub popup_open: Rc<RefCell<bool>>,
     is_visible: Rc<RefCell<bool>>,
@@ -55,13 +58,18 @@ impl Bar {
         let launcher = BarLauncher::new();
         let center = BarCenter::new(ctx.clone());
         let status = BarStatus::new(ctx.clone());
+        let tray = BarTray::new(ctx.clone());
+
+        let end_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+        end_box.append(&tray.container);
+        end_box.append(&status.container);
 
         let root = gtk4::CenterBox::new();
         root.set_margin_bottom(10);
         root.set_height_request(44);
         root.set_start_widget(Some(&launcher.container));
         root.set_center_widget(Some(&center.container));
-        root.set_end_widget(Some(&status.container));
+        root.set_end_widget(Some(&end_box));
         window.set_child(Some(&root));
 
         let bar = Self {
@@ -69,6 +77,7 @@ impl Bar {
             launcher_island: launcher.container,
             status_island: status.container,
             center_island: center.container,
+            tray_island: tray.container,
             vol_icon: status.vol_icon,
             popup_open: popup_open.clone(),
             is_visible: is_visible.clone(),
