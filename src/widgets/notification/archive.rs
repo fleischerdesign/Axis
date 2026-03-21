@@ -54,13 +54,16 @@ impl NotificationArchiveManager {
             ctx: ctx.clone(),
         });
 
-        // Dynamische Höhenanpassung
+        // Dynamische Höhenanpassung via tick callback
         let window_c = manager.window.clone();
         let qs_c = manager.qs_content.clone();
+        let last_height: Rc<RefCell<i32>> = Rc::new(RefCell::new(0));
         manager.window.add_tick_callback(move |_, _| {
             if window_c.is_visible() {
                 let height = qs_c.height();
-                if height > 50 {
+                let mut last = last_height.borrow_mut();
+                if height > 50 && height != *last {
+                    *last = height;
                     window_c.set_margin(Edge::Bottom, height + ARCHIVE_MARGIN_BOTTOM);
                 }
             }

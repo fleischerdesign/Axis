@@ -72,7 +72,7 @@ where
                 return;
             }
             let val = s.value();
-            let _ = tx_c.send_blocking(to_cmd(val));
+            let _ = tx_c.try_send(to_cmd(val));
         });
 
         Self {

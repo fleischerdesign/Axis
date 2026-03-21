@@ -1,5 +1,6 @@
 use async_channel::{bounded, Sender};
 use futures_util::StreamExt;
+use std::time::Duration;
 use zbus::{proxy, Connection};
 
 use log::{error, info};
@@ -59,7 +60,7 @@ impl Service for PowerService {
                     },
                     Err(e) => error!("[power] Failed to connect to D-Bus: {e}"),
                 }
-                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                tokio::time::sleep(Duration::from_secs(5)).await;
             };
 
             info!("[power] Connected to UPower");

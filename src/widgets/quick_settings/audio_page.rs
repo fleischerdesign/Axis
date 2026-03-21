@@ -1,8 +1,9 @@
 use crate::app_context::AppContext;
 use crate::services::audio::{AudioCmd, SinkInputData};
+use crate::widgets::components::debounced_slider::DebouncedSlider;
 use crate::widgets::components::icon_slider::IconSlider;
-use crate::widgets::icons;
 use crate::widgets::components::subpage_header::SubPageHeader;
+use crate::widgets::icons;
 use gtk4::prelude::*;
 use std::cell::Cell;
 use std::rc::Rc;
@@ -19,41 +20,33 @@ impl AudioPage {
         header.connect_back(on_back);
         container.append(&header.container);
 
-        // --- MASTER SLIDER ---
+        // --- MASTER SLIDER (reuses DebouncedSlider) ---
         let master_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
         master_row.add_css_class("audio-master-row");
 
-        let master = IconSlider::new("audio-volume-high-symbolic", 0.0, 1.0, 0.01);
-        master.overlay.add_css_class("volume-slider");
-        master_row.append(&master.overlay);
+        let master_slider = DebouncedSlider::new(
+            "audio-volume-high-symbolic",
+            0.0,
+            1.0,
+            0.01,
+            &ctx.audio.store,
+            &ctx.audio.tx,
+            |d| d.volume,
+            |v| AudioCmd::SetVolume(v),
+            0.01,
+            Some({
+                move |slider: &IconSlider, data: &crate::services::audio::AudioData| {
+                    let icon_name = icons::volume_icon(data.volume, data.is_muted);
+                    slider.set_icon(icon_name);
+                }
+            }),
+        );
+        master_slider
+            .icon_slider
+            .overlay
+            .add_css_class("volume-slider");
+        master_row.append(&master_slider.icon_slider.overlay);
         container.append(&master_row);
-
-        // Master slider reactive bindings
-        let is_updating = Rc::new(std::cell::RefCell::new(false));
-
-        let master_slider_c = master.slider.clone();
-        let master_icon_c = master.icon.clone();
-        let is_updating_rx = is_updating.clone();
-        ctx.audio.subscribe(move |data| {
-            if !*is_updating_rx.borrow() {
-                *is_updating_rx.borrow_mut() = true;
-                master_slider_c.set_value(data.volume);
-                *is_updating_rx.borrow_mut() = false;
-            }
-            let icon_name = icons::volume_icon(data.volume, data.is_muted);
-            master_icon_c.set_icon_name(Some(icon_name));
-        });
-
-        let ctx_audio = ctx.clone();
-        let is_updating_cmd = is_updating.clone();
-        master.slider.connect_value_changed(move |s| {
-            if *is_updating_cmd.borrow() {
-                return;
-            }
-            let _ = ctx_audio
-                .audio_tx
-                .send_blocking(AudioCmd::SetVolume(s.value()));
-        });
 
         // --- APP LIST ---
         let list_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
@@ -143,10 +136,10 @@ impl AudioPage {
         row.append(&slider_overlay);
 
         // Slider → SetSinkInputVolume
-        let tx = ctx.audio_tx.clone();
+        let tx = ctx.audio.tx.clone();
         let app_index = input.index;
         slider.connect_value_changed(move |s| {
-            let _ = tx.send_blocking(AudioCmd::SetSinkInputVolume(app_index, s.value()));
+            let _ = tx.try_send(AudioCmd::SetSinkInputVolume(app_index, s.value()));
         });
 
         row

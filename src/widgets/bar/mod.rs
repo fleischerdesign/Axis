@@ -5,6 +5,7 @@ pub mod tray;
 
 use crate::app_context::AppContext;
 use crate::constants::{BAR_HEIGHT, BAR_HIDE_DELAY_MS, BAR_PEEK_PX};
+use crate::store::ReactiveBool;
 use crate::widgets::animations::SlideAnimator;
 use center::BarCenter;
 use launcher::BarLauncher;
@@ -26,20 +27,20 @@ pub struct Bar {
     pub center_island: gtk4::Box,
     pub tray_island: gtk4::Box,
     pub vol_icon: gtk4::Image,
-    pub popup_open: Rc<RefCell<bool>>,
-    is_visible: Rc<RefCell<bool>>,
+    pub popup_open: ReactiveBool,
+    is_visible: ReactiveBool,
     hide_timeout: Rc<RefCell<Option<glib::SourceId>>>,
     anim_source: Rc<RefCell<Option<glib::SourceId>>>,
-    is_hovered: Rc<RefCell<bool>>,
+    is_hovered: ReactiveBool,
 }
 
 impl Bar {
     pub fn new(app: &libadwaita::Application, ctx: AppContext) -> Self {
-        let is_visible = Rc::new(RefCell::new(false));
+        let is_visible = ReactiveBool::new(false);
         let hide_timeout = Rc::new(RefCell::new(None));
         let anim_source = Rc::new(RefCell::new(None));
-        let popup_open = Rc::new(RefCell::new(false));
-        let is_hovered = Rc::new(RefCell::new(false));
+        let popup_open = ReactiveBool::new(false);
+        let is_hovered = ReactiveBool::new(false);
 
         let window = gtk4::ApplicationWindow::builder()
             .application(app)
@@ -93,7 +94,7 @@ impl Bar {
             let bar_ref = bar.clone();
 
             motion.connect_enter(move |_, _, _| {
-                *is_hovered_c.borrow_mut() = true;
+                is_hovered_c.set(true);
                 bar_ref.check_auto_hide();
             });
         }
@@ -102,7 +103,7 @@ impl Bar {
             let is_hovered_c = is_hovered.clone();
             let bar_ref = bar.clone();
             motion.connect_leave(move |_| {
-                *is_hovered_c.borrow_mut() = false;
+                is_hovered_c.set(false);
                 bar_ref.check_auto_hide();
             });
         }
@@ -112,7 +113,7 @@ impl Bar {
     }
 
     pub fn check_auto_hide(&self) {
-        let should_be_visible = *self.popup_open.borrow() || *self.is_hovered.borrow();
+        let should_be_visible = self.popup_open.get() || self.is_hovered.get();
 
         // Timer für das Verstecken immer stoppen, wenn sich der Status ändert
         if let Some(src) = self.hide_timeout.borrow_mut().take() {
@@ -121,8 +122,8 @@ impl Bar {
 
         if should_be_visible {
             // SHOW
-            if !*self.is_visible.borrow() {
-                *self.is_visible.borrow_mut() = true;
+            if !self.is_visible.get() {
+                self.is_visible.set(true);
                 SlideAnimator::slide_margin(
                     &self.window,
                     Edge::Bottom,
@@ -139,7 +140,7 @@ impl Bar {
 
             let src =
                 glib::timeout_add_local_once(Duration::from_millis(BAR_HIDE_DELAY_MS), move || {
-                    *is_visible_for_cb.borrow_mut() = false;
+                    is_visible_for_cb.set(false);
                     *hide_timeout_for_cb.borrow_mut() = None;
 
                     SlideAnimator::slide_margin(

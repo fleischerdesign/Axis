@@ -18,7 +18,7 @@ impl ShellPopup for WorkspacePopup {
         "ws"
     }
     fn is_open(&self) -> bool {
-        *self.base.is_open.borrow()
+        self.base.is_open.get()
     }
 
     fn close(&self) {
@@ -116,7 +116,7 @@ impl WorkspacePopup {
         });
         let close_popup_c = close_popup.clone();
         ctx.niri.subscribe(move |data| {
-            if *is_open_c.borrow() {
+            if is_open_c.get() {
                 Self::render_shelf(&shelf_c, data, &window_c, close_popup_c.clone());
             }
         });
@@ -141,8 +141,6 @@ impl WorkspacePopup {
                 move || base.close()
             });
             Self::render_shelf(&shelf, &self.ctx.niri.get(), &self.base.window, close_popup);
-            // Focus first workspace card on open
-            gtk4::glib::timeout_add_local_once(std::time::Duration::from_millis(50), move || {});
         }
     }
 

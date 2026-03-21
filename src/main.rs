@@ -20,6 +20,7 @@ use crate::services::power::PowerService;
 use crate::services::launcher::LauncherService;
 use crate::services::ipc::IpcService;
 use crate::services::notifications::NotificationService;
+use crate::store::{ReadOnlyHandle, ServiceHandle};
 use crate::widgets::{Bar, QuickSettingsPopup, WorkspacePopup, LauncherPopup, NotificationToastManager, osd::OsdManager};
 use crate::shell::ShellController;
 use gtk4::prelude::*;
@@ -162,29 +163,31 @@ fn setup_click_handler(island: &gtk4::Box, controller: Rc<ShellController>, id: 
 }
 
 fn setup_services() -> AppContext {
-    let (network, network_tx) = NetworkService::spawn();
-    let (bluetooth, bluetooth_tx) = BluetoothService::spawn();
-    let (audio, audio_tx) = AudioService::spawn();
-    let (backlight, backlight_tx) = BacklightService::spawn();
-    let (nightlight, nightlight_tx) = NightlightService::spawn();
-    let (notifications, notifications_tx) = NotificationService::spawn();
-    let (power, _) = PowerService::spawn();
-    let (niri, _) = NiriService::spawn();
-    let (clock, _) = ClockService::spawn();
-    let (launcher, launcher_tx) = LauncherService::spawn();
-    let (dnd, dnd_tx) = DndService::spawn();
-    let (tray, tray_tx) = TrayService::spawn();
+    let (network_store, network_tx) = NetworkService::spawn();
+    let (bluetooth_store, bluetooth_tx) = BluetoothService::spawn();
+    let (audio_store, audio_tx) = AudioService::spawn();
+    let (backlight_store, backlight_tx) = BacklightService::spawn();
+    let (nightlight_store, nightlight_tx) = NightlightService::spawn();
+    let (notifications_store, notifications_tx) = NotificationService::spawn();
+    let (dnd_store, dnd_tx) = DndService::spawn();
+    let (tray_store, tray_tx) = TrayService::spawn();
+    let (power_store, _) = PowerService::spawn();
+    let (niri_store, _) = NiriService::spawn();
+    let (clock_store, _) = ClockService::spawn();
+    let (launcher_store, launcher_tx) = LauncherService::spawn();
 
     AppContext {
-        network, network_tx,
-        bluetooth, bluetooth_tx,
-        audio, audio_tx,
-        backlight, backlight_tx,
-        nightlight, nightlight_tx,
-        launcher, launcher_tx,
-        notifications, notifications_tx,
-        power, niri, clock,
-        dnd, dnd_tx,
-        tray, tray_tx,
+        network: ServiceHandle { store: network_store, tx: network_tx },
+        bluetooth: ServiceHandle { store: bluetooth_store, tx: bluetooth_tx },
+        audio: ServiceHandle { store: audio_store, tx: audio_tx },
+        backlight: ServiceHandle { store: backlight_store, tx: backlight_tx },
+        nightlight: ServiceHandle { store: nightlight_store, tx: nightlight_tx },
+        launcher: ServiceHandle { store: launcher_store, tx: launcher_tx },
+        notifications: ServiceHandle { store: notifications_store, tx: notifications_tx },
+        dnd: ServiceHandle { store: dnd_store, tx: dnd_tx },
+        tray: ServiceHandle { store: tray_store, tx: tray_tx },
+        power: ReadOnlyHandle { store: power_store },
+        niri: ReadOnlyHandle { store: niri_store },
+        clock: ReadOnlyHandle { store: clock_store },
     }
 }

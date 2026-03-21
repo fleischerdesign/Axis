@@ -2,8 +2,8 @@ use crate::app_context::AppContext;
 use crate::services::bluetooth::BluetoothCmd;
 use crate::widgets::components::scrolled_list::ScrolledList;
 use crate::widgets::components::subpage_header::SubPageHeader;
-use crate::widgets::ToggleTile;
 use crate::widgets::ListRow;
+use crate::widgets::ToggleTile;
 use gtk4::prelude::*;
 use std::rc::Rc;
 
@@ -23,16 +23,16 @@ impl BluetoothPage {
         container.append(&scrolled_list.scrolled);
 
         // --- LOGIC ---
-        let tx_back = ctx.bluetooth_tx.clone();
+        let tx_back = ctx.bluetooth.tx.clone();
         let on_back = Rc::new(on_back);
         header.connect_back(move || {
-            let _ = tx_back.send_blocking(BluetoothCmd::StopScan);
+            let _ = tx_back.try_send(BluetoothCmd::StopScan);
             on_back();
         });
 
         let list_c = scrolled_list.list;
         let parent_tile_c = parent_tile.clone();
-        let tx_row = ctx.bluetooth_tx.clone();
+        let tx_row = ctx.bluetooth.tx.clone();
 
         ctx.bluetooth.subscribe(move |data| {
             parent_tile_c.set_active(data.is_powered);
@@ -64,10 +64,9 @@ impl BluetoothPage {
 
                 row.button.connect_clicked(move |_| {
                     if is_connected {
-                        let _ =
-                            tx_inner.send_blocking(BluetoothCmd::Disconnect(path_inner.clone()));
+                        let _ = tx_inner.try_send(BluetoothCmd::Disconnect(path_inner.clone()));
                     } else {
-                        let _ = tx_inner.send_blocking(BluetoothCmd::Connect(path_inner.clone()));
+                        let _ = tx_inner.try_send(BluetoothCmd::Connect(path_inner.clone()));
                     }
                 });
 

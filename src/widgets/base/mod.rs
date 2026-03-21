@@ -1,20 +1,19 @@
 use crate::constants::REVEALER_TRANSITION_MS;
+use crate::store::ReactiveBool;
 use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
-use std::cell::RefCell;
-use std::rc::Rc;
 use std::time::Duration;
 
 #[derive(Clone)]
 pub struct PopupBase {
     pub window: gtk4::Window,
     pub revealer: gtk4::Revealer,
-    pub is_open: Rc<RefCell<bool>>,
+    pub is_open: ReactiveBool,
 }
 
 impl PopupBase {
     pub fn new(app: &libadwaita::Application, title: &str, anchor_right: bool) -> Self {
-        let is_open = Rc::new(RefCell::new(false));
+        let is_open = ReactiveBool::new(false);
 
         let window = gtk4::Window::builder()
             .application(app)
@@ -56,10 +55,10 @@ impl PopupBase {
     }
 
     pub fn open(&self) {
-        if *self.is_open.borrow() {
+        if self.is_open.get() {
             return;
         }
-        *self.is_open.borrow_mut() = true;
+        self.is_open.set(true);
         self.window.set_visible(true);
         self.revealer.set_reveal_child(true);
 
@@ -71,10 +70,10 @@ impl PopupBase {
     }
 
     pub fn close(&self) {
-        if !*self.is_open.borrow() {
+        if !self.is_open.get() {
             return;
         }
-        *self.is_open.borrow_mut() = false;
+        self.is_open.set(false);
         self.revealer.set_reveal_child(false);
 
         let win = self.window.clone();
@@ -88,7 +87,7 @@ impl PopupBase {
     }
 
     pub fn toggle(&self) {
-        if *self.is_open.borrow() {
+        if self.is_open.get() {
             self.close();
         } else {
             self.open();

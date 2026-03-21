@@ -63,19 +63,19 @@ impl BarTray {
                         1 => {
                             debug!("[tray] Left click: {bn}");
                             let _ = ctx_click
-                                .tray_tx
-                                .send_blocking(TrayCmd::SecondaryActivate(bn.clone()));
+                                .tray
+                                .tx
+                                .try_send(TrayCmd::SecondaryActivate(bn.clone()));
                         }
                         3 => {
                             debug!("[tray] Right click: {bn}");
-                            let _ = ctx_click
-                                .tray_tx
-                                .send_blocking(TrayCmd::ContextMenu(bn.clone()));
+                            let _ = ctx_click.tray.tx.try_send(TrayCmd::ContextMenu(bn.clone()));
                         }
                         2 => {
                             let _ = ctx_click
-                                .tray_tx
-                                .send_blocking(TrayCmd::SecondaryActivate(bn.clone()));
+                                .tray
+                                .tx
+                                .try_send(TrayCmd::SecondaryActivate(bn.clone()));
                         }
                         _ => {}
                     });

@@ -19,7 +19,7 @@ impl ShellPopup for LauncherPopup {
         "launcher"
     }
     fn is_open(&self) -> bool {
-        *self.base.is_open.borrow()
+        self.base.is_open.get()
     }
     fn close(&self) {
         self.base.close();
@@ -84,11 +84,11 @@ impl LauncherPopup {
         // Single-click activation on list rows.
         // connect_row_activated fires on single-click in GTK4,
         // unlike ListBoxRow::connect_activate which needs double-click.
-        let tx_click = ctx.launcher_tx.clone();
+        let tx_click = ctx.launcher.tx.clone();
         let base_click = base.clone();
         list.connect_row_activated(move |_, row| {
             let idx = row.index() as usize;
-            let _ = tx_click.send_blocking(LauncherCmd::Activate(Some(idx)));
+            let _ = tx_click.try_send(LauncherCmd::Activate(Some(idx)));
             base_click.close();
         });
 
@@ -122,13 +122,13 @@ impl LauncherPopup {
         base.set_content(&container);
 
         // --- Search ---
-        let tx = ctx.launcher_tx.clone();
+        let tx = ctx.launcher.tx.clone();
         entry.connect_changed(move |e| {
-            let _ = tx.send_blocking(LauncherCmd::Search(e.text().to_string()));
+            let _ = tx.try_send(LauncherCmd::Search(e.text().to_string()));
         });
 
         // --- Keyboard navigation ---
-        let tx_key = ctx.launcher_tx.clone();
+        let tx_key = ctx.launcher.tx.clone();
         let base_key = base.clone();
         let key_controller = gtk4::EventControllerKey::new();
         key_controller.connect_key_pressed(move |_, key, _, state| {
@@ -136,18 +136,18 @@ impl LauncherPopup {
             use gtk4::gdk::ModifierType;
             match key {
                 Key::Down => {
-                    let _ = tx_key.send_blocking(LauncherCmd::SelectNext);
+                    let _ = tx_key.try_send(LauncherCmd::SelectNext);
                     gtk4::glib::Propagation::Stop
                 }
                 Key::Up => {
-                    let _ = tx_key.send_blocking(LauncherCmd::SelectPrev);
+                    let _ = tx_key.try_send(LauncherCmd::SelectPrev);
                     gtk4::glib::Propagation::Stop
                 }
                 Key::Tab => {
                     if state.contains(ModifierType::SHIFT_MASK) {
-                        let _ = tx_key.send_blocking(LauncherCmd::SelectPrev);
+                        let _ = tx_key.try_send(LauncherCmd::SelectPrev);
                     } else {
-                        let _ = tx_key.send_blocking(LauncherCmd::SelectNext);
+                        let _ = tx_key.try_send(LauncherCmd::SelectNext);
                     }
                     gtk4::glib::Propagation::Stop
                 }
@@ -161,10 +161,10 @@ impl LauncherPopup {
         entry.add_controller(key_controller);
 
         // --- Activation (Enter) ---
-        let tx_activate = ctx.launcher_tx.clone();
+        let tx_activate = ctx.launcher.tx.clone();
         let base_activate = base.clone();
         entry.connect_activate(move |_| {
-            let _ = tx_activate.send_blocking(LauncherCmd::Activate(None));
+            let _ = tx_activate.try_send(LauncherCmd::Activate(None));
             base_activate.close();
         });
 
@@ -240,8 +240,9 @@ impl LauncherPopup {
         self.entry.grab_focus();
         let _ = self
             .ctx
-            .launcher_tx
-            .send_blocking(LauncherCmd::Search("".to_string()));
+            .launcher
+            .tx
+            .try_send(LauncherCmd::Search("".to_string()));
     }
 }
 

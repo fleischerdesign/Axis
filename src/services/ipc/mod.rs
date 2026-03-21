@@ -14,23 +14,17 @@ impl IpcService {
         let server = ShellIpcServer::new(tx);
 
         tokio::spawn(async move {
-            let conn_res = Builder::session()
-                .unwrap()
-                .name("org.axis.Shell")
-                .unwrap()
-                .serve_at("/org/axis/Shell", server)
-                .unwrap()
-                .build()
-                .await;
+            let conn_res = async {
+                let builder = Builder::session()?;
+                let builder = builder.name("org.axis.Shell")?;
+                let builder = builder.serve_at("/org/axis/Shell", server)?;
+                builder.build().await
+            }.await;
 
             match conn_res {
                 Ok(_conn) => {
                     info!("[ipc] D-Bus Interface 'org.axis.Shell' registered and active");
-                    // WICHTIG: Wir müssen die Verbindung halten!
-                    // Solange dieser Future läuft, bleibt die Verbindung offen.
-                    loop {
-                        tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
-                    }
+                    std::future::pending::<()>().await;
                 }
                 Err(e) => error!("[ipc] Failed to register D-Bus interface: {:?}", e),
             }

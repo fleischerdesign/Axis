@@ -1,3 +1,4 @@
+use crate::store::ReactiveBool;
 use log::debug;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -11,13 +12,13 @@ pub trait ShellPopup {
 
 pub struct ShellController {
     popups: RefCell<Vec<Rc<dyn ShellPopup>>>,
-    bar_popup_state: Rc<RefCell<bool>>,
+    bar_popup_state: ReactiveBool,
     active_id: Rc<RefCell<Option<String>>>,
     on_change: Box<dyn Fn()>,
 }
 
 impl ShellController {
-    pub fn new(bar_popup_state: Rc<RefCell<bool>>, on_change: impl Fn() + 'static) -> Self {
+    pub fn new(bar_popup_state: ReactiveBool, on_change: impl Fn() + 'static) -> Self {
         Self {
             popups: RefCell::new(Vec::new()),
             bar_popup_state,
@@ -86,7 +87,7 @@ impl ShellController {
     }
 
     fn sync_state(&self, any_open: bool) {
-        *self.bar_popup_state.borrow_mut() = any_open;
+        self.bar_popup_state.set(any_open);
         (self.on_change)();
     }
 }

@@ -124,7 +124,7 @@ impl NiriService {
     }
 
     pub fn spawn_action(action: Action) {
-        thread::spawn(move || {
+        tokio::task::spawn_blocking(move || {
             if let Ok(mut sock) = Socket::connect() {
                 let _ = sock.send(Request::Action(action));
             }

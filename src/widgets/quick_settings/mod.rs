@@ -29,7 +29,7 @@ impl ShellPopup for QuickSettingsPopup {
         "qs"
     }
     fn is_open(&self) -> bool {
-        *self.base.is_open.borrow()
+        self.base.is_open.get()
     }
 
     fn close(&self) {
@@ -74,17 +74,17 @@ impl QuickSettingsPopup {
 
         // --- PAGES ---
         let stack_wifi = qs_stack.clone();
-        let tx_wifi = ctx.network_tx.clone();
+        let tx_wifi = ctx.network.tx.clone();
         let open_wifi = move || {
             stack_wifi.set_visible_child_name("wifi");
-            let _ = tx_wifi.send_blocking(NetworkCmd::ScanWifi);
+            let _ = tx_wifi.try_send(NetworkCmd::ScanWifi);
         };
 
         let stack_bt = qs_stack.clone();
-        let tx_bt = ctx.bluetooth_tx.clone();
+        let tx_bt = ctx.bluetooth.tx.clone();
         let open_bt = move || {
             stack_bt.set_visible_child_name("bluetooth");
-            let _ = tx_bt.send_blocking(BluetoothCmd::Scan);
+            let _ = tx_bt.try_send(BluetoothCmd::Scan);
         };
 
         let stack_nl = qs_stack.clone();
@@ -132,7 +132,7 @@ impl QuickSettingsPopup {
                 stack_back_nl.set_visible_child_name("main");
             },
             main_page.nl_tile.clone(),
-            ctx.nightlight_tx.clone(),
+            ctx.nightlight.tx.clone(),
         );
 
         let stack_back_audio = qs_stack.clone();

@@ -1,6 +1,5 @@
 use async_channel::{bounded, Sender};
 use chrono::{DateTime, Local};
-use std::thread;
 use std::time::Duration;
 
 use super::Service;
@@ -15,11 +14,13 @@ impl Service for ClockService {
     fn spawn() -> (ServiceStore<Self::Data>, Sender<Self::Cmd>) {
         let (tx, rx) = bounded(10);
 
-        thread::spawn(move || loop {
-            if tx.send_blocking(Local::now()).is_err() {
-                break;
+        tokio::spawn(async move {
+            loop {
+                if tx.send(Local::now()).await.is_err() {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_secs(1)).await;
             }
-            thread::sleep(Duration::from_millis(1000));
         });
 
         let (dummy_tx, _) = bounded(1);

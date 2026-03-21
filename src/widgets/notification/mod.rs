@@ -76,7 +76,7 @@ impl NotificationCard {
             .build();
 
         let id = data.id;
-        let tx = ctx.notifications_tx.clone();
+        let tx = ctx.notifications.tx.clone();
         close_btn.connect_clicked(move |_| {
             let _ = tx.try_send(NotificationCmd::Close(id));
         });
@@ -127,7 +127,7 @@ impl NotificationCard {
                     .css_classes(vec!["notification-action-btn".to_string()])
                     .build();
 
-                let tx = ctx.notifications_tx.clone();
+                let tx = ctx.notifications.tx.clone();
                 let key = action.key.clone();
                 let id_action = data.id;
                 btn.connect_clicked(move |_| {
@@ -140,7 +140,7 @@ impl NotificationCard {
         }
 
         // --- SWIPE TO DISMISS (generisch) ---
-        let tx_swipe = ctx.notifications_tx.clone();
+        let tx_swipe = ctx.notifications.tx.clone();
         let id_swipe = data.id;
         let swipe = SwipeDismiss::new(&card, move || {
             let _ = tx_swipe.try_send(NotificationCmd::Close(id_swipe));
@@ -155,7 +155,7 @@ impl NotificationCard {
 
         // --- CLICK GESTURE (Default Action) ---
         let click = gtk4::GestureClick::new();
-        let tx_click = ctx.notifications_tx.clone();
+        let tx_click = ctx.notifications.tx.clone();
         let id_click = data.id;
         let has_default = data.actions.iter().any(|a| a.key == "default");
 

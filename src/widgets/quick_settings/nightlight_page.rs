@@ -140,7 +140,7 @@ impl NightlightPage {
             }
             let val = s.value() as u32;
             val_lbl.set_text(&format!("{} K", val));
-            let _ = tx.send_blocking(NightlightCmd::SetTempDay(val));
+            let _ = tx.try_send(NightlightCmd::SetTempDay(val));
         });
 
         // Night Slider -> Service
@@ -153,13 +153,13 @@ impl NightlightPage {
             }
             let val = s.value() as u32;
             val_lbl.set_text(&format!("{} K", val));
-            let _ = tx.send_blocking(NightlightCmd::SetTempNight(val));
+            let _ = tx.try_send(NightlightCmd::SetTempNight(val));
         });
 
         // Toggle -> Service
         let tx = nightlight_tx.clone();
         toggle.connect_state_notify(move |sw| {
-            let _ = tx.send_blocking(NightlightCmd::Toggle(sw.state()));
+            let _ = tx.try_send(NightlightCmd::Toggle(sw.state()));
         });
 
         // Schedule: Apply on Enter
@@ -168,7 +168,7 @@ impl NightlightPage {
             let sun_e = sunrise_entry.clone();
             let set_e = sunset_entry.clone();
             move || {
-                let _ = tx.send_blocking(NightlightCmd::SetSchedule(
+                let _ = tx.try_send(NightlightCmd::SetSchedule(
                     sun_e.text().to_string(),
                     set_e.text().to_string(),
                 ));

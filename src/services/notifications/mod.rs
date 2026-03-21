@@ -2,7 +2,7 @@ pub mod server;
 
 use crate::services::notifications::server::{NotificationServer, NotificationCmd, NotificationServerSignals};
 use async_channel::{bounded, Sender};
-use log::info;
+use log::{error, info};
 use serde::Serialize;
 use zbus::connection::Builder;
 use zbus::object_server::InterfaceRef;
@@ -46,30 +46,40 @@ impl Service for NotificationService {
         let server_cmd_tx = cmd_tx.clone();
         
         tokio::spawn(async move {
-            let server = NotificationServer::new(raw_tx, server_cmd_tx);
-            let conn = Builder::session()
-                .unwrap()
-                .name("org.freedesktop.Notifications")
-                .unwrap()
-                .serve_at("/org/freedesktop/Notifications", server)
-                .unwrap()
-                .build()
-                .await
-                .unwrap();
+            let conn = async {
+                let server = NotificationServer::new(raw_tx, server_cmd_tx);
+                let builder = Builder::session()?;
+                let builder = builder.name("org.freedesktop.Notifications")?;
+                let builder = builder.serve_at("/org/freedesktop/Notifications", server)?;
+                builder.build().await
+            }.await;
+
+            let conn = match conn {
+                Ok(c) => c,
+                Err(e) => {
+                    error!("[notifications] Failed to register D-Bus service: {:?}", e);
+                    return;
+                }
+            };
 
             info!("[notifications] D-Bus service registered");
 
-            let interface_ref: InterfaceRef<NotificationServer> = conn
+            let interface_ref: InterfaceRef<NotificationServer> = match conn
                 .object_server()
                 .interface("/org/freedesktop/Notifications")
                 .await
-                .unwrap();
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    error!("[notifications] Failed to get interface ref: {:?}", e);
+                    return;
+                }
+            };
 
             let mut history: Vec<Notification> = Vec::new();
 
             loop {
                 tokio::select! {
-                    // Neue Nachricht von D-Bus (App schickt Notification)
                     Ok(n) = raw_rx.recv() => {
                         info!("[notifications] {} - {}", n.app_name, n.summary);
                         let id = n.id;
@@ -85,26 +95,20 @@ impl Service for NotificationService {
                         }).await;
                     }
 
-                    // Befehl von unserer UI (User klickt "X" oder Action)
                     Ok(cmd) = cmd_rx.recv() => {
                         match cmd {
                             NotificationCmd::Close(id) => {
                                 info!("[notifications] Notification {id} closed");
-                                // 1. Aus History entfernen (für UI)
                                 history.retain(|n| n.id != id);
                                 let _ = data_tx.send(NotificationData { 
                                     notifications: history.clone(), 
                                     last_id: 0 
                                 }).await;
-                                
-                                // 2. D-Bus informieren (App Bescheid geben)
                                 let _ = interface_ref.notification_closed(id, 2).await;
                             },
                             NotificationCmd::Action(id, key) => {
                                 info!("[notifications] Notification {id} action: {key}");
-                                // D-Bus informieren
                                 let _ = interface_ref.action_invoked(id, &key).await;
-                                // Danach schließen wir sie meistens direkt
                                 history.retain(|n| n.id != id);
                                 let _ = data_tx.send(NotificationData { 
                                     notifications: history.clone(), 
@@ -120,7 +124,4 @@ impl Service for NotificationService {
 
         (ServiceStore::new(data_rx, Default::default()), cmd_tx)
     }
-}
-
-impl NotificationService {
 }

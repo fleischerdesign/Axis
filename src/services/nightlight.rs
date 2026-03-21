@@ -64,100 +64,95 @@ impl Service for NightlightService {
             }
 
             loop {
-                // Handle commands
-                while let Ok(cmd) = cmd_rx.try_recv() {
-                    match cmd {
-                        NightlightCmd::Toggle(on) => {
-                            info!("[nightlight] {}", if on { "enabled" } else { "disabled" });
-                            if on {
-                                if !data.enabled {
-                                    if let Some(child) = Self::start_wlsunset(&data) {
-                                        wlsunset_child = Some(child);
-                                        data.enabled = true;
+                // Block until a command arrives (no CPU-burning poll)
+                match cmd_rx.recv_blocking() {
+                    Ok(cmd) => {
+                        match cmd {
+                            NightlightCmd::Toggle(on) => {
+                                info!("[nightlight] {}", if on { "enabled" } else { "disabled" });
+                                if on {
+                                    if !data.enabled {
+                                        if let Some(child) = Self::start_wlsunset(&data) {
+                                            wlsunset_child = Some(child);
+                                            data.enabled = true;
+                                        }
                                     }
-                                }
-                            } else if data.enabled {
-                                if let Some(mut child) = wlsunset_child.take() {
-                                    Self::stop_wlsunset(&mut child);
+                                } else if data.enabled {
+                                    Self::stop_child(&mut wlsunset_child);
                                     data.enabled = false;
                                 }
                             }
-                        }
-                        NightlightCmd::SetTempDay(kelvin) => {
-                            data.temp_day = kelvin;
-                            if data.enabled {
-                                if let Some(mut child) = wlsunset_child.take() {
-                                    Self::stop_wlsunset(&mut child);
-                                }
-                                if let Some(child) = Self::start_wlsunset(&data) {
-                                    wlsunset_child = Some(child);
-                                }
+                            NightlightCmd::SetTempDay(kelvin) => {
+                                data.temp_day = kelvin;
+                                Self::restart_if_enabled(&mut wlsunset_child, &data);
+                            }
+                            NightlightCmd::SetTempNight(kelvin) => {
+                                data.temp_night = kelvin;
+                                Self::restart_if_enabled(&mut wlsunset_child, &data);
+                            }
+                            NightlightCmd::SetSchedule(sunrise, sunset) => {
+                                data.sunrise = sunrise;
+                                data.sunset = sunset;
+                                data.latitude.clear();
+                                data.longitude.clear();
+                                Self::restart_if_enabled(&mut wlsunset_child, &data);
+                            }
+                            NightlightCmd::SetLocation(lat, long) => {
+                                data.latitude = lat;
+                                data.longitude = long;
+                                data.sunrise.clear();
+                                data.sunset.clear();
+                                Self::restart_if_enabled(&mut wlsunset_child, &data);
                             }
                         }
-                        NightlightCmd::SetTempNight(kelvin) => {
-                            data.temp_night = kelvin;
-                            if data.enabled {
-                                if let Some(mut child) = wlsunset_child.take() {
-                                    Self::stop_wlsunset(&mut child);
-                                }
+
+                        let _ = data_tx.send_blocking(data.clone());
+                    }
+                    Err(_) => break,
+                }
+
+                // Drain any additional queued commands before checking process
+                while let Ok(cmd) = cmd_rx.try_recv() {
+                    match cmd {
+                        NightlightCmd::Toggle(on) => {
+                            if on && !data.enabled {
                                 if let Some(child) = Self::start_wlsunset(&data) {
                                     wlsunset_child = Some(child);
+                                    data.enabled = true;
                                 }
+                            } else if !on && data.enabled {
+                                Self::stop_child(&mut wlsunset_child);
+                                data.enabled = false;
                             }
                         }
-                        NightlightCmd::SetSchedule(sunrise, sunset) => {
-                            data.sunrise = sunrise;
-                            data.sunset = sunset;
-                            data.latitude = "".to_string();
-                            data.longitude = "".to_string();
-                            if data.enabled {
-                                if let Some(mut child) = wlsunset_child.take() {
-                                    Self::stop_wlsunset(&mut child);
-                                }
-                                if let Some(child) = Self::start_wlsunset(&data) {
-                                    wlsunset_child = Some(child);
-                                }
-                            }
+                        NightlightCmd::SetTempDay(k) => {
+                            data.temp_day = k;
+                            Self::restart_if_enabled(&mut wlsunset_child, &data);
                         }
-                        NightlightCmd::SetLocation(lat, long) => {
-                            data.latitude = lat;
-                            data.longitude = long;
-                            data.sunrise = "".to_string();
-                            data.sunset = "".to_string();
-                            if data.enabled {
-                                if let Some(mut child) = wlsunset_child.take() {
-                                    Self::stop_wlsunset(&mut child);
-                                }
-                                if let Some(child) = Self::start_wlsunset(&data) {
-                                    wlsunset_child = Some(child);
-                                }
-                            }
+                        NightlightCmd::SetTempNight(k) => {
+                            data.temp_night = k;
+                            Self::restart_if_enabled(&mut wlsunset_child, &data);
+                        }
+                        NightlightCmd::SetSchedule(sr, ss) => {
+                            data.sunrise = sr;
+                            data.sunset = ss;
+                            data.latitude.clear();
+                            data.longitude.clear();
+                            Self::restart_if_enabled(&mut wlsunset_child, &data);
+                        }
+                        NightlightCmd::SetLocation(la, lo) => {
+                            data.latitude = la;
+                            data.longitude = lo;
+                            data.sunrise.clear();
+                            data.sunset.clear();
+                            Self::restart_if_enabled(&mut wlsunset_child, &data);
                         }
                     }
-
                     let _ = data_tx.send_blocking(data.clone());
                 }
 
-                // If wlsunset crashed, reset state
-                if let Some(child) = &mut wlsunset_child {
-                    match child.try_wait() {
-                        Ok(Some(_)) => {
-                            warn!("[nightlight] wlsunset exited");
-                            wlsunset_child = None;
-                            data.enabled = false;
-                            let _ = data_tx.send_blocking(data.clone());
-                        }
-                        Ok(None) => {} // Still running
-                        Err(e) => {
-                            error!("[nightlight] Error checking wlsunset: {e}");
-                            wlsunset_child = None;
-                            data.enabled = false;
-                            let _ = data_tx.send_blocking(data.clone());
-                        }
-                    }
-                }
-
-                thread::sleep(std::time::Duration::from_millis(100));
+                // Check if wlsunset crashed
+                Self::check_crashed(&mut wlsunset_child, &mut data, &data_tx);
             }
         });
 
@@ -211,5 +206,42 @@ impl NightlightService {
     fn stop_wlsunset(child: &mut Child) {
         let _ = child.kill();
         let _ = child.wait();
+    }
+
+    fn stop_child(child: &mut Option<Child>) {
+        if let Some(mut c) = child.take() {
+            Self::stop_wlsunset(&mut c);
+        }
+    }
+
+    fn restart_if_enabled(child: &mut Option<Child>, data: &NightlightData) {
+        if data.enabled {
+            Self::stop_child(child);
+            *child = Self::start_wlsunset(data);
+        }
+    }
+
+    fn check_crashed(
+        child: &mut Option<Child>,
+        data: &mut NightlightData,
+        tx: &Sender<NightlightData>,
+    ) {
+        if let Some(c) = child {
+            match c.try_wait() {
+                Ok(Some(_)) => {
+                    warn!("[nightlight] wlsunset exited");
+                    *child = None;
+                    data.enabled = false;
+                    let _ = tx.send_blocking(data.clone());
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    error!("[nightlight] Error checking wlsunset: {e}");
+                    *child = None;
+                    data.enabled = false;
+                    let _ = tx.send_blocking(data.clone());
+                }
+            }
+        }
     }
 }

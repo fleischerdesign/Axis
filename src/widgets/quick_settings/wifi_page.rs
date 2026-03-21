@@ -1,10 +1,10 @@
 use crate::app_context::AppContext;
 use crate::services::network::NetworkCmd;
 use crate::widgets::components::scrolled_list::ScrolledList;
-use crate::widgets::icons::wifi_signal_icon;
 use crate::widgets::components::subpage_header::SubPageHeader;
-use crate::widgets::ToggleTile;
+use crate::widgets::icons::wifi_signal_icon;
 use crate::widgets::ListRow;
+use crate::widgets::ToggleTile;
 use gtk4::prelude::*;
 use std::rc::Rc;
 
@@ -62,7 +62,7 @@ fn build_auth_revealer(
         btn_c.set_child(Some(&spinner));
         btn_c.set_sensitive(false);
 
-        let _ = tx.send_blocking(NetworkCmd::ConnectToApWithPassword(
+        let _ = tx.try_send(NetworkCmd::ConnectToApWithPassword(
             ap_path.clone(),
             ap_ssid.clone(),
             password,
@@ -106,7 +106,7 @@ fn build_ap_row(
 
     row.button.connect_clicked(move |_| {
         if is_active {
-            let _ = tx.send_blocking(NetworkCmd::DisconnectWifi);
+            let _ = tx.try_send(NetworkCmd::DisconnectWifi);
         } else if needs_auth {
             let open = revealer.reveals_child();
             revealer.set_reveal_child(!open);
@@ -116,7 +116,7 @@ fn build_ap_row(
                 container_c.add_css_class("expanded");
             }
         } else {
-            let _ = tx.send_blocking(NetworkCmd::ConnectToAp(path.clone()));
+            let _ = tx.try_send(NetworkCmd::ConnectToAp(path.clone()));
         }
     });
 
@@ -150,7 +150,7 @@ impl WifiPage {
         let list_c = scrolled_list.list;
         let wifi_tile_c = wifi_tile.clone();
         let eth_tile_c = eth_tile.clone();
-        let tx = ctx.network_tx.clone();
+        let tx = ctx.network.tx.clone();
 
         ctx.network.subscribe(move |data| {
             wifi_tile_c.set_active(data.is_wifi_enabled);

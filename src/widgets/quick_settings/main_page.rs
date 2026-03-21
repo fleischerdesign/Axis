@@ -78,8 +78,8 @@ impl MainPage {
             0.0,
             1.0,
             0.01,
-            &ctx.audio,
-            &ctx.audio_tx,
+            &ctx.audio.store,
+            &ctx.audio.tx,
             |d| d.volume,
             |v| AudioCmd::SetVolume(v),
             0.01,
@@ -116,8 +116,8 @@ impl MainPage {
             0.0,
             100.0,
             1.0,
-            &ctx.backlight,
-            &ctx.backlight_tx,
+            &ctx.backlight.store,
+            &ctx.backlight.tx,
             |d| d.percentage,
             |v| BacklightCmd::SetBrightness(v),
             0.5,
@@ -156,8 +156,9 @@ impl MainPage {
         wifi_tile.main_btn.connect_clicked(move |_| {
             let current = network_store.get().is_wifi_enabled;
             let _ = ctx_wifi
-                .network_tx
-                .send_blocking(NetworkCmd::ToggleWifi(!current));
+                .network
+                .tx
+                .try_send(NetworkCmd::ToggleWifi(!current));
         });
         wifi_tile
             .arrow_btn
@@ -181,8 +182,9 @@ impl MainPage {
         bt_tile.main_btn.connect_clicked(move |_| {
             let current = bt_store.get().is_powered;
             let _ = ctx_bt
-                .bluetooth_tx
-                .send_blocking(BluetoothCmd::TogglePower(!current));
+                .bluetooth
+                .tx
+                .try_send(BluetoothCmd::TogglePower(!current));
         });
         bt_tile
             .arrow_btn
@@ -198,8 +200,9 @@ impl MainPage {
         nl_tile.main_btn.connect_clicked(move |_| {
             let current = night_store.get().enabled;
             let _ = ctx_nl
-                .nightlight_tx
-                .send_blocking(NightlightCmd::Toggle(!current));
+                .nightlight
+                .tx
+                .try_send(NightlightCmd::Toggle(!current));
         });
 
         // DND toggle
@@ -207,7 +210,7 @@ impl MainPage {
         let dnd_store = ctx.dnd.clone();
         dnd_tile.main_btn.connect_clicked(move |_| {
             let current = dnd_store.get().enabled;
-            let _ = ctx_dnd.dnd_tx.send_blocking(DndCmd::Toggle(!current));
+            let _ = ctx_dnd.dnd.tx.try_send(DndCmd::Toggle(!current));
         });
 
         // Network → Tile-States

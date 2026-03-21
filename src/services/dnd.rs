@@ -26,16 +26,14 @@ impl Service for DndService {
             let mut data = DndData::default();
 
             loop {
-                while let Ok(cmd) = cmd_rx.try_recv() {
-                    match cmd {
-                        DndCmd::Toggle(on) => {
-                            info!("[dnd] {}", if on { "enabled" } else { "disabled" });
-                            data.enabled = on;
-                            let _ = data_tx.send_blocking(data.clone());
-                        }
+                match cmd_rx.recv_blocking() {
+                    Ok(DndCmd::Toggle(on)) => {
+                        info!("[dnd] {}", if on { "enabled" } else { "disabled" });
+                        data.enabled = on;
+                        let _ = data_tx.send_blocking(data.clone());
                     }
+                    Err(_) => break,
                 }
-                std::thread::sleep(std::time::Duration::from_millis(100));
             }
         });
 
