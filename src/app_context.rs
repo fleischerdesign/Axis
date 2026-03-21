@@ -4,12 +4,13 @@ use chrono::{DateTime, Local};
 use crate::services::audio::{AudioCmd, AudioData};
 use crate::services::backlight::{BacklightCmd, BacklightData};
 use crate::services::bluetooth::{BluetoothCmd, BluetoothData};
+use crate::services::dnd::{DndCmd, DndData};
+use crate::services::launcher::{LauncherCmd, LauncherData};
 use crate::services::network::{NetworkCmd, NetworkData};
 use crate::services::nightlight::{NightlightCmd, NightlightData};
-use crate::services::launcher::{LauncherCmd, LauncherData};
 use crate::services::niri::NiriData;
+use crate::services::notifications::{server::NotificationCmd, NotificationData};
 use crate::services::power::PowerData;
-use crate::services::notifications::{NotificationData, server::NotificationCmd};
 use crate::store::ServiceStore;
 
 /// Zentraler App-Kontext — wird an alle Widgets weitergegeben.
@@ -44,4 +45,7 @@ pub struct AppContext {
 
     pub niri: ServiceStore<NiriData>,
     pub clock: ServiceStore<DateTime<Local>>,
+
+    pub dnd: ServiceStore<DndData>,
+    pub dnd_tx: Sender<DndCmd>,
 }

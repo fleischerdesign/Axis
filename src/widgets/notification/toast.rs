@@ -50,10 +50,12 @@ impl NotificationToastManager {
     }
 
     fn sync(&self, data: &crate::services::notifications::NotificationData) {
-        if data.last_id > self.last_shown_id.get() {
-            if let Some(n) = data.notifications.iter().find(|n| n.id == data.last_id) {
-                self.last_shown_id.set(data.last_id);
-                self.add_toast(n);
+        if !self.ctx.dnd.get().enabled {
+            if data.last_id > self.last_shown_id.get() {
+                if let Some(n) = data.notifications.iter().find(|n| n.id == data.last_id) {
+                    self.last_shown_id.set(data.last_id);
+                    self.add_toast(n);
+                }
             }
         }
 

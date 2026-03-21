@@ -2,6 +2,7 @@ use crate::app_context::AppContext;
 use crate::services::audio::AudioCmd;
 use crate::services::backlight::BacklightCmd;
 use crate::services::bluetooth::BluetoothCmd;
+use crate::services::dnd::DndCmd;
 use crate::services::network::NetworkCmd;
 use crate::services::nightlight::NightlightCmd;
 use crate::widgets::components::debounced_slider::DebouncedSlider;
@@ -21,6 +22,7 @@ pub struct MainPage {
     pub eth_tile: Rc<ToggleTile>,
     pub bt_tile: Rc<ToggleTile>,
     pub nl_tile: Rc<ToggleTile>,
+    pub dnd_tile: Rc<ToggleTile>,
     power_actions: Rc<PowerActionStack>,
 }
 
@@ -54,12 +56,18 @@ impl MainPage {
         ));
         let nl_tile = Rc::new(ToggleTile::new("Night Light", "night-light-symbolic", true));
         let airplane_tile = ToggleTile::new("Airplane", "airplane-mode-symbolic", false);
+        let dnd_tile = Rc::new(ToggleTile::new(
+            "DND",
+            "preferences-system-notifications-symbolic",
+            false,
+        ));
 
         grid.attach(&wifi_tile.container, 0, 0, 1, 1);
         grid.attach(&eth_tile.container, 1, 0, 1, 1);
         grid.attach(&bt_tile.container, 0, 1, 1, 1);
         grid.attach(&nl_tile.container, 1, 1, 1, 1);
         grid.attach(&airplane_tile.container, 0, 2, 1, 1);
+        grid.attach(&dnd_tile.container, 1, 2, 1, 1);
 
         // --- VOLUME SLIDER ROW ---
         let vol_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
@@ -194,6 +202,14 @@ impl MainPage {
                 .send_blocking(NightlightCmd::Toggle(!current));
         });
 
+        // DND toggle
+        let ctx_dnd = ctx.clone();
+        let dnd_store = ctx.dnd.clone();
+        dnd_tile.main_btn.connect_clicked(move |_| {
+            let current = dnd_store.get().enabled;
+            let _ = ctx_dnd.dnd_tx.send_blocking(DndCmd::Toggle(!current));
+        });
+
         // Network → Tile-States
         let wifi_tile_c = wifi_tile.clone();
         let eth_tile_c = eth_tile.clone();
@@ -223,6 +239,12 @@ impl MainPage {
         ctx.nightlight.subscribe(move |data| {
             nl_tile_c.set_active(data.enabled);
             nl_tile_c.set_sensitive(data.available);
+        });
+
+        // DND → Tile-State
+        let dnd_tile_c = dnd_tile.clone();
+        ctx.dnd.subscribe(move |data| {
+            dnd_tile_c.set_active(data.enabled);
         });
 
         // Volume highlight style (on subscribe + on user change)
@@ -274,6 +296,7 @@ impl MainPage {
             eth_tile,
             bt_tile,
             nl_tile,
+            dnd_tile,
             power_actions,
         }
     }
