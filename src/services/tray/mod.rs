@@ -391,18 +391,29 @@ impl Service for TrayService {
                     Some(cmd) = cmd_rx.next() => {
                         match cmd {
                             TrayCmd::Activate(ref bn) => {
+                                info!("[tray] Activate: {bn}");
                                 if let Some(p) = item_proxies.get(bn) {
-                                    let _ = p.activate(0, 0).await;
+                                    if let Err(e) = p.activate(0, 0).await {
+                                        error!("[tray] Activate failed: {e}");
+                                    }
+                                } else {
+                                    warn!("[tray] Activate: item not found: {bn}");
                                 }
                             }
                             TrayCmd::ContextMenu(ref bn) => {
+                                info!("[tray] ContextMenu: {bn}");
                                 if let Some(p) = item_proxies.get(bn) {
-                                    let _ = p.context_menu(0, 0).await;
+                                    if let Err(e) = p.context_menu(0, 0).await {
+                                        error!("[tray] ContextMenu failed: {e}");
+                                    }
                                 }
                             }
                             TrayCmd::SecondaryActivate(ref bn) => {
+                                info!("[tray] SecondaryActivate: {bn}");
                                 if let Some(p) = item_proxies.get(bn) {
-                                    let _ = p.secondary_activate(0, 0).await;
+                                    if let Err(e) = p.secondary_activate(0, 0).await {
+                                        error!("[tray] SecondaryActivate failed: {e}");
+                                    }
                                 }
                             }
                             TrayCmd::Scroll(ref bn, delta, ref orientation) => {

@@ -3,6 +3,7 @@ use crate::services::tray::{TrayCmd, TrayData, TrayItem};
 use crate::widgets::Island;
 use gtk4::prelude::*;
 use gtk4::GestureClick;
+use log::debug;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -60,11 +61,13 @@ impl BarTray {
                     let ctx_click = ctx_c.clone();
                     click.connect_pressed(move |gesture, _, _, _| match gesture.current_button() {
                         1 => {
+                            debug!("[tray] Left click: {bn}");
                             let _ = ctx_click
                                 .tray_tx
-                                .send_blocking(TrayCmd::Activate(bn.clone()));
+                                .send_blocking(TrayCmd::SecondaryActivate(bn.clone()));
                         }
                         3 => {
+                            debug!("[tray] Right click: {bn}");
                             let _ = ctx_click
                                 .tray_tx
                                 .send_blocking(TrayCmd::ContextMenu(bn.clone()));
