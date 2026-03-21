@@ -23,6 +23,8 @@ impl BarTray {
         let ctx_c = ctx.clone();
 
         ctx.tray.subscribe(move |data: &TrayData| {
+            island_c.set_visible(!data.items.is_empty());
+
             let mut current = icons_c.borrow_mut();
 
             // Remove icons for items that no longer exist

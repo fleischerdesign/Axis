@@ -160,20 +160,24 @@ async fn add_item(
         let mut title_changed = proxy.receive_new_title().await.ok();
         let mut status_changed = proxy.receive_new_status().await.ok();
 
-        loop {
-            let triggered = tokio::select! {
-                Some(_) = async { icon_changed.as_mut()?.next().await }, if icon_changed.is_some() => true,
-                Some(_) = async { title_changed.as_mut()?.next().await }, if title_changed.is_some() => true,
-                Some(_) = async { status_changed.as_mut()?.next().await }, if status_changed.is_some() => true,
-                else => break,
-            };
+        let has_any_signal = icon_changed.is_some() || title_changed.is_some() || status_changed.is_some();
 
-            if triggered {
-                fetch_and_emit(&proxy, &bus_name_c, &event_tx_c).await;
+        if has_any_signal {
+            loop {
+                let triggered = tokio::select! {
+                    Some(_) = async { icon_changed.as_mut()?.next().await }, if icon_changed.is_some() => true,
+                    Some(_) = async { title_changed.as_mut()?.next().await }, if title_changed.is_some() => true,
+                    Some(_) = async { status_changed.as_mut()?.next().await }, if status_changed.is_some() => true,
+                    else => break,
+                };
+
+                if triggered {
+                    fetch_and_emit(&proxy, &bus_name_c, &event_tx_c).await;
+                }
             }
-        }
 
-        let _ = event_tx_c.send(ItemEvent::Disconnected(bus_name_c)).await;
+            let _ = event_tx_c.send(ItemEvent::Disconnected(bus_name_c)).await;
+        }
     });
 }
 
