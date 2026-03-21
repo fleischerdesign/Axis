@@ -2,6 +2,8 @@ use crate::services::launcher::provider::{LauncherAction, LauncherItem, Launcher
 use std::future::Future;
 use std::pin::Pin;
 use std::path::PathBuf;
+use std::sync::RwLock;
+use std::time::SystemTime;
 use std::fs;
 
 #[derive(Debug, Clone)]
@@ -12,33 +14,88 @@ struct AppEntry {
     comment: Option<String>,
 }
 
-#[derive(Debug, Default)]
-pub struct AppProvider;
+#[derive(Debug)]
+struct Cache {
+    apps: Vec<AppEntry>,
+    dir_mtimes: Vec<(PathBuf, SystemTime)>,
+}
+
+#[derive(Debug)]
+pub struct AppProvider {
+    cache: RwLock<Option<Cache>>,
+}
+
+impl Default for AppProvider {
+    fn default() -> Self {
+        Self { cache: RwLock::new(None) }
+    }
+}
 
 impl AppProvider {
-    fn scan_apps(&self) -> Vec<AppEntry> {
-        let mut apps = Vec::new();
+    fn get_cached_or_scan(&self) -> Vec<AppEntry> {
+        {
+            let guard = self.cache.read().unwrap();
+            if let Some(ref cache) = *guard {
+                if !self.dirs_changed(&cache.dir_mtimes) {
+                    return cache.apps.clone();
+                }
+            }
+        }
+
+        let apps = self.scan_apps();
+        let dir_mtimes = self.get_dir_mtimes();
+        *self.cache.write().unwrap() = Some(Cache { apps: apps.clone(), dir_mtimes });
+        apps
+    }
+
+    fn dirs_changed(&self, cached: &[(PathBuf, SystemTime)]) -> bool {
+        for (path, cached_time) in cached {
+            if let Ok(meta) = fs::metadata(path) {
+                if let Ok(mtime) = meta.modified() {
+                    if mtime != *cached_time {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    fn get_dir_mtimes(&self) -> Vec<(PathBuf, SystemTime)> {
+        self.app_dirs()
+            .into_iter()
+            .filter_map(|p| {
+                let mtime = fs::metadata(&p).ok()?.modified().ok()?;
+                Some((p, mtime))
+            })
+            .collect()
+    }
+
+    fn app_dirs(&self) -> Vec<PathBuf> {
         let mut paths = Vec::new();
-        
-        // 1. User-spezifische Apps
+
         if let Ok(data_home) = std::env::var("XDG_DATA_HOME") {
             paths.push(PathBuf::from(data_home).join("applications"));
         } else if let Ok(home) = std::env::var("HOME") {
             paths.push(PathBuf::from(home).join(".local/share/applications"));
         }
 
-        // 2. System-weite Apps (via XDG_DATA_DIRS)
         if let Ok(data_dirs) = std::env::var("XDG_DATA_DIRS") {
             for dir in data_dirs.split(':') {
                 paths.push(PathBuf::from(dir).join("applications"));
             }
         } else {
-            // Fallback auf Standardpfade, falls XDG_DATA_DIRS nicht gesetzt ist
             paths.push(PathBuf::from("/usr/local/share/applications"));
             paths.push(PathBuf::from("/usr/share/applications"));
         }
 
-        for path in paths {
+        paths
+    }
+
+    fn scan_apps(&self) -> Vec<AppEntry> {
+        let mut apps = Vec::new();
+
+        for path in self.app_dirs() {
             if !path.exists() { continue; }
             
             if let Ok(entries) = fs::read_dir(&path) {
@@ -113,7 +170,7 @@ impl LauncherProvider for AppProvider {
     ) -> Pin<Box<dyn Future<Output = Vec<LauncherItem>> + Send + 'a>> {
         Box::pin(async move {
             let query_lower = query.to_lowercase();
-            let mut all_apps = self.scan_apps();
+            let mut all_apps = self.get_cached_or_scan();
             
             // Bei leerer Suche: Alle Apps alphabetisch sortiert zurückgeben
             if query_lower.is_empty() {
