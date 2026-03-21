@@ -11,7 +11,7 @@ use zbus::connection::Builder;
 use zbus::interface;
 use zbus::fdo::DBusProxy;
 use zbus::Connection;
-use zbus::zvariant::Value;
+use zbus::message::Header;
 use zbus::names::WellKnownName;
 
 // --- Data Types ---
@@ -51,16 +51,63 @@ struct StatusNotifierWatcher {
     reg_tx: Sender<String>,
 }
 
+// libappindicator (Steam, Discord, etc.) uses the KDE interface name
+struct StatusNotifierWatcherKde {
+    reg_tx: Sender<String>,
+}
+
 #[interface(name = "org.freedesktop.StatusNotifierWatcher")]
 impl StatusNotifierWatcher {
-    fn register_status_notifier_item(&self, service: String) {
-        info!("[tray] RegisterStatusNotifierItem: {service}");
-        let _ = self.reg_tx.send_blocking(service);
+    fn register_status_notifier_item(&self, service: String, #[zbus(header)] header: Header<'_>) {
+        let item = if service.starts_with('/') {
+            // Object path — use caller's bus name
+            if let Some(sender) = header.sender() {
+                format!("{sender}{service}")
+            } else {
+                service
+            }
+        } else {
+            service
+        };
+        info!("[tray] RegisterStatusNotifierItem: {item}");
+        let _ = self.reg_tx.send_blocking(item);
     }
 
-    fn register_status_notifier_host(&self, _service: String) {
-        info!("[tray] RegisterStatusNotifierHost: {_service}");
+    fn register_status_notifier_host(&self, _service: String) {}
+
+    #[zbus(property)]
+    fn registered_status_notifier_items(&self) -> Vec<String> {
+        vec![]
     }
+
+    #[zbus(property)]
+    fn is_status_notifier_host_registered(&self) -> bool {
+        true
+    }
+
+    #[zbus(property)]
+    fn protocol_version(&self) -> i32 {
+        0
+    }
+}
+
+#[interface(name = "org.kde.StatusNotifierWatcher")]
+impl StatusNotifierWatcherKde {
+    fn register_status_notifier_item(&self, service: String, #[zbus(header)] header: Header<'_>) {
+        let item = if service.starts_with('/') {
+            if let Some(sender) = header.sender() {
+                format!("{sender}{service}")
+            } else {
+                service
+            }
+        } else {
+            service
+        };
+        info!("[tray] RegisterStatusNotifierItem: {item}");
+        let _ = self.reg_tx.send_blocking(item);
+    }
+
+    fn register_status_notifier_host(&self, _service: String) {}
 
     #[zbus(property)]
     fn registered_status_notifier_items(&self) -> Vec<String> {
@@ -205,7 +252,8 @@ impl Service for TrayService {
 
             // --- Register Watcher Interface on this connection ---
             let (reg_tx, reg_rx) = bounded::<String>(64);
-            let watcher = StatusNotifierWatcher { reg_tx };
+            let watcher = StatusNotifierWatcher { reg_tx: reg_tx.clone() };
+            let watcher_kde = StatusNotifierWatcherKde { reg_tx };
 
             if let Err(e) = connection
                 .object_server()
@@ -213,6 +261,15 @@ impl Service for TrayService {
                 .await
             {
                 error!("[tray] Failed to serve watcher interface: {e}");
+                return;
+            }
+
+            if let Err(e) = connection
+                .object_server()
+                .at("/StatusNotifierWatcher", watcher_kde)
+                .await
+            {
+                error!("[tray] Failed to serve KDE watcher interface: {e}");
                 return;
             }
 
