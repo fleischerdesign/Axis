@@ -5,7 +5,7 @@ use std::time::Duration;
 use std::collections::{HashMap, HashSet};
 use super::Service;
 use crate::store::ServiceStore;
-use log::error;
+use log::{error, info};
 
 #[proxy(
     interface = "org.freedesktop.NetworkManager",
@@ -106,13 +106,15 @@ impl Service for NetworkService {
                 }
                 tokio::time::sleep(Duration::from_secs(5)).await;
             };
+            info!("[network] Connected to system bus");
 
             let mut wifi_device_path = None;
             if let Ok(devices) = proxy.get_devices().await {
                 for path in devices {
                     if let Ok(dev_proxy) = DeviceProxy::builder(&connection).path(path.clone()).unwrap().build().await {
                         if let Ok(2) = dev_proxy.device_type().await {
-                            wifi_device_path = Some(path);
+                            wifi_device_path = Some(path.clone());
+                            info!("[network] WiFi device found: {path}");
                             break;
                         }
                     }
@@ -137,11 +139,13 @@ impl Service for NetworkService {
                     Some(cmd) = cmd_rx.next() => {
                         match cmd {
                             NetworkCmd::ToggleWifi(on) => {
+                                info!("[network] WiFi toggled: {}", if on { "on" } else { "off" });
                                 if let Err(e) = proxy.set_wireless_enabled(on).await {
                                     error!("[network] Failed to toggle WiFi: {e}");
                                 }
                             }
                             NetworkCmd::ScanWifi => {
+                                info!("[network] WiFi scan initiated");
                                 if let Some(path) = &wifi_device_path {
                                     if let Ok(wifi_proxy) = WirelessDeviceProxy::builder(&connection).path(path).unwrap().build().await {
                                         if let Err(e) = wifi_proxy.request_scan(HashMap::new()).await {
@@ -152,6 +156,7 @@ impl Service for NetworkService {
                                 }
                             }
                             NetworkCmd::ConnectToAp(ap_path_str) => {
+                                info!("[network] Connecting to AP");
                                 if let (Some(dev_path), Ok(ap_path)) = (&wifi_device_path, OwnedObjectPath::try_from(ap_path_str)) {
                                     if let Err(e) = proxy.activate_connection(OwnedObjectPath::try_from("/").unwrap(), dev_path.clone(), ap_path).await {
                                         error!("[network] Failed to connect to AP: {e}");
@@ -178,6 +183,7 @@ impl Service for NetworkService {
                                 }
                             }
                             NetworkCmd::DisconnectWifi => {
+                                info!("[network] WiFi disconnected");
                                 if let Some(path) = &wifi_device_path {
                                     if let Ok(dev_proxy) = DeviceProxy::builder(&connection).path(path.clone()).unwrap().build().await {
                                         if let Ok(active_conn_path) = dev_proxy.active_connection().await {

@@ -5,7 +5,7 @@ use libpulse_binding::context::subscribe::{Facility, InterestMaskSet, Operation}
 use libpulse_binding::context::{Context, FlagSet as ContextFlagSet, State as ContextState};
 use libpulse_binding::mainloop::threaded::Mainloop;
 use libpulse_binding::volume::{ChannelVolumes, Volume};
-use log::error;
+use log::{error, info};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::thread;
@@ -96,7 +96,10 @@ impl Service for AudioService {
             // Warten bis Context Ready oder Failed
             loop {
                 match context.borrow().get_state() {
-                    ContextState::Ready => break,
+                    ContextState::Ready => {
+                        info!("[audio] PulseAudio connected");
+                        break;
+                    }
                     ContextState::Failed | ContextState::Terminated => {
                         error!("[audio] PulseAudio context failed");
                         mainloop.borrow_mut().unlock();
@@ -153,6 +156,7 @@ impl Service for AudioService {
 
                 match cmd {
                     AudioCmd::SetVolume(new_vol) => {
+                        info!("[audio] Volume set to {:.0}%", new_vol * 100.0);
                         let pulse_vol = Volume(
                             ((new_vol * Volume::NORMAL.0 as f64) as u32).min(Volume::NORMAL.0 * 2),
                         );
@@ -165,6 +169,7 @@ impl Service for AudioService {
                         );
                     }
                     AudioCmd::SetMute(mute) => {
+                        info!("[audio] Mute: {}", if mute { "on" } else { "off" });
                         context.borrow().introspect().set_sink_mute_by_name(
                             "@DEFAULT_SINK@",
                             mute,

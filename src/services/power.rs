@@ -2,7 +2,7 @@ use async_channel::{bounded, Sender};
 use futures_util::StreamExt;
 use zbus::{proxy, Connection};
 
-use log::error;
+use log::{error, info};
 
 use super::Service;
 use crate::store::ServiceStore;
@@ -61,6 +61,8 @@ impl Service for PowerService {
                 }
                 tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             };
+
+            info!("[power] Connected to UPower");
 
             let mut pct_changed = upower.receive_percentage_changed().await;
             let mut state_changed = upower.receive_state_changed().await;

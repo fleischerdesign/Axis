@@ -2,6 +2,7 @@ pub mod server;
 
 use crate::services::notifications::server::{NotificationServer, NotificationCmd, NotificationServerSignals};
 use async_channel::{bounded, Sender};
+use log::info;
 use serde::Serialize;
 use zbus::connection::Builder;
 use zbus::object_server::InterfaceRef;
@@ -56,6 +57,8 @@ impl Service for NotificationService {
                 .await
                 .unwrap();
 
+            info!("[notifications] D-Bus service registered");
+
             let interface_ref: InterfaceRef<NotificationServer> = conn
                 .object_server()
                 .interface("/org/freedesktop/Notifications")
@@ -68,6 +71,7 @@ impl Service for NotificationService {
                 tokio::select! {
                     // Neue Nachricht von D-Bus (App schickt Notification)
                     Ok(n) = raw_rx.recv() => {
+                        info!("[notifications] {} - {}", n.app_name, n.summary);
                         let id = n.id;
                         if let Some(pos) = history.iter().position(|x| x.id == id) {
                             history[pos] = n;
@@ -85,6 +89,7 @@ impl Service for NotificationService {
                     Ok(cmd) = cmd_rx.recv() => {
                         match cmd {
                             NotificationCmd::Close(id) => {
+                                info!("[notifications] Notification {id} closed");
                                 // 1. Aus History entfernen (für UI)
                                 history.retain(|n| n.id != id);
                                 let _ = data_tx.send(NotificationData { 
@@ -96,6 +101,7 @@ impl Service for NotificationService {
                                 let _ = interface_ref.notification_closed(id, 2).await;
                             },
                             NotificationCmd::Action(id, key) => {
+                                info!("[notifications] Notification {id} action: {key}");
                                 // D-Bus informieren
                                 let _ = interface_ref.action_invoked(id, &key).await;
                                 // Danach schließen wir sie meistens direkt

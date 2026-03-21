@@ -3,7 +3,7 @@ use crate::store::ServiceStore;
 use async_channel::{bounded, Sender};
 use brightness::blocking::Brightness;
 use inotify::{Inotify, WatchMask};
-use log::error;
+use log::{error, info};
 use std::fs;
 use std::path::PathBuf;
 use std::thread;
@@ -33,8 +33,12 @@ impl Service for BacklightService {
 
         thread::spawn(move || {
             let device_path = match find_backlight_device() {
-                Some(p) => p,
+                Some(p) => {
+                    info!("[backlight] Backlight device found");
+                    p
+                }
                 None => {
+                    info!("[backlight] No backlight device found");
                     let _ = data_tx.send_blocking(BacklightData::default());
                     return;
                 }

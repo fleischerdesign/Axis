@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 use super::Service;
 use crate::store::ServiceStore;
-use log::error;
+use log::{error, info};
 
 #[proxy(
     interface = "org.bluez.Adapter1",
@@ -89,6 +89,7 @@ impl Service for BluetoothService {
                 }
                 tokio::time::sleep(Duration::from_secs(5)).await;
             };
+            info!("[bluetooth] Connected to system bus");
 
             let mut powered_changed = adapter_proxy.receive_powered_changed().await;
             let mut interfaces_added = obj_manager.receive_interfaces_added().await.unwrap();
@@ -110,24 +111,28 @@ impl Service for BluetoothService {
                     Some(cmd) = cmd_rx.next() => {
                         match cmd {
                             BluetoothCmd::TogglePower(on) => {
+                                info!("[bluetooth] Power toggled: {}", if on { "on" } else { "off" });
                                 if let Err(e) = adapter_proxy.set_powered(on).await {
                                     error!("[bluetooth] Failed to toggle power: {e}");
                                 }
                                 if !on { is_discovering = false; }
                             }
                             BluetoothCmd::Scan => {
+                                info!("[bluetooth] Discovery started");
                                 if let Err(e) = adapter_proxy.start_discovery().await {
                                     error!("[bluetooth] Failed to start discovery: {e}");
                                 }
                                 is_discovering = true;
                             }
                             BluetoothCmd::StopScan => {
+                                info!("[bluetooth] Discovery stopped");
                                 if let Err(e) = adapter_proxy.stop_discovery().await {
                                     error!("[bluetooth] Failed to stop discovery: {e}");
                                 }
                                 is_discovering = false;
                             }
                             BluetoothCmd::Connect(path_str) => {
+                                info!("[bluetooth] Connecting device");
                                 if let Ok(path) = OwnedObjectPath::try_from(path_str) {
                                     if let Ok(dev_proxy) = BluetoothDeviceProxy::builder(&connection).path(path).unwrap().build().await {
                                         if let Err(e) = dev_proxy.connect().await {
@@ -137,6 +142,7 @@ impl Service for BluetoothService {
                                 }
                             }
                             BluetoothCmd::Disconnect(path_str) => {
+                                info!("[bluetooth] Disconnecting device");
                                 if let Ok(path) = OwnedObjectPath::try_from(path_str) {
                                     if let Ok(dev_proxy) = BluetoothDeviceProxy::builder(&connection).path(path).unwrap().build().await {
                                         if let Err(e) = dev_proxy.disconnect().await {

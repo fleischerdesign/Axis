@@ -1,6 +1,7 @@
 use super::Service;
 use crate::store::ServiceStore;
 use async_channel::{bounded, Sender};
+use log::info;
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct DndData {
@@ -28,6 +29,7 @@ impl Service for DndService {
                 while let Ok(cmd) = cmd_rx.try_recv() {
                     match cmd {
                         DndCmd::Toggle(on) => {
+                            info!("[dnd] {}", if on { "enabled" } else { "disabled" });
                             data.enabled = on;
                             let _ = data_tx.send_blocking(data.clone());
                         }

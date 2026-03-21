@@ -1,7 +1,7 @@
 use super::Service;
 use crate::store::ServiceStore;
 use async_channel::{bounded, Sender};
-use log::error;
+use log::{error, info, warn};
 use std::process::{Child, Command, Stdio};
 use std::thread;
 
@@ -57,11 +57,18 @@ impl Service for NightlightService {
                 ..Default::default()
             };
 
+            if data.available {
+                info!("[nightlight] wlsunset available");
+            } else {
+                info!("[nightlight] wlsunset not available");
+            }
+
             loop {
                 // Handle commands
                 while let Ok(cmd) = cmd_rx.try_recv() {
                     match cmd {
                         NightlightCmd::Toggle(on) => {
+                            info!("[nightlight] {}", if on { "enabled" } else { "disabled" });
                             if on {
                                 if !data.enabled {
                                     if let Some(child) = Self::start_wlsunset(&data) {
@@ -135,7 +142,7 @@ impl Service for NightlightService {
                 if let Some(child) = &mut wlsunset_child {
                     match child.try_wait() {
                         Ok(Some(_)) => {
-                            // Process exited
+                            warn!("[nightlight] wlsunset exited");
                             wlsunset_child = None;
                             data.enabled = false;
                             let _ = data_tx.send_blocking(data.clone());
@@ -192,7 +199,13 @@ impl NightlightService {
             cmd.arg("-s").arg(&data.sunset);
         }
 
-        cmd.spawn().ok()
+        match cmd.spawn() {
+            Ok(child) => Some(child),
+            Err(e) => {
+                error!("[nightlight] Failed to start wlsunset: {e}");
+                None
+            }
+        }
     }
 
     fn stop_wlsunset(child: &mut Child) {

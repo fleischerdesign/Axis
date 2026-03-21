@@ -4,6 +4,7 @@ pub mod providers;
 use crate::services::launcher::provider::{LauncherItem, LauncherProvider};
 use crate::services::Service;
 use crate::store::ServiceStore;
+use log::{error, info};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::cell::RefCell;
@@ -82,15 +83,20 @@ impl Service for LauncherService {
                         if let Some(idx) = idx_to_activate {
                             if let Some(item) = data.results.get(idx) {
                                 match &item.action {
-                                    crate::services::launcher::provider::LauncherAction::Exec(cmd) => {
-                                        let _ = Command::new("sh")
+                                    crate::services::launcher::provider::LauncherAction::Exec(program) => {
+                                        info!("[launcher] Executing: {program}");
+                                        match Command::new("sh")
                                             .arg("-c")
-                                            .arg(cmd)
+                                            .arg(program)
                                             .stdin(Stdio::null())
                                             .stdout(Stdio::null())
                                             .stderr(Stdio::null())
                                             .process_group(0)
-                                            .spawn();
+                                            .spawn()
+                                        {
+                                            Ok(_) => {}
+                                            Err(e) => error!("[launcher] Failed to execute: {program} ({e})"),
+                                        }
                                     }
                                     _ => {}
                                 }

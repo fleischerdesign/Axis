@@ -1,5 +1,5 @@
 use async_channel::{bounded, Sender};
-use log::warn;
+use log::{info, warn};
 use niri_ipc::{
     socket::Socket, Action, Event, Output, Request, Response, Window, Workspace,
     WorkspaceReferenceArg,
@@ -58,7 +58,7 @@ impl Service for NiriService {
 
                 if let (Ok(mut events_sock), Ok(mut query_sock)) = (client_event, client_query) {
                     reconnect_delay = Duration::from_secs(1);
-                    println!("[NiriService] Connected");
+                    info!("[niri] Connected");
 
                     if let Some(data) = Self::fetch_full_state(&mut query_sock) {
                         let _ = data_tx.send_blocking(data);

@@ -3,7 +3,7 @@ pub mod server;
 use crate::services::ipc::server::{ShellIpcServer, ShellIpcCmd};
 use async_channel::{bounded, Receiver};
 use zbus::connection::Builder;
-use log::error;
+use log::{error, info};
 
 pub struct IpcService;
 
@@ -25,7 +25,7 @@ impl IpcService {
 
             match conn_res {
                 Ok(_conn) => {
-                    println!("IPC: D-Bus Interface 'org.axis.Shell' registered and active");
+                    info!("[ipc] D-Bus Interface 'org.axis.Shell' registered and active");
                     // WICHTIG: Wir müssen die Verbindung halten!
                     // Solange dieser Future läuft, bleibt die Verbindung offen.
                     loop {
