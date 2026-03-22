@@ -32,6 +32,7 @@
             pkgs.gtk4-layer-shell
             pkgs.libpulseaudio
             pkgs.wlsunset
+            pkgs.kdePackages.kdeconnect-kde
           ];
           shellHook = ''
             echo "Entering AXIS development environment..."

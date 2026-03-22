@@ -34,6 +34,7 @@ impl MainPage {
         open_bt: impl Fn() + 'static,
         open_nl: impl Fn() + 'static,
         open_audio: impl Fn() + 'static,
+        open_kdeconnect: impl Fn() + 'static,
     ) -> Self {
         let container = gtk4::Box::new(gtk4::Orientation::Vertical, 20);
 
@@ -61,6 +62,7 @@ impl MainPage {
             "preferences-system-notifications-symbolic",
             false,
         ));
+        let kdeconnect_tile = ToggleTile::new("KDE Connect", "phone-symbolic", true);
 
         grid.attach(&wifi_tile.container, 0, 0, 1, 1);
         grid.attach(&eth_tile.container, 1, 0, 1, 1);
@@ -68,6 +70,7 @@ impl MainPage {
         grid.attach(&nl_tile.container, 1, 1, 1, 1);
         grid.attach(&airplane_tile.container, 0, 2, 1, 1);
         grid.attach(&dnd_tile.container, 1, 2, 1, 1);
+        grid.attach(&kdeconnect_tile.container, 0, 3, 2, 1);
 
         // --- VOLUME SLIDER ROW ---
         let vol_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
@@ -213,6 +216,15 @@ impl MainPage {
             let _ = ctx_dnd.dnd.tx.try_send(DndCmd::Toggle(!current));
         });
 
+        // KDE Connect → open page
+        kdeconnect_tile
+            .arrow_btn
+            .as_ref()
+            .unwrap()
+            .connect_clicked(move |_| {
+                open_kdeconnect();
+            });
+
         // Network → Tile-States
         let wifi_tile_c = wifi_tile.clone();
         let eth_tile_c = eth_tile.clone();
@@ -248,6 +260,14 @@ impl MainPage {
         let dnd_tile_c = dnd_tile.clone();
         ctx.dnd.subscribe(move |data| {
             dnd_tile_c.set_active(data.enabled);
+        });
+
+        // KDE Connect → Tile-State
+        let kdeconnect_tile_c = Rc::new(kdeconnect_tile);
+        ctx.kdeconnect.subscribe(move |data| {
+            let has_paired = data.devices.iter().any(|d| d.is_paired && d.is_reachable);
+            kdeconnect_tile_c.set_active(has_paired);
+            kdeconnect_tile_c.set_sensitive(data.available);
         });
 
         // Volume highlight style (on subscribe + on user change)

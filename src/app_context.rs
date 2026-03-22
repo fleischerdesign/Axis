@@ -4,6 +4,7 @@ use crate::services::audio::{AudioCmd, AudioData};
 use crate::services::backlight::{BacklightCmd, BacklightData};
 use crate::services::bluetooth::{BluetoothCmd, BluetoothData};
 use crate::services::dnd::{DndCmd, DndData};
+use crate::services::kdeconnect::{KdeConnectCmd, KdeConnectData};
 use crate::services::launcher::{LauncherCmd, LauncherData};
 use crate::services::network::{NetworkCmd, NetworkData};
 use crate::services::nightlight::{NightlightCmd, NightlightData};
@@ -28,6 +29,7 @@ pub struct AppContext {
     pub notifications: ServiceHandle<NotificationData, NotificationCmd>,
     pub dnd: ServiceHandle<DndData, DndCmd>,
     pub tray: ServiceHandle<TrayData, TrayCmd>,
+    pub kdeconnect: ServiceHandle<KdeConnectData, KdeConnectCmd>,
     pub power: ReadOnlyHandle<PowerData>,
     pub niri: ReadOnlyHandle<NiriData>,
     pub clock: ReadOnlyHandle<DateTime<Local>>,

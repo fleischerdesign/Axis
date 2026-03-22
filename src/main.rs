@@ -12,6 +12,7 @@ use crate::services::backlight::BacklightService;
 use crate::services::bluetooth::BluetoothService;
 use crate::services::clock::ClockService;
 use crate::services::dnd::DndService;
+use crate::services::kdeconnect::KdeConnectService;
 use crate::services::tray::TrayService;
 use crate::services::nightlight::NightlightService;
 use crate::services::network::NetworkService;
@@ -171,6 +172,7 @@ fn setup_services() -> AppContext {
     let (notifications_store, notifications_tx) = NotificationService::spawn();
     let (dnd_store, dnd_tx) = DndService::spawn();
     let (tray_store, tray_tx) = TrayService::spawn();
+    let (kdeconnect_store, kdeconnect_tx) = KdeConnectService::spawn();
     let (power_store, _) = PowerService::spawn();
     let (niri_store, _) = NiriService::spawn();
     let (clock_store, _) = ClockService::spawn();
@@ -186,6 +188,7 @@ fn setup_services() -> AppContext {
         notifications: ServiceHandle { store: notifications_store, tx: notifications_tx },
         dnd: ServiceHandle { store: dnd_store, tx: dnd_tx },
         tray: ServiceHandle { store: tray_store, tx: tray_tx },
+        kdeconnect: ServiceHandle { store: kdeconnect_store, tx: kdeconnect_tx },
         power: ReadOnlyHandle { store: power_store },
         niri: ReadOnlyHandle { store: niri_store },
         clock: ReadOnlyHandle { store: clock_store },
