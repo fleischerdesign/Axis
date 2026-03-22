@@ -139,7 +139,7 @@ impl FileSearchProvider {
                     icon_name: Self::file_icon(path).into(),
                     action: LauncherAction::Exec(format!("xdg-open '{path}'")),
                     score,
-                    priority: SearchPriority::Primary,
+                    priority: SearchPriority::Fallback,
                 })
             })
             .take(20)

@@ -4,7 +4,7 @@ use log::info;
 use std::future::Future;
 use std::pin::Pin;
 use std::path::PathBuf;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 use std::time::SystemTime;
 use std::fs;
 
@@ -16,24 +16,61 @@ struct AppEntry {
     comment: Option<String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Cache {
     apps: Vec<AppEntry>,
     dir_mtimes: Vec<(PathBuf, SystemTime)>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AppProvider {
-    cache: RwLock<Option<Cache>>,
+    cache: Arc<RwLock<Option<Cache>>>,
 }
 
 impl Default for AppProvider {
     fn default() -> Self {
-        Self { cache: RwLock::new(None) }
+        Self { cache: Arc::new(RwLock::new(None)) }
     }
 }
 
 impl AppProvider {
+    fn do_search(apps: Vec<AppEntry>, query: &str) -> Vec<LauncherItem> {
+        let query_lower = query.to_lowercase();
+        
+        // Bei leerer Suche: Alle Apps alphabetisch sortiert zurückgeben
+        if query_lower.is_empty() {
+            let mut sorted_apps = apps;
+            sorted_apps.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+            return sorted_apps.into_iter().map(|app| LauncherItem {
+                id: format!("app-{}", app.name),
+                title: app.name.clone(),
+                description: app.comment.clone(),
+                icon_name: app.icon.clone(),
+                action: LauncherAction::Exec(app.exec.clone()),
+                score: 1,
+                priority: SearchPriority::Primary,
+            }).collect();
+        }
+
+        let mut results = Vec::new();
+        for app in apps {
+            let score = scored_match(&app.name, app.comment.as_deref(), &query_lower);
+            if score > 0 {
+                results.push(LauncherItem {
+                    id: format!("app-{}", app.name),
+                    title: app.name.clone(),
+                    description: app.comment.clone(),
+                    icon_name: app.icon.clone(),
+                    action: LauncherAction::Exec(app.exec.clone()),
+                    score,
+                    priority: SearchPriority::Primary,
+                });
+            }
+        }
+
+        // Sortierung nach Score übernehmen wir im LauncherService
+        results
+    }
     fn get_cached_or_scan(&self) -> Vec<AppEntry> {
         {
             let guard = self.cache.read().unwrap();
@@ -171,42 +208,25 @@ impl LauncherProvider for AppProvider {
         &'a self,
         query: &'a str,
     ) -> Pin<Box<dyn Future<Output = Vec<LauncherItem>> + Send + 'a>> {
+        let query = query.to_string();
+        let provider = self.clone();
         Box::pin(async move {
-            let query_lower = query.to_lowercase();
-            let mut all_apps = self.get_cached_or_scan();
-            
-            // Bei leerer Suche: Alle Apps alphabetisch sortiert zurückgeben
-            if query_lower.is_empty() {
-                all_apps.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-                return all_apps.into_iter().map(|app| LauncherItem {
-                    id: format!("app-{}", app.name),
-                    title: app.name.clone(),
-                    description: app.comment.clone(),
-                    icon_name: app.icon.clone(),
-                    action: LauncherAction::Exec(app.exec.clone()),
-                    score: 1,
-                    priority: SearchPriority::Primary,
-                }).collect();
-            }
+            let (tx, rx) = async_channel::unbounded();
 
-            let mut results = Vec::new();
-            for app in all_apps {
-                let score = scored_match(&app.name, app.comment.as_deref(), &query_lower);
-                if score > 0 {
-                    results.push(LauncherItem {
-                        id: format!("app-{}", app.name),
-                        title: app.name.clone(),
-                        description: app.comment.clone(),
-                        icon_name: app.icon.clone(),
-                        action: LauncherAction::Exec(app.exec.clone()),
-                        score,
-                        priority: SearchPriority::Primary,
-                    });
-                }
-            }
+            // Alles im Background-Thread ausführen
+            std::thread::spawn(move || {
+                let start = std::time::Instant::now();
+                let apps = provider.get_cached_or_scan();
+                let results = Self::do_search(apps, &query);
+                info!("[app-provider] Search for '{}' took {:?}", query, start.elapsed());
+                let _ = tx.try_send(results);
+            });
 
-            // Sortierung nach Score übernehmen wir im LauncherService
-            results
+            // Ergebnisse empfangen (async, nicht blockierend)
+            match rx.recv().await {
+                Ok(results) => results,
+                Err(_) => vec![],
+            }
         })
     }
 }
