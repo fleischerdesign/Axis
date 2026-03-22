@@ -11,24 +11,11 @@ pub struct KdeConnectPage {
 
 fn device_icon(device_type: &str) -> &str {
     match device_type {
-        "phone" => "phone-apple-iphone-symbolic",
+        "phone" => "phone-symbolic",
         "tablet" => "computer-apple-ipad-symbolic",
         "desktop" => "computer-symbolic",
         "laptop" => "laptop-symbolic",
         _ => "phone-symbolic",
-    }
-}
-
-fn battery_icon(level: Option<i32>, charging: bool) -> &'static str {
-    if charging {
-        return "battery-full-charging-symbolic";
-    }
-    match level {
-        Some(l) if l > 80 => "battery-full-symbolic",
-        Some(l) if l > 50 => "battery-good-symbolic",
-        Some(l) if l > 20 => "battery-low-symbolic",
-        Some(_) => "battery-caution-symbolic",
-        None => "",
     }
 }
 
@@ -42,22 +29,23 @@ fn build_device_row(
     row.set_margin_top(8);
     row.set_margin_bottom(8);
 
-    // Device info
+    // Device icon (left side)
+    let dev_icon = gtk4::Image::from_icon_name(device_icon(&device.device_type));
+    dev_icon.set_pixel_size(24);
+    dev_icon.set_valign(gtk4::Align::Center);
+    row.append(&dev_icon);
+
+    // Device info (name + status stacked)
     let info = gtk4::Box::new(gtk4::Orientation::Vertical, 2);
     info.set_hexpand(true);
-
-    let name_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
-    let icon = gtk4::Image::from_icon_name(device_icon(&device.device_type));
-    icon.set_pixel_size(18);
-    name_box.append(&icon);
+    info.set_valign(gtk4::Align::Center);
 
     let name_label = gtk4::Label::builder()
         .label(&device.name)
         .halign(gtk4::Align::Start)
         .ellipsize(gtk4::pango::EllipsizeMode::End)
         .build();
-    name_box.append(&name_label);
-    info.append(&name_box);
+    info.append(&name_label);
 
     // Status sublabel
     let mut status_parts = Vec::new();
@@ -69,7 +57,6 @@ fn build_device_row(
         status_parts.push("Verfügbar".to_string());
     }
     if let Some(level) = device.battery_level {
-        let _bat_icon_name = battery_icon(Some(level), device.battery_charging);
         let charging_str = if device.battery_charging { " ⚡" } else { "" };
         status_parts.push(format!("{level}%{charging_str}"));
     }
@@ -90,7 +77,7 @@ fn build_device_row(
 
     if device.is_paired && device.is_reachable {
         if device.has_ping {
-            let ping_btn = gtk4::Button::from_icon_name("notification-symbolic");
+            let ping_btn = gtk4::Button::from_icon_name("dialog-information-symbolic");
             ping_btn.set_tooltip_text(Some("Ping"));
             ping_btn.add_css_class("flat");
             ping_btn.add_css_class("circular");
@@ -105,7 +92,7 @@ fn build_device_row(
         }
 
         if device.has_findmyphone {
-            let ring_btn = gtk4::Button::from_icon_name("find-location-symbolic");
+            let ring_btn = gtk4::Button::from_icon_name("call-start-symbolic");
             ring_btn.set_tooltip_text(Some("Klingeln"));
             ring_btn.add_css_class("flat");
             ring_btn.add_css_class("circular");
@@ -122,7 +109,7 @@ fn build_device_row(
 
     if device.is_reachable {
         let pair_btn = if device.is_paired {
-            let btn = gtk4::Button::from_icon_name("network-wireless-disconnected-symbolic");
+            let btn = gtk4::Button::from_icon_name("network-transmit-receive-symbolic");
             btn.set_tooltip_text(Some("Trennen"));
             btn.add_css_class("flat");
             btn.add_css_class("circular");
@@ -135,7 +122,7 @@ fn build_device_row(
             });
             btn
         } else {
-            let btn = gtk4::Button::from_icon_name("network-wireless-connected-symbolic");
+            let btn = gtk4::Button::from_icon_name("network-transmit-receive-symbolic");
             btn.set_tooltip_text(Some("Koppeln"));
             btn.add_css_class("flat");
             btn.add_css_class("circular");
