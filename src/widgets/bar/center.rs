@@ -45,20 +45,48 @@ impl BarCenter {
         let mut workspaces = data.workspaces.clone();
         workspaces.sort_by_key(|w| w.id);
 
-        while let Some(child) = container.first_child() {
-            container.remove(&child);
+        let target = workspaces.len();
+
+        // Remove excess dots
+        while Self::child_count(container) > target {
+            if let Some(last) = container.last_child() {
+                container.remove(&last);
+            }
         }
 
-        for ws in workspaces {
-            let dot = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
-            dot.add_css_class("ws-dot");
-            dot.set_hexpand(false);
-            dot.set_vexpand(false);
-            dot.set_valign(gtk4::Align::Center);
-            if ws.is_active {
-                dot.add_css_class("active");
+        // Add missing dots or update existing
+        let mut child = container.first_child();
+        for ws in workspaces.iter() {
+            if let Some(dot) = child {
+                // Update existing dot
+                if ws.is_active {
+                    dot.add_css_class("active");
+                } else {
+                    dot.remove_css_class("active");
+                }
+                child = dot.next_sibling();
+            } else {
+                // Create new dot
+                let dot = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+                dot.add_css_class("ws-dot");
+                dot.set_hexpand(false);
+                dot.set_vexpand(false);
+                dot.set_valign(gtk4::Align::Center);
+                if ws.is_active {
+                    dot.add_css_class("active");
+                }
+                container.append(&dot);
             }
-            container.append(&dot);
         }
+    }
+
+    fn child_count(container: &gtk4::Box) -> usize {
+        let mut count = 0;
+        let mut child = container.first_child();
+        while child.is_some() {
+            count += 1;
+            child = child.and_then(|c| c.next_sibling());
+        }
+        count
     }
 }

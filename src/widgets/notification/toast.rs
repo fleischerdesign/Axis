@@ -43,9 +43,11 @@ impl NotificationToastManager {
             ctx: ctx.clone(),
         });
 
-        let manager_c = manager.clone();
+        let weak = Rc::downgrade(&manager);
         ctx.notifications.subscribe(move |data| {
-            manager_c.sync(data);
+            if let Some(m) = weak.upgrade() {
+                m.sync(data);
+            }
         });
     }
 

@@ -74,6 +74,7 @@ pub struct OsdManager {
     vol_module: Rc<OsdModule>,
     bright_module: Rc<OsdModule>,
     hide_timeout: Rc<RefCell<Option<gtk4::glib::SourceId>>>,
+    inner_timeout: Rc<RefCell<Option<gtk4::glib::SourceId>>>,
 }
 
 impl OsdManager {
@@ -105,6 +106,7 @@ impl OsdManager {
             vol_module,
             bright_module,
             hide_timeout: Rc::new(RefCell::new(None)),
+            inner_timeout: Rc::new(RefCell::new(None)),
         });
 
         manager.setup_subscriptions(ctx);
@@ -112,31 +114,43 @@ impl OsdManager {
         manager
     }
 
-    fn reset_hide_timeout(&self) {
-        // Bestehenden Timeout canceln
+    fn cancel_timeouts(&self) {
         if let Some(src) = self.hide_timeout.borrow_mut().take() {
             src.remove();
         }
+        if let Some(src) = self.inner_timeout.borrow_mut().take() {
+            src.remove();
+        }
+    }
+
+    fn reset_hide_timeout(&self) {
+        self.cancel_timeouts();
 
         let win = self.window.clone();
         let vol = self.vol_module.clone();
         let bright = self.bright_module.clone();
         let timeout_ref = self.hide_timeout.clone();
+        let inner_ref = self.inner_timeout.clone();
 
         let src = gtk4::glib::timeout_add_local_once(Duration::from_secs(2), move || {
-            // Beide Module ausblenden
+            *timeout_ref.borrow_mut() = None;
+
             vol.hide();
             bright.hide();
 
-            // Nach Revealer-Animation das Fenster verstecken
+            // After revealer animation, hide window
             let win_c = win.clone();
-            gtk4::glib::timeout_add_local_once(Duration::from_millis(300), move || {
-                if !vol.is_active() && !bright.is_active() {
-                    win_c.set_visible(false);
-                }
-            });
-
-            *timeout_ref.borrow_mut() = None;
+            let vol_c = vol.clone();
+            let bright_c = bright.clone();
+            let inner_ref_c = inner_ref.clone();
+            let inner_src =
+                gtk4::glib::timeout_add_local_once(Duration::from_millis(300), move || {
+                    *inner_ref_c.borrow_mut() = None;
+                    if !vol_c.is_active() && !bright_c.is_active() {
+                        win_c.set_visible(false);
+                    }
+                });
+            *inner_ref.borrow_mut() = Some(inner_src);
         });
 
         *self.hide_timeout.borrow_mut() = Some(src);
@@ -222,6 +236,7 @@ impl Clone for OsdManager {
             vol_module: self.vol_module.clone(),
             bright_module: self.bright_module.clone(),
             hide_timeout: self.hide_timeout.clone(),
+            inner_timeout: self.inner_timeout.clone(),
         }
     }
 }
