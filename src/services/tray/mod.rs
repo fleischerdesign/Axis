@@ -7,7 +7,6 @@ use futures_util::StreamExt;
 use item_proxy::StatusNotifierItemProxy;
 use log::{error, info, warn};
 use std::collections::HashMap;
-use zbus::connection::Builder;
 use zbus::interface;
 use zbus::fdo::DBusProxy;
 use zbus::Connection;

@@ -101,13 +101,12 @@ impl Service for BluetoothService {
             let mut is_discovering = false;
 
             loop {
-                let mut should_update = false;
 
                 tokio::select! {
-                    _ = interval.tick() => { should_update = true; }
-                    Some(_) = powered_changed.next() => { should_update = true; }
-                    Some(_) = interfaces_added.next() => { should_update = true; }
-                    Some(_) = interfaces_removed.next() => { should_update = true; }
+                    _ = interval.tick() => {}
+                    Some(_) = powered_changed.next() => {}
+                    Some(_) = interfaces_added.next() => {}
+                    Some(_) = interfaces_removed.next() => {}
                     Some(cmd) = cmd_rx.next() => {
                         match cmd {
                             BluetoothCmd::TogglePower(on) => {
@@ -152,16 +151,13 @@ impl Service for BluetoothService {
                                 }
                             }
                         }
-                        should_update = true;
                     }
                 }
 
-                if should_update {
-                    let next_data = Self::fetch_data(&adapter_proxy, &obj_manager, is_discovering, &current_data).await;
-                    if next_data != current_data {
-                        current_data = next_data;
-                        let _ = data_tx.send(current_data.clone()).await;
-                    }
+                let next_data = Self::fetch_data(&adapter_proxy, &obj_manager, is_discovering, &current_data).await;
+                if next_data != current_data {
+                    current_data = next_data;
+                    let _ = data_tx.send(current_data.clone()).await;
                 }
             }
         });
