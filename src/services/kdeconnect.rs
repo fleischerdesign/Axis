@@ -4,11 +4,10 @@ use zbus::proxy::{Builder as ProxyBuilder, SignalStream};
 use zbus::zvariant::ObjectPath;
 use async_channel::{Sender, bounded};
 use std::collections::HashMap;
-use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 use super::Service;
 use crate::store::ServiceStore;
-use log::{error, info, warn};
+use log::{error, info};
 
 const SERVICE: &str = "org.kde.kdeconnect";
 const BASE: &str = "/modules/kdeconnect";
@@ -70,28 +69,39 @@ impl Service for KdeConnectService {
         let (cmd_tx, cmd_rx) = bounded(10);
 
         tokio::spawn(async move {
-            let mut daemon_child: Option<Child> = None;
+            // Wait for kdeconnectd (system service via programs.kdeconnect.enable)
+            let connection = match Connection::session().await {
+                Ok(conn) => conn,
+                Err(e) => {
+                    error!("[kdeconnect] Failed to connect to session bus: {e}");
+                    return;
+                }
+            };
 
-            if !Self::daemon_running().await {
-                info!("[kdeconnect] Daemon not running, starting kdeconnectd...");
-                Self::start_daemon(&mut daemon_child);
-                for _ in 0..10 {
-                    tokio::time::sleep(Duration::from_secs(1)).await;
-                    if Self::daemon_running().await {
-                        info!("[kdeconnect] Daemon is now running");
+            // Wait for kdeconnectd to be available (up to 10s)
+            let mut available = false;
+            for _ in 0..10 {
+                if let Ok(reply) = connection.call_method(
+                    Some("org.freedesktop.DBus"),
+                    "/org/freedesktop/DBus",
+                    Some("org.freedesktop.DBus"),
+                    "NameHasOwner",
+                    &("org.kde.kdeconnect",),
+                ).await {
+                    if reply.body().deserialize::<bool>().unwrap_or(false) {
+                        available = true;
                         break;
                     }
                 }
+                tokio::time::sleep(Duration::from_secs(1)).await;
             }
 
-            let connection = loop {
-                match Connection::session().await {
-                    Ok(conn) => break conn,
-                    Err(e) => error!("[kdeconnect] Failed to connect to session bus: {e}"),
-                }
-                tokio::time::sleep(Duration::from_secs(3)).await;
-            };
-            info!("[kdeconnect] Connected to session bus");
+            if !available {
+                info!("[kdeconnect] kdeconnectd not available");
+                let _ = data_tx.send(KdeConnectData::default()).await;
+                return;
+            }
+            info!("[kdeconnect] Connected");
 
             let daemon = DaemonProxy::new(&connection).await.unwrap();
             let mut device_added = daemon.receive_device_added().await.unwrap();
@@ -99,7 +109,6 @@ impl Service for KdeConnectService {
 
             let mut cmd_rx = Box::pin(cmd_rx);
             let mut devices: HashMap<String, KdeConnectDeviceData> = HashMap::new();
-            // Combined stream of all device property signals
             let mut signal_stream = SelectAll::new();
             let mut current_data = KdeConnectData::default();
 
@@ -108,7 +117,6 @@ impl Service for KdeConnectService {
             Self::emit_sorted(&devices, &mut current_data, &data_tx).await;
 
             loop {
-                // Poll all signal streams to find which device changed
                 let mut changed_device_id: Option<String> = None;
 
                 tokio::select! {
@@ -131,14 +139,11 @@ impl Service for KdeConnectService {
                         continue;
                     }
                     Some(msg) = signal_stream.next() => {
-                        // Extract device ID from path
                         if let Some(path) = msg.header().path() {
                             let path_str = path.as_str();
-                            // Path format: /modules/kdeconnect/devices/{id} or /modules/kdeconnect/devices/{id}/battery
                             if let Some(rest) = path_str.strip_prefix(&format!("{BASE}/devices/")) {
                                 let device_id = rest.split('/').next().unwrap_or("").to_string();
                                 if !device_id.is_empty() {
-                                    // Parse the signal
                                     if let Some(member) = msg.header().member() {
                                         let member_str = member.to_string();
                                         Self::process_signal(&msg, &member_str, &device_id, &mut devices);
@@ -155,7 +160,6 @@ impl Service for KdeConnectService {
                     else => break,
                 }
 
-                // If a device signal changed, emit updated data
                 if changed_device_id.is_some() {
                     Self::emit_sorted(&devices, &mut current_data, &data_tx).await;
                 }
@@ -167,53 +171,6 @@ impl Service for KdeConnectService {
 }
 
 impl KdeConnectService {
-    fn check_available() -> bool {
-        Command::new("which")
-            .arg("kdeconnectd")
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false)
-    }
-
-    async fn daemon_running() -> bool {
-        if let Ok(conn) = Connection::session().await {
-            if let Ok(reply) = conn.call_method(
-                Some("org.freedesktop.DBus"),
-                "/org/freedesktop/DBus",
-                Some("org.freedesktop.DBus"),
-                "NameHasOwner",
-                &("org.kde.kdeconnect",),
-            ).await {
-                if let Ok(has_owner) = reply.body().deserialize::<bool>() {
-                    return has_owner;
-                }
-            }
-        }
-        false
-    }
-
-    fn start_daemon(child: &mut Option<Child>) {
-        if child.is_some() { return; }
-        if !Self::check_available() {
-            warn!("[kdeconnect] kdeconnectd not found in PATH");
-            return;
-        }
-        match Command::new("kdeconnectd")
-            .env("DBUS_SYSTEM_BUS_ADDRESS", "unix:path=/run/dbus/system_bus_socket")
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-        {
-            Ok(c) => {
-                info!("[kdeconnect] Started kdeconnectd (pid {})", c.id());
-                *child = Some(c);
-            }
-            Err(e) => error!("[kdeconnect] Failed to start kdeconnectd: {e}"),
-        }
-    }
-
     async fn refresh_all(
         connection: &Connection,
         daemon: &DaemonProxy<'_>,
@@ -235,9 +192,8 @@ impl KdeConnectService {
         if let Some(dev) = Self::fetch_device(connection, id).await {
             devices.insert(id.to_string(), dev);
 
-            // Subscribe to device signals: nameChanged, pairStateChanged, reachableChanged
             let dev_path = format!("{BASE}/devices/{id}");
-            if let Ok(proxy) = Self::make_proxy(connection, dev_path.clone(), "org.kde.kdeconnect.device".to_string()).await {
+            if let Ok(proxy) = Self::make_proxy(connection, dev_path, "org.kde.kdeconnect.device".to_string()).await {
                 for signal in ["nameChanged", "pairStateChanged", "reachableChanged"] {
                     if let Ok(stream) = proxy.receive_signal(signal).await {
                         signal_stream.push(stream);
@@ -245,10 +201,9 @@ impl KdeConnectService {
                 }
             }
 
-            // Subscribe to battery signal if plugin exists
             if devices.get(id).map_or(false, |d| d.has_battery) {
                 let bat_path = format!("{BASE}/devices/{id}/battery");
-                if let Ok(proxy) = Self::make_proxy(connection, bat_path.clone(), "org.kde.kdeconnect.device.battery".to_string()).await {
+                if let Ok(proxy) = Self::make_proxy(connection, bat_path, "org.kde.kdeconnect.device.battery".to_string()).await {
                     if let Ok(stream) = proxy.receive_signal("refreshed").await {
                         signal_stream.push(stream);
                     }
@@ -259,8 +214,6 @@ impl KdeConnectService {
 
     async fn fetch_device(connection: &Connection, id: &str) -> Option<KdeConnectDeviceData> {
         let path = format!("{BASE}/devices/{id}");
-
-        // GetAll device properties in one call (includes supportedPlugins!)
         let props = Self::get_all(connection, &path, "org.kde.kdeconnect.device").await?;
 
         let name = props.get("name")
@@ -276,7 +229,6 @@ impl KdeConnectService {
             .and_then(|v| bool::try_from(v.clone()).ok())
             .unwrap_or(false);
 
-        // supportedPlugins from GetAll
         let supported: Vec<String> = props.get("supportedPlugins")
             .and_then(|v| <Vec<String>>::try_from(v.clone()).ok())
             .unwrap_or_default();
@@ -285,12 +237,9 @@ impl KdeConnectService {
         let has_ping = supported.iter().any(|p| p == "kdeconnect_ping");
         let has_findmyphone = supported.iter().any(|p| p == "kdeconnect_findmyphone");
 
-        // Battery: one GetAll call
         let (battery_level, battery_charging) = if has_battery {
             let bat_path = format!("{path}/battery");
-            if let Some(bat_props) = Self::get_all(
-                connection, &bat_path, "org.kde.kdeconnect.device.battery"
-            ).await {
+            if let Some(bat_props) = Self::get_all(connection, &bat_path, "org.kde.kdeconnect.device.battery").await {
                 let level = bat_props.get("charge")
                     .and_then(|v| i32::try_from(v.clone()).ok());
                 let charging = bat_props.get("isCharging")
@@ -358,7 +307,6 @@ impl KdeConnectService {
                     }
                 }
                 "pairStateChanged" => {
-                    // pairState: 0=NotPaired, 1=Requested, 2=Paired
                     if let Ok((state,)) = msg.body().deserialize::<(u32,)>() {
                         dev.is_paired = state == 2;
                     }
@@ -369,7 +317,6 @@ impl KdeConnectService {
                     }
                 }
                 "refreshed" => {
-                    // Battery refreshed: (isCharging, charge)
                     if let Ok((charging, charge)) = msg.body().deserialize::<(bool, i32)>() {
                         dev.battery_charging = charging;
                         dev.battery_level = Some(charge);
