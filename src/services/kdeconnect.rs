@@ -201,6 +201,7 @@ impl KdeConnectService {
             return;
         }
         match Command::new("kdeconnectd")
+            .env("DBUS_SYSTEM_BUS_ADDRESS", "unix:path=/run/dbus/system_bus_socket")
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .spawn()
