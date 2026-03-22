@@ -1,8 +1,8 @@
 use futures_util::StreamExt;
-use zbus::{proxy, Connection, zvariant::{OwnedObjectPath, OwnedValue, Type}};
+use zbus::{proxy, Connection, zvariant::{OwnedObjectPath, OwnedValue}};
 use async_channel::{Sender, bounded};
 use std::collections::HashMap;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use super::Service;
 use crate::store::ServiceStore;
 use log::{error, info};
@@ -40,13 +40,14 @@ trait ObjectManager {
     fn interfaces_removed(&self, object_path: OwnedObjectPath, interfaces: Vec<String>) -> zbus::Result<()>;
 }
 
-#[derive(Debug, Clone, Default, Type, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct BluetoothDeviceData {
     pub name: String,
     pub is_connected: bool,
     pub is_paired: bool,
     pub path: String,
     pub icon: String,
+    pub first_seen: Option<SystemTime>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -99,6 +100,8 @@ impl Service for BluetoothService {
             let mut cmd_rx = Box::pin(cmd_rx);
             let mut current_data = BluetoothData::default();
             let mut is_discovering = false;
+            let mut was_discovering = false;
+            let mut known_devices: HashMap<String, SystemTime> = HashMap::new();
 
             loop {
 
@@ -154,7 +157,16 @@ impl Service for BluetoothService {
                     }
                 }
 
-                let next_data = Self::fetch_data(&adapter_proxy, &obj_manager, is_discovering, &current_data).await;
+                // Prüfen ob ein neuer Scan gestartet oder beendet wurde
+                let is_new_scan = is_discovering && !was_discovering;
+                let is_scan_ended = !is_discovering && was_discovering;
+                
+                if is_new_scan || is_scan_ended {
+                    known_devices.clear();
+                }
+                was_discovering = is_discovering;
+
+                let next_data = Self::fetch_data(&adapter_proxy, &obj_manager, is_discovering, &current_data, &mut known_devices, is_new_scan).await;
                 if next_data != current_data {
                     current_data = next_data;
                     let _ = data_tx.send(current_data.clone()).await;
@@ -168,7 +180,7 @@ impl Service for BluetoothService {
 
 impl BluetoothService {
 
-    async fn fetch_data(adapter: &BluetoothAdapterProxy<'_>, obj_manager: &ObjectManagerProxy<'_>, include_devices: bool, old_data: &BluetoothData) -> BluetoothData {
+    async fn fetch_data(adapter: &BluetoothAdapterProxy<'_>, obj_manager: &ObjectManagerProxy<'_>, include_devices: bool, old_data: &BluetoothData, known_devices: &mut HashMap<String, SystemTime>, is_new_scan: bool) -> BluetoothData {
         let is_powered = adapter.powered().await.unwrap_or(false);
         // Wenn BT aus ist, brauchen wir keine Geräte-Abfrage
         let actual_include = include_devices && is_powered;
@@ -198,16 +210,50 @@ impl BluetoothService {
                             .map(|s| s.to_string())
                             .unwrap_or_else(|| "bluetooth-symbolic".to_string());
 
+                        let path_str = path.to_string();
+                        
+                        // Timestamp für ungekoppelte Geräte
+                        let first_seen = if !is_connected && !is_paired {
+                            if is_new_scan {
+                                // Bei neuem Scan: Timestamp zurücksetzen und neu setzen
+                                let now = SystemTime::now();
+                                known_devices.insert(path_str.clone(), now);
+                                Some(now)
+                            } else {
+                                // Bekanntes Gerät: alten Timestamp behalten, oder neu setzen
+                                Some(*known_devices.entry(path_str.clone()).or_insert_with(SystemTime::now))
+                            }
+                        } else {
+                            None
+                        };
+
                         devices.push(BluetoothDeviceData {
                             name,
                             is_connected,
                             is_paired,
-                            path: path.to_string(),
+                            path: path_str,
                             icon,
+                            first_seen,
                         });
                     }
                 }
-                devices.sort_by(|a, b| b.is_connected.cmp(&a.is_connected).then_with(|| b.is_paired.cmp(&a.is_paired)).then_with(|| a.name.cmp(&b.name)));
+                devices.sort_by(|a, b| {
+                    // Verbundene Geräte zuerst
+                    if a.is_connected != b.is_connected {
+                        return b.is_connected.cmp(&a.is_connected);
+                    }
+                    // Gekoppelte Geräte danach
+                    if a.is_paired != b.is_paired {
+                        return b.is_paired.cmp(&a.is_paired);
+                    }
+                    // Ungekoppelte Geräte nach Timestamp sortieren (älteste zuerst)
+                    match (&a.first_seen, &b.first_seen) {
+                        (Some(a_time), Some(b_time)) => a_time.cmp(b_time),
+                        (Some(_), None) => std::cmp::Ordering::Less,
+                        (None, Some(_)) => std::cmp::Ordering::Greater,
+                        (None, None) => std::cmp::Ordering::Equal,
+                    }
+                });
             }
         } else if !is_powered {
             devices.clear();
