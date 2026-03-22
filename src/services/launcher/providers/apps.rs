@@ -1,4 +1,5 @@
-use crate::services::launcher::provider::{LauncherAction, LauncherItem, LauncherProvider};
+use crate::services::launcher::provider::{LauncherAction, LauncherItem, LauncherProvider, SearchPriority};
+use crate::services::launcher::providers::util::scored_match;
 use log::info;
 use std::future::Future;
 use std::pin::Pin;
@@ -183,27 +184,14 @@ impl LauncherProvider for AppProvider {
                     description: app.comment.clone(),
                     icon_name: app.icon.clone(),
                     action: LauncherAction::Exec(app.exec.clone()),
-                    score: 1, // Niedriger Basis-Score
+                    score: 1,
+                    priority: SearchPriority::Primary,
                 }).collect();
             }
 
             let mut results = Vec::new();
             for app in all_apps {
-                let name_lower = app.name.to_lowercase();
-                
-                let mut score = 0;
-                if name_lower == query_lower {
-                    score = 100;
-                } else if name_lower.starts_with(&query_lower) {
-                    score = 80;
-                } else if name_lower.contains(&query_lower) {
-                    score = 50;
-                } else if let Some(ref c) = app.comment {
-                    if c.to_lowercase().contains(&query_lower) {
-                        score = 30;
-                    }
-                }
-
+                let score = scored_match(&app.name, app.comment.as_deref(), &query_lower);
                 if score > 0 {
                     results.push(LauncherItem {
                         id: format!("app-{}", app.name),
@@ -212,6 +200,7 @@ impl LauncherProvider for AppProvider {
                         icon_name: app.icon.clone(),
                         action: LauncherAction::Exec(app.exec.clone()),
                         score,
+                        priority: SearchPriority::Primary,
                     });
                 }
             }

@@ -1,7 +1,7 @@
 pub mod provider;
 pub mod providers;
 
-use crate::services::launcher::provider::{LauncherItem, LauncherProvider};
+use crate::services::launcher::provider::{LauncherAction, LauncherItem, LauncherProvider};
 use crate::services::Service;
 use crate::store::ServiceStore;
 use log::{error, info};
@@ -51,6 +51,8 @@ impl Service for LauncherService {
         let store: ServiceStore<LauncherData> = ServiceStore::new_manual(Default::default());
         let service = Self::new();
         service.add_provider(Arc::new(providers::apps::AppProvider::default()));
+        service.add_provider(Arc::new(providers::files::FileSearchProvider));
+        service.add_provider(Arc::new(providers::web::WebSearchProvider::default()));
 
         let providers_ref = service.providers.clone();
         let data_store = store.store.clone();
@@ -83,7 +85,7 @@ impl Service for LauncherService {
                         if let Some(idx) = idx_to_activate {
                             if let Some(item) = data.results.get(idx) {
                                 match &item.action {
-                                    crate::services::launcher::provider::LauncherAction::Exec(program) => {
+                                    LauncherAction::Exec(program) => {
                                         info!("[launcher] Executing: {program}");
                                         match Command::new("sh")
                                             .arg("-c")
@@ -98,13 +100,29 @@ impl Service for LauncherService {
                                             Err(e) => error!("[launcher] Failed to execute: {program} ({e})"),
                                         }
                                     }
-                                    _ => {}
+                                    LauncherAction::OpenUrl(url) => {
+                                        info!("[launcher] Opening URL: {url}");
+                                        match Command::new("xdg-open")
+                                            .arg(url)
+                                            .stdin(Stdio::null())
+                                            .stdout(Stdio::null())
+                                            .stderr(Stdio::null())
+                                            .process_group(0)
+                                            .spawn()
+                                        {
+                                            Ok(_) => {}
+                                            Err(e) => error!("[launcher] Failed to open URL: {url} ({e})"),
+                                        }
+                                    }
+                                    LauncherAction::Internal(cmd) => {
+                                        info!("[launcher] Internal command: {cmd}");
+                                    }
                                 }
                             }
                         }
                     }
                     LauncherCmd::Search(query) => {
-                        let query_trimmed = query.trim().to_lowercase();
+                        let query_trimmed = query.trim().to_string();
 
                         data_store.update(|d| {
                             d.query = query.clone();
@@ -118,18 +136,29 @@ impl Service for LauncherService {
                         let active_providers: Vec<Arc<dyn LauncherProvider>> = providers_ref.borrow().clone();
                         let mut all_results = Vec::new();
 
+                        // Provider werden sequenziell gefragt, aber UI wird
+                        // nach JEDEM Provider aktualisiert — schnelle Provider
+                        // (Apps) zeigen sofort, langsame (Files) kommen dazu.
                         for p in active_providers {
                             let mut results = p.search(&query_trimmed).await;
                             all_results.append(&mut results);
+
+                            // Streaming-Update: UI sofort aktualisieren
+                            all_results.sort_by(|a, b| {
+                                b.priority.cmp(&a.priority).then_with(|| b.score.cmp(&a.score))
+                            });
+                            let snapshot = all_results.clone();
+                            data_store.update(move |d| {
+                                d.results = snapshot;
+                                d.is_searching = true; // Noch nicht fertig
+                                d.selected_index = if d.results.is_empty() { None } else { Some(0) };
+                                d.update_kind = LauncherUpdate::Results;
+                            });
                         }
 
-                        all_results.sort_by(|a, b| b.score.cmp(&a.score));
-
+                        // Finale Markierung
                         data_store.update(|d| {
-                            d.results = all_results;
                             d.is_searching = false;
-                            d.selected_index = if d.results.is_empty() { None } else { Some(0) };
-                            d.update_kind = LauncherUpdate::Results;
                         });
                     }
                 }

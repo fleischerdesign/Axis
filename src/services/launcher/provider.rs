@@ -9,6 +9,15 @@ pub enum LauncherAction {
     Internal(String),
 }
 
+/// Ergebnis-Priorität. Bestimmt die Reihenfolge in der Ergebnisliste.
+/// Primary-Ergebnisse erscheinen immer über Fallback-Ergebnissen,
+/// innerhalb der Ebene wird nach Score sortiert.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum SearchPriority {
+    Fallback = 0,
+    Primary = 1,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct LauncherItem {
     pub id: String,
@@ -17,12 +26,16 @@ pub struct LauncherItem {
     pub icon_name: String,
     pub action: LauncherAction,
     pub score: i32,
+    pub priority: SearchPriority,
 }
 
 pub trait LauncherProvider: Debug + Send + Sync {
     fn id(&self) -> &str;
-    
-    // Manuelle Definition des asynchronen Verhaltens für Dynamic Dispatch (dyn)
+
+    fn priority(&self) -> SearchPriority {
+        SearchPriority::Primary
+    }
+
     fn search<'a>(
         &'a self,
         query: &'a str,
