@@ -20,7 +20,12 @@ const BASE: &str = "/modules/kdeconnect";
     default_path = "/modules/kdeconnect"
 )]
 trait Daemon {
+    #[zbus(name = "devices")]
     fn devices(&self) -> zbus::Result<Vec<String>>;
+    #[zbus(name = "devices")]
+    fn devices_only_reachable(&self, only_reachable: bool) -> zbus::Result<Vec<String>>;
+    #[zbus(name = "devices")]
+    fn devices_filter(&self, only_reachable: bool, only_paired: bool) -> zbus::Result<Vec<String>>;
     #[zbus(signal, name = "deviceAdded")]
     fn device_added(&self, id: String) -> zbus::Result<()>;
     #[zbus(signal, name = "deviceRemoved")]
@@ -114,6 +119,7 @@ impl Service for KdeConnectService {
 
             // Initial fetch
             Self::refresh_all(&connection, &daemon, &mut devices, &mut signal_stream).await;
+            info!("[kdeconnect] Found {} devices", devices.len());
             Self::emit_sorted(&devices, &mut current_data, &data_tx).await;
 
             loop {
@@ -177,10 +183,13 @@ impl KdeConnectService {
         devices: &mut HashMap<String, KdeConnectDeviceData>,
         signal_stream: &mut SelectAll<SignalStream<'static>>,
     ) {
-        let device_ids = daemon.devices().await.unwrap_or_default();
+        let device_ids = daemon.devices_filter(false, false).await.unwrap_or_default();
+        info!("[kdeconnect] refresh_all: daemon reports {} device IDs: {:?}", device_ids.len(), device_ids);
         for id in &device_ids {
+            info!("[kdeconnect] Fetching device {id}...");
             Self::add_device(connection, id, devices, signal_stream).await;
         }
+        info!("[kdeconnect] refresh_all complete: {} devices in map", devices.len());
     }
 
     async fn add_device(
@@ -214,7 +223,15 @@ impl KdeConnectService {
 
     async fn fetch_device(connection: &Connection, id: &str) -> Option<KdeConnectDeviceData> {
         let path = format!("{BASE}/devices/{id}");
-        let props = Self::get_all(connection, &path, "org.kde.kdeconnect.device").await?;
+        let props = Self::get_all(connection, &path, "org.kde.kdeconnect.device").await;
+        
+        let props = match props {
+            Some(p) => p,
+            None => {
+                error!("[kdeconnect] Failed to fetch device {id}: GetAll returned None");
+                return None;
+            }
+        };
 
         let name = props.get("name")
             .and_then(|v| <String>::try_from(v.clone()).ok())
