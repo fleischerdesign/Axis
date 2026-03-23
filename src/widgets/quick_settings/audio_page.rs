@@ -64,6 +64,11 @@ impl AudioPage {
                     slider.set_icon(icon_name);
                 }
             }),
+            Some({
+                move |slider: &IconSlider, val: f64| {
+                    slider.set_icon(icons::volume_icon(val, false));
+                }
+            }),
         );
         master_slider
             .icon_slider

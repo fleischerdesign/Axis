@@ -94,6 +94,14 @@ impl MainPage {
                     vol_icon_bar_c.set_icon_name(Some(icon_name));
                 }
             }),
+            Some({
+                let vol_icon_bar_c = vol_icon_bar.clone();
+                move |slider: &IconSlider, val: f64| {
+                    let icon_name = icons::volume_icon(val, false);
+                    slider.set_icon(icon_name);
+                    vol_icon_bar_c.set_icon_name(Some(icon_name));
+                }
+            }),
         );
         volume_slider
             .icon_slider
@@ -125,6 +133,7 @@ impl MainPage {
             |v| BacklightCmd::SetBrightness(v),
             0.5,
             None::<fn(&IconSlider, &_)>,
+            None::<fn(&IconSlider, f64)>,
         );
         brightness_slider
             .icon_slider

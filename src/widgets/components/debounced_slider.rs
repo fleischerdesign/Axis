@@ -11,7 +11,8 @@ use std::rc::Rc;
 /// Internally wraps an IconSlider and handles:
 /// - Store → Slider (with threshold-based debounce)
 /// - Slider → Command (on user interaction)
-/// - Optional data_changed callback for side effects (icon update, etc.)
+/// - Optional data_changed callback for side effects on store updates
+/// - Optional on_user_change callback for side effects on user interaction
 pub struct DebouncedSlider<T, C>
 where
     T: Clone + PartialEq + 'static,
@@ -37,6 +38,7 @@ where
         to_cmd: impl Fn(f64) -> C + 'static,
         threshold: f64,
         data_changed: Option<impl Fn(&IconSlider, &T) + 'static>,
+        on_user_change: Option<impl Fn(&IconSlider, f64) + 'static>,
     ) -> Self {
         let icon_slider = IconSlider::new(icon_name, min, max, step);
         let is_updating = Rc::new(RefCell::new(false));
@@ -67,12 +69,17 @@ where
         // Slider → Command (guarded by is_updating)
         let tx_c = tx.clone();
         let is_updating_cmd = is_updating.clone();
+        let icon_slider_c = icon_slider.clone();
         icon_slider.slider.connect_value_changed(move |s| {
             if *is_updating_cmd.borrow() {
                 return;
             }
             let val = s.value();
             let _ = tx_c.try_send(to_cmd(val));
+
+            if let Some(ref cb) = on_user_change {
+                cb(&icon_slider_c, val);
+            }
         });
 
         Self {
