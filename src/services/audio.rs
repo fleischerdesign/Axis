@@ -82,16 +82,20 @@ impl Service for AudioService {
                     })));
             }
 
-            context
+            if context
                 .borrow_mut()
                 .connect(None, ContextFlagSet::NOFLAGS, None)
-                .expect("Failed to connect PulseAudio context");
+                .is_err()
+            {
+                error!("[audio] Failed to connect PulseAudio context");
+                return;
+            }
 
             mainloop.borrow_mut().lock();
-            mainloop
-                .borrow_mut()
-                .start()
-                .expect("Failed to start PulseAudio mainloop");
+            if mainloop.borrow_mut().start().is_err() {
+                error!("[audio] Failed to start PulseAudio mainloop");
+                return;
+            }
 
             // Warten bis Context Ready oder Failed
             loop {

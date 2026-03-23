@@ -125,8 +125,9 @@ fn build_ui(app: &libadwaita::Application) {
         if let Some(c) = ctrl_q.borrow().as_ref() { c.sync(); }
     }));
 
-    // --- ARCHIVE (Braucht QS-Referenz) ---
-    let notification_archive = crate::widgets::notification::archive::NotificationArchiveManager::new(app, ctx.clone(), &qs.container);
+    // --- ARCHIVE (über dem QS Popup) ---
+    let notification_archive = crate::widgets::notification::archive::NotificationArchiveManager::new(ctx.clone());
+    qs.archive_box.append(&notification_archive.container);
     let archive_cb = notification_archive.clone();
 
     // OnChange Callback für alle Popups

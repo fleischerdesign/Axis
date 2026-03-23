@@ -58,11 +58,17 @@ impl Service for BacklightService {
             }
 
             // inotify auf Device-Verzeichnis registrieren
-            let mut watcher = Inotify::init().expect("Failed to init inotify");
-            watcher
-                .watches()
-                .add(&device_path, WatchMask::MODIFY)
-                .expect("Failed to watch backlight device");
+            let mut watcher = match Inotify::init() {
+                Ok(w) => w,
+                Err(e) => {
+                    error!("[backlight] Failed to init inotify: {e}");
+                    return;
+                }
+            };
+            if let Err(e) = watcher.watches().add(&device_path, WatchMask::MODIFY) {
+                error!("[backlight] Failed to watch backlight device: {e}");
+                return;
+            }
 
             // Command-Thread: Brightness setzen über brightness Crate (D-Bus)
             thread::spawn(move || {

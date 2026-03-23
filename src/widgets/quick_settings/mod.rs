@@ -25,6 +25,7 @@ use std::rc::Rc;
 pub struct QuickSettingsPopup {
     pub base: PopupBase,
     pub container: gtk4::Box,
+    pub archive_box: gtk4::Box,
     qs_stack: gtk4::Stack,
 }
 
@@ -179,7 +180,18 @@ impl QuickSettingsPopup {
         qs_stack.add_named(&kdeconnect_page.container, Some("kdeconnect"));
 
         qs_container.append(&qs_stack);
-        base.set_content(&qs_container);
+
+        // Outer wrapper: Archive oben, Popup-Content unten
+        let archive_box = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
+        archive_box.set_valign(gtk4::Align::End);
+        archive_box.set_halign(gtk4::Align::End);
+        archive_box.set_width_request(380);
+
+        let outer = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+        outer.set_valign(gtk4::Align::End);
+        outer.append(&archive_box);
+        outer.append(&qs_container);
+        base.set_content(&outer);
 
         // --- KEYBOARD NAVIGATION ---
         let base_kb = base.clone();
@@ -207,6 +219,7 @@ impl QuickSettingsPopup {
         Self {
             base,
             container: qs_container,
+            archive_box,
             qs_stack,
         }
     }

@@ -108,9 +108,27 @@ impl Service for KdeConnectService {
             }
             info!("[kdeconnect] Connected");
 
-            let daemon = DaemonProxy::new(&connection).await.unwrap();
-            let mut device_added = daemon.receive_device_added().await.unwrap();
-            let mut device_removed = daemon.receive_device_removed().await.unwrap();
+            let daemon = match DaemonProxy::new(&connection).await {
+                Ok(d) => d,
+                Err(e) => {
+                    error!("[kdeconnect] Failed to create proxy: {e}");
+                    return;
+                }
+            };
+            let mut device_added = match daemon.receive_device_added().await {
+                Ok(s) => s,
+                Err(e) => {
+                    error!("[kdeconnect] Failed to subscribe device_added: {e}");
+                    return;
+                }
+            };
+            let mut device_removed = match daemon.receive_device_removed().await {
+                Ok(s) => s,
+                Err(e) => {
+                    error!("[kdeconnect] Failed to subscribe device_removed: {e}");
+                    return;
+                }
+            };
 
             let mut cmd_rx = Box::pin(cmd_rx);
             let mut devices: HashMap<String, KdeConnectDeviceData> = HashMap::new();
@@ -373,9 +391,16 @@ impl KdeConnectService {
             ),
         };
         info!("[kdeconnect] {method} to {path}");
+        let obj_path = match ObjectPath::try_from(path.as_str()) {
+            Ok(p) => p,
+            Err(_) => {
+                error!("[kdeconnect] Invalid object path: {path}");
+                return;
+            }
+        };
         if let Err(e) = connection.call_method(
             Some(SERVICE),
-            ObjectPath::try_from(path.as_str()).unwrap(),
+            obj_path,
             Some(interface),
             method,
             &(),

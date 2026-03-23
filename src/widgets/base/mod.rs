@@ -25,6 +25,7 @@ impl PopupBase {
         window.set_layer(Layer::Overlay);
         window.set_keyboard_mode(KeyboardMode::OnDemand);
         window.set_anchor(Edge::Bottom, true);
+        window.set_default_size(380, -1);
 
         if anchor_right {
             window.set_anchor(Edge::Right, true);
