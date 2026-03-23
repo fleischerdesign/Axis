@@ -76,11 +76,13 @@ impl QuickSettingsPopup {
             .interpolate_size(true)
             .build();
 
-        // Reset Stack to main page after popup is fully hidden
+        // Reset Stack to main page after popup is fully hidden, stop BT scan
         let stack_reset = qs_stack.clone();
+        let tx_bt_stop = ctx.bluetooth.tx.clone();
         base.window.connect_visible_notify(move |win| {
             if !win.is_visible() {
                 stack_reset.set_visible_child_name("main");
+                let _ = tx_bt_stop.try_send(BluetoothCmd::StopScan);
             }
         });
 
