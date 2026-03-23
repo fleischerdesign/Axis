@@ -65,6 +65,8 @@ impl NotificationServer {
             urgency,
             timestamp: chrono::Local::now().timestamp(),
             actions: parsed_actions,
+            on_action: None,
+            internal_id: 0,
         };
 
         let _ = self.tx.send_blocking(notification);

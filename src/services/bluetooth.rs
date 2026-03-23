@@ -4,6 +4,7 @@ use async_channel::{Sender, bounded, Receiver};
 use tokio::sync::oneshot;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, SystemTime};
 use super::Service;
 use crate::store::ServiceStore;
@@ -109,14 +110,29 @@ pub enum BluetoothCmd {
 
 static PAIRING_STATE: std::sync::LazyLock<Arc<Mutex<Option<PairingRequest>>>> =
     std::sync::LazyLock::new(|| Arc::new(Mutex::new(None)));
+static PAIRING_NOTIF_ID: AtomicU32 = AtomicU32::new(0);
 
-pub fn get_pairing_request() -> Option<PairingRequest> {
-    PAIRING_STATE.lock().unwrap().clone()
+pub struct PairingUiState {
+    pub request: Option<PairingRequest>,
+    pub should_close_notif: bool,
+    pub notif_id: u32,
+}
+
+pub fn get_pairing_ui_state() -> PairingUiState {
+    let request = PAIRING_STATE.lock().unwrap().clone();
+    let notif_id = PAIRING_NOTIF_ID.load(Ordering::SeqCst);
+    PairingUiState {
+        should_close_notif: request.is_none() && notif_id > 0,
+        notif_id,
+        request,
+    }
+}
+
+pub fn set_pairing_notification_id(id: u32) {
+    PAIRING_NOTIF_ID.store(id, Ordering::SeqCst);
 }
 
 fn set_pairing_request(req: Option<PairingRequest>) {
-    let name = req.as_ref().map(|r| r.device_name.as_str()).unwrap_or("(none)");
-    info!("[bluetooth] PAIRING_STATE set: {name}");
     *PAIRING_STATE.lock().unwrap() = req;
 }
 

@@ -6,7 +6,6 @@ use log::{error, info};
 use serde::Serialize;
 use zbus::connection::Builder;
 use zbus::object_server::InterfaceRef;
-use super::Service;
 use crate::store::ServiceStore;
 
 #[derive(Clone, Debug, Default, Serialize, PartialEq)]
@@ -15,7 +14,10 @@ pub struct NotificationAction {
     pub label: String,
 }
 
-#[derive(Clone, Debug, Default, Serialize, PartialEq)]
+use std::collections::HashMap;
+use std::sync::Arc;
+
+#[derive(Clone, Serialize)]
 pub struct Notification {
     pub id: u32,
     pub app_name: String,
@@ -25,6 +27,40 @@ pub struct Notification {
     pub urgency: u8,
     pub timestamp: i64,
     pub actions: Vec<NotificationAction>,
+    #[serde(skip)]
+    pub on_action: Option<HashMap<String, Arc<dyn Fn() + Send + Sync>>>,
+    pub internal_id: u64,
+}
+
+impl Default for Notification {
+    fn default() -> Self {
+        Self {
+            id: 0, app_name: String::new(), app_icon: String::new(),
+            summary: String::new(), body: String::new(), urgency: 0,
+            timestamp: 0, actions: Vec::new(), on_action: None, internal_id: 0,
+        }
+    }
+}
+
+impl PartialEq for Notification {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id && self.app_name == other.app_name
+            && self.app_icon == other.app_icon && self.summary == other.summary
+            && self.body == other.body && self.urgency == other.urgency
+            && self.timestamp == other.timestamp && self.actions == other.actions
+            && self.internal_id == other.internal_id
+    }
+}
+
+impl std::fmt::Debug for Notification {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Notification")
+            .field("id", &self.id)
+            .field("app_name", &self.app_name)
+            .field("summary", &self.summary)
+            .field("internal_id", &self.internal_id)
+            .finish_non_exhaustive()
+    }
 }
 
 #[derive(Clone, Debug, Default, Serialize, PartialEq)]
@@ -35,15 +71,13 @@ pub struct NotificationData {
 
 pub struct NotificationService;
 
-impl Service for NotificationService {
-    type Data = NotificationData;
-    type Cmd = NotificationCmd;
-
-    fn spawn() -> (ServiceStore<Self::Data>, Sender<Self::Cmd>) {
+impl NotificationService {
+    pub fn spawn_with_raw_tx() -> (ServiceStore<NotificationData>, Sender<NotificationCmd>, Sender<Notification>) {
         let (raw_tx, raw_rx) = bounded::<Notification>(64);
         let (data_tx, data_rx) = bounded::<NotificationData>(64);
         let (cmd_tx, cmd_rx) = bounded::<NotificationCmd>(32);
         let server_cmd_tx = cmd_tx.clone();
+        let raw_tx_ret = raw_tx.clone();
         
         tokio::spawn(async move {
             let conn = async {
@@ -122,6 +156,6 @@ impl Service for NotificationService {
             }
         });
 
-        (ServiceStore::new(data_rx, Default::default()), cmd_tx)
+        (ServiceStore::new(data_rx, Default::default()), cmd_tx, raw_tx_ret)
     }
 }

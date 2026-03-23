@@ -28,6 +28,8 @@ pub struct NotificationCard {
 
 impl NotificationCard {
     pub fn new(data: &Notification, ctx: AppContext) -> Self {
+        let _is_internal = data.internal_id > 0;
+
         // --- INNERE KARTE ---
         let card = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
         card.add_css_class("notification-card");
@@ -77,7 +79,14 @@ impl NotificationCard {
 
         let id = data.id;
         let tx = ctx.notifications.tx.clone();
+        let close_callbacks = data.on_action.clone();
         close_btn.connect_clicked(move |_| {
+            // Fire "reject" callback for interactive notifications
+            if let Some(ref cbs) = close_callbacks {
+                if let Some(cb) = cbs.get("reject") {
+                    cb();
+                }
+            }
             let _ = tx.try_send(NotificationCmd::Close(id));
         });
 
@@ -130,7 +139,14 @@ impl NotificationCard {
                 let tx = ctx.notifications.tx.clone();
                 let key = action.key.clone();
                 let id_action = data.id;
+                let action_callbacks = data.on_action.clone();
                 btn.connect_clicked(move |_| {
+                    // Fire internal callback first
+                    if let Some(ref cbs) = action_callbacks {
+                        if let Some(cb) = cbs.get(&key) {
+                            cb();
+                        }
+                    }
                     let _ = tx.try_send(NotificationCmd::Action(id_action, key.clone()));
                     let _ = tx.try_send(NotificationCmd::Close(id_action));
                 });
@@ -139,31 +155,43 @@ impl NotificationCard {
             card.append(&action_box);
         }
 
-        // --- SWIPE TO DISMISS (generisch) ---
+        // --- SWIPE TO DISMISS ---
         let tx_swipe = ctx.notifications.tx.clone();
         let id_swipe = data.id;
+        let swipe_callbacks = data.on_action.clone();
         let swipe = SwipeDismiss::new(&card, move || {
+            // Fire "reject" callback for interactive notifications
+            if let Some(ref cbs) = swipe_callbacks {
+                if let Some(cb) = cbs.get("reject") {
+                    cb();
+                }
+            }
             let _ = tx_swipe.try_send(NotificationCmd::Close(id_swipe));
         });
 
-        // Wrapper-Eigenschaften auf den SwipeDismiss-Container
         let container = swipe.container.clone();
         container.set_width_request(380);
         container.set_hexpand(false);
         container.set_halign(gtk4::Align::End);
         container.add_css_class("notification-wrapper");
 
-        // --- CLICK GESTURE (Default Action) ---
+        // --- CLICK GESTURE ---
         let click = gtk4::GestureClick::new();
         let tx_click = ctx.notifications.tx.clone();
         let id_click = data.id;
         let has_default = data.actions.iter().any(|a| a.key == "default");
+        let click_callbacks = data.on_action.clone();
 
         click.connect_pressed(move |_, _, _, _| {
             if swipe.is_dragging() {
                 return;
             }
             if has_default {
+                if let Some(ref cbs) = click_callbacks {
+                    if let Some(cb) = cbs.get("default") {
+                        cb();
+                    }
+                }
                 let _ = tx_click.try_send(NotificationCmd::Action(id_click, "default".to_string()));
                 let _ = tx_click.try_send(NotificationCmd::Close(id_click));
             }

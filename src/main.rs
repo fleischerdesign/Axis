@@ -76,8 +76,32 @@ fn build_ui(app: &libadwaita::Application) {
 
     let ctx = setup_services();
 
-    // Bluetooth pairing dialog (layer shell, independent of popups)
-    crate::widgets::quick_settings::bluetooth_pair_dialog::spawn_pairing_dialog(app, ctx.bluetooth.tx.clone());
+    // Bluetooth pairing via notification system
+    let ctx_bt = ctx.clone();
+    gtk4::glib::timeout_add_local(std::time::Duration::from_millis(250), move || {
+        let state = crate::services::bluetooth::get_pairing_ui_state();
+
+        // Close stale notification
+        if state.should_close_notif && state.notif_id > 0 {
+            let _ = ctx_bt.notifications.tx.try_send(
+                crate::services::notifications::server::NotificationCmd::Close(state.notif_id)
+            );
+            crate::services::bluetooth::set_pairing_notification_id(0);
+        }
+
+        // Show new notification
+        if let Some(ref req) = state.request {
+            if state.notif_id == 0 {
+                crate::widgets::quick_settings::bluetooth_pair_dialog::send_pairing_notification(
+                    req,
+                    ctx_bt.bluetooth.tx.clone(),
+                    &ctx_bt.notification_raw_tx,
+                );
+            }
+        }
+
+        gtk4::glib::ControlFlow::Continue
+    });
 
     // --- WIDGETS & CONTROLLER ---
     let bar = Bar::new(app, ctx.clone());
@@ -172,7 +196,7 @@ fn setup_services() -> AppContext {
     let (audio_store, audio_tx) = AudioService::spawn();
     let (backlight_store, backlight_tx) = BacklightService::spawn();
     let (nightlight_store, nightlight_tx) = NightlightService::spawn();
-    let (notifications_store, notifications_tx) = NotificationService::spawn();
+    let (notifications_store, notifications_tx, notification_raw_tx) = NotificationService::spawn_with_raw_tx();
     let (dnd_store, dnd_tx) = DndService::spawn();
     let (tray_store, tray_tx) = TrayService::spawn();
     let (kdeconnect_store, kdeconnect_tx) = KdeConnectService::spawn();
@@ -189,6 +213,7 @@ fn setup_services() -> AppContext {
         nightlight: ServiceHandle { store: nightlight_store, tx: nightlight_tx },
         launcher: ServiceHandle { store: launcher_store, tx: launcher_tx },
         notifications: ServiceHandle { store: notifications_store, tx: notifications_tx },
+        notification_raw_tx,
         dnd: ServiceHandle { store: dnd_store, tx: dnd_tx },
         tray: ServiceHandle { store: tray_store, tx: tray_tx },
         kdeconnect: ServiceHandle { store: kdeconnect_store, tx: kdeconnect_tx },

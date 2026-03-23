@@ -5,7 +5,6 @@ use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
-use std::rc::Rc;
 use std::time::Duration;
 
 pub struct NotificationToastManager {
@@ -14,6 +13,10 @@ pub struct NotificationToastManager {
     last_shown_id: Cell<u32>,
     active_toasts: RefCell<HashMap<u32, gtk4::Revealer>>,
     ctx: AppContext,
+}
+
+thread_local! {
+    static MANAGER: RefCell<Option<NotificationToastManager>> = RefCell::new(None);
 }
 
 impl NotificationToastManager {
@@ -35,26 +38,29 @@ impl NotificationToastManager {
         container.set_valign(gtk4::Align::Start);
         window.set_child(Some(&container));
 
-        let manager = Rc::new(Self {
-            window,
-            container,
-            last_shown_id: Cell::new(0),
-            active_toasts: RefCell::new(HashMap::new()),
-            ctx: ctx.clone(),
+        MANAGER.with_borrow_mut(|m| {
+            *m = Some(Self {
+                window,
+                container,
+                last_shown_id: Cell::new(0),
+                active_toasts: RefCell::new(HashMap::new()),
+                ctx: ctx.clone(),
+            });
         });
 
-        let weak = Rc::downgrade(&manager);
-        ctx.notifications.subscribe(move |data| {
-            if let Some(m) = weak.upgrade() {
-                m.sync(data);
-            }
+        ctx.notifications.subscribe(|data| {
+            MANAGER.with_borrow(|m| {
+                if let Some(mgr) = m {
+                    mgr.sync(data);
+                }
+            });
         });
     }
 
     fn sync(&self, data: &crate::services::notifications::NotificationData) {
-        if !self.ctx.dnd.get().enabled {
-            if data.last_id > self.last_shown_id.get() {
-                if let Some(n) = data.notifications.iter().find(|n| n.id == data.last_id) {
+        if data.last_id > self.last_shown_id.get() {
+            if let Some(n) = data.notifications.iter().find(|n| n.id == data.last_id) {
+                if n.internal_id > 0 || !self.ctx.dnd.get().enabled {
                     self.last_shown_id.set(data.last_id);
                     self.add_toast(n);
                 }
@@ -90,29 +96,30 @@ impl NotificationToastManager {
 
         revealer.set_reveal_child(true);
 
-        // Auto-Entfernung nach 5 Sekunden
-        let id = data.id;
-        let active_toasts_c = self.active_toasts.clone();
-        let container_c = self.container.clone();
-        let window_c = self.window.clone();
+        if data.internal_id == 0 {
+            let id = data.id;
+            let active_toasts_c = self.active_toasts.clone();
+            let container_c = self.container.clone();
+            let window_c = self.window.clone();
 
-        gtk4::glib::timeout_add_local_once(Duration::from_secs(5), move || {
-            if let Some(revealer) = active_toasts_c.borrow_mut().remove(&id) {
-                revealer_handle::animate_out(
-                    &revealer,
-                    &container_c,
-                    Some({
-                        let cc = container_c.clone();
-                        let wc = window_c.clone();
-                        move || {
-                            if cc.first_child().is_none() {
-                                wc.set_visible(false);
+            gtk4::glib::timeout_add_local_once(Duration::from_secs(5), move || {
+                if let Some(revealer) = active_toasts_c.borrow_mut().remove(&id) {
+                    revealer_handle::animate_out(
+                        &revealer,
+                        &container_c,
+                        Some({
+                            let cc = container_c.clone();
+                            let wc = window_c.clone();
+                            move || {
+                                if cc.first_child().is_none() {
+                                    wc.set_visible(false);
+                                }
                             }
-                        }
-                    }),
-                );
-            }
-        });
+                        }),
+                    );
+                }
+            });
+        }
     }
 
     fn remove_toast_by_id(&self, id: u32) {
