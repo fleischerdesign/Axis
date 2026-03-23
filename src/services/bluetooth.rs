@@ -1,5 +1,4 @@
 use futures_util::StreamExt;
-use futures_util::stream::FuturesUnordered;
 use zbus::{Connection, interface, proxy, zvariant::{OwnedObjectPath, OwnedValue}};
 use async_channel::{Sender, bounded, Receiver};
 use tokio::sync::oneshot;
@@ -31,6 +30,14 @@ trait BluetoothAdapter {
 trait BluetoothDevice {
     fn connect(&self) -> zbus::Result<()>;
     fn disconnect(&self) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn name(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn connected(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn paired(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn icon(&self) -> zbus::Result<String>;
 }
 
 #[proxy(
@@ -109,64 +116,72 @@ pub enum BluetoothCmd {
 
 // ─── Properties Changed Forwarding ───────────────────────────────────────────
 
-#[derive(Debug)]
-pub struct PropertyChange;
+pub enum FwdCmd {
+    Add(String),
+    Remove(String),
+}
 
-/// Listens for `PropertiesChanged` on specific device paths.
-/// Streams are created when `interfaces_added` fires, removed on `interfaces_removed`.
-/// Only forwards `Connected` property changes to avoid spurious re-fetches.
+#[derive(Debug)]
+pub struct PropertyChange {
+    pub device_path: String,
+}
+
+/// Spawns a per-device task for each added device path.
+/// Tasks listen for `PropertiesChanged` (filtered to `Connected`) and forward to the main loop.
+/// On `Remove`, the device task is cancelled — no shared state, no clear-all.
 fn spawn_device_property_forwarder(
     conn: zbus::Connection,
-    add_rx: Receiver<String>,
-) -> (Sender<String>, Receiver<PropertyChange>) {
-    let (remove_tx, remove_rx) = bounded::<String>(10);
+    cmd_rx: Receiver<FwdCmd>,
+) -> Receiver<PropertyChange> {
     let (prop_tx, prop_rx) = bounded::<PropertyChange>(10);
 
     tokio::spawn(async move {
-        let mut streams: FuturesUnordered<std::pin::Pin<Box<dyn std::future::Future<
-            Output = Result<(), zbus::Error>
-        > + Send>>> = FuturesUnordered::new();
+        let mut cancel_txs: HashMap<String, oneshot::Sender<()>> = HashMap::new();
 
-        loop {
-            // Drain remove channel — clear all monitored streams
-            while remove_rx.try_recv().is_ok() {
-                streams.clear();
-            }
-
-            // Drain add channel — subscribe to new device paths
-            while let Ok(path) = add_rx.try_recv() {
-                if let Ok(proxy) = zbus::fdo::PropertiesProxy::builder(&conn)
-                    .destination("org.bluez").unwrap()
-                    .path(&*path).unwrap()
-                    .build().await
-                {
-                    if let Ok(changed) = proxy.receive_properties_changed().await {
-                        let ptx = prop_tx.clone();
-                        streams.push(Box::pin(async move {
-                            let mut s = changed;
-                            while let Some(args) = s.next().await {
-                                if args.args()?
-                                    .changed_properties.contains_key("Connected")
-                                {
-                                    let _ = ptx.try_send(PropertyChange);
-                                }
-                            }
-                            Ok(())
-                        }));
+        while let Ok(cmd) = cmd_rx.recv().await {
+            match cmd {
+                FwdCmd::Remove(path) => {
+                    if let Some(tx) = cancel_txs.remove(&path) {
+                        let _ = tx.send(());
                     }
                 }
-            }
-
-            // Poll streams or sleep briefly
-            if streams.is_empty() {
-                tokio::time::sleep(Duration::from_millis(100)).await;
-            } else {
-                streams.next().await;
+                FwdCmd::Add(path) => {
+                    if let Some(tx) = cancel_txs.remove(&path) {
+                        let _ = tx.send(());
+                    }
+                    let (cancel_tx, cancel_rx) = oneshot::channel::<()>();
+                    cancel_txs.insert(path.clone(), cancel_tx);
+                    let c = conn.clone();
+                    let ptx = prop_tx.clone();
+                    tokio::spawn(async move {
+                        let Ok(proxy) = zbus::fdo::PropertiesProxy::builder(&c)
+                            .destination("org.bluez").unwrap()
+                            .path(&*path).unwrap()
+                            .build().await
+                        else { return };
+                        let Ok(changed) = proxy.receive_properties_changed().await
+                        else { return };
+                        let mut s = changed;
+                        tokio::select! {
+                            _ = async {
+                                while let Some(args) = s.next().await {
+                                    if args.args().ok()
+                                        .map(|a| a.changed_properties.contains_key("Connected"))
+                                        .unwrap_or(true)
+                                    {
+                                        let _ = ptx.try_send(PropertyChange { device_path: path.clone() });
+                                    }
+                                }
+                            } => {}
+                            _ = cancel_rx => {}
+                        }
+                    });
+                }
             }
         }
     });
 
-    (remove_tx, prop_rx)
+    prop_rx
 }
 
 // ─── Global Pairing State (bypasses async_channel for instant GTK delivery) ─
@@ -390,8 +405,8 @@ impl Service for BluetoothService {
                 tokio::time::sleep(Duration::from_secs(2)).await;
             }
 
-            let (prop_add_tx, prop_add_rx) = bounded::<String>(10);
-            let (remove_tx, prop_rx) = spawn_device_property_forwarder(connection.clone(), prop_add_rx);
+            let (fwd_tx, fwd_rx) = bounded::<FwdCmd>(10);
+            let prop_rx = spawn_device_property_forwarder(connection.clone(), fwd_rx);
 
             // --- Event streams ---
             let mut powered_changed = adapter_proxy.receive_powered_changed().await;
@@ -497,18 +512,24 @@ impl Service for BluetoothService {
                     Some(args) = interfaces_added.next() => {
                         if let Ok(a) = args.args() {
                             if a.interfaces_and_properties.contains_key("org.bluez.Device1") {
-                                let _ = prop_add_tx.try_send(a.object_path.to_string());
+                                let _ = fwd_tx.try_send(FwdCmd::Add(a.object_path.to_string()));
                             }
                         }
                     }
                     Some(args) = interfaces_removed.next() => {
                         if let Ok(a) = args.args() {
                             if a.interfaces.iter().any(|i| i == "org.bluez.Device1") {
-                                let _ = remove_tx.try_send(a.object_path.to_string());
+                                let _ = fwd_tx.try_send(FwdCmd::Remove(a.object_path.to_string()));
                             }
                         }
                     }
-                    Some(_) = prop_rx.next() => {}
+                    Some(chg) = prop_rx.next() => {
+                        if let Some(updated) = Self::fetch_single_device(&connection, &chg.device_path).await {
+                            if Self::update_device_in_list(&mut current_data, updated) {
+                                let _ = data_tx.send(current_data.clone()).await;
+                            }
+                        }
+                    }
                 }
 
                 // Scan state change
@@ -537,6 +558,44 @@ impl Service for BluetoothService {
 }
 
 impl BluetoothService {
+    async fn fetch_single_device(
+        conn: &zbus::Connection,
+        device_path: &str,
+    ) -> Option<BluetoothDeviceData> {
+        let path = OwnedObjectPath::try_from(device_path).ok()?;
+        let proxy = BluetoothDeviceProxy::builder(conn)
+            .path(path).ok()?
+            .build().await.ok()?;
+
+        let name = proxy.name().await
+            .unwrap_or_else(|_| "Unknown Device".to_string());
+        let is_connected = proxy.connected().await.unwrap_or(false);
+        let is_paired = proxy.paired().await.unwrap_or(false);
+        let icon = proxy.icon().await
+            .unwrap_or_else(|_| "bluetooth-symbolic".to_string());
+
+        Some(BluetoothDeviceData {
+            name, is_connected, is_paired,
+            path: device_path.to_string(), icon,
+            first_seen: None,
+        })
+    }
+
+    fn update_device_in_list(data: &mut BluetoothData, updated: BluetoothDeviceData) -> bool {
+        if let Some(existing) = data.devices.iter_mut().find(|d| d.path == updated.path) {
+            if *existing != updated {
+                let first_seen = existing.first_seen;
+                *existing = updated;
+                existing.first_seen = first_seen;
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    }
+
     async fn fetch_data(
         adapter: &BluetoothAdapterProxy<'_>,
         obj_manager: &ObjectManagerProxy<'_>,
