@@ -76,6 +76,9 @@ fn build_ui(app: &libadwaita::Application) {
 
     let ctx = setup_services();
 
+    // Bluetooth pairing dialog (layer shell, independent of popups)
+    crate::widgets::quick_settings::bluetooth_pair_dialog::spawn_pairing_dialog(app, ctx.bluetooth.tx.clone());
+
     // --- WIDGETS & CONTROLLER ---
     let bar = Bar::new(app, ctx.clone());
     let bar_popup_state = bar.popup_open.clone();

@@ -37,12 +37,10 @@ impl BluetoothPage {
         ctx.bluetooth.subscribe(move |data| {
             parent_tile_c.set_active(data.is_powered);
 
-            // Liste leeren
             while let Some(child) = list_c.first_child() {
                 list_c.remove(&child);
             }
 
-            // Geräte rendern
             for device in &data.devices {
                 let row = ListRow::new(
                     &device.name,
