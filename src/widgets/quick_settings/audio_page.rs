@@ -6,7 +6,7 @@ use crate::widgets::components::subpage_header::SubPageHeader;
 use crate::widgets::icons;
 use gtk4::prelude::*;
 use libadwaita::prelude::*;
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 pub struct AudioPage {
@@ -120,9 +120,15 @@ impl AudioPage {
         let sink_user_selecting = Rc::new(Cell::new(false));
         let source_user_selecting = Rc::new(Cell::new(false));
 
+        // Store device names for index→name mapping
+        let sink_names: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
+        let source_names: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
+
         // Clones for subscribe closure
         let sink_user_for_sub = sink_user_selecting.clone();
         let source_user_for_sub = source_user_selecting.clone();
+        let sink_names_c = sink_names.clone();
+        let source_names_c = source_names.clone();
 
         ctx.audio.subscribe(move |data| {
             // Update sink list
@@ -140,6 +146,10 @@ impl AudioPage {
                 &data.sources,
                 &source_user_for_sub,
             );
+
+            // Store device names for index→name mapping
+            *sink_names_c.borrow_mut() = data.sinks.iter().map(|s| s.name.clone()).collect();
+            *source_names_c.borrow_mut() = data.sources.iter().map(|s| s.name.clone()).collect();
 
             // Update app list
             if data.sink_inputs.is_empty() {
@@ -174,26 +184,28 @@ impl AudioPage {
         // Sink selection → SetDefaultSink
         let tx_sink = ctx.audio.tx.clone();
         let sink_user_c = sink_user_selecting.clone();
+        let sink_names_for_sel = sink_names.clone();
         sink_combo.connect_selected_notify(move |combo| {
             if !sink_user_c.get() {
                 return;
             }
-            if let Some(item) = combo.selected_item() {
-                let sobj: gtk4::StringObject = item.downcast().unwrap();
-                let _ = tx_sink.try_send(AudioCmd::SetDefaultSink(sobj.string().to_string()));
+            let idx = combo.selected() as usize;
+            if let Some(name) = sink_names_for_sel.borrow().get(idx) {
+                let _ = tx_sink.try_send(AudioCmd::SetDefaultSink(name.clone()));
             }
         });
 
         // Source selection → SetDefaultSource
         let tx_source = ctx.audio.tx.clone();
         let source_user_c = source_user_selecting.clone();
+        let source_names_for_sel = source_names.clone();
         source_combo.connect_selected_notify(move |combo| {
             if !source_user_c.get() {
                 return;
             }
-            if let Some(item) = combo.selected_item() {
-                let sobj: gtk4::StringObject = item.downcast().unwrap();
-                let _ = tx_source.try_send(AudioCmd::SetDefaultSource(sobj.string().to_string()));
+            let idx = combo.selected() as usize;
+            if let Some(name) = source_names_for_sel.borrow().get(idx) {
+                let _ = tx_source.try_send(AudioCmd::SetDefaultSource(name.clone()));
             }
         });
 
