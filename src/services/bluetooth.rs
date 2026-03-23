@@ -1,9 +1,9 @@
 use futures_util::StreamExt;
-use futures_util::stream::select_all;
+use futures_util::stream::FuturesUnordered;
 use zbus::{Connection, interface, proxy, zvariant::{OwnedObjectPath, OwnedValue}};
 use async_channel::{Sender, bounded, Receiver};
 use tokio::sync::oneshot;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, SystemTime};
@@ -112,53 +112,61 @@ pub enum BluetoothCmd {
 #[derive(Debug)]
 pub struct PropertyChange;
 
-/// Monitors all BlueZ device paths for property changes.
-/// Re-scans managed objects every 5s to discover new devices.
-/// Forwards all `PropertiesChanged` signals through the channel.
-fn spawn_device_property_monitor(conn: zbus::Connection) -> Receiver<PropertyChange> {
-    let (tx, rx) = bounded::<PropertyChange>(10);
+/// Listens for `PropertiesChanged` on specific device paths.
+/// Streams are created when `interfaces_added` fires, removed on `interfaces_removed`.
+/// Only forwards `Connected` property changes to avoid spurious re-fetches.
+fn spawn_device_property_forwarder(
+    conn: zbus::Connection,
+    add_rx: Receiver<String>,
+) -> (Sender<String>, Receiver<PropertyChange>) {
+    let (remove_tx, remove_rx) = bounded::<String>(10);
+    let (prop_tx, prop_rx) = bounded::<PropertyChange>(10);
 
     tokio::spawn(async move {
-        let mut streams = select_all(Vec::<futures_util::stream::BoxStream<()>>::new());
-        let mut known: HashSet<String> = HashSet::new();
-        let mut rescan = tokio::time::interval(Duration::from_secs(5));
+        let mut streams: FuturesUnordered<std::pin::Pin<Box<dyn std::future::Future<
+            Output = Result<(), zbus::Error>
+        > + Send>>> = FuturesUnordered::new();
 
         loop {
-            tokio::select! {
-                Some(()) = streams.next() => {
-                    let _ = tx.try_send(PropertyChange);
-                }
-                _ = rescan.tick() => {
-                    let Some(obj_mgr) = ObjectManagerProxy::new(&conn).await.ok() else { continue };
-                    let Ok(objects) = obj_mgr.get_managed_objects().await else { continue };
+            // Drain remove channel — clear all monitored streams
+            while remove_rx.try_recv().is_ok() {
+                streams.clear();
+            }
 
-                    for (path, interfaces) in &objects {
-                        if !interfaces.contains_key("org.bluez.Device1") {
-                            continue;
-                        }
-                        let path_str = path.to_string();
-                        if !known.insert(path_str.clone()) {
-                            continue;
-                        }
-                        if let Ok(proxy) = zbus::fdo::PropertiesProxy::builder(&conn)
-                            .destination("org.bluez").unwrap()
-                            .path(path).unwrap()
-                            .build().await
-                        {
-                            match proxy.receive_properties_changed().await {
-                                Ok(s) => streams.push(s.map(|_| ()).boxed()),
-                                Err(e) => {
-                                    error!("[bluetooth] Failed to subscribe {path_str}: {e}");
+            // Drain add channel — subscribe to new device paths
+            while let Ok(path) = add_rx.try_recv() {
+                if let Ok(proxy) = zbus::fdo::PropertiesProxy::builder(&conn)
+                    .destination("org.bluez").unwrap()
+                    .path(&*path).unwrap()
+                    .build().await
+                {
+                    if let Ok(changed) = proxy.receive_properties_changed().await {
+                        let ptx = prop_tx.clone();
+                        streams.push(Box::pin(async move {
+                            let mut s = changed;
+                            while let Some(args) = s.next().await {
+                                if args.args()?
+                                    .changed_properties.contains_key("Connected")
+                                {
+                                    let _ = ptx.try_send(PropertyChange);
                                 }
                             }
-                        }
+                            Ok(())
+                        }));
                     }
                 }
+            }
+
+            // Poll streams or sleep briefly
+            if streams.is_empty() {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            } else {
+                streams.next().await;
             }
         }
     });
 
-    rx
+    (remove_tx, prop_rx)
 }
 
 // ─── Global Pairing State (bypasses async_channel for instant GTK delivery) ─
@@ -382,7 +390,8 @@ impl Service for BluetoothService {
                 tokio::time::sleep(Duration::from_secs(2)).await;
             }
 
-            let prop_rx = spawn_device_property_monitor(connection.clone());
+            let (prop_add_tx, prop_add_rx) = bounded::<String>(10);
+            let (remove_tx, prop_rx) = spawn_device_property_forwarder(connection.clone(), prop_add_rx);
 
             // --- Event streams ---
             let mut powered_changed = adapter_proxy.receive_powered_changed().await;
@@ -485,8 +494,20 @@ impl Service for BluetoothService {
                     // Other events
                     _ = interval.tick() => {}
                     Some(_) = powered_changed.next() => {}
-                    Some(_) = interfaces_added.next() => {}
-                    Some(_) = interfaces_removed.next() => {}
+                    Some(args) = interfaces_added.next() => {
+                        if let Ok(a) = args.args() {
+                            if a.interfaces_and_properties.contains_key("org.bluez.Device1") {
+                                let _ = prop_add_tx.try_send(a.object_path.to_string());
+                            }
+                        }
+                    }
+                    Some(args) = interfaces_removed.next() => {
+                        if let Ok(a) = args.args() {
+                            if a.interfaces.iter().any(|i| i == "org.bluez.Device1") {
+                                let _ = remove_tx.try_send(a.object_path.to_string());
+                            }
+                        }
+                    }
                     Some(_) = prop_rx.next() => {}
                 }
 
