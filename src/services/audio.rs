@@ -1,6 +1,6 @@
 use async_channel::{bounded, Sender};
 use libpulse_binding::callbacks::ListResult;
-use libpulse_binding::context::introspect::{SinkInfo, SinkInputInfo};
+use libpulse_binding::context::introspect::{SinkInfo, SinkInputInfo, SourceInfo};
 use libpulse_binding::context::subscribe::{Facility, InterestMaskSet, Operation};
 use libpulse_binding::context::{Context, FlagSet as ContextFlagSet, State as ContextState};
 use libpulse_binding::mainloop::threaded::Mainloop;
@@ -23,10 +23,28 @@ pub struct SinkInputData {
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
+pub struct SinkData {
+    pub name: String,
+    pub description: String,
+    pub index: u32,
+    pub is_default: bool,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SourceData {
+    pub name: String,
+    pub description: String,
+    pub index: u32,
+    pub is_default: bool,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct AudioData {
     pub volume: f64,
     pub is_muted: bool,
     pub sink_inputs: Vec<SinkInputData>,
+    pub sinks: Vec<SinkData>,
+    pub sources: Vec<SourceData>,
 }
 
 pub enum AudioCmd {
@@ -34,6 +52,8 @@ pub enum AudioCmd {
     SetMute(bool),
     SetSinkInputVolume(u32, f64),
     SetSinkInputMute(u32, bool),
+    SetDefaultSink(String),
+    SetDefaultSource(String),
 }
 
 pub struct AudioService;
@@ -120,7 +140,7 @@ impl Service for AudioService {
             // sink-only and sink-input-only fetches can preserve the other half.
             let last_state: Rc<RefCell<AudioData>> = Rc::new(RefCell::new(AudioData::default()));
 
-            // Subscribe für Sink + SinkInput Events
+            // Subscribe für Sink + SinkInput + Server Events
             let ctx_ref = Rc::clone(&context);
             let data_tx2 = data_tx.clone();
             let state_sub = last_state.clone();
@@ -134,18 +154,25 @@ impl Service for AudioService {
                         Some(Facility::SinkInput) => {
                             Self::fetch_sink_inputs(&ctx_ref, &data_tx2, &state_sub);
                         }
+                        Some(Facility::Server) => {
+                            Self::fetch_sinks(&ctx_ref, &data_tx2, &state_sub);
+                            Self::fetch_sources(&ctx_ref, &data_tx2, &state_sub);
+                        }
                         _ => {}
                     }
                 },
             )));
 
-            context
-                .borrow_mut()
-                .subscribe(InterestMaskSet::SINK | InterestMaskSet::SINK_INPUT, |_| {});
+            context.borrow_mut().subscribe(
+                InterestMaskSet::SINK | InterestMaskSet::SINK_INPUT | InterestMaskSet::SERVER,
+                |_| {},
+            );
 
             // Ersten Zustand direkt senden (vor dem Unlock)
             Self::fetch_sink(&context, &data_tx, &last_state);
             Self::fetch_sink_inputs(&context, &data_tx, &last_state);
+            Self::fetch_sinks(&context, &data_tx, &last_state);
+            Self::fetch_sources(&context, &data_tx, &last_state);
 
             mainloop.borrow_mut().unlock();
 
@@ -199,6 +226,14 @@ impl Service for AudioService {
                             Some(Box::new(|_| {})),
                         );
                     }
+                    AudioCmd::SetDefaultSink(name) => {
+                        info!("[audio] Default sink: {}", name);
+                        context.borrow_mut().set_default_sink(&name, |_| {});
+                    }
+                    AudioCmd::SetDefaultSource(name) => {
+                        info!("[audio] Default source: {}", name);
+                        context.borrow_mut().set_default_source(&name, |_| {});
+                    }
                 }
 
                 mainloop.borrow_mut().unlock();
@@ -225,11 +260,15 @@ impl AudioService {
                 if let ListResult::Item(sink) = result {
                     let vol_raw = sink.volume.avg().0 as f64 / Volume::NORMAL.0 as f64;
                     let vol = (vol_raw * 100.0).round() / 100.0;
+                    let current = state.borrow();
                     let data = AudioData {
                         volume: vol,
                         is_muted: sink.mute,
-                        sink_inputs: state.borrow().sink_inputs.clone(),
+                        sink_inputs: current.sink_inputs.clone(),
+                        sinks: current.sinks.clone(),
+                        sources: current.sources.clone(),
                     };
+                    drop(current);
                     *state.borrow_mut() = data.clone();
                     let _ = tx.send_blocking(data);
                 }
@@ -276,6 +315,8 @@ impl AudioService {
                         sink_inputs: inputs.borrow().clone(),
                         volume: current.volume,
                         is_muted: current.is_muted,
+                        sinks: current.sinks.clone(),
+                        sources: current.sources.clone(),
                     };
                     drop(current);
                     *state.borrow_mut() = data.clone();
@@ -283,6 +324,114 @@ impl AudioService {
                 }
                 ListResult::Error => {}
             }
+        });
+    }
+
+    /// Fetch all output sinks, marking the default one.
+    fn fetch_sinks(
+        ctx_ref: &Rc<RefCell<Context>>,
+        data_tx: &Sender<AudioData>,
+        state: &Rc<RefCell<AudioData>>,
+    ) {
+        let introspector = ctx_ref.borrow().introspect();
+        let sinks: Rc<RefCell<Vec<SinkData>>> = Rc::new(RefCell::new(Vec::new()));
+        let sinks_ref = Rc::clone(&sinks);
+        let tx = data_tx.clone();
+        let state = state.clone();
+
+        // First get the server info to know the default sink name
+        let default_sink: Rc<RefCell<String>> = Rc::new(RefCell::new(String::new()));
+        let default_ref = Rc::clone(&default_sink);
+
+        introspector.get_server_info(move |info| {
+            if let Some(ref name) = info.default_sink_name {
+                *default_ref.borrow_mut() = name.to_string();
+            }
+        });
+
+        // Then enumerate all sinks
+        introspector.get_sink_info_list(move |result: ListResult<&SinkInfo>| match result {
+            ListResult::Item(info) => {
+                let name = info.name.as_deref().unwrap_or_default().to_string();
+                let description = info.description.as_deref().unwrap_or_default().to_string();
+                let is_default = *default_sink.borrow() == name;
+
+                sinks_ref.borrow_mut().push(SinkData {
+                    name,
+                    description,
+                    index: info.index,
+                    is_default,
+                });
+            }
+            ListResult::End => {
+                let current = state.borrow();
+                let data = AudioData {
+                    sinks: sinks.borrow().clone(),
+                    volume: current.volume,
+                    is_muted: current.is_muted,
+                    sink_inputs: current.sink_inputs.clone(),
+                    sources: current.sources.clone(),
+                };
+                drop(current);
+                *state.borrow_mut() = data.clone();
+                let _ = tx.send_blocking(data);
+            }
+            ListResult::Error => {}
+        });
+    }
+
+    /// Fetch all input sources (excluding monitor sources), marking the default one.
+    fn fetch_sources(
+        ctx_ref: &Rc<RefCell<Context>>,
+        data_tx: &Sender<AudioData>,
+        state: &Rc<RefCell<AudioData>>,
+    ) {
+        let introspector = ctx_ref.borrow().introspect();
+        let sources: Rc<RefCell<Vec<SourceData>>> = Rc::new(RefCell::new(Vec::new()));
+        let sources_ref = Rc::clone(&sources);
+        let tx = data_tx.clone();
+        let state = state.clone();
+
+        let default_source: Rc<RefCell<String>> = Rc::new(RefCell::new(String::new()));
+        let default_ref = Rc::clone(&default_source);
+
+        introspector.get_server_info(move |info| {
+            if let Some(ref name) = info.default_source_name {
+                *default_ref.borrow_mut() = name.to_string();
+            }
+        });
+
+        introspector.get_source_info_list(move |result: ListResult<&SourceInfo>| match result {
+            ListResult::Item(info) => {
+                // Skip monitor sources (virtual sources that record output)
+                if info.monitor_of_sink.is_some() {
+                    return;
+                }
+                let name = info.name.as_deref().unwrap_or_default().to_string();
+                let description = info.description.as_deref().unwrap_or_default().to_string();
+                let is_default = *default_source.borrow() == name;
+
+                sources_ref.borrow_mut().push(SourceData {
+                    name,
+                    description,
+                    index: info.index,
+                    is_default,
+                });
+            }
+            ListResult::End => {
+                let current = state.borrow();
+                let data = AudioData {
+                    sources: sources.borrow().clone(),
+                    volume: current.volume,
+                    is_muted: current.is_muted,
+                    sink_inputs: current.sink_inputs.clone(),
+                    sinks: current.sinks.clone(),
+                };
+                drop(current);
+                *state.borrow_mut() = data.clone();
+                let _ = tx.send_blocking(data);
+            }
+            ListResult::Error => {}
         });
     }
 }

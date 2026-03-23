@@ -343,6 +343,53 @@ entry:focus-visible {
     color: rgba(255, 255, 255, 0.9);
 }
 
+/* Audio empty state */
+.audio-empty-icon {
+    opacity: 0.3;
+    margin-bottom: 4px;
+}
+
+.audio-empty-label {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.4);
+}
+
+/* Audio device selectors (adw PreferencesGroup boxed-list) */
+preferencesgroup .boxed-list {
+    background-color: #303030;
+    border-radius: 16px;
+    color: white;
+}
+
+preferencesgroup .boxed-list row {
+    color: white;
+}
+
+preferencesgroup .boxed-list row label {
+    color: white;
+}
+
+preferencesgroup .boxed-list row .title {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+preferencesgroup .boxed-list row .subtitle {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+preferencesgroup > .title {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+preferencesgroup > .description {
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 11px;
+}
+
 .qs-battery-btn {
     background-color: #303030;
     color: white;
