@@ -187,7 +187,7 @@ impl QuickSettingsPopup {
         archive_box.set_halign(gtk4::Align::End);
         archive_box.set_width_request(380);
 
-        let outer = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+        let outer = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
         outer.set_valign(gtk4::Align::End);
         outer.append(&archive_box);
         outer.append(&qs_container);
