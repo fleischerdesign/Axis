@@ -44,8 +44,14 @@ trait Device {
 trait WirelessDevice {
     fn get_access_points(&self) -> zbus::Result<Vec<OwnedObjectPath>>;
     fn request_scan(&self, options: HashMap<String, zbus::zvariant::Value<'_>>) -> zbus::Result<()>;
+    #[zbus(signal)]
+    fn access_point_added(&self, access_point: zbus::zvariant::OwnedObjectPath) -> zbus::Result<()>;
+    #[zbus(signal)]
+    fn access_point_removed(&self, access_point: zbus::zvariant::OwnedObjectPath) -> zbus::Result<()>;
     #[zbus(property)]
     fn active_access_point(&self) -> zbus::Result<OwnedObjectPath>;
+    #[zbus(property)]
+    fn last_scan(&self) -> zbus::Result<i64>;
 }
 
 #[proxy(interface = "org.freedesktop.NetworkManager.AccessPoint", default_service = "org.freedesktop.NetworkManager")]
@@ -73,6 +79,7 @@ pub struct NetworkData {
     pub is_ethernet_connected: bool,
     pub is_wifi_enabled: bool,
     pub active_strength: u8,
+    pub is_scanning: bool,
     pub access_points: Vec<AccessPointData>,
 }
 
@@ -123,19 +130,44 @@ impl Service for NetworkService {
 
             let mut state_changed = proxy.receive_state_changed().await;
             let mut wifi_changed = proxy.receive_wireless_enabled_changed().await;
-            let mut interval = tokio::time::interval(Duration::from_secs(30)); 
+            let mut interval = tokio::time::interval(Duration::from_secs(30));
+
+            // AP change listeners + scan status (if WiFi device found)
+            let mut ap_added_stream: Option<_> = None;
+            let mut ap_removed_stream: Option<_> = None;
+            let mut last_scan_stream: Option<_> = None;
+            if let Some(wifi_path) = &wifi_device_path {
+                if let Ok(wifi_proxy) = WirelessDeviceProxy::builder(&connection).path(wifi_path).unwrap().build().await {
+                    ap_added_stream = wifi_proxy.receive_access_point_added().await.ok();
+                    ap_removed_stream = wifi_proxy.receive_access_point_removed().await.ok();
+                    last_scan_stream = Some(wifi_proxy.receive_last_scan_changed().await);
+                }
+            }
 
             let mut cmd_rx = Box::pin(cmd_rx);
             let mut current_data = NetworkData::default();
+            let mut is_scanning = false;
 
-            loop {
+                loop {
                 let should_update;
-                let mut full_scan = false;
 
                 tokio::select! {
                     _ = interval.tick() => { should_update = true; }
                     Some(_) = state_changed.next() => { should_update = true; }
                     Some(_) = wifi_changed.next() => { should_update = true; }
+                    Some(_) = async { ap_added_stream.as_mut()?.next().await }, if ap_added_stream.is_some() => {
+                        info!("[network] Access point added");
+                        should_update = true;
+                    }
+                    Some(_) = async { ap_removed_stream.as_mut()?.next().await }, if ap_removed_stream.is_some() => {
+                        info!("[network] Access point removed");
+                        should_update = true;
+                    }
+                    Some(_) = async { last_scan_stream.as_mut()?.next().await }, if last_scan_stream.is_some() => {
+                        info!("[network] Scan completed");
+                        is_scanning = false;
+                        should_update = true;
+                    }
                     Some(cmd) = cmd_rx.next() => {
                         match cmd {
                             NetworkCmd::ToggleWifi(on) => {
@@ -146,12 +178,12 @@ impl Service for NetworkService {
                             }
                             NetworkCmd::ScanWifi => {
                                 info!("[network] WiFi scan initiated");
+                                is_scanning = true;
                                 if let Some(path) = &wifi_device_path {
                                     if let Ok(wifi_proxy) = WirelessDeviceProxy::builder(&connection).path(path).unwrap().build().await {
                                         if let Err(e) = wifi_proxy.request_scan(HashMap::new()).await {
                                             error!("[network] Failed to scan WiFi: {e}");
                                         }
-                                        full_scan = true;
                                     }
                                 }
                             }
@@ -202,7 +234,8 @@ impl Service for NetworkService {
                 }
 
                 if should_update {
-                    let next_data = Self::fetch_data(&proxy, &connection, wifi_device_path.as_ref(), full_scan, &current_data).await;
+                    let mut next_data = Self::fetch_data(&proxy, &connection, wifi_device_path.as_ref(), &current_data).await;
+                    next_data.is_scanning = is_scanning;
                     if next_data != current_data {
                         current_data = next_data;
                         let _ = data_tx.send(current_data.clone()).await;
@@ -217,14 +250,14 @@ impl Service for NetworkService {
 
 impl NetworkService {
 
-    async fn fetch_data(proxy: &NetworkManagerProxy<'_>, conn: &Connection, wifi_path: Option<&OwnedObjectPath>, include_aps: bool, old_data: &NetworkData) -> NetworkData {
+    async fn fetch_data(proxy: &NetworkManagerProxy<'_>, conn: &Connection, wifi_path: Option<&OwnedObjectPath>, old_data: &NetworkData) -> NetworkData {
         let state = proxy.state().await.unwrap_or(0);
         let wifi_on = proxy.wireless_enabled().await.unwrap_or(false);
         let primary_type = proxy.primary_connection_type().await.unwrap_or_default();
         
         let mut active_ap_path = "/".to_string();
         let mut active_strength = 0;
-        let mut aps = if include_aps { Vec::new() } else { old_data.access_points.clone() };
+        let mut aps = Vec::new();
 
         if let Some(path) = wifi_path {
             if let Ok(wifi_proxy) = WirelessDeviceProxy::builder(conn).path(path).unwrap().build().await {
@@ -235,28 +268,26 @@ impl NetworkService {
                     }
                 }
 
-                if include_aps {
-                    if let Ok(ap_paths) = wifi_proxy.get_access_points().await {
-                        for ap_path in ap_paths.into_iter().take(15) { 
-                            if let Ok(ap_proxy) = AccessPointProxy::builder(conn).path(ap_path.clone()).unwrap().build().await {
-                                if let Ok(ssid_bytes) = ap_proxy.ssid().await {
-                                    let ssid = String::from_utf8_lossy(&ssid_bytes).to_string();
-                                    if !ssid.is_empty() {
-                                        aps.push(AccessPointData { 
-                                            ssid, 
-                                            strength: ap_proxy.strength().await.unwrap_or(0), 
-                                            path: ap_path.to_string(),
-                                            is_active: ap_path.to_string() == active_ap_path,
-                                            needs_auth: ap_proxy.flags().await.unwrap_or(0) != 0,
-                                        });
-                                    }
+                if let Ok(ap_paths) = wifi_proxy.get_access_points().await {
+                    for ap_path in ap_paths.into_iter().take(15) { 
+                        if let Ok(ap_proxy) = AccessPointProxy::builder(conn).path(ap_path.clone()).unwrap().build().await {
+                            if let Ok(ssid_bytes) = ap_proxy.ssid().await {
+                                let ssid = String::from_utf8_lossy(&ssid_bytes).to_string();
+                                if !ssid.is_empty() {
+                                    aps.push(AccessPointData { 
+                                        ssid, 
+                                        strength: ap_proxy.strength().await.unwrap_or(0), 
+                                        path: ap_path.to_string(),
+                                        is_active: ap_path.to_string() == active_ap_path,
+                                        needs_auth: ap_proxy.flags().await.unwrap_or(0) != 0,
+                                    });
                                 }
                             }
                         }
-                        aps.sort_by(|a, b| b.is_active.cmp(&a.is_active).then_with(|| b.strength.cmp(&a.strength)));
-                        let mut seen = HashSet::new();
-                        aps.retain(|ap| seen.insert(ap.ssid.clone()));
                     }
+                    aps.sort_by(|a, b| b.is_active.cmp(&a.is_active).then_with(|| b.strength.cmp(&a.strength)));
+                    let mut seen = HashSet::new();
+                    aps.retain(|ap| seen.insert(ap.ssid.clone()));
                 }
             }
         }
@@ -267,6 +298,7 @@ impl NetworkService {
             is_ethernet_connected: is_connected && primary_type == "802-3-ethernet",
             is_wifi_enabled: wifi_on,
             active_strength,
+            is_scanning: false,
             access_points: aps,
         }
     }

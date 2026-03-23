@@ -19,7 +19,7 @@ impl NightlightPage {
     ) -> Self {
         let container = gtk4::Box::new(gtk4::Orientation::Vertical, 16);
 
-        let header = SubPageHeader::new("Night Light");
+        let header = SubPageHeader::new("Night Light", None::<&gtk4::Widget>);
         container.append(&header.container);
 
         // back_btn wiring moved to end of function

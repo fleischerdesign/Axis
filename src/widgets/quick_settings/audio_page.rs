@@ -16,7 +16,7 @@ impl AudioPage {
     pub fn new(ctx: AppContext, on_back: impl Fn() + 'static) -> Self {
         let container = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
 
-        let header = SubPageHeader::new("Audio");
+        let header = SubPageHeader::new("Audio", None::<&gtk4::Widget>);
         header.connect_back(on_back);
         container.append(&header.container);
 

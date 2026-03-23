@@ -146,7 +146,7 @@ impl KdeConnectPage {
     pub fn new(ctx: AppContext, on_back: impl Fn() + 'static) -> Self {
         let container = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
 
-        let header = SubPageHeader::new("KDE Connect");
+        let header = SubPageHeader::new("KDE Connect", None::<&gtk4::Widget>);
         container.append(&header.container);
 
         let scrolled_list = ScrolledList::new(300);

@@ -6,7 +6,16 @@ use crate::widgets::icons::wifi_signal_icon;
 use crate::widgets::ListRow;
 use crate::widgets::ToggleTile;
 use gtk4::prelude::*;
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
+
+struct RowEntry {
+    list_row: ListRow,
+    list_box_row: gtk4::ListBoxRow,
+    auth_revealer: gtk4::Revealer,
+    path: String,
+}
 
 fn build_auth_revealer(
     ap_path: &str,
@@ -55,9 +64,8 @@ fn build_auth_revealer(
         }
 
         let spinner = gtk4::Spinner::builder()
-            .spinning(true)
-            .halign(gtk4::Align::Center)
-            .valign(gtk4::Align::Center)
+            .spinning(false)
+            .css_classes(vec!["subpage-spinner".to_string()])
             .build();
         btn_c.set_child(Some(&spinner));
         btn_c.set_sensitive(false);
@@ -72,55 +80,24 @@ fn build_auth_revealer(
     revealer
 }
 
-fn build_ap_row(
-    ap: &crate::services::network::AccessPointData,
-    tx: &async_channel::Sender<NetworkCmd>,
-) -> gtk4::Box {
-    let icon = if ap.is_active {
+fn ap_icon(ap: &crate::services::network::AccessPointData) -> &'static str {
+    if ap.is_active {
         "network-wireless-connected-symbolic"
     } else if ap.needs_auth {
         "network-wireless-encrypted-symbolic"
     } else {
         wifi_signal_icon(ap.strength)
-    };
+    }
+}
 
-    let sublabel = if ap.is_active {
+fn ap_sublabel(ap: &crate::services::network::AccessPointData) -> Option<&'static str> {
+    if ap.is_active {
         Some("Verbunden")
     } else if ap.needs_auth {
         Some("Gesichert")
     } else {
         None
-    };
-
-    let row = ListRow::new(&ap.ssid, icon, ap.is_active, sublabel, false);
-
-    let auth_revealer = build_auth_revealer(&ap.path, &ap.ssid, tx);
-    row.container.append(&auth_revealer);
-
-    let tx = tx.clone();
-    let path = ap.path.clone();
-    let is_active = ap.is_active;
-    let needs_auth = ap.needs_auth;
-    let revealer = auth_revealer.clone();
-    let container_c = row.container.clone();
-
-    row.button.connect_clicked(move |_| {
-        if is_active {
-            let _ = tx.try_send(NetworkCmd::DisconnectWifi);
-        } else if needs_auth {
-            let open = revealer.reveals_child();
-            revealer.set_reveal_child(!open);
-            if open {
-                container_c.remove_css_class("expanded");
-            } else {
-                container_c.add_css_class("expanded");
-            }
-        } else {
-            let _ = tx.try_send(NetworkCmd::ConnectToAp(path.clone()));
-        }
-    });
-
-    row.container
+    }
 }
 
 pub struct WifiPage {
@@ -136,14 +113,16 @@ impl WifiPage {
     ) -> Self {
         let container = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
 
-        let header = SubPageHeader::new("Wi-Fi Netzwerke");
+        let spinner = gtk4::Spinner::builder().spinning(true).build();
+
+        let header = SubPageHeader::new("Wi-Fi Netzwerke", Some(&spinner));
         container.append(&header.container);
 
         let scrolled_list = ScrolledList::new(300);
         scrolled_list.list.add_css_class("qs-list");
         container.append(&scrolled_list.scrolled);
 
-        // --- LOGIC ---
+        // --- Logic ---
         let on_back = Rc::new(on_back);
         header.connect_back(move || on_back());
 
@@ -152,31 +131,93 @@ impl WifiPage {
         let eth_tile_c = eth_tile.clone();
         let tx = ctx.network.tx.clone();
 
+        let rows: Rc<RefCell<HashMap<String, RowEntry>>> = Rc::new(RefCell::new(HashMap::new()));
+
+        let rows_c = rows.clone();
+        let spinner_c = spinner;
+
         ctx.network.subscribe(move |data| {
             wifi_tile_c.set_active(data.is_wifi_enabled);
             eth_tile_c.set_active(data.is_ethernet_connected);
+            spinner_c.set_spinning(data.is_scanning);
 
-            while let Some(child) = list_c.first_child() {
-                list_c.remove(&child);
+            let mut rows = rows_c.borrow_mut();
+
+            let new_paths: std::collections::HashSet<&str> = data
+                .access_points
+                .iter()
+                .map(|ap| ap.path.as_str())
+                .collect();
+
+            // Remove rows for APs that no longer exist
+            let stale: Vec<String> = rows
+                .keys()
+                .filter(|p| !new_paths.contains(p.as_str()))
+                .cloned()
+                .collect();
+            for path in stale {
+                if let Some(entry) = rows.remove(&path) {
+                    list_c.remove(&entry.list_box_row);
+                }
             }
 
             for ap in &data.access_points {
-                let list_row = gtk4::ListBoxRow::builder()
+                let icon = ap_icon(ap);
+                let sublabel = ap_sublabel(ap);
+
+                if let Some(entry) = rows.get(&ap.path) {
+                    // Existing row: update content
+                    entry
+                        .list_row
+                        .update(&ap.ssid, icon, ap.is_active, sublabel, false);
+                    continue;
+                }
+
+                // New row
+                let list_row = ListRow::new(&ap.ssid, icon, ap.is_active, sublabel, false);
+
+                let auth_revealer = build_auth_revealer(&ap.path, &ap.ssid, &tx);
+                list_row.container.append(&auth_revealer);
+
+                let tx_click = tx.clone();
+                let path = ap.path.clone();
+                let needs_auth = ap.needs_auth;
+                let revealer = auth_revealer.clone();
+                let container_c = list_row.container.clone();
+                list_row.button.connect_clicked(move |btn| {
+                    let connected = btn.has_css_class("active");
+                    if connected {
+                        let _ = tx_click.try_send(NetworkCmd::DisconnectWifi);
+                    } else if needs_auth {
+                        let open = revealer.reveals_child();
+                        revealer.set_reveal_child(!open);
+                        if open {
+                            container_c.remove_css_class("expanded");
+                        } else {
+                            container_c.add_css_class("expanded");
+                        }
+                    } else {
+                        let _ = tx_click.try_send(NetworkCmd::ConnectToAp(path.clone()));
+                    }
+                });
+
+                let list_box_row = gtk4::ListBoxRow::builder()
                     .css_classes(vec!["qs-wifi-item".to_string()])
                     .selectable(false)
                     .activatable(false)
+                    .child(&list_row.container)
                     .build();
-                list_row.set_child(Some(&build_ap_row(ap, &tx)));
-                list_c.append(&list_row);
-            }
 
-            if data.access_points.is_empty() && data.is_wifi_enabled {
-                let empty_label = gtk4::Label::builder()
-                    .label("Suche nach Netzwerken...")
-                    .css_classes(vec!["list-sublabel".to_string()])
-                    .margin_top(20)
-                    .build();
-                list_c.append(&empty_label);
+                rows.insert(
+                    ap.path.clone(),
+                    RowEntry {
+                        list_row,
+                        list_box_row,
+                        auth_revealer,
+                        path: ap.path.clone(),
+                    },
+                );
+                list_c.append(&rows[&ap.path].list_box_row);
             }
         });
 

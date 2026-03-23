@@ -670,6 +670,7 @@ impl BluetoothService {
                         (None, Some(_)) => std::cmp::Ordering::Greater,
                         (None, None) => std::cmp::Ordering::Equal,
                     }
+                    .then_with(|| a.path.cmp(&b.path))
                 });
             }
         } else if !is_powered {

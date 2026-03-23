@@ -3,6 +3,10 @@ use gtk4::prelude::*;
 pub struct ListRow {
     pub container: gtk4::Box,
     pub button: gtk4::Button,
+    icon_img: gtk4::Image,
+    label: gtk4::Label,
+    sublabel: gtk4::Label,
+    check_img: gtk4::Image,
 }
 
 impl ListRow {
@@ -35,36 +39,74 @@ impl ListRow {
 
         let label_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
         label_box.set_hexpand(true);
-        label_box.append(
-            &gtk4::Label::builder()
-                .label(label)
+
+        let label_widget = gtk4::Label::builder()
+            .label(label)
+            .halign(gtk4::Align::Start)
+            .ellipsize(gtk4::pango::EllipsizeMode::End)
+            .build();
+        label_box.append(&label_widget);
+
+        let sublabel_widget = {
+            let sl = gtk4::Label::builder()
+                .label(sublabel.unwrap_or(""))
                 .halign(gtk4::Align::Start)
                 .ellipsize(gtk4::pango::EllipsizeMode::End)
-                .build(),
-        );
+                .max_width_chars(35)
+                .css_classes(vec!["list-sublabel".to_string()])
+                .visible(sublabel.is_some())
+                .build();
+            label_box.append(&sl);
+            sl
+        };
 
-        if let Some(sub) = sublabel {
-            label_box.append(
-                &gtk4::Label::builder()
-                    .label(sub)
-                    .halign(gtk4::Align::Start)
-                    .ellipsize(gtk4::pango::EllipsizeMode::End)
-                    .max_width_chars(35)
-                    .css_classes(vec!["list-sublabel".to_string()])
-                    .build(),
-            );
-        }
         content.append(&label_box);
 
-        if active && show_check {
+        let check_img = {
             let check = gtk4::Image::from_icon_name("object-select-symbolic");
             check.set_halign(gtk4::Align::End);
+            check.set_visible(active && show_check);
             content.append(&check);
-        }
+            check
+        };
 
         button.set_child(Some(&content));
         container.append(&button);
 
-        Self { container, button }
+        Self {
+            container,
+            button,
+            icon_img,
+            label: label_widget,
+            sublabel: sublabel_widget,
+            check_img,
+        }
+    }
+
+    pub fn update(
+        &self,
+        label: &str,
+        icon: &str,
+        active: bool,
+        sublabel: Option<&str>,
+        show_check: bool,
+    ) {
+        self.label.set_label(label);
+        self.icon_img.set_icon_name(Some(icon));
+
+        if active {
+            self.button.add_css_class("active");
+        } else {
+            self.button.remove_css_class("active");
+        }
+
+        if let Some(text) = sublabel {
+            self.sublabel.set_label(text);
+            self.sublabel.set_visible(true);
+        } else {
+            self.sublabel.set_visible(false);
+        }
+
+        self.check_img.set_visible(active && show_check);
     }
 }

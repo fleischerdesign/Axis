@@ -6,7 +6,7 @@ pub struct SubPageHeader {
 }
 
 impl SubPageHeader {
-    pub fn new(title: &str) -> Self {
+    pub fn new(title: &str, end_widget: Option<&impl IsA<gtk4::Widget>>) -> Self {
         let container = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
 
         let back_btn = gtk4::Button::builder()
@@ -22,6 +22,13 @@ impl SubPageHeader {
 
         container.append(&back_btn);
         container.append(&title_label);
+
+        if let Some(w) = end_widget {
+            let spacer = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+            spacer.set_hexpand(true);
+            container.append(&spacer);
+            container.append(w);
+        }
 
         Self {
             container,

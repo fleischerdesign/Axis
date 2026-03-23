@@ -123,6 +123,12 @@ entry:focus-visible {
     font-size: 15px;
 }
 
+.subpage-spinner {
+    min-width: 14px;
+    min-height: 14px;
+    opacity: 0.5;
+}
+
 .qs-list {
     background-color: #242424;
     color: white;
