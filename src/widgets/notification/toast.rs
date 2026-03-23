@@ -33,6 +33,7 @@ impl NotificationToastManager {
         window.set_margin(Edge::Top, 10);
         window.set_margin(Edge::Right, 10);
         window.set_exclusive_zone(-1);
+        window.set_default_size(380, -1);
 
         let container = gtk4::Box::new(gtk4::Orientation::Vertical, 10);
         container.set_valign(gtk4::Align::Start);

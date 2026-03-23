@@ -34,6 +34,7 @@ impl NotificationArchiveManager {
         window.set_anchor(Edge::Right, true);
         window.set_margin(Edge::Right, 10);
         window.set_exclusive_zone(-1);
+        window.set_default_size(380, -1);
 
         let main_revealer = revealer_handle::create_revealer();
 

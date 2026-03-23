@@ -105,6 +105,8 @@ impl NotificationCard {
             .halign(gtk4::Align::Start)
             .css_classes(vec!["notification-summary".to_string()])
             .wrap(true)
+            .wrap_mode(gtk4::pango::WrapMode::WordChar)
+            .ellipsize(gtk4::pango::EllipsizeMode::End)
             .xalign(0.0)
             .build();
 
@@ -113,6 +115,8 @@ impl NotificationCard {
             .halign(gtk4::Align::Start)
             .css_classes(vec!["notification-body".to_string()])
             .wrap(true)
+            .wrap_mode(gtk4::pango::WrapMode::WordChar)
+            .ellipsize(gtk4::pango::EllipsizeMode::End)
             .xalign(0.0)
             .build();
 
@@ -123,6 +127,7 @@ impl NotificationCard {
 
         card.append(&header_box);
         card.append(&content_box);
+        card.set_hexpand(false);
 
         // --- ACTIONS ---
         if !data.actions.is_empty() {

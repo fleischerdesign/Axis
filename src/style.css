@@ -436,9 +436,7 @@ entry:focus-visible {
 /* Workspace Dots (libadwaita style) */
 .ws-dot {
     min-width: 6px;
-    max-width: 6px;
     min-height: 6px;
-    max-height: 6px;
     border-radius: 50%;
     background-color: rgba(255, 255, 255, 0.25);
 }
