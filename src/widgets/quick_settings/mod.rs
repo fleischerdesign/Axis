@@ -25,6 +25,7 @@ use std::rc::Rc;
 pub struct QuickSettingsPopup {
     pub base: PopupBase,
     pub container: gtk4::Box,
+    qs_stack: gtk4::Stack,
 }
 
 impl ShellPopup for QuickSettingsPopup {
@@ -74,6 +75,14 @@ impl QuickSettingsPopup {
             .hhomogeneous(true)
             .interpolate_size(true)
             .build();
+
+        // Reset Stack to main page after popup is fully hidden
+        let stack_reset = qs_stack.clone();
+        base.window.connect_visible_notify(move |win| {
+            if !win.is_visible() {
+                stack_reset.set_visible_child_name("main");
+            }
+        });
 
         // --- PAGES ---
         let stack_wifi = qs_stack.clone();
@@ -196,6 +205,7 @@ impl QuickSettingsPopup {
         Self {
             base,
             container: qs_container,
+            qs_stack,
         }
     }
 }
