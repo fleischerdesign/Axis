@@ -505,6 +505,7 @@ impl Service for BluetoothService {
                             let _ = tx.send(AgentResponse::Reject);
                             set_pairing_request(None);
                         }
+                        pair_timeout = Box::pin(tokio::time::sleep(Duration::MAX));
                     }
                     // Other events
                     _ = interval.tick() => {}

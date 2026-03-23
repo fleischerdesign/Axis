@@ -58,7 +58,12 @@ impl NotificationToastManager {
     }
 
     fn sync(&self, data: &crate::services::notifications::NotificationData) {
-        if data.last_id > self.last_shown_id.get() {
+        let is_new = data.last_id > self.last_shown_id.get();
+        let needs_show = data.last_id > 0
+            && data.notifications.iter().any(|n| n.id == data.last_id)
+            && !self.active_toasts.borrow().contains_key(&data.last_id);
+
+        if is_new || needs_show {
             if let Some(n) = data.notifications.iter().find(|n| n.id == data.last_id) {
                 if n.internal_id > 0 || !self.ctx.dnd.get().enabled {
                     self.last_shown_id.set(data.last_id);
