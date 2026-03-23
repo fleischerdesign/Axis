@@ -1,8 +1,9 @@
 use futures_util::StreamExt;
+use futures_util::stream::select_all;
 use zbus::{Connection, interface, proxy, zvariant::{OwnedObjectPath, OwnedValue}};
 use async_channel::{Sender, bounded, Receiver};
 use tokio::sync::oneshot;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, SystemTime};
@@ -104,6 +105,60 @@ pub enum BluetoothCmd {
     StopScan,
     PairAccept,
     PairReject,
+}
+
+// ─── Properties Changed Forwarding ───────────────────────────────────────────
+
+#[derive(Debug)]
+pub struct PropertyChange;
+
+/// Monitors all BlueZ device paths for property changes.
+/// Re-scans managed objects every 5s to discover new devices.
+/// Forwards all `PropertiesChanged` signals through the channel.
+fn spawn_device_property_monitor(conn: zbus::Connection) -> Receiver<PropertyChange> {
+    let (tx, rx) = bounded::<PropertyChange>(10);
+
+    tokio::spawn(async move {
+        let mut streams = select_all(Vec::<futures_util::stream::BoxStream<()>>::new());
+        let mut known: HashSet<String> = HashSet::new();
+        let mut rescan = tokio::time::interval(Duration::from_secs(5));
+
+        loop {
+            tokio::select! {
+                Some(()) = streams.next() => {
+                    let _ = tx.try_send(PropertyChange);
+                }
+                _ = rescan.tick() => {
+                    let Some(obj_mgr) = ObjectManagerProxy::new(&conn).await.ok() else { continue };
+                    let Ok(objects) = obj_mgr.get_managed_objects().await else { continue };
+
+                    for (path, interfaces) in &objects {
+                        if !interfaces.contains_key("org.bluez.Device1") {
+                            continue;
+                        }
+                        let path_str = path.to_string();
+                        if !known.insert(path_str.clone()) {
+                            continue;
+                        }
+                        if let Ok(proxy) = zbus::fdo::PropertiesProxy::builder(&conn)
+                            .destination("org.bluez").unwrap()
+                            .path(path).unwrap()
+                            .build().await
+                        {
+                            match proxy.receive_properties_changed().await {
+                                Ok(s) => streams.push(s.map(|_| ()).boxed()),
+                                Err(e) => {
+                                    error!("[bluetooth] Failed to subscribe {path_str}: {e}");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    rx
 }
 
 // ─── Global Pairing State (bypasses async_channel for instant GTK delivery) ─
@@ -327,6 +382,8 @@ impl Service for BluetoothService {
                 tokio::time::sleep(Duration::from_secs(2)).await;
             }
 
+            let prop_rx = spawn_device_property_monitor(connection.clone());
+
             // --- Event streams ---
             let mut powered_changed = adapter_proxy.receive_powered_changed().await;
             let mut interfaces_added = obj_manager.receive_interfaces_added().await.unwrap();
@@ -339,6 +396,7 @@ impl Service for BluetoothService {
             let mut was_discovering = false;
             let mut known_devices: HashMap<String, SystemTime> = HashMap::new();
             let mut pair_rx = Box::pin(pair_rx);
+            let mut prop_rx = Box::pin(prop_rx);
             let mut pair_resolve: Option<oneshot::Sender<AgentResponse>> = None;
             let mut pair_timeout = Box::pin(tokio::time::sleep(Duration::MAX));
 
@@ -429,6 +487,7 @@ impl Service for BluetoothService {
                     Some(_) = powered_changed.next() => {}
                     Some(_) = interfaces_added.next() => {}
                     Some(_) = interfaces_removed.next() => {}
+                    Some(_) = prop_rx.next() => {}
                 }
 
                 // Scan state change
