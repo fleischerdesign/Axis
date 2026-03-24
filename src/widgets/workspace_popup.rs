@@ -4,13 +4,14 @@ use crate::shell::ShellPopup;
 use crate::widgets::base::PopupBase;
 use gtk4::prelude::*;
 use gtk4_layer_shell::LayerShell;
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 pub struct WorkspacePopup {
     pub base: PopupBase,
     ctx: AppContext,
     focused_index: Rc<Cell<usize>>,
+    workspace_ids: Rc<RefCell<Vec<u64>>>,
 }
 
 impl ShellPopup for WorkspacePopup {
@@ -22,6 +23,9 @@ impl ShellPopup for WorkspacePopup {
     }
 
     fn close(&self) {
+        self.base
+            .window
+            .set_keyboard_mode(gtk4_layer_shell::KeyboardMode::OnDemand);
         self.base.close();
     }
 
@@ -44,6 +48,7 @@ impl WorkspacePopup {
         let base = PopupBase::new(app, "AXIS Workspace Popup", false);
         let on_state_change = Rc::new(on_state_change);
         let focused_index = Rc::new(Cell::new(0));
+        let workspace_ids: Rc<RefCell<Vec<u64>>> = Rc::new(RefCell::new(Vec::new()));
 
         // State-Change an den Controller melden
         let on_change_c = on_state_change.clone();
@@ -61,44 +66,38 @@ impl WorkspacePopup {
 
         // --- KEYBOARD NAVIGATION ---
         let base_close = base.clone();
-        let shelf_kb = shelf.clone();
         let focused_index_kb = focused_index.clone();
+        let workspace_ids_kb = workspace_ids.clone();
         let key_controller = gtk4::EventControllerKey::new();
         key_controller.connect_key_pressed(move |_, key, _, _| {
+            let ids = workspace_ids_kb.borrow();
+            let count = ids.len();
+            if count == 0 {
+                return gtk4::glib::Propagation::Proceed;
+            }
             match key {
                 gtk4::gdk::Key::Escape => {
                     base_close.close();
                     return gtk4::glib::Propagation::Stop;
                 }
-                gtk4::gdk::Key::Right | gtk4::gdk::Key::Tab => {
-                    let count = Self::child_count(&shelf_kb);
-                    if count > 0 {
-                        let next = (focused_index_kb.get() + 1) % count;
-                        focused_index_kb.set(next);
-                        Self::focus_child_at(&shelf_kb, next);
-                    }
+                gtk4::gdk::Key::Right => {
+                    let next = (focused_index_kb.get() + 1) % count;
+                    focused_index_kb.set(next);
+                    NiriService::switch_to_workspace(ids[next]);
                     return gtk4::glib::Propagation::Stop;
                 }
                 gtk4::gdk::Key::Left => {
-                    let count = Self::child_count(&shelf_kb);
-                    if count > 0 {
-                        let prev = if focused_index_kb.get() == 0 {
-                            count - 1
-                        } else {
-                            focused_index_kb.get() - 1
-                        };
-                        focused_index_kb.set(prev);
-                        Self::focus_child_at(&shelf_kb, prev);
-                    }
+                    let prev = if focused_index_kb.get() == 0 {
+                        count - 1
+                    } else {
+                        focused_index_kb.get() - 1
+                    };
+                    focused_index_kb.set(prev);
+                    NiriService::switch_to_workspace(ids[prev]);
                     return gtk4::glib::Propagation::Stop;
                 }
                 gtk4::gdk::Key::Return | gtk4::gdk::Key::KP_Enter => {
-                    // Activate the currently focused child
-                    if let Some(child) = Self::child_at(&shelf_kb, focused_index_kb.get()) {
-                        if let Some(btn) = child.downcast_ref::<gtk4::Button>() {
-                            btn.emit_clicked();
-                        }
-                    }
+                    base_close.close();
                     return gtk4::glib::Propagation::Stop;
                 }
                 _ => {}
@@ -115,9 +114,16 @@ impl WorkspacePopup {
             move || base.close()
         });
         let close_popup_c = close_popup.clone();
+        let workspace_ids_c = workspace_ids.clone();
         ctx.niri.subscribe(move |data| {
             if is_open_c.get() {
-                Self::render_shelf(&shelf_c, data, &window_c, close_popup_c.clone());
+                Self::render_shelf(
+                    &shelf_c,
+                    data,
+                    &window_c,
+                    close_popup_c.clone(),
+                    &workspace_ids_c,
+                );
             }
         });
 
@@ -125,11 +131,15 @@ impl WorkspacePopup {
             base,
             ctx,
             focused_index,
+            workspace_ids,
         }
     }
 
     fn on_open(&self) {
-        self.focused_index.set(0);
+        self.base
+            .window
+            .set_keyboard_mode(gtk4_layer_shell::KeyboardMode::Exclusive);
+
         if let Some(shelf) = self
             .base
             .revealer
@@ -140,31 +150,22 @@ impl WorkspacePopup {
                 let base = self.base.clone();
                 move || base.close()
             });
-            Self::render_shelf(&shelf, &self.ctx.niri.get(), &self.base.window, close_popup);
-        }
-    }
+            Self::render_shelf(
+                &shelf,
+                &self.ctx.niri.get(),
+                &self.base.window,
+                close_popup,
+                &self.workspace_ids,
+            );
 
-    fn child_count(shelf: &gtk4::Box) -> usize {
-        let mut count = 0;
-        let mut child = shelf.first_child();
-        while child.is_some() {
-            count += 1;
-            child = child.and_then(|c| c.next_sibling());
-        }
-        count
-    }
-
-    fn child_at(shelf: &gtk4::Box, index: usize) -> Option<gtk4::Widget> {
-        let mut current = shelf.first_child()?;
-        for _ in 0..index {
-            current = current.next_sibling()?;
-        }
-        Some(current)
-    }
-
-    fn focus_child_at(shelf: &gtk4::Box, index: usize) {
-        if let Some(child) = Self::child_at(shelf, index) {
-            child.grab_focus();
+            // Set focus to the active workspace
+            let data = self.ctx.niri.get();
+            let active_idx = data
+                .workspaces
+                .iter()
+                .position(|w| w.is_active)
+                .unwrap_or(0);
+            self.focused_index.set(active_idx);
         }
     }
 
@@ -173,12 +174,14 @@ impl WorkspacePopup {
         data: &crate::services::niri::NiriData,
         window: &gtk4::Window,
         close_popup: Rc<dyn Fn()>,
+        workspace_ids: &RefCell<Vec<u64>>,
     ) {
         while let Some(child) = shelf.first_child() {
             shelf.remove(&child);
         }
         let mut workspaces = data.workspaces.clone();
         workspaces.sort_by_key(|w| w.id);
+        *workspace_ids.borrow_mut() = workspaces.iter().map(|w| w.id).collect();
         let mut windows = data.windows.clone();
         windows.sort_by_key(|w| w.layout.pos_in_scrolling_layout.unwrap_or((0, 0)));
 

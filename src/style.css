@@ -18,10 +18,15 @@ entry:focus-visible {
 
 /* Inset Focus-Ring für Elemente mit border-radius (Tiles, Rows, Cards) */
 .tile button:focus-visible,
-.qs-list row:focus-visible,
-.workspace-card:focus-visible {
+.qs-list row:focus-visible {
     box-shadow: inset 0 0 0 2px rgba(53, 132, 228, 0.5);
     outline: none; /* Outline wird an border-radius abgeschnitten */
+}
+
+/* Workspace cards: no focus ring — .active is the only indicator */
+.workspace-card:focus-visible {
+    outline: none;
+    box-shadow: none;
 }
 
 .qs-entry:focus-visible {
