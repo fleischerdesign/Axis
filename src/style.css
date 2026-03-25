@@ -616,3 +616,59 @@ levelbar.osd-level-bar block.empty {
 .notification-wrapper {
     background-color: rgba(0, 0, 0, 0.01);
 }
+
+/* Lock Screen */
+.lock-bg {
+    background-color: #0a0a0a;
+}
+
+.lock-avatar {
+    opacity: 0.6;
+    margin-bottom: 8px;
+}
+
+.lock-username {
+    font-size: 16px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.85);
+    margin-bottom: 24px;
+}
+
+.lock-clock {
+    font-size: 72px;
+    font-weight: 200;
+    color: white;
+    letter-spacing: 2px;
+}
+
+.lock-date {
+    font-size: 16px;
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.5);
+    margin-bottom: 12px;
+}
+
+.lock-pw-box {
+    margin-top: 8px;
+}
+
+.lock-pw-entry {
+    min-width: 280px;
+    background-color: rgba(255, 255, 255, 0.08);
+    color: white;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    padding: 10px 14px;
+    font-size: 15px;
+}
+
+.lock-pw-entry:focus {
+    border-color: #3584e4;
+    box-shadow: 0 0 0 3px rgba(53, 132, 228, 0.25);
+}
+
+.lock-error {
+    font-size: 13px;
+    color: #e01b24;
+    font-weight: 600;
+}

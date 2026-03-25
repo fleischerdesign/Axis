@@ -35,6 +35,7 @@ impl MainPage {
         open_nl: impl Fn() + 'static,
         open_audio: impl Fn() + 'static,
         open_kdeconnect: impl Fn() + 'static,
+        on_lock: Rc<dyn Fn()>,
     ) -> Self {
         let container = gtk4::Box::new(gtk4::Orientation::Vertical, 20);
 
@@ -146,7 +147,7 @@ impl MainPage {
 
         let battery = BatteryButton::new(&ctx);
 
-        let power_actions = Rc::new(PowerActionStack::new());
+        let power_actions = Rc::new(PowerActionStack::new(on_lock));
 
         let spacer = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
         spacer.set_hexpand(true);

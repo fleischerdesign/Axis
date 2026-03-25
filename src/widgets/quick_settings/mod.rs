@@ -52,6 +52,7 @@ impl QuickSettingsPopup {
         vol_icon_bar: &gtk4::Image,
         ctx: AppContext,
         on_state_change: impl Fn() + 'static,
+        on_lock: Rc<dyn Fn()>,
     ) -> Self {
         let base = PopupBase::new(app, "AXIS Quick Settings", true);
         let on_state_change = Rc::new(on_state_change);
@@ -125,6 +126,7 @@ impl QuickSettingsPopup {
             open_nl,
             open_audio,
             open_kdeconnect,
+            on_lock,
         );
 
         let stack_back = qs_stack.clone();

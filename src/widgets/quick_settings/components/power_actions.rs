@@ -10,7 +10,7 @@ pub struct PowerActionStack {
 }
 
 impl PowerActionStack {
-    pub fn new() -> Self {
+    pub fn new(on_lock: Rc<dyn Fn()>) -> Self {
         let stack = gtk4::Stack::builder()
             .transition_type(gtk4::StackTransitionType::Crossfade)
             .transition_duration(200)
@@ -23,8 +23,7 @@ impl PowerActionStack {
         settings_btn.set_sensitive(false);
         settings_btn.set_tooltip_text(Some("Coming soon"));
         let lock_btn = Self::create_btn("system-lock-screen-symbolic");
-        lock_btn.set_sensitive(false);
-        lock_btn.set_tooltip_text(Some("Coming soon"));
+        lock_btn.set_tooltip_text(Some("Lock Screen"));
         let power_btn = Self::create_btn("system-shutdown-symbolic");
 
         normal_actions.append(&screenshot_btn);
@@ -58,6 +57,11 @@ impl PowerActionStack {
                 show_pointer: false,
                 path: None,
             });
+        });
+
+        // Lock Screen
+        lock_btn.connect_clicked(move |_| {
+            on_lock();
         });
 
         // Power expand/collapse

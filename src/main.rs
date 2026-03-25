@@ -23,6 +23,7 @@ use crate::services::ipc::IpcService;
 use crate::services::notifications::NotificationService;
 use crate::store::{ReadOnlyHandle, ServiceHandle};
 use crate::widgets::{Bar, QuickSettingsPopup, WorkspacePopup, LauncherPopup, NotificationToastManager, osd::OsdManager};
+use crate::widgets::lock_screen::LockScreen;
 use crate::shell::ShellController;
 use gtk4::prelude::*;
 use gtk4::glib;
@@ -107,7 +108,11 @@ fn build_ui(app: &libadwaita::Application) {
     let bar = Bar::new(app, ctx.clone());
     let bar_popup_state = bar.popup_open.clone();
     let bar_ref = bar.clone();
-    
+
+    // Lock Screen
+    let lock_screen = Rc::new(LockScreen::new());
+    setup_lock_triggers(&lock_screen);
+
     // Controller braucht RefCell für Callbacks
     let controller: Rc<RefCell<Option<Rc<ShellController>>>> = Rc::new(RefCell::new(None));
     let controller_on_change = controller.clone();
@@ -121,9 +126,10 @@ fn build_ui(app: &libadwaita::Application) {
     // Popups initialisieren (QS brauchen wir zuerst für das Archiv)
     let ctx_c = ctx.clone();
     let ctrl_q = controller.clone();
+    let ls_lock = lock_screen.clone();
     let qs = Rc::new(QuickSettingsPopup::new(app, &bar.vol_icon, ctx_c, move || {
         if let Some(c) = ctrl_q.borrow().as_ref() { c.sync(); }
-    }));
+    }, Rc::new(move || ls_lock.lock_session()) as Rc<dyn Fn()>));
 
     // --- ARCHIVE (über dem QS Popup) ---
     let notification_archive = crate::widgets::notification::archive::NotificationArchiveManager::new(ctx.clone());
@@ -162,6 +168,7 @@ fn build_ui(app: &libadwaita::Application) {
     // --- IPC SERVICE STARTEN ---
     let ipc_rx = IpcService::spawn();
     let shell_ipc = shell_ctrl.clone();
+    let ipc_lock = lock_screen.clone();
     glib::spawn_future_local(async move {
         while let Ok(cmd) = ipc_rx.recv().await {
             use crate::services::ipc::server::ShellIpcCmd;
@@ -170,6 +177,7 @@ fn build_ui(app: &libadwaita::Application) {
                 ShellIpcCmd::ToggleQuickSettings => shell_ipc.toggle("qs"),
                 ShellIpcCmd::ToggleWorkspaces => shell_ipc.toggle("ws"),
                 ShellIpcCmd::CloseAll => shell_ipc.close_all(),
+                ShellIpcCmd::Lock => ipc_lock.lock_session(),
             }
         }
     });
@@ -189,6 +197,108 @@ fn setup_click_handler(island: &gtk4::Box, controller: Rc<ShellController>, id: 
         controller.toggle(id);
     });
     island.add_controller(click);
+}
+
+/// Listens for logind signals that should trigger the lock screen:
+/// - PrepareForSleep(true): lock before suspend
+/// - Lock signal on the session: lock on idle / loginctl lock-session
+fn setup_lock_triggers(lock_screen: &Rc<LockScreen>) {
+    let (lock_tx, lock_rx) = async_channel::bounded::<()>(1);
+
+    // Main-thread handler: receives lock triggers and executes lock
+    let ls = lock_screen.clone();
+    glib::spawn_future_local(async move {
+        while lock_rx.recv().await.is_ok() {
+            if !ls.is_locked() {
+                log::info!("[lock] Signal received, locking session");
+                ls.lock_session();
+            }
+        }
+    });
+
+    // D-Bus listener runs on tokio runtime
+    let trigger = move || {
+        let _ = lock_tx.try_send(());
+    };
+
+    tokio::spawn(async move {
+        use futures_util::StreamExt;
+
+        let Ok(conn) = zbus::Connection::system().await else {
+            log::warn!("[lock] Failed to connect to system D-Bus for logind signals");
+            return;
+        };
+
+        let manager_proxy = match zbus::Proxy::new(
+            &conn,
+            "org.freedesktop.login1",
+            "/org/freedesktop/login1",
+            "org.freedesktop.login1.Manager",
+        )
+        .await
+        {
+            Ok(p) => p,
+            Err(e) => {
+                log::warn!("[lock] Failed to create logind manager proxy: {e}");
+                return;
+            }
+        };
+
+        let Ok(mut sleep_stream) = manager_proxy.receive_signal("PrepareForSleep").await else {
+            log::warn!("[lock] Failed to subscribe to PrepareForSleep signal");
+            return;
+        };
+
+        let session_path: Option<zbus::zvariant::OwnedObjectPath> =
+            manager_proxy.get_property("Session").await.ok();
+
+        let mut lock_stream_opt = if let Some(ref path) = session_path {
+            match zbus::Proxy::new(
+                &conn,
+                "org.freedesktop.login1",
+                path.as_str(),
+                "org.freedesktop.login1.Session",
+            )
+            .await
+            {
+                Ok(session_proxy) => session_proxy.receive_signal("Lock").await.ok(),
+                Err(e) => {
+                    log::warn!("[lock] Failed to create session proxy: {e}");
+                    None
+                }
+            }
+        } else {
+            log::warn!("[lock] Could not determine session path");
+            None
+        };
+
+        log::info!("[lock] Listening for logind signals");
+
+        loop {
+            if let Some(ref mut lock_stream) = lock_stream_opt {
+                tokio::select! {
+                    Some(msg) = sleep_stream.next() => {
+                        if let Ok(body) = msg.body().deserialize::<bool>() {
+                            if body {
+                                trigger();
+                            }
+                        }
+                    }
+                    Some(_msg) = lock_stream.next() => {
+                        trigger();
+                    }
+                }
+            } else {
+                if let Some(msg) = sleep_stream.next().await {
+                    if let Ok(body) = msg.body().deserialize::<bool>() {
+                        if body {
+                            trigger();
+                        }
+                    }
+                }
+            }
+        }
+    });
 }
 
 fn setup_services() -> AppContext {

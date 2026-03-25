@@ -5,6 +5,7 @@ pub mod components;
 pub mod icons;
 mod island;
 pub mod launcher;
+pub mod lock_screen;
 pub mod notification;
 pub mod osd;
 pub mod quick_settings;

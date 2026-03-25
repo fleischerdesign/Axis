@@ -6,6 +6,7 @@ pub enum ShellIpcCmd {
     ToggleQuickSettings,
     ToggleWorkspaces,
     CloseAll,
+    Lock,
 }
 
 pub struct ShellIpcServer {
@@ -38,6 +39,11 @@ impl ShellIpcServer {
     /// Schließt alle aktiven Popups
     async fn close_all(&self) {
         let _ = self.cmd_tx.send(ShellIpcCmd::CloseAll).await;
+    }
+
+    /// Sperrt die Session (Lock Screen)
+    async fn lock(&self) {
+        let _ = self.cmd_tx.send(ShellIpcCmd::Lock).await;
     }
     
     /// Gibt die aktuelle Version der Shell zurück
