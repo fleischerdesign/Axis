@@ -18,10 +18,22 @@
       system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
+        lib = nixpkgs.lib;
         craneLib = crane.mkLib pkgs;
 
         commonArgs = {
-          src = craneLib.cleanCargoSource ./.;
+          src = lib.cleanSourceWith {
+            src = ./.;
+            filter =
+              path: type:
+              let
+                base = baseNameOf path;
+              in
+              base == "Cargo.toml"
+              || base == "Cargo.lock"
+              || (type == "directory" && base == "src")
+              || (lib.hasPrefix (toString ./src) (toString path));
+          };
           strictDeps = true;
 
           nativeBuildInputs = [
