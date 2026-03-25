@@ -54,15 +54,24 @@ fn main() {
 
     log::info!("AXIS Shell starting");
 
+    // Check for --locked flag before GTK processes args
+    let start_locked = std::env::args().any(|a| a == "--locked");
+
     let application = libadwaita::Application::builder()
         .application_id("com.github.axis.shell")
         .build();
 
-    application.connect_activate(build_ui);
-    application.run();
+    application.connect_activate(move |app| build_ui(app, start_locked));
+
+    // Filter out AXIS-specific flags before passing to GTK
+    let args: Vec<String> = std::env::args()
+        .filter(|a| a != "--locked")
+        .collect();
+    let args_ref: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    application.run_with_args(&args_ref);
 }
 
-fn build_ui(app: &libadwaita::Application) {
+fn build_ui(app: &libadwaita::Application, start_locked: bool) {
     let provider = gtk4::CssProvider::new();
     provider.load_from_string(include_str!("style.css"));
     if let Some(display) = gtk4::gdk::Display::default() {
@@ -189,6 +198,15 @@ fn build_ui(app: &libadwaita::Application) {
 
     log::info!("UI ready, presenting window");
     bar.window.present();
+
+    // Lock on boot if --locked flag was passed
+    if start_locked {
+        log::info!("[main] --locked flag detected, locking session");
+        let ls = lock_screen.clone();
+        glib::idle_add_local_once(move || {
+            ls.lock_session();
+        });
+    }
 }
 
 fn setup_click_handler(island: &gtk4::Box, controller: Rc<ShellController>, id: &'static str) {
