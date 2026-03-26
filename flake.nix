@@ -67,15 +67,20 @@
           }
         );
 
-        devShells.default = craneLib.devShell (
-          commonArgs
-          // {
+        devShells.default = pkgs.mkShell {
+          nativeBuildInputs = commonArgs.nativeBuildInputs ++ [
+            pkgs.cargo
+            pkgs.rustc
+            pkgs.rust-analyzer
+          ];
+          buildInputs = commonArgs.buildInputs;
+          env = commonArgs.env // {
             RUST_SRC_PATH = pkgs.rustPlatform.rustLibSrc;
-            shellHook = ''
-              echo "Entering AXIS development environment..."
-            '';
-          }
-        );
+          };
+          shellHook = ''
+            echo "Entering AXIS development environment..."
+          '';
+        };
       }
     );
 }
