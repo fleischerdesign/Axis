@@ -7,6 +7,8 @@ use std::cell::Cell;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::services::power::PowerData;
+use crate::store::ReadOnlyHandle;
 use crate::widgets::components::blurred_picture::BlurredPicture;
 
 struct SharedState {
@@ -44,10 +46,11 @@ impl SharedState {
 pub struct LockScreen {
     state: Rc<SharedState>,
     wallpaper: Option<gtk4::gdk::Texture>,
+    power: ReadOnlyHandle<PowerData>,
 }
 
 impl LockScreen {
-    pub fn new(wallpaper: Option<gtk4::gdk::Texture>) -> Self {
+    pub fn new(wallpaper: Option<gtk4::gdk::Texture>, power: ReadOnlyHandle<PowerData>) -> Self {
         Self {
             state: Rc::new(SharedState {
                 instance: RefCell::new(None),
@@ -59,6 +62,7 @@ impl LockScreen {
                 clock_running: Cell::new(false),
             }),
             wallpaper,
+            power,
         }
     }
 
@@ -206,6 +210,36 @@ impl LockScreen {
             .css_classes(vec!["lock-date".to_string()])
             .build();
         content.append(&date_label);
+
+        // Battery status
+        let battery_row = gtk4::Box::builder()
+            .orientation(gtk4::Orientation::Horizontal)
+            .spacing(6)
+            .halign(gtk4::Align::Center)
+            .css_classes(vec!["lock-battery".to_string()])
+            .build();
+
+        let battery_icon = gtk4::Image::from_icon_name("battery-full-symbolic");
+        let battery_label = gtk4::Label::new(None);
+        battery_row.append(&battery_icon);
+        battery_row.append(&battery_label);
+
+        let power = self.power.clone();
+        let icon_c = battery_icon.clone();
+        let label_c = battery_label.clone();
+        let row_c = battery_row.clone();
+        power.subscribe(move |data: &PowerData| {
+            row_c.set_visible(data.has_battery);
+            if data.has_battery {
+                label_c.set_text(&format!("{:.0}%", data.battery_percentage));
+                icon_c.set_icon_name(Some(crate::widgets::icons::battery_icon(
+                    data.battery_percentage,
+                    data.is_charging,
+                )));
+            }
+        });
+
+        content.append(&battery_row);
 
         let pw_box = gtk4::Box::builder()
             .orientation(gtk4::Orientation::Vertical)

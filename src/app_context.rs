@@ -1,6 +1,7 @@
 use async_channel::Sender;
 use chrono::{DateTime, Local};
 
+use crate::services::airplane::{AirplaneCmd, AirplaneData};
 use crate::services::audio::{AudioCmd, AudioData};
 use crate::services::backlight::{BacklightCmd, BacklightData};
 use crate::services::bluetooth::{BluetoothCmd, BluetoothData};
@@ -17,6 +18,7 @@ use crate::store::{ReadOnlyHandle, ServiceHandle};
 
 #[derive(Clone)]
 pub struct AppContext {
+    pub airplane: ServiceHandle<AirplaneData, AirplaneCmd>,
     pub network: ServiceHandle<NetworkData, NetworkCmd>,
     pub bluetooth: ServiceHandle<BluetoothData, BluetoothCmd>,
     pub audio: ServiceHandle<AudioData, AudioCmd>,

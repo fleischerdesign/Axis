@@ -1,4 +1,5 @@
 use crate::app_context::AppContext;
+use crate::services::airplane::AirplaneCmd;
 use crate::services::audio::AudioCmd;
 use crate::services::backlight::BacklightCmd;
 use crate::services::bluetooth::BluetoothCmd;
@@ -22,6 +23,7 @@ pub struct MainPage {
     pub eth_tile: Rc<ToggleTile>,
     pub bt_tile: Rc<ToggleTile>,
     pub nl_tile: Rc<ToggleTile>,
+    pub airplane_tile: Rc<ToggleTile>,
     pub dnd_tile: Rc<ToggleTile>,
     power_actions: Rc<PowerActionStack>,
 }
@@ -57,7 +59,7 @@ impl MainPage {
             true,
         ));
         let nl_tile = Rc::new(ToggleTile::new("Night Light", "night-light-symbolic", true));
-        let airplane_tile = ToggleTile::new("Airplane", "airplane-mode-symbolic", false);
+        let airplane_tile = Rc::new(ToggleTile::new("Airplane", "airplane-mode-symbolic", false));
         let dnd_tile = Rc::new(ToggleTile::new(
             "DND",
             "preferences-system-notifications-symbolic",
@@ -226,6 +228,14 @@ impl MainPage {
             let _ = ctx_dnd.dnd.tx.try_send(DndCmd::Toggle(!current));
         });
 
+        // Airplane toggle
+        let ctx_ap = ctx.clone();
+        let ap_store = ctx.airplane.clone();
+        airplane_tile.main_btn.connect_clicked(move |_| {
+            let current = ap_store.get().enabled;
+            let _ = ctx_ap.airplane.tx.try_send(AirplaneCmd::Toggle(!current));
+        });
+
         // KDE Connect → open page
         kdeconnect_tile
             .arrow_btn
@@ -270,6 +280,12 @@ impl MainPage {
         let dnd_tile_c = dnd_tile.clone();
         ctx.dnd.subscribe(move |data| {
             dnd_tile_c.set_active(data.enabled);
+        });
+
+        // Airplane → Tile-State
+        let airplane_tile_c = airplane_tile.clone();
+        ctx.airplane.subscribe(move |data| {
+            airplane_tile_c.set_active(data.enabled);
         });
 
         // KDE Connect → Tile-State
@@ -329,6 +345,7 @@ impl MainPage {
             eth_tile,
             bt_tile,
             nl_tile,
+            airplane_tile,
             dnd_tile,
             power_actions,
         }

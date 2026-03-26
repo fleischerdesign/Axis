@@ -8,6 +8,7 @@ mod shell;
 use crate::app_context::AppContext;
 use crate::services::Service;
 use crate::services::audio::AudioService;
+use crate::services::airplane::AirplaneService;
 use crate::services::backlight::BacklightService;
 use crate::services::bluetooth::BluetoothService;
 use crate::services::clock::ClockService;
@@ -142,7 +143,7 @@ fn build_ui(app: &libadwaita::Application, start_locked: bool, wallpaper_path: O
         .and_then(|p| crate::widgets::wallpaper::WallpaperService::show(app, p));
 
     // Lock Screen
-    let lock_screen = Rc::new(LockScreen::new(lockscreen_texture));
+    let lock_screen = Rc::new(LockScreen::new(lockscreen_texture, ctx.power.clone()));
     setup_lock_triggers(&lock_screen);
 
     // Controller braucht RefCell für Callbacks
@@ -343,6 +344,7 @@ fn setup_lock_triggers(lock_screen: &Rc<LockScreen>) {
 }
 
 fn setup_services() -> AppContext {
+    let (airplane_store, airplane_tx) = AirplaneService::spawn();
     let (network_store, network_tx) = NetworkService::spawn();
     let (bluetooth_store, bluetooth_tx) = BluetoothService::spawn();
     let (audio_store, audio_tx) = AudioService::spawn();
@@ -358,6 +360,7 @@ fn setup_services() -> AppContext {
     let (launcher_store, launcher_tx) = LauncherService::spawn();
 
     AppContext {
+        airplane: ServiceHandle { store: airplane_store, tx: airplane_tx },
         network: ServiceHandle { store: network_store, tx: network_tx },
         bluetooth: ServiceHandle { store: bluetooth_store, tx: bluetooth_tx },
         audio: ServiceHandle { store: audio_store, tx: audio_tx },

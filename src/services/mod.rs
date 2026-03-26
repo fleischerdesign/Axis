@@ -24,3 +24,4 @@ pub mod notifications;
 pub mod dnd;
 pub mod tray;
 pub mod kdeconnect;
+pub mod airplane;
