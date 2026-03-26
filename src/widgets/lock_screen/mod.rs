@@ -126,8 +126,8 @@ impl LockScreen {
             .orientation(gtk4::Orientation::Vertical)
             .hexpand(true)
             .vexpand(true)
-            .valign(gtk4::Align::Center)
-            .halign(gtk4::Align::Center)
+            .valign(gtk4::Align::Fill)
+            .halign(gtk4::Align::Fill)
             .build();
 
         let content = gtk4::Box::builder()
