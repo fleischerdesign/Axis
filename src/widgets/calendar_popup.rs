@@ -8,6 +8,7 @@ use gtk4_layer_shell::{Edge, KeyboardMode, LayerShell};
 use log::info;
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::mpsc;
 
 pub struct CalendarPopup {
     base: PopupBase,
@@ -16,6 +17,9 @@ pub struct CalendarPopup {
     add_entry: gtk4::Entry,
     spinner: gtk4::Spinner,
     ctx: AppContext,
+    refresh_tx: mpsc::Sender<()>,
+    refresh_rx: Rc<RefCell<Option<mpsc::Receiver<()>>>>,
+    refresh_source: Rc<RefCell<Option<gtk4::glib::SourceId>>>,
 }
 
 impl ShellPopup for CalendarPopup {
@@ -168,6 +172,8 @@ impl CalendarPopup {
         // ── Keyboard: Enter in entry adds task ──
         // (will be wired after Self creation)
 
+        let (refresh_tx, refresh_rx) = mpsc::channel::<()>();
+
         Self {
             base,
             task_list,
@@ -175,11 +181,64 @@ impl CalendarPopup {
             add_entry,
             spinner,
             ctx,
+            refresh_tx,
+            refresh_rx: Rc::new(RefCell::new(Some(refresh_rx))),
+            refresh_source: Rc::new(RefCell::new(None)),
         }
     }
 
     fn on_open(&self) {
-        self.load_tasks();
+        // Show cached tasks immediately (instant)
+        render_tasks(&self.task_list, &self.ctx, &self.spinner, &self.auth_box, &self.refresh_tx);
+
+        // Start timer once (survives popup close/open cycles)
+        if self.refresh_source.borrow().is_some() {
+            // Timer already running, just refresh from API
+            let reg = self.ctx.task_registry.clone();
+            let tx = self.refresh_tx.clone();
+            std::thread::spawn(move || {
+                let mut r = reg.lock().unwrap();
+                match r.refresh_tasks() {
+                    Ok(tasks) => log::info!("[calendar] Refreshed {} tasks", tasks.len()),
+                    Err(e) => log::warn!("[calendar] Refresh failed: {e}"),
+                }
+                let _ = tx.send(());
+            });
+            return;
+        }
+
+        // Take receiver (only done once)
+        let rx = self.refresh_rx.borrow_mut().take()
+            .expect("refresh_rx already taken");
+        let tl = self.task_list.clone();
+        let ctx = self.ctx.clone();
+        let sp = self.spinner.clone();
+        let ab = self.auth_box.clone();
+        let tx = self.refresh_tx.clone();
+        let source = self.refresh_source.clone();
+        let base_is_open = self.base.is_open.clone();
+        let src = gtk4::glib::timeout_add_local(
+            std::time::Duration::from_millis(300),
+            move || {
+                if rx.try_recv().is_ok() && base_is_open.get() {
+                    render_tasks(&tl, &ctx, &sp, &ab, &tx);
+                }
+                gtk4::glib::ControlFlow::Continue
+            },
+        );
+        *source.borrow_mut() = Some(src);
+
+        // Refresh from API in background thread
+        let reg = self.ctx.task_registry.clone();
+        let tx = self.refresh_tx.clone();
+        std::thread::spawn(move || {
+            let mut r = reg.lock().unwrap();
+            match r.refresh_tasks() {
+                Ok(tasks) => log::info!("[calendar] Refreshed {} tasks", tasks.len()),
+                Err(e) => log::warn!("[calendar] Refresh failed: {e}"),
+            }
+            let _ = tx.send(());
+        });
 
         // Wire add-task on Enter
         let ctx_c = self.ctx.clone();
@@ -187,6 +246,7 @@ impl CalendarPopup {
         let spinner_c = self.spinner.clone();
         let auth_box_c = self.auth_box.clone();
         let entry_c = self.add_entry.clone();
+        let tx_c = self.refresh_tx.clone();
         self.add_entry.connect_activate(move |entry| {
             let title = entry.text().to_string();
             if title.is_empty() {
@@ -194,33 +254,48 @@ impl CalendarPopup {
             }
             entry.set_text("");
 
-            let registry = ctx_c.task_registry.borrow();
+            let registry = ctx_c.task_registry.lock().unwrap();
             let provider_name = registry.active().name().to_string();
             let is_local = registry.active().is_local();
             drop(registry);
 
             if is_local {
-                let mut registry = ctx_c.task_registry.borrow_mut();
+                let mut registry = ctx_c.task_registry.lock().unwrap();
                 if let Ok(task) = registry.active_mut().add_task("default", &title) {
+                    registry.cached_tasks_mut().push(task);
                     drop(registry);
-                    render_tasks(&task_list_c, &ctx_c, &spinner_c, &auth_box_c);
+                    render_tasks(&task_list_c, &ctx_c, &spinner_c, &auth_box_c, &tx_c);
                 }
             } else {
-                // Remote: run on main thread (blocks briefly)
-                spinner_c.set_visible(true);
-                let mut registry = ctx_c.task_registry.borrow_mut();
-                let result = registry.active_mut().add_task("default", &title);
+                // Remote: optimistic add + API call in thread
+                // Add placeholder to cache immediately
+                let placeholder = crate::services::tasks::Task {
+                    id: String::new(),
+                    title: title.clone(),
+                    done: false,
+                    provider: "google".to_string(),
+                };
+                let mut registry = ctx_c.task_registry.lock().unwrap();
+                registry.cached_tasks_mut().push(placeholder);
+                let list_id = registry.last_list_id().unwrap_or("default").to_string();
                 drop(registry);
-                spinner_c.set_visible(false);
-                if result.is_ok() {
-                    render_tasks(&task_list_c, &ctx_c, &spinner_c, &auth_box_c);
-                }
+
+                // Re-render immediately with placeholder
+                render_tasks(&task_list_c, &ctx_c, &spinner_c, &auth_box_c, &tx_c);
+
+                // API call in background thread
+                let reg = ctx_c.task_registry.clone();
+                std::thread::spawn(move || {
+                    let mut r = reg.lock().unwrap();
+                    let _ = r.active_mut().add_task(&list_id, &title);
+                    let _ = r.refresh_tasks();
+                });
             }
         });
     }
 
     fn load_tasks(&self) {
-        render_tasks(&self.task_list, &self.ctx, &self.spinner, &self.auth_box);
+        render_tasks(&self.task_list, &self.ctx, &self.spinner, &self.auth_box, &self.refresh_tx);
     }
 }
 
@@ -229,6 +304,7 @@ fn render_tasks(
     ctx: &AppContext,
     spinner: &gtk4::Spinner,
     auth_box: &gtk4::Box,
+    refresh_tx: &mpsc::Sender<()>,
 ) {
     // Clear existing
     while let Some(child) = task_list.first_child() {
@@ -237,70 +313,60 @@ fn render_tasks(
     auth_box.set_visible(false);
     spinner.set_visible(false);
 
-    let mut registry = ctx.task_registry.borrow_mut();
-    let provider = registry.active_mut();
+    let mut registry = ctx.task_registry.lock().unwrap();
+    let authenticated = registry.active().is_authenticated();
 
-    log::info!("[calendar] Provider: {}, authenticated: {}", provider.name(), provider.is_authenticated());
+    if authenticated {
+        // Show cached tasks (instant, no API call)
+        let tasks = registry.cached_tasks().to_vec();
+        drop(registry);
 
-    match provider.auth_status() {
-        AuthStatus::Authenticated => {
-            // Get task lists, then fetch tasks from first list
-            match provider.lists() {
-                Ok(lists) => {
-                    let list_id = lists.first().map(|l| l.id.as_str()).unwrap_or("default");
-                    match provider.tasks(list_id) {
-                        Ok(tasks) => {
-                            for task in &tasks {
-                                let row = build_task_row(task, ctx, task_list, spinner, auth_box);
-                                task_list.append(&row);
-                            }
-                            if tasks.is_empty() {
-                                let empty = gtk4::Label::builder()
-                                    .label("Keine Aufgaben")
-                                    .css_classes(vec!["calendar-empty".to_string()])
-                                    .halign(gtk4::Align::Start)
-                                    .margin_top(8)
-                                    .build();
-                                task_list.append(&empty);
-                            }
-                        }
-                        Err(e) => {
-                            log::warn!("[calendar] Failed to load tasks: {e}");
-                            let empty = gtk4::Label::builder()
-                                .label("Keine Aufgaben")
-                                .css_classes(vec!["calendar-empty".to_string()])
-                                .halign(gtk4::Align::Start)
-                                .margin_top(8)
-                                .build();
-                            task_list.append(&empty);
-                        }
-                    }
-                }
-                Err(e) => {
-                    log::warn!("[calendar] Failed to load lists: {e}");
-                    let empty = gtk4::Label::builder()
-                        .label("Keine Aufgaben")
-                        .css_classes(vec!["calendar-empty".to_string()])
-                        .halign(gtk4::Align::Start)
-                        .margin_top(8)
-                        .build();
-                    task_list.append(&empty);
-                }
-            }
+        for task in &tasks {
+            let row = build_task_row(task, ctx, task_list, spinner, auth_box, refresh_tx.clone());
+            task_list.append(&row);
         }
-        AuthStatus::NeedsAuth { url, code } => {
-            log::info!("[calendar] NeedsAuth: url={}, code={}", url, code);
-            show_auth_prompt(auth_box, &url, &code, ctx);
-        }
-        AuthStatus::Failed(msg) => {
-            log::warn!("[calendar] Auth failed: {msg}");
+        if tasks.is_empty() {
             let empty = gtk4::Label::builder()
-                .label("Anmeldung fehlgeschlagen")
+                .label("Keine Aufgaben")
                 .css_classes(vec!["calendar-empty".to_string()])
                 .halign(gtk4::Align::Start)
                 .margin_top(8)
                 .build();
             task_list.append(&empty);
+        }
+    } else {
+        match registry.active_mut().auth_status() {
+            AuthStatus::NeedsAuth { url, code } => {
+                drop(registry);
+                log::info!("[calendar] NeedsAuth: url={}, code={}", url, code);
+                show_auth_prompt(auth_box, &url, &code, ctx);
+            }
+            AuthStatus::Failed(msg) => {
+                drop(registry);
+                log::warn!("[calendar] Auth failed: {msg}");
+                let empty = gtk4::Label::builder()
+                    .label("Anmeldung fehlgeschlagen")
+                    .css_classes(vec!["calendar-empty".to_string()])
+                    .halign(gtk4::Align::Start)
+                    .margin_top(8)
+                    .build();
+                task_list.append(&empty);
+            }
+            AuthStatus::Authenticated => {
+                drop(registry);
+            }
+        }
+    }
+}
+
+fn refresh_tasks(ctx: &AppContext) {
+    let mut registry = ctx.task_registry.lock().unwrap();
+    match registry.refresh_tasks() {
+        Ok(tasks) => {
+            log::info!("[calendar] Refreshed {} tasks", tasks.len());
+        }
+        Err(e) => {
+            log::warn!("[calendar] Failed to refresh tasks: {e}");
         }
     }
 }
@@ -311,6 +377,7 @@ fn build_task_row(
     task_list: &gtk4::Box,
     spinner: &gtk4::Spinner,
     auth_box: &gtk4::Box,
+    refresh_tx: mpsc::Sender<()>,
 ) -> gtk4::Box {
     let row = gtk4::Box::builder()
         .orientation(gtk4::Orientation::Horizontal)
@@ -347,13 +414,14 @@ fn build_task_row(
     let row_c = row.clone();
     check.connect_toggled(move |btn| {
         let done = btn.is_active();
-        let registry = ctx_c.task_registry.borrow();
+        let registry = ctx_c.task_registry.lock().unwrap();
         let is_local = registry.active().is_local();
         drop(registry);
 
         if is_local {
-            let mut registry = ctx_c.task_registry.borrow_mut();
+            let mut registry = ctx_c.task_registry.lock().unwrap();
             let _ = registry.active_mut().toggle_task("default", &task_id, done);
+            registry.update_cached_task(&task_id, done);
             drop(registry);
             if done {
                 row_c.add_css_class("calendar-task-done");
@@ -361,11 +429,28 @@ fn build_task_row(
                 row_c.remove_css_class("calendar-task-done");
             }
         } else {
-            // Remote: run on main thread (blocks briefly)
-            let mut registry = ctx_c.task_registry.borrow_mut();
-            let _ = registry.active_mut().toggle_task("default", &task_id, done);
+            // Remote: optimistic UI update, then API call in thread
+            if done {
+                row_c.add_css_class("calendar-task-done");
+            } else {
+                row_c.remove_css_class("calendar-task-done");
+            }
+            // Update cache immediately
+            let mut registry = ctx_c.task_registry.lock().unwrap();
+            registry.update_cached_task(&task_id, done);
+            let list_id = registry.last_list_id().unwrap_or("default").to_string();
             drop(registry);
-            render_tasks(&task_list_c, &ctx_c, &spinner_c, &auth_box_c);
+
+            // API call in background thread
+            let reg = ctx_c.task_registry.clone();
+            let tid = task_id.clone();
+            let tx = refresh_tx.clone();
+            std::thread::spawn(move || {
+                let mut r = reg.lock().unwrap();
+                let _ = r.active_mut().toggle_task(&list_id, &tid, done);
+                let _ = tx.send(());
+            });
+            // Re-render on next idle (optimistic UI already updated)
         }
     });
 
@@ -406,7 +491,7 @@ fn show_auth_prompt(
             btn.set_label("Warte...");
 
             log::info!("[calendar] Starting Google auth flow...");
-            let mut registry = ctx_c.task_registry.borrow_mut();
+            let mut registry = ctx_c.task_registry.lock().unwrap();
             match registry.active_mut().authenticate() {
                 Ok(_) => {
                     log::info!("[calendar] Auth complete!");
@@ -461,7 +546,7 @@ fn show_auth_prompt(
             btn.set_label("Warte auf Autorisierung...");
 
             log::info!("[calendar] Polling for Google token...");
-            let mut registry = ctx_c.task_registry.borrow_mut();
+            let mut registry = ctx_c.task_registry.lock().unwrap();
             match registry.active_mut().authenticate() {
                 Ok(_) => {
                     log::info!("[calendar] Auth complete!");

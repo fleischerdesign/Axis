@@ -18,6 +18,7 @@ use crate::services::power::PowerData;
 use crate::services::tasks::TaskRegistry;
 use crate::services::tray::{TrayCmd, TrayData};
 use crate::store::{ReadOnlyHandle, ServiceHandle};
+use std::sync::{Arc, Mutex};
 
 #[derive(Clone)]
 pub struct AppContext {
@@ -36,5 +37,5 @@ pub struct AppContext {
     pub power: ReadOnlyHandle<PowerData>,
     pub niri: ReadOnlyHandle<NiriData>,
     pub clock: ReadOnlyHandle<DateTime<Local>>,
-    pub task_registry: Rc<RefCell<TaskRegistry>>,
+    pub task_registry: Arc<Mutex<TaskRegistry>>,
 }

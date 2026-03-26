@@ -31,6 +31,7 @@ use gtk4::prelude::*;
 use gtk4::glib;
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::sync::{Arc, Mutex};
 
 fn setup_logging() {
     fern::Dispatch::new()
@@ -366,7 +367,7 @@ fn setup_services() -> AppContext {
     let (niri_store, _) = NiriService::spawn();
     let (clock_store, _) = ClockService::spawn();
     let (launcher_store, launcher_tx) = LauncherService::spawn();
-    let task_registry = Rc::new(RefCell::new(TaskRegistry::new()));
+    let task_registry = Arc::new(Mutex::new(TaskRegistry::new()));
 
     AppContext {
         airplane: ServiceHandle { store: airplane_store, tx: airplane_tx },
