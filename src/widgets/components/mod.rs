@@ -1,3 +1,4 @@
+pub mod blurred_picture;
 pub mod debounced_slider;
 pub mod icon_slider;
 pub mod list_row;

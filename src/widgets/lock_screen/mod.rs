@@ -7,6 +7,8 @@ use std::cell::Cell;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::widgets::components::blurred_picture::BlurredPicture;
+
 struct SharedState {
     instance: RefCell<Option<session_lock::Instance>>,
     locked: Cell<bool>,
@@ -143,11 +145,10 @@ impl LockScreen {
         let overlay = gtk4::Overlay::new();
 
         if let Some(ref texture) = self.wallpaper {
-            let picture = gtk4::Picture::for_paintable(texture);
-            picture.set_content_fit(gtk4::ContentFit::Cover);
-            picture.set_hexpand(true);
-            picture.set_vexpand(true);
-            overlay.set_child(Some(&picture));
+            let blurred = BlurredPicture::new(texture);
+            blurred.set_hexpand(true);
+            blurred.set_vexpand(true);
+            overlay.set_child(Some(&blurred));
         } else {
             let bg = gtk4::Box::builder()
                 .css_classes(vec!["lock-bg".to_string()])

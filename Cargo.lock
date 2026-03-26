@@ -178,7 +178,6 @@ dependencies = [
  "chrono",
  "fern",
  "futures-util",
- "gdk-pixbuf",
  "gtk4",
  "gtk4-layer-shell",
  "gtk4-session-lock",
