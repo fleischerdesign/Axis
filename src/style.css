@@ -510,15 +510,22 @@ separator {
     min-width: 1px;
 }
 
-/* Calendar Popup — wrapper matches qs-panel / workspace-shelf style */
+/* Calendar Popup — daily info panel */
 .calendar-wrapper {
     background-color: #1e1e1e;
-    padding: 16px;
+    padding: 20px;
     border-radius: 24px;
     box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-    min-width: 340px;
+    min-width: 360px;
     border: none;
     margin: 0 10px;
+}
+
+.calendar-date-header {
+    font-size: 16px;
+    font-weight: 700;
+    color: white;
+    margin-bottom: 14px;
 }
 
 .calendar-wrapper calendar {
@@ -527,6 +534,7 @@ separator {
     border: none;
     border-radius: 12px;
     padding: 4px;
+    margin-bottom: 8px;
 }
 
 .calendar-wrapper calendar header {
@@ -563,10 +571,122 @@ separator {
     font-weight: 600;
 }
 
+.calendar-wrapper calendar .today {
+    outline: 2px solid #3584e4;
+    outline-offset: -2px;
+    border-radius: 50%;
+}
+
 .calendar-wrapper calendar:selected {
     background-color: #3584e4;
     color: white;
-    border-radius: 999px;
+    border-radius: 50%;
+}
+
+/* Task List */
+.calendar-tasks-header {
+    font-size: 14px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 6px;
+}
+
+.calendar-task-row {
+    padding: 6px 8px;
+    border-radius: 10px;
+}
+
+.calendar-task-row:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.calendar-task-done label {
+    text-decoration: line-through;
+    opacity: 0.4;
+}
+
+.calendar-task-label {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.calendar-task-check {
+    margin-right: 2px;
+}
+
+.calendar-add-entry {
+    background-color: rgba(255, 255, 255, 0.06);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 6px 10px;
+    min-height: 0;
+}
+
+.calendar-add-entry:focus {
+    border-color: #3584e4;
+    box-shadow: 0 0 0 2px rgba(53, 132, 228, 0.3);
+}
+
+.calendar-add-btn {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.5);
+    border-radius: 10px;
+    padding: 4px 8px;
+    min-width: 0;
+    min-height: 0;
+}
+
+.calendar-add-btn:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+    color: white;
+}
+
+.calendar-empty {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.35);
+    font-style: italic;
+}
+
+.calendar-error {
+    font-size: 13px;
+    color: #e06c75;
+}
+
+/* Auth Prompt */
+.calendar-auth-info {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.calendar-auth-code {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: 6px;
+    color: #3584e4;
+    background: rgba(53, 132, 228, 0.1);
+    border-radius: 12px;
+    padding: 12px 24px;
+    margin: 4px 0;
+}
+
+.calendar-auth-url {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.calendar-auth-btn {
+    background-color: #3584e4;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 8px 16px;
+    font-weight: 600;
+}
+
+.calendar-auth-btn:hover {
+    background-color: #4a9af5;
 }
 
 /* Notifications (Authentic GNOME Style) */

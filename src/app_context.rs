@@ -1,5 +1,7 @@
 use async_channel::Sender;
 use chrono::{DateTime, Local};
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use crate::services::airplane::{AirplaneCmd, AirplaneData};
 use crate::services::audio::{AudioCmd, AudioData};
@@ -13,6 +15,7 @@ use crate::services::nightlight::{NightlightCmd, NightlightData};
 use crate::services::niri::NiriData;
 use crate::services::notifications::{server::NotificationCmd, Notification, NotificationData};
 use crate::services::power::PowerData;
+use crate::services::tasks::TaskRegistry;
 use crate::services::tray::{TrayCmd, TrayData};
 use crate::store::{ReadOnlyHandle, ServiceHandle};
 
@@ -33,4 +36,5 @@ pub struct AppContext {
     pub power: ReadOnlyHandle<PowerData>,
     pub niri: ReadOnlyHandle<NiriData>,
     pub clock: ReadOnlyHandle<DateTime<Local>>,
+    pub task_registry: Rc<RefCell<TaskRegistry>>,
 }

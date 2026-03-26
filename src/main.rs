@@ -10,6 +10,7 @@ use crate::services::Service;
 use crate::services::audio::AudioService;
 use crate::services::airplane::AirplaneService;
 use crate::services::backlight::BacklightService;
+use crate::services::tasks::TaskRegistry;
 use crate::services::bluetooth::BluetoothService;
 use crate::services::clock::ClockService;
 use crate::services::dnd::DndService;
@@ -196,7 +197,7 @@ fn build_ui(app: &libadwaita::Application, start_locked: bool, wallpaper_path: O
     shell_ctrl.add_popup(ws.clone());
 
     let ctrl_cal = controller.clone();
-    let cal = Rc::new(CalendarPopup::new(app, move || {
+    let cal = Rc::new(CalendarPopup::new(app, ctx.clone(), move || {
         if let Some(c) = ctrl_cal.borrow().as_ref() { c.sync(); }
     }));
     shell_ctrl.add_popup(cal.clone());
@@ -365,6 +366,7 @@ fn setup_services() -> AppContext {
     let (niri_store, _) = NiriService::spawn();
     let (clock_store, _) = ClockService::spawn();
     let (launcher_store, launcher_tx) = LauncherService::spawn();
+    let task_registry = Rc::new(RefCell::new(TaskRegistry::new()));
 
     AppContext {
         airplane: ServiceHandle { store: airplane_store, tx: airplane_tx },
@@ -382,5 +384,6 @@ fn setup_services() -> AppContext {
         power: ReadOnlyHandle { store: power_store },
         niri: ReadOnlyHandle { store: niri_store },
         clock: ReadOnlyHandle { store: clock_store },
+        task_registry,
     }
 }
