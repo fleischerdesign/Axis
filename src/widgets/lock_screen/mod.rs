@@ -135,6 +135,7 @@ impl LockScreen {
             .spacing(12)
             .valign(gtk4::Align::Center)
             .halign(gtk4::Align::Center)
+            .vexpand(true)
             .margin_bottom(60)
             .build();
 
