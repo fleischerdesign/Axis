@@ -622,6 +622,19 @@ levelbar.osd-level-bar block.empty {
     background-color: #0a0a0a;
 }
 
+.lock-overlay {
+    background-color: rgba(0, 0, 0, 0.55);
+}
+
+.lock-content {
+    transition: opacity 0.35s ease-out;
+    opacity: 1;
+}
+
+.lock-content.hidden {
+    opacity: 0;
+}
+
 .lock-avatar {
     opacity: 0.6;
     margin-bottom: 8px;
@@ -667,8 +680,21 @@ levelbar.osd-level-bar block.empty {
     box-shadow: 0 0 0 3px rgba(53, 132, 228, 0.25);
 }
 
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-5px); }
+    40% { transform: translateX(5px); }
+    60% { transform: translateX(-5px); }
+    80% { transform: translateX(5px); }
+}
+
+.lock-pw-entry.shake {
+    animation: shake 0.4s ease-in-out;
+}
+
 .lock-error {
     font-size: 13px;
     color: #e01b24;
     font-weight: 600;
+    transition: opacity 0.2s ease;
 }

@@ -7,33 +7,65 @@ use std::cell::Cell;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+struct SharedState {
+    instance: RefCell<Option<session_lock::Instance>>,
+    locked: Cell<bool>,
+    lock_confirmed: Cell<bool>,
+    pending_unlock: Cell<bool>,
+    password_entry: RefCell<Option<gtk4::PasswordEntry>>,
+    lock_content: RefCell<Option<gtk4::Box>>,
+    clock_running: Cell<bool>,
+}
+
+impl SharedState {
+    fn reset(&self) {
+        self.locked.set(false);
+        self.lock_confirmed.set(false);
+        self.pending_unlock.set(false);
+        *self.password_entry.borrow_mut() = None;
+        *self.lock_content.borrow_mut() = None;
+    }
+
+    fn perform_unlock(&self) {
+        if let Some(inst) = self.instance.borrow().as_ref() {
+            info!("[lock-screen] Unlocking session");
+            inst.unlock();
+            if let Some(display) = gtk4::gdk::Display::default() {
+                display.sync();
+            }
+        }
+        self.clock_running.set(false);
+        self.reset();
+    }
+}
+
 pub struct LockScreen {
-    instance: Rc<RefCell<Option<session_lock::Instance>>>,
-    locked: Rc<Cell<bool>>,
-    lock_confirmed: Rc<Cell<bool>>,
-    pending_unlock: Rc<Cell<bool>>,
-    password_entry: Rc<RefCell<Option<gtk4::PasswordEntry>>>,
+    state: Rc<SharedState>,
+    wallpaper: Option<gtk4::gdk::Texture>,
 }
 
 impl LockScreen {
-    pub fn new() -> Self {
+    pub fn new(wallpaper: Option<gtk4::gdk::Texture>) -> Self {
         Self {
-            instance: Rc::new(RefCell::new(None)),
-            locked: Rc::new(Cell::new(false)),
-            lock_confirmed: Rc::new(Cell::new(false)),
-            pending_unlock: Rc::new(Cell::new(false)),
-            password_entry: Rc::new(RefCell::new(None)),
+            state: Rc::new(SharedState {
+                instance: RefCell::new(None),
+                locked: Cell::new(false),
+                lock_confirmed: Cell::new(false),
+                pending_unlock: Cell::new(false),
+                password_entry: RefCell::new(None),
+                lock_content: RefCell::new(None),
+                clock_running: Cell::new(false),
+            }),
+            wallpaper,
         }
     }
 
     pub fn is_locked(&self) -> bool {
-        self.locked.get()
+        self.state.locked.get()
     }
 
-    /// Trigger the session lock via ext-session-lock-v1 protocol.
-    /// Creates fullscreen lock windows on all connected monitors.
     pub fn lock_session(&self) {
-        if self.locked.get() {
+        if self.state.locked.get() {
             return;
         }
 
@@ -46,41 +78,29 @@ impl LockScreen {
 
         let instance = session_lock::Instance::new();
 
-        // Focus the password entry once the compositor confirms the lock.
-        // If PAM auth already succeeded while waiting, unlock immediately.
-        let entry_for_locked = self.password_entry.clone();
-        let confirmed = self.lock_confirmed.clone();
-        let pending = self.pending_unlock.clone();
-        let inst_ref = self.instance.clone();
-        let locked_for_deferred = self.locked.clone();
-        let confirmed_for_deferred = self.lock_confirmed.clone();
-        let pending_for_deferred = self.pending_unlock.clone();
-        let entry_for_deferred = self.password_entry.clone();
+        let state = self.state.clone();
         instance.connect_locked(move |_| {
             info!("[lock-screen] Session locked by compositor");
-            confirmed.set(true);
-            if let Some(entry) = entry_for_locked.borrow().as_ref() {
+            state.lock_confirmed.set(true);
+
+            // Fade in content
+            if let Some(content) = state.lock_content.borrow().as_ref() {
+                content.remove_css_class("hidden");
+            }
+
+            if let Some(entry) = state.password_entry.borrow().as_ref() {
                 entry.grab_focus();
             }
-            if pending.get() {
+            if state.pending_unlock.get() {
                 info!("[lock-screen] Deferred unlock executing now");
-                if let Some(inst) = inst_ref.borrow().as_ref() {
-                    inst.unlock();
-                    if let Some(display) = gtk4::gdk::Display::default() {
-                        display.sync();
-                    }
-                }
-                locked_for_deferred.set(false);
-                confirmed_for_deferred.set(false);
-                pending_for_deferred.set(false);
-                *entry_for_deferred.borrow_mut() = None;
+                state.perform_unlock();
             }
         });
 
-        let inst_ref = self.instance.clone();
+        let state = self.state.clone();
         instance.connect_failed(move |_| {
             warn!("[lock-screen] Lock failed — another locker holds the lock");
-            *inst_ref.borrow_mut() = None;
+            *state.instance.borrow_mut() = None;
         });
 
         // NOTE: Do NOT connect to "unlocked" signal — it fires DURING unlock()
@@ -92,7 +112,7 @@ impl LockScreen {
             return;
         }
 
-        *self.instance.borrow_mut() = Some(instance);
+        *self.state.instance.borrow_mut() = Some(instance);
 
         let display = gtk4::gdk::Display::default().expect("No display available");
         let monitors = display.monitors();
@@ -103,7 +123,8 @@ impl LockScreen {
             let monitor = monitor.downcast_ref::<gtk4::gdk::Monitor>().unwrap();
 
             let (window, entry) = self.build_lock_window();
-            self.instance
+            self.state
+                .instance
                 .borrow()
                 .as_ref()
                 .unwrap()
@@ -111,25 +132,44 @@ impl LockScreen {
 
             if first_entry.is_none() {
                 first_entry = Some(entry);
-                *self.password_entry.borrow_mut() = first_entry.clone();
+                *self.state.password_entry.borrow_mut() = first_entry.clone();
             }
         }
     }
 
-    fn build_lock_window(&self) -> (gtk4::Window, gtk4::PasswordEntry) {
-        let window = gtk4::Window::builder()
-            .title("Lock Screen")
-            .build();
+    // ── Build helpers ──────────────────────────────────────────────────
 
-        let root = gtk4::Box::builder()
-            .css_classes(vec!["lock-bg".to_string()])
-            .orientation(gtk4::Orientation::Vertical)
+    fn build_background(&self) -> gtk4::Overlay {
+        let overlay = gtk4::Overlay::new();
+
+        if let Some(ref texture) = self.wallpaper {
+            let picture = gtk4::Picture::for_paintable(texture);
+            picture.set_content_fit(gtk4::ContentFit::Cover);
+            picture.set_hexpand(true);
+            picture.set_vexpand(true);
+            overlay.set_child(Some(&picture));
+        } else {
+            let bg = gtk4::Box::builder()
+                .css_classes(vec!["lock-bg".to_string()])
+                .hexpand(true)
+                .vexpand(true)
+                .build();
+            overlay.set_child(Some(&bg));
+        }
+
+        let dark_overlay = gtk4::Box::builder()
+            .css_classes(vec!["lock-overlay".to_string()])
             .hexpand(true)
             .vexpand(true)
-            .valign(gtk4::Align::Fill)
-            .halign(gtk4::Align::Fill)
             .build();
+        overlay.add_overlay(&dark_overlay);
 
+        overlay
+    }
+
+    fn build_content(
+        &self,
+    ) -> (gtk4::Box, gtk4::PasswordEntry, gtk4::Spinner) {
         let content = gtk4::Box::builder()
             .orientation(gtk4::Orientation::Vertical)
             .spacing(12)
@@ -137,6 +177,7 @@ impl LockScreen {
             .halign(gtk4::Align::Center)
             .vexpand(true)
             .margin_bottom(60)
+            .css_classes(vec!["lock-content".to_string(), "hidden".to_string()])
             .build();
 
         let avatar = gtk4::Image::builder()
@@ -182,6 +223,13 @@ impl LockScreen {
             .build();
         pw_box.append(&pw_entry);
 
+        let spinner = gtk4::Spinner::builder()
+            .visible(false)
+            .halign(gtk4::Align::Center)
+            .margin_top(4)
+            .build();
+        pw_box.append(&spinner);
+
         let error_label = gtk4::Label::builder()
             .label("Wrong password")
             .css_classes(vec!["lock-error".to_string()])
@@ -190,83 +238,126 @@ impl LockScreen {
         pw_box.append(&error_label);
 
         content.append(&pw_box);
-        root.append(&content);
 
-        // Clock ticker
-        let clock_c = clock_label;
-        let date_c = date_label;
+        self.start_clock_ticker(&clock_label, &date_label);
+        self.wire_auth(&pw_entry, &spinner, &error_label);
+
+        (content, pw_entry, spinner)
+    }
+
+    fn build_lock_window(&self) -> (gtk4::Window, gtk4::PasswordEntry) {
+        let window = gtk4::Window::builder()
+            .title("Lock Screen")
+            .build();
+
+        let overlay = self.build_background();
+        let (content, entry, _spinner) = self.build_content();
+        *self.state.lock_content.borrow_mut() = Some(content.clone());
+        overlay.add_overlay(&content);
+
+        window.set_child(Some(&overlay));
+        (window, entry)
+    }
+
+    // ── Clock ticker ───────────────────────────────────────────────────
+
+    fn start_clock_ticker(&self, clock: &gtk4::Label, date: &gtk4::Label) {
+        let running = self.state.clock_running.clone();
+        running.set(true);
+
+        let clock_c = clock.clone();
+        let date_c = date.clone();
         glib::spawn_future_local(async move {
             loop {
                 glib::timeout_future_seconds(1).await;
+                if !running.get() {
+                    break;
+                }
                 clock_c.set_label(&Self::format_clock());
                 date_c.set_label(&Self::format_date());
             }
         });
+    }
 
-        // PAM authentication on submit
-        let inst_ref = self.instance.clone();
-        let confirmed = self.lock_confirmed.clone();
-        let pending = self.pending_unlock.clone();
-        let locked_for_reset = self.locked.clone();
-        let confirmed_for_reset = self.lock_confirmed.clone();
-        let pending_for_reset = self.pending_unlock.clone();
-        let entry_for_reset = self.password_entry.clone();
-        let pw_entry_for_closure = pw_entry.clone();
+    // ── Auth wiring ────────────────────────────────────────────────────
+
+    fn wire_auth(
+        &self,
+        pw_entry: &gtk4::PasswordEntry,
+        spinner: &gtk4::Spinner,
+        error_label: &gtk4::Label,
+    ) {
+        let state = self.state.clone();
+        let spinner = spinner.clone();
+        let error_label = error_label.clone();
+        let pw_entry_ref = pw_entry.clone();
+
         pw_entry.connect_activate(move |entry| {
             let password = entry.text().to_string();
             entry.set_sensitive(false);
             error_label.set_visible(false);
+
+            spinner.start();
+            spinner.set_visible(true);
 
             let (result_tx, result_rx) = std::sync::mpsc::channel::<bool>();
             std::thread::spawn(move || {
                 let _ = result_tx.send(Self::pam_authenticate(&password));
             });
 
-            let inst = inst_ref.clone();
-            let conf = confirmed.clone();
-            let pend = pending.clone();
+            let state = state.clone();
+            let spinner = spinner.clone();
             let err_label = error_label.clone();
-            let pw_entry_ref = pw_entry_for_closure.clone();
-            let locked_r = locked_for_reset.clone();
-            let confirmed_r = confirmed_for_reset.clone();
-            let pending_r = pending_for_reset.clone();
-            let entry_r = entry_for_reset.clone();
+            let pw_ref = pw_entry_ref.clone();
 
             glib::timeout_add_local(std::time::Duration::from_millis(50), move || {
                 if let Ok(success) = result_rx.try_recv() {
+                    spinner.stop();
+                    spinner.set_visible(false);
+
                     if success {
-                        if conf.get() {
-                            if let Some(instance) = inst.borrow().as_ref() {
-                                info!("[lock-screen] Auth success, unlocking");
-                                instance.unlock();
-                                if let Some(display) = gtk4::gdk::Display::default() {
-                                    display.sync();
-                                }
-                            }
-                            locked_r.set(false);
-                            confirmed_r.set(false);
-                            pending_r.set(false);
-                            *entry_r.borrow_mut() = None;
+                        if state.lock_confirmed.get() {
+                            state.perform_unlock();
                         } else {
                             info!("[lock-screen] Auth success, deferring unlock");
-                            pend.set(true);
+                            state.pending_unlock.set(true);
                         }
                     } else {
                         warn!("[lock-screen] Auth failed");
                         err_label.set_visible(true);
-                        pw_entry_ref.set_text("");
-                        pw_entry_ref.set_sensitive(true);
-                        pw_entry_ref.grab_focus();
+                        pw_ref.set_text("");
+                        pw_ref.set_sensitive(true);
+                        pw_ref.grab_focus();
+
+                        // Shake animation
+                        let entry_ref = pw_ref.clone();
+                        entry_ref.add_css_class("shake");
+                        glib::timeout_add_local(
+                            std::time::Duration::from_millis(400),
+                            move || {
+                                entry_ref.remove_css_class("shake");
+                                glib::ControlFlow::Break
+                            },
+                        );
+
+                        // Auto-hide error after 3s
+                        let err_hide = err_label.clone();
+                        glib::timeout_add_local(
+                            std::time::Duration::from_secs(3),
+                            move || {
+                                err_hide.set_visible(false);
+                                glib::ControlFlow::Break
+                            },
+                        );
                     }
                     return glib::ControlFlow::Break;
                 }
                 glib::ControlFlow::Continue
             });
         });
-
-        window.set_child(Some(&root));
-        (window, pw_entry)
     }
+
+    // ── PAM ────────────────────────────────────────────────────────────
 
     fn pam_authenticate(password: &str) -> bool {
         let username = Self::current_user();
@@ -291,6 +382,8 @@ impl LockScreen {
             }
         }
     }
+
+    // ── Helpers ────────────────────────────────────────────────────────
 
     fn current_user() -> String {
         std::env::var("USER")

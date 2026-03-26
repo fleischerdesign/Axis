@@ -9,6 +9,7 @@ pub mod lock_screen;
 pub mod notification;
 pub mod osd;
 pub mod quick_settings;
+pub mod wallpaper;
 mod workspace_popup;
 
 pub use bar::Bar;

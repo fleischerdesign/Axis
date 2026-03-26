@@ -54,24 +54,42 @@ fn main() {
 
     log::info!("AXIS Shell starting");
 
-    // Check for --locked flag before GTK processes args
+    // Check for AXIS-specific flags before GTK processes args
     let start_locked = std::env::args().any(|a| a == "--locked");
+    let args_vec: Vec<String> = std::env::args().collect();
+    let wallpaper_path = args_vec
+        .windows(2)
+        .find(|w| w[0] == "--wallpaper")
+        .map(|w| w[1].clone());
 
     let application = libadwaita::Application::builder()
         .application_id("com.github.axis.shell")
         .build();
 
-    application.connect_activate(move |app| build_ui(app, start_locked));
+    application.connect_activate(move |app| build_ui(app, start_locked, wallpaper_path.clone()));
 
     // Filter out AXIS-specific flags before passing to GTK
+    let skip_next = std::cell::Cell::new(false);
     let args: Vec<String> = std::env::args()
-        .filter(|a| a != "--locked")
+        .filter(|a| {
+            if skip_next.take() {
+                return false;
+            }
+            if a == "--locked" {
+                return false;
+            }
+            if a == "--wallpaper" {
+                skip_next.set(true);
+                return false;
+            }
+            true
+        })
         .collect();
     let args_ref: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
     application.run_with_args(&args_ref);
 }
 
-fn build_ui(app: &libadwaita::Application, start_locked: bool) {
+fn build_ui(app: &libadwaita::Application, start_locked: bool, wallpaper_path: Option<String>) {
     let provider = gtk4::CssProvider::new();
     provider.load_from_string(include_str!("style.css"));
     if let Some(display) = gtk4::gdk::Display::default() {
@@ -118,8 +136,13 @@ fn build_ui(app: &libadwaita::Application, start_locked: bool) {
     let bar_popup_state = bar.popup_open.clone();
     let bar_ref = bar.clone();
 
+    // Wallpaper
+    let lockscreen_texture = wallpaper_path
+        .as_ref()
+        .and_then(|p| crate::widgets::wallpaper::WallpaperService::show(app, p));
+
     // Lock Screen
-    let lock_screen = Rc::new(LockScreen::new());
+    let lock_screen = Rc::new(LockScreen::new(lockscreen_texture));
     setup_lock_triggers(&lock_screen);
 
     // Controller braucht RefCell für Callbacks
