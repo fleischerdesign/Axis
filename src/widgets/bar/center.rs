@@ -6,25 +6,36 @@ use gtk4::prelude::*;
 pub struct BarCenter {
     pub container: gtk4::Box,
     pub ws_container: gtk4::Box,
+    pub ws_island: gtk4::Box,
+    pub clock_island: gtk4::Box,
 }
 
 impl BarCenter {
     pub fn new(ctx: AppContext) -> Self {
-        let island = Island::new(12);
-        island.container.set_cursor_from_name(Some("pointer"));
+        // --- Workspace Island ---
+        let ws_island = Island::new(6);
+        ws_island.container.set_cursor_from_name(Some("pointer"));
 
         let ws_container = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
         ws_container.add_css_class("workspace-dots");
+        ws_island.append(&ws_container);
 
         let ws_container_clone = ws_container.clone();
         let ws_container_for_ui = ws_container.clone();
 
+        // --- Clock Island ---
+        let clock_island = Island::new(12);
+        clock_island.container.set_cursor_from_name(Some("pointer"));
+
         let clock_label = gtk4::Label::new(None);
         clock_label.add_css_class("clock-label");
+        clock_island.append(&clock_label);
 
-        island.append(&ws_container);
-        island.append(&gtk4::Separator::new(gtk4::Orientation::Vertical));
-        island.append(&clock_label);
+        // --- Wrapper (keine .island class) ---
+        let wrapper = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+        wrapper.set_halign(gtk4::Align::Center);
+        wrapper.append(&ws_island.container);
+        wrapper.append(&clock_island.container);
 
         // Subscriptions
         ctx.clock.subscribe(move |time| {
@@ -36,8 +47,10 @@ impl BarCenter {
         });
 
         Self {
-            container: island.container,
+            container: wrapper,
             ws_container: ws_container_for_ui,
+            ws_island: ws_island.container,
+            clock_island: clock_island.container,
         }
     }
 
@@ -58,7 +71,6 @@ impl BarCenter {
         let mut child = container.first_child();
         for ws in workspaces.iter() {
             if let Some(dot) = child {
-                // Update existing dot
                 if ws.is_active {
                     dot.add_css_class("active");
                 } else {
@@ -66,7 +78,6 @@ impl BarCenter {
                 }
                 child = dot.next_sibling();
             } else {
-                // Create new dot
                 let dot = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
                 dot.add_css_class("ws-dot");
                 dot.set_hexpand(false);

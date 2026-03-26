@@ -23,7 +23,7 @@ use crate::services::launcher::LauncherService;
 use crate::services::ipc::IpcService;
 use crate::services::notifications::NotificationService;
 use crate::store::{ReadOnlyHandle, ServiceHandle};
-use crate::widgets::{Bar, QuickSettingsPopup, WorkspacePopup, LauncherPopup, NotificationToastManager, osd::OsdManager};
+use crate::widgets::{Bar, QuickSettingsPopup, WorkspacePopup, LauncherPopup, CalendarPopup, NotificationToastManager, osd::OsdManager};
 use crate::widgets::lock_screen::LockScreen;
 use crate::shell::ShellController;
 use gtk4::prelude::*;
@@ -195,6 +195,12 @@ fn build_ui(app: &libadwaita::Application, start_locked: bool, wallpaper_path: O
     }));
     shell_ctrl.add_popup(ws.clone());
 
+    let ctrl_cal = controller.clone();
+    let cal = Rc::new(CalendarPopup::new(app, move || {
+        if let Some(c) = ctrl_cal.borrow().as_ref() { c.sync(); }
+    }));
+    shell_ctrl.add_popup(cal.clone());
+
     let shell_ctrl = Rc::new(shell_ctrl);
     *controller.borrow_mut() = Some(shell_ctrl.clone());
 
@@ -218,7 +224,8 @@ fn build_ui(app: &libadwaita::Application, start_locked: bool, wallpaper_path: O
     // --- CLICK HANDLER ---
     setup_click_handler(&bar.launcher_island, shell_ctrl.clone(), "launcher");
     setup_click_handler(&bar.status_island, shell_ctrl.clone(), "qs");
-    setup_click_handler(&bar.center_island, shell_ctrl.clone(), "ws");
+    setup_click_handler(&bar.ws_island, shell_ctrl.clone(), "ws");
+    setup_click_handler(&bar.clock_island, shell_ctrl.clone(), "calendar");
 
     log::info!("UI ready, presenting window");
     bar.window.present();
