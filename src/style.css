@@ -584,11 +584,29 @@ separator {
 }
 
 /* Task List */
+.calendar-tasks-header-row {
+    margin-bottom: 6px;
+}
+
 .calendar-tasks-header {
     font-size: 14px;
     font-weight: 700;
     color: rgba(255, 255, 255, 0.7);
-    margin-bottom: 6px;
+}
+
+.calendar-list-dropdown {
+    min-height: 0;
+    padding: 0;
+    background: none;
+    border: none;
+    box-shadow: none;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.calendar-list-dropdown:hover {
+    color: white;
 }
 
 .calendar-task-row {
@@ -612,6 +630,28 @@ separator {
 
 .calendar-task-check {
     margin-right: 2px;
+}
+
+.calendar-task-delete {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    padding: 4px;
+    min-width: 0;
+    min-height: 0;
+    margin-left: 4px;
+    opacity: 0;
+    transition: all 0.2s ease;
+}
+
+.calendar-task-row:hover .calendar-task-delete {
+    opacity: 1;
+}
+
+.calendar-task-delete:hover {
+    background-color: rgba(224, 108, 117, 0.2);
+    color: #e06c75;
 }
 
 .calendar-add-entry {

@@ -180,6 +180,11 @@ impl GoogleTasksProvider {
         let token = self.ensure_access_token()?;
         api_patch(&self.http_client, url, &token, body)
     }
+
+    fn api_delete(&mut self, url: &str) -> Result<(), String> {
+        let token = self.ensure_access_token()?;
+        super::utils::api_delete(&self.http_client, url, &token)
+    }
 }
 
 // ── TaskProvider Implementation ───────────────────────────────────────
@@ -326,6 +331,18 @@ impl TaskProvider for GoogleTasksProvider {
         let _: serde_json::Value = self.api_patch(&url, &PatchBody { status: status.to_string() })?;
 
         info!("[google-tasks] Toggled {} -> {}", task_id, done);
+        Ok(())
+    }
+
+    fn delete_task(&mut self, list_id: &str, task_id: &str) -> Result<(), String> {
+        let url = format!(
+            "https://tasks.googleapis.com/tasks/v1/lists/{}/tasks/{}",
+            list_id, task_id
+        );
+
+        self.api_delete(&url)?;
+
+        info!("[google-tasks] Deleted: {}", task_id);
         Ok(())
     }
 }

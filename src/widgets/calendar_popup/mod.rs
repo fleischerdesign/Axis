@@ -14,6 +14,7 @@ use std::sync::mpsc;
 pub struct CalendarPopup {
     base: PopupBase,
     task_list: gtk4::Box,
+    list_selector: gtk4::Box,
     auth_box: gtk4::Box,
     add_entry: gtk4::Entry,
     spinner: gtk4::Spinner,
@@ -35,6 +36,7 @@ impl PopupExt for CalendarPopup {
     fn on_open(&self) {
         task_section::render_tasks(
             &self.task_list,
+            &self.list_selector,
             &self.ctx,
             &self.spinner,
             &self.auth_box,
@@ -51,6 +53,7 @@ impl PopupExt for CalendarPopup {
         let rx = self.refresh_rx.borrow_mut().take()
             .expect("refresh_rx already taken");
         let tl = self.task_list.clone();
+        let ls = self.list_selector.clone();
         let ctx = self.ctx.clone();
         let sp = self.spinner.clone();
         let ab = self.auth_box.clone();
@@ -61,7 +64,7 @@ impl PopupExt for CalendarPopup {
             std::time::Duration::from_millis(300),
             move || {
                 if rx.try_recv().is_ok() && base_is_open.get() {
-                    task_section::render_tasks(&tl, &ctx, &sp, &ab, &tx);
+                    task_section::render_tasks(&tl, &ls, &ctx, &sp, &ab, &tx);
                 }
                 gtk4::glib::ControlFlow::Continue
             },
@@ -115,12 +118,12 @@ impl CalendarPopup {
             .margin_top(4)
             .build();
 
-        let tasks_header = gtk4::Label::builder()
-            .label("Aufgaben")
-            .css_classes(vec!["calendar-tasks-header".to_string()])
-            .halign(gtk4::Align::Start)
+        let list_selector = gtk4::Box::builder()
+            .orientation(gtk4::Orientation::Horizontal)
+            .spacing(10)
+            .css_classes(vec!["calendar-tasks-header-row".to_string()])
             .build();
-        tasks_box.append(&tasks_header);
+        tasks_box.append(&list_selector);
 
         let task_list = gtk4::Box::builder()
             .orientation(gtk4::Orientation::Vertical)
@@ -175,6 +178,7 @@ impl CalendarPopup {
         Self {
             base,
             task_list,
+            list_selector,
             auth_box,
             add_entry,
             spinner,
@@ -201,6 +205,7 @@ impl CalendarPopup {
     fn wire_add_task(&self) {
         let ctx_c = self.ctx.clone();
         let task_list_c = self.task_list.clone();
+        let list_selector_c = self.list_selector.clone();
         let spinner_c = self.spinner.clone();
         let auth_box_c = self.auth_box.clone();
         let tx_c = self.refresh_tx.clone();
@@ -222,7 +227,7 @@ impl CalendarPopup {
                     let mut registry = ctx_c.task_registry.lock().unwrap();
                     registry.optimistic_add_task(&title);
                 }
-                task_section::render_tasks(&task_list_c, &ctx_c, &spinner_c, &auth_box_c, &tx_c);
+                task_section::render_tasks(&task_list_c, &list_selector_c, &ctx_c, &spinner_c, &auth_box_c, &tx_c);
 
                 let reg = ctx_c.task_registry.clone();
                 let title_c = title.clone();
@@ -237,7 +242,7 @@ impl CalendarPopup {
                     let mut registry = ctx_c.task_registry.lock().unwrap();
                     registry.optimistic_add_task(&title);
                 }
-                task_section::render_tasks(&task_list_c, &ctx_c, &spinner_c, &auth_box_c, &tx_c);
+                task_section::render_tasks(&task_list_c, &list_selector_c, &ctx_c, &spinner_c, &auth_box_c, &tx_c);
             }
         });
     }

@@ -97,4 +97,18 @@ impl TaskProvider for LocalTodoProvider {
             Err("Task not found".to_string())
         }
     }
+
+    fn delete_task(&mut self, _list_id: &str, task_id: &str) -> Result<(), String> {
+        let id: u64 = task_id.parse().map_err(|_| "Invalid task ID")?;
+        let len_before = self.storage.tasks.len();
+        self.storage.tasks.retain(|t| t.id != id);
+
+        if self.storage.tasks.len() < len_before {
+            self.save();
+            info!("[local-tasks] Deleted: {}", task_id);
+            Ok(())
+        } else {
+            Err("Task not found".to_string())
+        }
+    }
 }

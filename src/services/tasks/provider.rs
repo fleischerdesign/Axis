@@ -58,4 +58,5 @@ pub trait TaskProvider: Send + Sync {
     fn tasks(&mut self, list_id: &str) -> Result<Vec<Task>, String>;
     fn add_task(&mut self, list_id: &str, title: &str) -> Result<Task, String>;
     fn toggle_task(&mut self, list_id: &str, task_id: &str, done: bool) -> Result<(), String>;
-}
+    fn delete_task(&mut self, list_id: &str, task_id: &str) -> Result<(), String>;
+    }

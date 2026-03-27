@@ -76,6 +76,26 @@ pub fn api_patch<T: DeserializeOwned>(
     api_request(client, reqwest::Method::PATCH, url, token, Some(body))
 }
 
+pub fn api_delete(
+    client: &reqwest::blocking::Client,
+    url: &str,
+    token: &str,
+) -> Result<(), String> {
+    let resp = client
+        .delete(url)
+        .bearer_auth(token)
+        .send()
+        .map_err(|e| format!("API request failed: {e}"))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().unwrap_or_default();
+        return Err(format!("API error {status}: {text}"));
+    }
+
+    Ok(())
+}
+
 fn api_request<T: DeserializeOwned, B: Serialize>(
     client: &reqwest::blocking::Client,
     method: reqwest::Method,
