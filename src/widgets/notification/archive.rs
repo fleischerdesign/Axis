@@ -1,9 +1,8 @@
 use crate::app_context::AppContext;
-use crate::constants::REVEALER_TRANSITION_MS;
 use crate::widgets::components::revealer_handle;
 use crate::widgets::notification::NotificationCard;
 use gtk4::prelude::*;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::Duration;
@@ -13,6 +12,7 @@ pub struct NotificationArchiveManager {
     list_box: gtk4::Box,
     hide_timeout: Rc<RefCell<Option<gtk4::glib::SourceId>>>,
     active_items: Rc<RefCell<HashMap<u32, gtk4::Revealer>>>,
+    popup_open: Rc<Cell<bool>>,
     ctx: AppContext,
 }
 
@@ -26,11 +26,14 @@ impl NotificationArchiveManager {
         list_box.set_width_request(380);
         container.set_child(Some(&list_box));
 
+        let popup_open = Rc::new(Cell::new(false));
+
         let manager = Rc::new(Self {
             container,
             list_box,
             hide_timeout: Rc::new(RefCell::new(None)),
             active_items: Rc::new(RefCell::new(HashMap::new())),
+            popup_open: popup_open.clone(),
             ctx: ctx.clone(),
         });
 
@@ -42,10 +45,11 @@ impl NotificationArchiveManager {
         manager
     }
 
-    pub fn set_visible(&self, visible: bool) {
-        if visible {
+    pub fn set_popup_open(&self, open: bool) {
+        self.popup_open.set(open);
+        if open && !self.active_items.borrow().is_empty() {
             self.show_archive();
-        } else {
+        } else if !open {
             self.hide_archive();
         }
     }
@@ -107,7 +111,8 @@ impl NotificationArchiveManager {
             }
         }
 
-        if !active_items.is_empty() && !self.container.reveals_child() {
+        // Auto-show archive if popup is open and we have items
+        if self.popup_open.get() && !active_items.is_empty() && !self.container.reveals_child() {
             self.container.set_reveal_child(true);
         }
     }

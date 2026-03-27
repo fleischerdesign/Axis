@@ -110,11 +110,11 @@ fn build_ui(app: &libadwaita::Application, start_locked: bool, wallpaper_path: O
     // Bluetooth pairing — reactive via store subscription (no polling)
     {
         let ctx_bt = ctx.clone();
-        let last_notified = std::cell::Cell::new(false);
+        let last_notified: std::cell::RefCell<String> = std::cell::RefCell::new(String::new());
         ctx.bluetooth.subscribe(move |data| {
             match &data.pairing_request {
-                Some(req) if !last_notified.get() => {
-                    last_notified.set(true);
+                Some(req) if *last_notified.borrow() != req.device_name => {
+                    *last_notified.borrow_mut() = req.device_name.clone();
                     crate::widgets::quick_settings::bluetooth_pair_dialog::send_pairing_notification(
                         req,
                         ctx_bt.bluetooth.tx.clone(),
@@ -122,7 +122,7 @@ fn build_ui(app: &libadwaita::Application, start_locked: bool, wallpaper_path: O
                     );
                 }
                 None => {
-                    last_notified.set(false);
+                    last_notified.borrow_mut().clear();
                 }
                 _ => {}
             }
@@ -168,11 +168,9 @@ fn build_ui(app: &libadwaita::Application, start_locked: bool, wallpaper_path: O
     // --- ARCHIVE (über dem QS Popup) ---
     let notification_archive = crate::widgets::notification::archive::NotificationArchiveManager::new(ctx.clone());
     qs.archive_box.append(&notification_archive.container);
-    let archive_cb = notification_archive.clone();
-    let shell_ctrl_for_archive = shell_ctrl.clone();
-    qs.base.is_open.subscribe(move |_is_open| {
-        let is_qs = shell_ctrl_for_archive.active_id() == Some("qs".to_string());
-        archive_cb.set_visible(is_qs);
+    let archive_mgr = notification_archive.clone();
+    qs.base.is_open.subscribe(move |is_open| {
+        archive_mgr.set_popup_open(is_open);
     });
 
     let launcher = Rc::new(LauncherPopup::new(app, ctx.clone()));
