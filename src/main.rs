@@ -107,32 +107,27 @@ fn build_ui(app: &libadwaita::Application, start_locked: bool, wallpaper_path: O
 
     let ctx = setup_services();
 
-    // Bluetooth pairing via notification system
-    let ctx_bt = ctx.clone();
-    gtk4::glib::timeout_add_local(std::time::Duration::from_millis(250), move || {
-        let state = crate::services::bluetooth::get_pairing_ui_state();
-
-        // Close stale notification
-        if state.should_close_notif && state.notif_id > 0 {
-            let _ = ctx_bt.notifications.tx.try_send(
-                crate::services::notifications::server::NotificationCmd::Close(state.notif_id)
-            );
-            crate::services::bluetooth::set_pairing_notification_id(0);
-        }
-
-        // Show new notification
-        if let Some(ref req) = state.request {
-            if state.notif_id == 0 {
-                crate::widgets::quick_settings::bluetooth_pair_dialog::send_pairing_notification(
-                    req,
-                    ctx_bt.bluetooth.tx.clone(),
-                    &ctx_bt.notifications.tx,
-                );
+    // Bluetooth pairing — reactive via store subscription (no polling)
+    {
+        let ctx_bt = ctx.clone();
+        let last_notified = std::cell::Cell::new(false);
+        ctx.bluetooth.subscribe(move |data| {
+            match &data.pairing_request {
+                Some(req) if !last_notified.get() => {
+                    last_notified.set(true);
+                    crate::widgets::quick_settings::bluetooth_pair_dialog::send_pairing_notification(
+                        req,
+                        ctx_bt.bluetooth.tx.clone(),
+                        &ctx_bt.notifications.tx,
+                    );
+                }
+                None => {
+                    last_notified.set(false);
+                }
+                _ => {}
             }
-        }
-
-        gtk4::glib::ControlFlow::Continue
-    });
+        });
+    }
 
     // --- WIDGETS & CONTROLLER ---
     let bar = Bar::new(app, ctx.clone());

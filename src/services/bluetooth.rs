@@ -3,8 +3,6 @@ use zbus::{Connection, interface, proxy, zvariant::{OwnedObjectPath, OwnedValue}
 use async_channel::{Sender, bounded, Receiver};
 use tokio::sync::oneshot;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, SystemTime};
 use super::Service;
 use crate::store::ServiceStore;
@@ -102,6 +100,7 @@ pub struct BluetoothDeviceData {
 pub struct BluetoothData {
     pub is_powered: bool,
     pub devices: Vec<BluetoothDeviceData>,
+    pub pairing_request: Option<PairingRequest>,
 }
 
 pub enum BluetoothCmd {
@@ -182,36 +181,6 @@ fn spawn_device_property_forwarder(
     });
 
     prop_rx
-}
-
-// ─── Global Pairing State (bypasses async_channel for instant GTK delivery) ─
-
-static PAIRING_STATE: std::sync::LazyLock<Arc<Mutex<Option<PairingRequest>>>> =
-    std::sync::LazyLock::new(|| Arc::new(Mutex::new(None)));
-static PAIRING_NOTIF_ID: AtomicU32 = AtomicU32::new(0);
-
-pub struct PairingUiState {
-    pub request: Option<PairingRequest>,
-    pub should_close_notif: bool,
-    pub notif_id: u32,
-}
-
-pub fn get_pairing_ui_state() -> PairingUiState {
-    let request = PAIRING_STATE.lock().unwrap().clone();
-    let notif_id = PAIRING_NOTIF_ID.load(Ordering::SeqCst);
-    PairingUiState {
-        should_close_notif: request.is_none() && notif_id > 0,
-        notif_id,
-        request,
-    }
-}
-
-pub fn set_pairing_notification_id(id: u32) {
-    PAIRING_NOTIF_ID.store(id, Ordering::SeqCst);
-}
-
-fn set_pairing_request(req: Option<PairingRequest>) {
-    *PAIRING_STATE.lock().unwrap() = req;
 }
 
 // ─── BlueZ Agent ────────────────────────────────────────────────────────────
@@ -435,14 +404,16 @@ impl Service for BluetoothService {
                                     let _ = tx.send(AgentResponse::Accept(String::new()));
                                     info!("[bluetooth] Pairing accepted");
                                 }
-                                set_pairing_request(None);
+                                current_data.pairing_request = None;
+                                let _ = data_tx.send(current_data.clone()).await;
                             }
                             BluetoothCmd::PairReject => {
                                 if let Some(tx) = pair_resolve.take() {
                                     let _ = tx.send(AgentResponse::Reject);
                                     info!("[bluetooth] Pairing rejected");
                                 }
-                                set_pairing_request(None);
+                                current_data.pairing_request = None;
+                                let _ = data_tx.send(current_data.clone()).await;
                             }
                             BluetoothCmd::TogglePower(on) => {
                                 info!("[bluetooth] Power toggled: {}", if on { "on" } else { "off" });
@@ -497,13 +468,15 @@ impl Service for BluetoothService {
                     Some((req, resp_tx)) = pair_rx.next() => {
                         pair_resolve = Some(resp_tx);
                         pair_timeout = Box::pin(tokio::time::sleep(Duration::from_secs(30)));
-                        set_pairing_request(Some(req));
+                        current_data.pairing_request = Some(req);
+                        let _ = data_tx.send(current_data.clone()).await;
                     }
                     // Pairing timeout
                     _ = &mut pair_timeout => {
                         if let Some(tx) = pair_resolve.take() {
                             let _ = tx.send(AgentResponse::Reject);
-                            set_pairing_request(None);
+                            current_data.pairing_request = None;
+                            let _ = data_tx.send(current_data.clone()).await;
                         }
                         pair_timeout = Box::pin(tokio::time::sleep(Duration::MAX));
                     }
@@ -680,6 +653,7 @@ impl BluetoothService {
         BluetoothData {
             is_powered,
             devices,
+            pairing_request: old_data.pairing_request.clone(),
         }
     }
 }
