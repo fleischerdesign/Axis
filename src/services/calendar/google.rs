@@ -1,0 +1,132 @@
+use super::provider::{AuthStatus, CalendarEvent, CalendarProvider};
+use crate::services::google::{GoogleAuthRegistry, DEFAULT_SCOPES};
+use crate::services::tasks::utils::{api_get, build_http_client};
+use serde::Deserialize;
+
+const CALENDAR_SCOPE: &[&str] = &["https://www.googleapis.com/auth/calendar.events.readonly"];
+
+pub struct GoogleCalendarProvider {
+    http_client: reqwest::blocking::Client,
+}
+
+impl GoogleCalendarProvider {
+    pub fn new() -> Self {
+        Self {
+            http_client: build_http_client(),
+        }
+    }
+}
+
+impl Default for GoogleCalendarProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl CalendarProvider for GoogleCalendarProvider {
+    fn name(&self) -> &str {
+        "Google Calendar"
+    }
+
+    fn icon(&self) -> &str {
+        "calendar-symbolic"
+    }
+
+    fn is_async(&self) -> bool {
+        true
+    }
+
+    fn auth_status(&mut self) -> AuthStatus {
+        match GoogleAuthRegistry::load() {
+            Ok(reg) if reg.is_authenticated() => AuthStatus::Authenticated,
+            _ => AuthStatus::NeedsAuth { url: String::new() },
+        }
+    }
+
+    fn authenticate(&mut self) -> Result<AuthStatus, String> {
+        GoogleAuthRegistry::authenticate(DEFAULT_SCOPES, |result| {
+            match result {
+                Ok(()) => log::info!("[calendar] Auth successful"),
+                Err(e) => log::warn!("[calendar] Auth failed: {}", e),
+            }
+        });
+        Ok(AuthStatus::Authenticated)
+    }
+
+    fn is_authenticated(&self) -> bool {
+        GoogleAuthRegistry::load()
+            .map(|r| r.is_authenticated())
+            .unwrap_or(false)
+    }
+
+    fn events(&mut self, start: &str, end: &str) -> Result<Vec<CalendarEvent>, String> {
+        let mut reg = GoogleAuthRegistry::load()?;
+        let token = reg.ensure_token(CALENDAR_SCOPE)?;
+
+        let url = format!(
+            "https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin={}&timeMax={}&singleEvents=true&orderBy=startTime",
+            start, end
+        );
+
+        #[derive(Deserialize)]
+        struct Response {
+            items: Option<Vec<Item>>,
+        }
+
+        #[derive(Deserialize)]
+        struct Item {
+            id: String,
+            summary: Option<String>,
+            start: Option<StartEnd>,
+            end: Option<StartEnd>,
+            location: Option<String>,
+            #[serde(rename = "colorId")]
+            color_id: Option<String>,
+        }
+
+        #[derive(Deserialize)]
+        struct StartEnd {
+            #[serde(rename = "dateTime")]
+            date_time: Option<String>,
+            date: Option<String>,
+        }
+
+        let resp: Response = api_get(&self.http_client, &url, &token)?;
+
+        let events = resp
+            .items
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|item| {
+                let summary = item.summary?;
+                if summary.is_empty() {
+                    return None;
+                }
+
+                let (start_str, all_day) = if let Some(dt) = item.start.as_ref().and_then(|s| s.date_time.clone()) {
+                    (dt, false)
+                } else if let Some(date) = item.start.as_ref().and_then(|s| s.date.clone()) {
+                    (date, true)
+                } else {
+                    return None;
+                };
+
+                let end_str = item.end.as_ref().and_then(|e| {
+                    e.date_time.clone().or(e.date.clone())
+                }).unwrap_or_default();
+
+                Some(CalendarEvent {
+                    id: item.id,
+                    summary,
+                    start: start_str,
+                    end: end_str,
+                    all_day,
+                    location: item.location,
+                    color_id: item.color_id,
+                })
+            })
+            .collect();
+
+        Ok(events)
+    }
+}

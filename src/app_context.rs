@@ -5,6 +5,7 @@ use crate::services::airplane::{AirplaneCmd, AirplaneData};
 use crate::services::audio::{AudioCmd, AudioData};
 use crate::services::backlight::{BacklightCmd, BacklightData};
 use crate::services::bluetooth::{BluetoothCmd, BluetoothData};
+use crate::services::calendar::CalendarRegistry;
 use crate::services::dnd::{DndCmd, DndData};
 use crate::services::kdeconnect::{KdeConnectCmd, KdeConnectData};
 use crate::services::launcher::{LauncherCmd, LauncherData};
@@ -45,4 +46,5 @@ pub struct AppContext {
     pub niri: ReadOnlyHandle<NiriData>,
     pub clock: ReadOnlyHandle<DateTime<Local>>,
     pub task_registry: Arc<Mutex<TaskRegistry>>,
+    pub calendar_registry: Arc<Mutex<CalendarRegistry>>,
 }

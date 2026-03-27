@@ -26,3 +26,5 @@ pub mod tray;
 pub mod kdeconnect;
 pub mod airplane;
 pub mod tasks;
+pub mod google;
+pub mod calendar;

@@ -20,15 +20,9 @@ impl TaskRegistry {
         // Local provider (always available)
         providers.push(Box::new(local::LocalTodoProvider::new()));
 
-        // Google (only if credentials exist)
-        let mut active = 0;
-        match google::GoogleTasksProvider::load() {
-            Ok(google) => {
-                providers.push(Box::new(google));
-                active = 1; // Default to Google Tasks
-            }
-            Err(e) => log::info!("[tasks] Google provider unavailable: {e}"),
-        }
+        // Google (always available - will check auth at runtime)
+        providers.push(Box::new(google::GoogleTasksProvider::new()));
+        let active = 1;
 
         Self {
             providers,

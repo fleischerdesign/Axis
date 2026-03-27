@@ -1,4 +1,5 @@
 mod auth_flow;
+mod calendar_section;
 mod date;
 mod task_section;
 
@@ -18,6 +19,9 @@ pub struct CalendarPopup {
     auth_box: gtk4::Box,
     add_entry: gtk4::Entry,
     spinner: gtk4::Spinner,
+    calendar_list: gtk4::Box,
+    calendar_range_toggle: gtk4::Box,
+    calendar_auth_box: gtk4::Box,
     ctx: AppContext,
     refresh_tx: mpsc::Sender<()>,
     refresh_rx: Rc<RefCell<Option<mpsc::Receiver<()>>>>,
@@ -43,9 +47,19 @@ impl PopupExt for CalendarPopup {
             &self.refresh_tx,
         );
 
+        calendar_section::render_calendar(
+            &self.calendar_list,
+            &self.calendar_range_toggle,
+            &self.ctx,
+            &self.spinner,
+            &self.calendar_auth_box,
+            &self.refresh_tx,
+        );
+
         // Start refresh timer once (survives popup close/open cycles)
         if self.refresh_source.borrow().is_some() {
             self.trigger_background_refresh();
+            self.trigger_calendar_refresh();
             return;
         }
 
@@ -60,11 +74,15 @@ impl PopupExt for CalendarPopup {
         let tx = self.refresh_tx.clone();
         let source = self.refresh_source.clone();
         let base_is_open = self.base.is_open.clone();
+        let cl = self.calendar_list.clone();
+        let rt = self.calendar_range_toggle.clone();
+        let cab = self.calendar_auth_box.clone();
         let src = gtk4::glib::timeout_add_local(
             std::time::Duration::from_millis(300),
             move || {
                 if rx.try_recv().is_ok() && base_is_open.get() {
                     task_section::render_tasks(&tl, &ls, &ctx, &sp, &ab, &tx);
+                    calendar_section::render_calendar(&cl, &rt, &ctx, &sp, &cab, &tx);
                 }
                 gtk4::glib::ControlFlow::Continue
             },
@@ -72,6 +90,7 @@ impl PopupExt for CalendarPopup {
         *source.borrow_mut() = Some(src);
 
         self.trigger_background_refresh();
+        self.trigger_calendar_refresh();
         self.wire_add_task();
     }
 
@@ -148,6 +167,36 @@ impl CalendarPopup {
             .build();
         tasks_box.append(&auth_box);
 
+        // ── Calendar section ──
+        let calendar_box = gtk4::Box::builder()
+            .orientation(gtk4::Orientation::Vertical)
+            .spacing(4)
+            .margin_top(4)
+            .build();
+
+        let calendar_range_toggle = gtk4::Box::builder()
+            .orientation(gtk4::Orientation::Horizontal)
+            .spacing(10)
+            .css_classes(vec!["calendar-range-row".to_string()])
+            .build();
+        calendar_box.append(&calendar_range_toggle);
+
+        let calendar_list = gtk4::Box::builder()
+            .orientation(gtk4::Orientation::Vertical)
+            .spacing(2)
+            .build();
+        calendar_box.append(&calendar_list);
+
+        let calendar_auth_box = gtk4::Box::builder()
+            .orientation(gtk4::Orientation::Vertical)
+            .spacing(8)
+            .visible(false)
+            .margin_top(8)
+            .build();
+        calendar_box.append(&calendar_auth_box);
+
+        wrapper.append(&calendar_box);
+
         // ── Add task row ──
         let add_row = gtk4::Box::builder()
             .orientation(gtk4::Orientation::Horizontal)
@@ -182,6 +231,9 @@ impl CalendarPopup {
             auth_box,
             add_entry,
             spinner,
+            calendar_list,
+            calendar_range_toggle,
+            calendar_auth_box,
             ctx,
             refresh_tx,
             refresh_rx: Rc::new(RefCell::new(Some(refresh_rx))),
@@ -197,6 +249,19 @@ impl CalendarPopup {
             match r.refresh_tasks() {
                 Ok(tasks) => log::info!("[calendar] Refreshed {} tasks", tasks.len()),
                 Err(e) => log::warn!("[calendar] Refresh failed: {e}"),
+            }
+let _ = tx.send(());
+        });
+    }
+
+    fn trigger_calendar_refresh(&self) {
+        let reg = self.ctx.calendar_registry.clone();
+        let tx = self.refresh_tx.clone();
+        std::thread::spawn(move || {
+            let mut r = reg.lock().unwrap();
+            match r.refresh_events() {
+                Ok(events) => log::info!("[calendar] Refreshed {} events", events.len()),
+                Err(e) => log::warn!("[calendar] Refresh failed: {}", e),
             }
             let _ = tx.send(());
         });

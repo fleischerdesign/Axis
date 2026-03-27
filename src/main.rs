@@ -330,6 +330,7 @@ fn setup_lock_triggers(lock_screen: &Rc<LockScreen>) {
 
 fn setup_services() -> AppContext {
     use crate::app_context::{spawn_readonly, spawn_service};
+    use crate::services::calendar::CalendarRegistry;
 
     AppContext {
         airplane:     spawn_service::<AirplaneService>(),
@@ -347,5 +348,6 @@ fn setup_services() -> AppContext {
         niri:         spawn_readonly::<NiriService>(),
         clock:        spawn_readonly::<ClockService>(),
         task_registry: Arc::new(Mutex::new(TaskRegistry::new())),
+        calendar_registry: Arc::new(Mutex::new(CalendarRegistry::new())),
     }
 }

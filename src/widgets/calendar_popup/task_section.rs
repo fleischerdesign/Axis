@@ -1,5 +1,5 @@
-use super::auth_flow;
 use crate::app_context::AppContext;
+use crate::services::google::GoogleAuthRegistry;
 use crate::services::tasks::Task;
 use gtk4::prelude::*;
 use std::sync::mpsc;
@@ -21,13 +21,16 @@ pub fn render_tasks(
     auth_box.set_visible(false);
     spinner.set_visible(false);
 
-    let registry = ctx.task_registry.lock().unwrap();
+    let google_auth = GoogleAuthRegistry::load()
+        .map(|r| r.is_authenticated())
+        .unwrap_or(false);
 
-    if !registry.active().is_authenticated() {
-        drop(registry);
-        auth_flow::show_auth_prompt(auth_box, ctx);
+    if !google_auth {
+        auth_box.set_visible(false);
         return;
     }
+
+    let registry = ctx.task_registry.lock().unwrap();
 
     let tasks = registry.cached_tasks().to_vec();
     let lists = registry.cached_lists().to_vec();
