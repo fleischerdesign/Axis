@@ -3,10 +3,10 @@ mod date;
 mod task_section;
 
 use crate::app_context::AppContext;
-use crate::shell::ShellPopup;
+use crate::shell::PopupExt;
 use crate::widgets::base::PopupBase;
 use gtk4::prelude::*;
-use gtk4_layer_shell::{Edge, KeyboardMode, LayerShell};
+use gtk4_layer_shell::{KeyboardMode, LayerShell};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::mpsc;
@@ -23,47 +23,63 @@ pub struct CalendarPopup {
     refresh_source: Rc<RefCell<Option<gtk4::glib::SourceId>>>,
 }
 
-impl ShellPopup for CalendarPopup {
+impl PopupExt for CalendarPopup {
     fn id(&self) -> &str {
         "calendar"
     }
 
-    fn is_open(&self) -> bool {
-        self.base.is_open.get()
+    fn base(&self) -> &PopupBase {
+        &self.base
     }
 
-    fn toggle(&self) {
-        if self.is_open() {
-            self.close();
-        } else {
-            self.on_open();
-            self.base.open();
+    fn on_open(&self) {
+        task_section::render_tasks(
+            &self.task_list,
+            &self.ctx,
+            &self.spinner,
+            &self.auth_box,
+            &self.refresh_tx,
+        );
+
+        // Start refresh timer once (survives popup close/open cycles)
+        if self.refresh_source.borrow().is_some() {
+            self.trigger_background_refresh();
+            return;
         }
+
+        // Take receiver (only done once)
+        let rx = self.refresh_rx.borrow_mut().take()
+            .expect("refresh_rx already taken");
+        let tl = self.task_list.clone();
+        let ctx = self.ctx.clone();
+        let sp = self.spinner.clone();
+        let ab = self.auth_box.clone();
+        let tx = self.refresh_tx.clone();
+        let source = self.refresh_source.clone();
+        let base_is_open = self.base.is_open.clone();
+        let src = gtk4::glib::timeout_add_local(
+            std::time::Duration::from_millis(300),
+            move || {
+                if rx.try_recv().is_ok() && base_is_open.get() {
+                    task_section::render_tasks(&tl, &ctx, &sp, &ab, &tx);
+                }
+                gtk4::glib::ControlFlow::Continue
+            },
+        );
+        *source.borrow_mut() = Some(src);
+
+        self.trigger_background_refresh();
+        self.wire_add_task();
     }
 
-    fn close(&self) {
-        self.base
-            .window
-            .set_keyboard_mode(KeyboardMode::OnDemand);
-        self.base.close();
+    fn on_close(&self) {
+        self.base.window.set_keyboard_mode(KeyboardMode::OnDemand);
     }
 }
 
 impl CalendarPopup {
-    pub fn new(
-        app: &libadwaita::Application,
-        ctx: AppContext,
-        on_state_change: impl Fn() + 'static,
-    ) -> Self {
-        let base = PopupBase::new(app, "AXIS Daily Panel", false);
-
-        // Center on screen
-        base.window.set_anchor(Edge::Left, false);
-        base.window.set_anchor(Edge::Right, false);
-
-        let on_change = Rc::new(on_state_change);
-        base.window
-            .connect_visible_notify(move |_| on_change());
+    pub fn new(app: &libadwaita::Application, ctx: AppContext) -> Self {
+        let base = PopupBase::new_centered(app, "AXIS Daily Panel");
 
         // ── Main wrapper ──
         let wrapper = gtk4::Box::builder()
@@ -154,18 +170,6 @@ impl CalendarPopup {
         wrapper.append(&tasks_box);
         base.set_content(&wrapper);
 
-        // ── Keyboard: Escape closes ──
-        let base_close = base.clone();
-        let key = gtk4::EventControllerKey::new();
-        key.connect_key_pressed(move |_, key, _, _| {
-            if key == gtk4::gdk::Key::Escape {
-                base_close.close();
-                return gtk4::glib::Propagation::Stop;
-            }
-            gtk4::glib::Propagation::Proceed
-        });
-        base.window.add_controller(key);
-
         let (refresh_tx, refresh_rx) = mpsc::channel::<()>();
 
         Self {
@@ -179,50 +183,6 @@ impl CalendarPopup {
             refresh_rx: Rc::new(RefCell::new(Some(refresh_rx))),
             refresh_source: Rc::new(RefCell::new(None)),
         }
-    }
-
-    fn on_open(&self) {
-        task_section::render_tasks(
-            &self.task_list,
-            &self.ctx,
-            &self.spinner,
-            &self.auth_box,
-            &self.refresh_tx,
-        );
-
-        // Start refresh timer once (survives popup close/open cycles)
-        if self.refresh_source.borrow().is_some() {
-            // Timer already running, just trigger a refresh
-            self.trigger_background_refresh();
-            return;
-        }
-
-        // Take receiver (only done once)
-        let rx = self.refresh_rx.borrow_mut().take()
-            .expect("refresh_rx already taken");
-        let tl = self.task_list.clone();
-        let ctx = self.ctx.clone();
-        let sp = self.spinner.clone();
-        let ab = self.auth_box.clone();
-        let tx = self.refresh_tx.clone();
-        let source = self.refresh_source.clone();
-        let base_is_open = self.base.is_open.clone();
-        let src = gtk4::glib::timeout_add_local(
-            std::time::Duration::from_millis(300),
-            move || {
-                if rx.try_recv().is_ok() && base_is_open.get() {
-                    task_section::render_tasks(&tl, &ctx, &sp, &ab, &tx);
-                }
-                gtk4::glib::ControlFlow::Continue
-            },
-        );
-        *source.borrow_mut() = Some(src);
-
-        // Initial background refresh
-        self.trigger_background_refresh();
-
-        // Wire add-task entry (Enter key + button)
-        self.wire_add_task();
     }
 
     fn trigger_background_refresh(&self) {
@@ -258,7 +218,6 @@ impl CalendarPopup {
             };
 
             if is_async {
-                // Async provider: optimistic UI + background API
                 {
                     let mut registry = ctx_c.task_registry.lock().unwrap();
                     registry.optimistic_add_task(&title);
@@ -274,7 +233,6 @@ impl CalendarPopup {
                     let _ = r.refresh_tasks();
                 });
             } else {
-                // Sync provider: do it immediately
                 {
                     let mut registry = ctx_c.task_registry.lock().unwrap();
                     registry.optimistic_add_task(&title);

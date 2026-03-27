@@ -126,10 +126,14 @@ impl<T: Clone + PartialEq + 'static> Store<T> {
         let mut data = self.data.borrow_mut();
         if *data != val {
             *data = val.clone();
-            drop(data); // Lock lösen vor Callbacks
-            for listener in self.listeners.borrow().iter() {
+            drop(data);
+            // Take listeners out temporarily — prevents RefCell panic if
+            // a listener calls subscribe() during iteration.
+            let listeners = std::mem::take(&mut *self.listeners.borrow_mut());
+            for listener in &listeners {
                 listener(&val);
             }
+            *self.listeners.borrow_mut() = listeners;
         }
     }
 
@@ -142,10 +146,12 @@ impl<T: Clone + PartialEq + 'static> Store<T> {
         f(&mut *data);
         if old_data != *data {
             let val = data.clone();
-            drop(data); // Lock lösen vor Callbacks
-            for listener in self.listeners.borrow().iter() {
+            drop(data);
+            let listeners = std::mem::take(&mut *self.listeners.borrow_mut());
+            for listener in &listeners {
                 listener(&val);
             }
+            *self.listeners.borrow_mut() = listeners;
         }
     }
 }
@@ -184,9 +190,11 @@ impl ReactiveBool {
         if *data != val {
             *data = val;
             drop(data);
-            for listener in self.listeners.borrow().iter() {
+            let listeners = std::mem::take(&mut *self.listeners.borrow_mut());
+            for listener in &listeners {
                 listener(val);
             }
+            *self.listeners.borrow_mut() = listeners;
         }
     }
 

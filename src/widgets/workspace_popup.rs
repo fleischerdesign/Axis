@@ -1,9 +1,9 @@
 use crate::app_context::AppContext;
 use crate::services::niri::NiriService;
-use crate::shell::ShellPopup;
+use crate::shell::PopupExt;
 use crate::widgets::base::PopupBase;
 use gtk4::prelude::*;
-use gtk4_layer_shell::LayerShell;
+use gtk4_layer_shell::{KeyboardMode, LayerShell};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
@@ -14,58 +14,58 @@ pub struct WorkspacePopup {
     workspace_ids: Rc<RefCell<Vec<u64>>>,
 }
 
-impl ShellPopup for WorkspacePopup {
+impl PopupExt for WorkspacePopup {
     fn id(&self) -> &str {
         "ws"
     }
-    fn is_open(&self) -> bool {
-        self.base.is_open.get()
+
+    fn base(&self) -> &PopupBase {
+        &self.base
     }
 
-    fn close(&self) {
-        self.base
-            .window
-            .set_keyboard_mode(gtk4_layer_shell::KeyboardMode::OnDemand);
-        self.base.close();
-    }
+    fn on_open(&self) {
+        self.base.window.set_keyboard_mode(KeyboardMode::Exclusive);
 
-    fn toggle(&self) {
-        if self.is_open() {
-            self.close();
-        } else {
-            self.on_open();
-            self.base.open();
+        if let Some(shelf) = self.base.content().and_then(|c| c.downcast::<gtk4::Box>().ok()) {
+            let close_popup = Rc::new({
+                let base = self.base.clone();
+                move || base.close()
+            });
+            Self::render_shelf(
+                &shelf,
+                &self.ctx.niri.get(),
+                &self.base.window,
+                close_popup,
+                &self.workspace_ids,
+            );
+
+            let data = self.ctx.niri.get();
+            let active_idx = data
+                .workspaces
+                .iter()
+                .position(|w| w.is_active)
+                .unwrap_or(0);
+            self.focused_index.set(active_idx);
         }
+    }
+
+    fn on_close(&self) {
+        self.base.window.set_keyboard_mode(KeyboardMode::OnDemand);
     }
 }
 
 impl WorkspacePopup {
-    pub fn new(
-        app: &libadwaita::Application,
-        ctx: AppContext,
-        on_state_change: impl Fn() + 'static,
-    ) -> Self {
-        let base = PopupBase::new(app, "AXIS Workspace Popup", false);
-        let on_state_change = Rc::new(on_state_change);
+    pub fn new(app: &libadwaita::Application, ctx: AppContext) -> Self {
+        let base = PopupBase::new_centered(app, "AXIS Workspace Popup");
         let focused_index = Rc::new(Cell::new(0));
         let workspace_ids: Rc<RefCell<Vec<u64>>> = Rc::new(RefCell::new(Vec::new()));
-
-        // State-Change an den Controller melden
-        let on_change_c = on_state_change.clone();
-        base.window.connect_visible_notify(move |_| {
-            on_change_c();
-        });
-
-        // Den Workspace-Shelf mittig ausrichten (keine Anker für Links/Rechts = Zentriert)
-        base.window.set_anchor(gtk4_layer_shell::Edge::Left, false);
-        base.window.set_anchor(gtk4_layer_shell::Edge::Right, false);
 
         let shelf = gtk4::Box::new(gtk4::Orientation::Horizontal, 24);
         shelf.add_css_class("workspace-shelf");
         base.set_content(&shelf);
 
-        // --- KEYBOARD NAVIGATION ---
-        let base_close = base.clone();
+        // Keyboard navigation (arrow keys + Enter). Escape handled by ShellController::register()
+        let base_nav = base.clone();
         let focused_index_kb = focused_index.clone();
         let workspace_ids_kb = workspace_ids.clone();
         let key_controller = gtk4::EventControllerKey::new();
@@ -76,15 +76,11 @@ impl WorkspacePopup {
                 return gtk4::glib::Propagation::Proceed;
             }
             match key {
-                gtk4::gdk::Key::Escape => {
-                    base_close.close();
-                    return gtk4::glib::Propagation::Stop;
-                }
                 gtk4::gdk::Key::Right => {
                     let next = (focused_index_kb.get() + 1) % count;
                     focused_index_kb.set(next);
                     NiriService::switch_to_workspace(ids[next]);
-                    return gtk4::glib::Propagation::Stop;
+                    gtk4::glib::Propagation::Stop
                 }
                 gtk4::gdk::Key::Left => {
                     let prev = if focused_index_kb.get() == 0 {
@@ -94,15 +90,14 @@ impl WorkspacePopup {
                     };
                     focused_index_kb.set(prev);
                     NiriService::switch_to_workspace(ids[prev]);
-                    return gtk4::glib::Propagation::Stop;
+                    gtk4::glib::Propagation::Stop
                 }
                 gtk4::gdk::Key::Return | gtk4::gdk::Key::KP_Enter => {
-                    base_close.close();
-                    return gtk4::glib::Propagation::Stop;
+                    base_nav.close();
+                    gtk4::glib::Propagation::Stop
                 }
-                _ => {}
+                _ => gtk4::glib::Propagation::Proceed,
             }
-            gtk4::glib::Propagation::Proceed
         });
         base.window.add_controller(key_controller);
 
@@ -132,40 +127,6 @@ impl WorkspacePopup {
             ctx,
             focused_index,
             workspace_ids,
-        }
-    }
-
-    fn on_open(&self) {
-        self.base
-            .window
-            .set_keyboard_mode(gtk4_layer_shell::KeyboardMode::Exclusive);
-
-        if let Some(shelf) = self
-            .base
-            .revealer
-            .child()
-            .and_then(|c| c.downcast::<gtk4::Box>().ok())
-        {
-            let close_popup = Rc::new({
-                let base = self.base.clone();
-                move || base.close()
-            });
-            Self::render_shelf(
-                &shelf,
-                &self.ctx.niri.get(),
-                &self.base.window,
-                close_popup,
-                &self.workspace_ids,
-            );
-
-            // Set focus to the active workspace
-            let data = self.ctx.niri.get();
-            let active_idx = data
-                .workspaces
-                .iter()
-                .position(|w| w.is_active)
-                .unwrap_or(0);
-            self.focused_index.set(active_idx);
         }
     }
 

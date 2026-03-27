@@ -137,7 +137,6 @@ fn build_ui(app: &libadwaita::Application, start_locked: bool, wallpaper_path: O
     // --- WIDGETS & CONTROLLER ---
     let bar = Bar::new(app, ctx.clone());
     let bar_popup_state = bar.popup_open.clone();
-    let bar_ref = bar.clone();
 
     // Wallpaper
     let lockscreen_texture = wallpaper_path
@@ -148,9 +147,8 @@ fn build_ui(app: &libadwaita::Application, start_locked: bool, wallpaper_path: O
     let lock_screen = Rc::new(LockScreen::new(lockscreen_texture, ctx.power.clone()));
     setup_lock_triggers(&lock_screen);
 
-    // Controller braucht RefCell für Callbacks
+    // Controller für IPC
     let controller: Rc<RefCell<Option<Rc<ShellController>>>> = Rc::new(RefCell::new(None));
-    let controller_on_change = controller.clone();
 
     // Toasts initialisieren
     NotificationToastManager::init(app, ctx.clone());
@@ -158,53 +156,38 @@ fn build_ui(app: &libadwaita::Application, start_locked: bool, wallpaper_path: O
     // OSD initialisieren
     let _osd = OsdManager::new(app, ctx.clone());
 
-    // Popups initialisieren (QS brauchen wir zuerst für das Archiv)
-    let ctx_c = ctx.clone();
-    let ctrl_q = controller.clone();
+    // OnChange Callback
+    let bar_ref = bar.clone();
+    let on_change = move || {
+        bar_ref.check_auto_hide();
+    };
+
+    let shell_ctrl = Rc::new(ShellController::new(bar_popup_state, on_change));
+    *controller.borrow_mut() = Some(shell_ctrl.clone());
+
+    // Popups registrieren
     let ls_lock = lock_screen.clone();
-    let qs = Rc::new(QuickSettingsPopup::new(app, &bar.vol_icon, ctx_c, move || {
-        if let Some(c) = ctrl_q.borrow().as_ref() { c.sync(); }
-    }, Rc::new(move || ls_lock.lock_session()) as Rc<dyn Fn()>));
+    let qs = Rc::new(QuickSettingsPopup::new(app, &bar.vol_icon, ctx.clone(), Rc::new(move || ls_lock.lock_session()) as Rc<dyn Fn()>));
+    shell_ctrl.register(&qs);
 
     // --- ARCHIVE (über dem QS Popup) ---
     let notification_archive = crate::widgets::notification::archive::NotificationArchiveManager::new(ctx.clone());
     qs.archive_box.append(&notification_archive.container);
     let archive_cb = notification_archive.clone();
+    let shell_ctrl_for_archive = shell_ctrl.clone();
+    qs.base.is_open.subscribe(move |_is_open| {
+        let is_qs = shell_ctrl_for_archive.active_id() == Some("qs".to_string());
+        archive_cb.set_visible(is_qs);
+    });
 
-    // OnChange Callback für alle Popups
-    let on_change = move || {
-        bar_ref.check_auto_hide();
-        if let Some(c) = controller_on_change.borrow().as_ref() {
-            let is_qs = c.active_id() == Some("qs".to_string());
-            archive_cb.set_visible(is_qs);
-        }
-    };
+    let launcher = Rc::new(LauncherPopup::new(app, ctx.clone()));
+    shell_ctrl.register(&launcher);
 
-    let shell_ctrl = ShellController::new(bar_popup_state, on_change);
-    shell_ctrl.add_popup(qs.clone());
+    let ws = Rc::new(WorkspacePopup::new(app, ctx.clone()));
+    shell_ctrl.register(&ws);
 
-    let ctx_c = ctx.clone();
-    let ctrl_l = controller.clone();
-    let launcher = Rc::new(LauncherPopup::new(app, ctx_c, move || {
-        if let Some(c) = ctrl_l.borrow().as_ref() { c.sync(); }
-    }));
-    shell_ctrl.add_popup(launcher.clone());
-
-    let ctx_c = ctx.clone();
-    let ctrl_w = controller.clone();
-    let ws = Rc::new(WorkspacePopup::new(app, ctx_c, move || {
-        if let Some(c) = ctrl_w.borrow().as_ref() { c.sync(); }
-    }));
-    shell_ctrl.add_popup(ws.clone());
-
-    let ctrl_cal = controller.clone();
-    let cal = Rc::new(CalendarPopup::new(app, ctx.clone(), move || {
-        if let Some(c) = ctrl_cal.borrow().as_ref() { c.sync(); }
-    }));
-    shell_ctrl.add_popup(cal.clone());
-
-    let shell_ctrl = Rc::new(shell_ctrl);
-    *controller.borrow_mut() = Some(shell_ctrl.clone());
+    let cal = Rc::new(CalendarPopup::new(app, ctx.clone()));
+    shell_ctrl.register(&cal);
 
     // --- IPC SERVICE STARTEN ---
     let ipc_rx = IpcService::spawn();

@@ -8,7 +8,7 @@ mod nightlight_page;
 mod wifi_page;
 
 use crate::app_context::AppContext;
-use crate::shell::ShellPopup;
+use crate::shell::PopupExt;
 use crate::widgets::base::PopupBase;
 use crate::widgets::quick_settings::nightlight_page::NightlightPage;
 use audio_page::AudioPage;
@@ -27,22 +27,34 @@ pub struct QuickSettingsPopup {
     pub container: gtk4::Box,
     pub archive_box: gtk4::Box,
     qs_stack: gtk4::Stack,
+    main_page: MainPage,
 }
 
-impl ShellPopup for QuickSettingsPopup {
+impl PopupExt for QuickSettingsPopup {
     fn id(&self) -> &str {
         "qs"
     }
-    fn is_open(&self) -> bool {
-        self.base.is_open.get()
+
+    fn base(&self) -> &PopupBase {
+        &self.base
     }
 
-    fn close(&self) {
-        self.base.close();
+    fn on_close(&self) {
+        self.qs_stack.set_visible_child_name("main");
+        let _ = self.base.window; // ensure field access compiles
     }
 
-    fn toggle(&self) {
-        self.base.toggle();
+    fn handle_escape(&self) {
+        let current = self.qs_stack.visible_child_name();
+        if current.as_deref() == Some("main") {
+            if self.main_page.is_power_expanded() {
+                self.main_page.collapse_power_menu();
+            } else {
+                self.close();
+            }
+        } else {
+            self.qs_stack.set_visible_child_name("main");
+        }
     }
 }
 
@@ -51,23 +63,21 @@ impl QuickSettingsPopup {
         app: &libadwaita::Application,
         vol_icon_bar: &gtk4::Image,
         ctx: AppContext,
-        on_state_change: impl Fn() + 'static,
         on_lock: Rc<dyn Fn()>,
     ) -> Self {
         let base = PopupBase::new(app, "AXIS Quick Settings", true);
-        let on_state_change = Rc::new(on_state_change);
 
-        let on_change_c = on_state_change.clone();
-        base.window.connect_visible_notify(move |_| {
-            on_change_c();
+        // Stop BT scan on close
+        let tx_bt_stop = ctx.bluetooth.tx.clone();
+        base.window.connect_visible_notify(move |win| {
+            if !win.is_visible() {
+                let _ = tx_bt_stop.try_send(BluetoothCmd::StopScan);
+            }
         });
 
         let qs_container = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
         qs_container.add_css_class("qs-panel");
         qs_container.set_width_request(380);
-
-        // WICHTIG: Valign auf End sorgt dafür, dass das Fenster nach oben wächst,
-        // wenn es am unteren Rand verankert ist.
         qs_container.set_valign(gtk4::Align::End);
 
         let qs_stack = gtk4::Stack::builder()
@@ -77,16 +87,6 @@ impl QuickSettingsPopup {
             .hhomogeneous(true)
             .interpolate_size(true)
             .build();
-
-        // Reset Stack to main page after popup is fully hidden, stop BT scan
-        let stack_reset = qs_stack.clone();
-        let tx_bt_stop = ctx.bluetooth.tx.clone();
-        base.window.connect_visible_notify(move |win| {
-            if !win.is_visible() {
-                stack_reset.set_visible_child_name("main");
-                let _ = tx_bt_stop.try_send(BluetoothCmd::StopScan);
-            }
-        });
 
         // --- PAGES ---
         let stack_wifi = qs_stack.clone();
@@ -195,34 +195,34 @@ impl QuickSettingsPopup {
         outer.append(&qs_container);
         base.set_content(&outer);
 
-        // --- KEYBOARD NAVIGATION ---
-        let base_kb = base.clone();
+        // Custom escape handler for stack navigation (register() wires Escape to handle_escape())
         let stack_kb = qs_stack.clone();
         let main_page_kb = main_page.clone();
         let key_controller = gtk4::EventControllerKey::new();
         key_controller.connect_key_pressed(move |_, key, _, _| {
             if key == gtk4::gdk::Key::Escape {
+                // Handle at entry level before window-level handler
                 let current = stack_kb.visible_child_name();
                 if current.as_deref() == Some("main") {
                     if main_page_kb.is_power_expanded() {
                         main_page_kb.collapse_power_menu();
-                    } else {
-                        base_kb.close();
+                        return gtk4::glib::Propagation::Stop;
                     }
                 } else {
                     stack_kb.set_visible_child_name("main");
+                    return gtk4::glib::Propagation::Stop;
                 }
-                return gtk4::glib::Propagation::Stop;
             }
             gtk4::glib::Propagation::Proceed
         });
-        base.window.add_controller(key_controller);
+        qs_container.add_controller(key_controller);
 
         Self {
             base,
             container: qs_container,
             archive_box,
             qs_stack,
+            main_page,
         }
     }
 }

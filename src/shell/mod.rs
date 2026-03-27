@@ -1,20 +1,49 @@
 use crate::store::ReactiveBool;
+use crate::widgets::base::PopupBase;
+use gtk4::prelude::*;
 use log::debug;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-pub trait ShellPopup {
+pub trait PopupExt {
     fn id(&self) -> &str;
-    fn is_open(&self) -> bool;
-    fn toggle(&self);
-    fn close(&self);
+    fn base(&self) -> &PopupBase;
+
+    fn on_open(&self) {}
+    fn on_close(&self) {}
+
+    fn is_open(&self) -> bool {
+        self.base().is_open.get()
+    }
+
+    fn close(&self) {
+        self.on_close();
+        self.base().close();
+    }
+
+    fn open(&self) {
+        self.on_open();
+        self.base().open();
+    }
+
+    fn toggle(&self) {
+        if self.is_open() {
+            self.close();
+        } else {
+            self.open();
+        }
+    }
+
+    fn handle_escape(&self) {
+        self.close();
+    }
 }
 
 pub struct ShellController {
-    popups: RefCell<Vec<Rc<dyn ShellPopup>>>,
+    popups: RefCell<Vec<Rc<dyn PopupExt>>>,
     bar_popup_state: ReactiveBool,
     active_id: Rc<RefCell<Option<String>>>,
-    on_change: Box<dyn Fn()>,
+    on_change: Rc<dyn Fn()>,
 }
 
 impl ShellController {
@@ -23,12 +52,28 @@ impl ShellController {
             popups: RefCell::new(Vec::new()),
             bar_popup_state,
             active_id: Rc::new(RefCell::new(None)),
-            on_change: Box::new(on_change),
+            on_change: Rc::new(on_change),
         }
     }
 
-    pub fn add_popup(&self, popup: Rc<dyn ShellPopup>) {
-        self.popups.borrow_mut().push(popup);
+    pub fn register<P: PopupExt + 'static>(&self, popup: &Rc<P>) {
+        let on_change = self.on_change.clone();
+        popup.base().window.connect_visible_notify(move |_| {
+            on_change();
+        });
+
+        let popup_ref = popup.clone();
+        let key = gtk4::EventControllerKey::new();
+        key.connect_key_pressed(move |_, key, _, _| {
+            if key == gtk4::gdk::Key::Escape {
+                popup_ref.handle_escape();
+                return gtk4::glib::Propagation::Stop;
+            }
+            gtk4::glib::Propagation::Proceed
+        });
+        popup.base().window.add_controller(key);
+
+        self.popups.borrow_mut().push(popup.clone());
     }
 
     pub fn active_id(&self) -> Option<String> {

@@ -1,6 +1,6 @@
 use crate::app_context::AppContext;
 use crate::services::launcher::{LauncherCmd, LauncherUpdate};
-use crate::shell::ShellPopup;
+use crate::shell::PopupExt;
 use crate::widgets::base::PopupBase;
 use crate::widgets::launcher::launcher_row::LauncherRow;
 use gtk4::prelude::*;
@@ -14,38 +14,29 @@ pub struct LauncherPopup {
     pub entry: gtk4::Entry,
 }
 
-impl ShellPopup for LauncherPopup {
+impl PopupExt for LauncherPopup {
     fn id(&self) -> &str {
         "launcher"
     }
-    fn is_open(&self) -> bool {
-        self.base.is_open.get()
-    }
-    fn close(&self) {
-        self.base.close();
+
+    fn base(&self) -> &PopupBase {
+        &self.base
     }
 
-    fn toggle(&self) {
-        if self.is_open() {
-            self.close();
-        } else {
-            self.on_open();
-            self.base.open();
-        }
+    fn on_open(&self) {
+        self.entry.set_text("");
+        self.entry.grab_focus();
+        let _ = self
+            .ctx
+            .launcher
+            .tx
+            .try_send(LauncherCmd::Search("".to_string()));
     }
 }
 
 impl LauncherPopup {
-    pub fn new(
-        app: &libadwaita::Application,
-        ctx: AppContext,
-        on_state_change: impl Fn() + 'static,
-    ) -> Self {
+    pub fn new(app: &libadwaita::Application, ctx: AppContext) -> Self {
         let base = PopupBase::new(app, "AXIS Launcher", false);
-
-        let on_change = Rc::new(on_state_change);
-        let on_change_c = on_change.clone();
-        base.window.connect_visible_notify(move |_| on_change_c());
 
         // --- Layout ---
         let container = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
@@ -81,9 +72,6 @@ impl LauncherPopup {
         scrolled.set_child(Some(&list));
         left_pane.append(&scrolled);
 
-        // Single-click activation on list rows.
-        // connect_row_activated fires on single-click in GTK4,
-        // unlike ListBoxRow::connect_activate which needs double-click.
         let tx_click = ctx.launcher.tx.clone();
         let base_click = base.clone();
         list.connect_row_activated(move |_, row| {
@@ -127,9 +115,8 @@ impl LauncherPopup {
             let _ = tx.try_send(LauncherCmd::Search(e.text().to_string()));
         });
 
-        // --- Keyboard navigation ---
+        // --- Keyboard navigation (Escape on entry-level, register() handles window-level) ---
         let tx_key = ctx.launcher.tx.clone();
-        let base_key = base.clone();
         let key_controller = gtk4::EventControllerKey::new();
         key_controller.connect_key_pressed(move |_, key, _, state| {
             use gtk4::gdk::Key;
@@ -149,10 +136,6 @@ impl LauncherPopup {
                     } else {
                         let _ = tx_key.try_send(LauncherCmd::SelectNext);
                     }
-                    gtk4::glib::Propagation::Stop
-                }
-                Key::Escape => {
-                    base_key.close();
                     gtk4::glib::Propagation::Stop
                 }
                 _ => gtk4::glib::Propagation::Proceed,
@@ -177,23 +160,18 @@ impl LauncherPopup {
         let win_c = base.window.clone();
         ctx.launcher.subscribe(move |data| {
             match data.update_kind {
-                // Full rebuild: new search results arrived.
                 LauncherUpdate::Results => {
                     while let Some(child) = list_c.first_child() {
                         list_c.remove(&child);
                     }
-
                     for item in data.results.iter() {
                         let launcher_row = LauncherRow::new(item);
                         list_c.append(&launcher_row.row);
                     }
                 }
-
-                // Selection only: update the highlighted row without rebuilding.
                 LauncherUpdate::SelectionOnly => {}
             }
 
-            // Sync GTK selection + detail pane regardless of update kind.
             if data.results.is_empty() {
                 list_c.unselect_all();
                 d_rev.set_reveal_child(false);
@@ -202,9 +180,6 @@ impl LauncherPopup {
                 if let Some(row) = list_c.row_at_index(idx as i32) {
                     list_c.select_row(Some(&row));
 
-                    // Scroll so the selected row is centered in the viewport.
-                    // compute_point() gives the real Y offset of the row
-                    // within the list — no hardcoded heights needed.
                     let adj = scrolled_c.vadjustment();
                     if let Some(point) =
                         row.compute_point(&list_c, &gtk4::graphene::Point::new(0.0, 0.0))
@@ -234,20 +209,8 @@ impl LauncherPopup {
             entry: entry_c,
         }
     }
-
-    fn on_open(&self) {
-        self.entry.set_text("");
-        self.entry.grab_focus();
-        let _ = self
-            .ctx
-            .launcher
-            .tx
-            .try_send(LauncherCmd::Search("".to_string()));
-    }
 }
 
-/// Animates a `gtk4::Adjustment` from its current value to `target` using
-/// an ease-out curve over ~120 ms (8 frames @ 60 Hz).
 fn smooth_scroll(adj: &gtk4::Adjustment, target: f64) {
     const STEPS: u32 = 8;
     const INTERVAL: Duration = Duration::from_millis(15);
@@ -255,7 +218,6 @@ fn smooth_scroll(adj: &gtk4::Adjustment, target: f64) {
     let start = adj.value();
     let delta = target - start;
 
-    // Skip animation for tiny movements — avoids jitter on first item.
     if delta.abs() < 1.0 {
         return;
     }
@@ -267,7 +229,6 @@ fn smooth_scroll(adj: &gtk4::Adjustment, target: f64) {
         let s = step.get() + 1;
         step.set(s);
 
-        // Ease-out: t starts fast and decelerates.
         let t = s as f64 / STEPS as f64;
         let ease = 1.0 - (1.0 - t).powi(3);
         adj.set_value(start + delta * ease);
