@@ -336,38 +336,26 @@ fn setup_lock_triggers(lock_screen: &Rc<LockScreen>) {
 }
 
 fn setup_services() -> AppContext {
-    let (airplane_store, airplane_tx) = AirplaneService::spawn();
-    let (network_store, network_tx) = NetworkService::spawn();
-    let (bluetooth_store, bluetooth_tx) = BluetoothService::spawn();
-    let (audio_store, audio_tx) = AudioService::spawn();
-    let (backlight_store, backlight_tx) = BacklightService::spawn();
-    let (nightlight_store, nightlight_tx) = NightlightService::spawn();
+    use crate::app_context::{spawn_readonly, spawn_service};
+
     let (notifications_store, notifications_tx, notification_raw_tx) = NotificationService::spawn_with_raw_tx();
-    let (dnd_store, dnd_tx) = DndService::spawn();
-    let (tray_store, tray_tx) = TrayService::spawn();
-    let (kdeconnect_store, kdeconnect_tx) = KdeConnectService::spawn();
-    let (power_store, _) = PowerService::spawn();
-    let (niri_store, _) = NiriService::spawn();
-    let (clock_store, _) = ClockService::spawn();
-    let (launcher_store, launcher_tx) = LauncherService::spawn();
-    let task_registry = Arc::new(Mutex::new(TaskRegistry::new()));
 
     AppContext {
-        airplane: ServiceHandle { store: airplane_store, tx: airplane_tx },
-        network: ServiceHandle { store: network_store, tx: network_tx },
-        bluetooth: ServiceHandle { store: bluetooth_store, tx: bluetooth_tx },
-        audio: ServiceHandle { store: audio_store, tx: audio_tx },
-        backlight: ServiceHandle { store: backlight_store, tx: backlight_tx },
-        nightlight: ServiceHandle { store: nightlight_store, tx: nightlight_tx },
-        launcher: ServiceHandle { store: launcher_store, tx: launcher_tx },
+        airplane:     spawn_service::<AirplaneService>(),
+        network:      spawn_service::<NetworkService>(),
+        bluetooth:    spawn_service::<BluetoothService>(),
+        audio:        spawn_service::<AudioService>(),
+        backlight:    spawn_service::<BacklightService>(),
+        nightlight:   spawn_service::<NightlightService>(),
+        launcher:     spawn_service::<LauncherService>(),
+        dnd:          spawn_service::<DndService>(),
+        tray:         spawn_service::<TrayService>(),
+        kdeconnect:   spawn_service::<KdeConnectService>(),
         notifications: ServiceHandle { store: notifications_store, tx: notifications_tx },
         notification_raw_tx,
-        dnd: ServiceHandle { store: dnd_store, tx: dnd_tx },
-        tray: ServiceHandle { store: tray_store, tx: tray_tx },
-        kdeconnect: ServiceHandle { store: kdeconnect_store, tx: kdeconnect_tx },
-        power: ReadOnlyHandle { store: power_store },
-        niri: ReadOnlyHandle { store: niri_store },
-        clock: ReadOnlyHandle { store: clock_store },
-        task_registry,
+        power:        spawn_readonly::<PowerService>(),
+        niri:         spawn_readonly::<NiriService>(),
+        clock:        spawn_readonly::<ClockService>(),
+        task_registry: Arc::new(Mutex::new(TaskRegistry::new())),
     }
 }

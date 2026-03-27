@@ -1,7 +1,5 @@
 use async_channel::Sender;
 use chrono::{DateTime, Local};
-use std::cell::RefCell;
-use std::rc::Rc;
 
 use crate::services::airplane::{AirplaneCmd, AirplaneData};
 use crate::services::audio::{AudioCmd, AudioData};
@@ -17,8 +15,19 @@ use crate::services::notifications::{server::NotificationCmd, Notification, Noti
 use crate::services::power::PowerData;
 use crate::services::tasks::TaskRegistry;
 use crate::services::tray::{TrayCmd, TrayData};
-use crate::store::{ReadOnlyHandle, ServiceHandle};
+use crate::services::Service;
+use crate::store::{ReadOnlyHandle, ServiceHandle, ServiceStore};
 use std::sync::{Arc, Mutex};
+
+pub fn spawn_service<S: Service>() -> ServiceHandle<S::Data, S::Cmd> {
+    let (store, tx) = S::spawn();
+    ServiceHandle { store, tx }
+}
+
+pub fn spawn_readonly<S: Service<Cmd = ()>>() -> ReadOnlyHandle<S::Data> {
+    let (store, _) = S::spawn();
+    ReadOnlyHandle { store }
+}
 
 #[derive(Clone)]
 pub struct AppContext {

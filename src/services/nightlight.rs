@@ -67,45 +67,7 @@ impl Service for NightlightService {
                 // Block until a command arrives (no CPU-burning poll)
                 match cmd_rx.recv_blocking() {
                     Ok(cmd) => {
-                        match cmd {
-                            NightlightCmd::Toggle(on) => {
-                                info!("[nightlight] {}", if on { "enabled" } else { "disabled" });
-                                if on {
-                                    if !data.enabled {
-                                        if let Some(child) = Self::start_wlsunset(&data) {
-                                            wlsunset_child = Some(child);
-                                            data.enabled = true;
-                                        }
-                                    }
-                                } else if data.enabled {
-                                    Self::stop_child(&mut wlsunset_child);
-                                    data.enabled = false;
-                                }
-                            }
-                            NightlightCmd::SetTempDay(kelvin) => {
-                                data.temp_day = kelvin;
-                                Self::restart_if_enabled(&mut wlsunset_child, &data);
-                            }
-                            NightlightCmd::SetTempNight(kelvin) => {
-                                data.temp_night = kelvin;
-                                Self::restart_if_enabled(&mut wlsunset_child, &data);
-                            }
-                            NightlightCmd::SetSchedule(sunrise, sunset) => {
-                                data.sunrise = sunrise;
-                                data.sunset = sunset;
-                                data.latitude.clear();
-                                data.longitude.clear();
-                                Self::restart_if_enabled(&mut wlsunset_child, &data);
-                            }
-                            NightlightCmd::SetLocation(lat, long) => {
-                                data.latitude = lat;
-                                data.longitude = long;
-                                data.sunrise.clear();
-                                data.sunset.clear();
-                                Self::restart_if_enabled(&mut wlsunset_child, &data);
-                            }
-                        }
-
+                        Self::apply_cmd(cmd, &mut data, &mut wlsunset_child);
                         let _ = data_tx.send_blocking(data.clone());
                     }
                     Err(_) => break,
@@ -113,41 +75,7 @@ impl Service for NightlightService {
 
                 // Drain any additional queued commands before checking process
                 while let Ok(cmd) = cmd_rx.try_recv() {
-                    match cmd {
-                        NightlightCmd::Toggle(on) => {
-                            if on && !data.enabled {
-                                if let Some(child) = Self::start_wlsunset(&data) {
-                                    wlsunset_child = Some(child);
-                                    data.enabled = true;
-                                }
-                            } else if !on && data.enabled {
-                                Self::stop_child(&mut wlsunset_child);
-                                data.enabled = false;
-                            }
-                        }
-                        NightlightCmd::SetTempDay(k) => {
-                            data.temp_day = k;
-                            Self::restart_if_enabled(&mut wlsunset_child, &data);
-                        }
-                        NightlightCmd::SetTempNight(k) => {
-                            data.temp_night = k;
-                            Self::restart_if_enabled(&mut wlsunset_child, &data);
-                        }
-                        NightlightCmd::SetSchedule(sr, ss) => {
-                            data.sunrise = sr;
-                            data.sunset = ss;
-                            data.latitude.clear();
-                            data.longitude.clear();
-                            Self::restart_if_enabled(&mut wlsunset_child, &data);
-                        }
-                        NightlightCmd::SetLocation(la, lo) => {
-                            data.latitude = la;
-                            data.longitude = lo;
-                            data.sunrise.clear();
-                            data.sunset.clear();
-                            Self::restart_if_enabled(&mut wlsunset_child, &data);
-                        }
-                    }
+                    Self::apply_cmd(cmd, &mut data, &mut wlsunset_child);
                     let _ = data_tx.send_blocking(data.clone());
                 }
 
@@ -164,6 +92,47 @@ impl Service for NightlightService {
 }
 
 impl NightlightService {
+    fn apply_cmd(cmd: NightlightCmd, data: &mut NightlightData, child: &mut Option<Child>) {
+        match cmd {
+            NightlightCmd::Toggle(on) => {
+                info!("[nightlight] {}", if on { "enabled" } else { "disabled" });
+                if on {
+                    if !data.enabled {
+                        if let Some(c) = Self::start_wlsunset(data) {
+                            *child = Some(c);
+                            data.enabled = true;
+                        }
+                    }
+                } else if data.enabled {
+                    Self::stop_child(child);
+                    data.enabled = false;
+                }
+            }
+            NightlightCmd::SetTempDay(k) => {
+                data.temp_day = k;
+                Self::restart_if_enabled(child, data);
+            }
+            NightlightCmd::SetTempNight(k) => {
+                data.temp_night = k;
+                Self::restart_if_enabled(child, data);
+            }
+            NightlightCmd::SetSchedule(sr, ss) => {
+                data.sunrise = sr;
+                data.sunset = ss;
+                data.latitude.clear();
+                data.longitude.clear();
+                Self::restart_if_enabled(child, data);
+            }
+            NightlightCmd::SetLocation(la, lo) => {
+                data.latitude = la;
+                data.longitude = lo;
+                data.sunrise.clear();
+                data.sunset.clear();
+                Self::restart_if_enabled(child, data);
+            }
+        }
+    }
+
     fn check_available() -> bool {
         Command::new("which")
             .arg("wlsunset")
