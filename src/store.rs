@@ -1,6 +1,7 @@
 use async_channel::{Receiver, Sender};
 use gtk4::glib;
 use std::cell::RefCell;
+use std::ops::Deref;
 use std::rc::Rc;
 
 /// Pairs a reactive store with a command sender for a single service.
@@ -18,20 +19,19 @@ impl<T: Clone + PartialEq + 'static, C: Send + 'static> Clone for ServiceHandle<
     }
 }
 
+impl<T: Clone + PartialEq + 'static, C: Send + 'static> Deref for ServiceHandle<T, C> {
+    type Target = ServiceStore<T>;
+    fn deref(&self) -> &Self::Target {
+        &self.store
+    }
+}
+
 impl<T: Clone + PartialEq + 'static, C: Send + 'static> ServiceHandle<T, C> {
     pub fn new(rx: Receiver<T>, initial: T, tx: Sender<C>) -> Self {
         Self {
             store: ServiceStore::new(rx, initial),
             tx,
         }
-    }
-
-    pub fn subscribe(&self, f: impl Fn(&T) + 'static) {
-        self.store.subscribe(f);
-    }
-
-    pub fn get(&self) -> T {
-        self.store.get()
     }
 }
 
@@ -41,19 +41,18 @@ pub struct ReadOnlyHandle<T: Clone + PartialEq + 'static> {
     pub store: ServiceStore<T>,
 }
 
+impl<T: Clone + PartialEq + 'static> Deref for ReadOnlyHandle<T> {
+    type Target = ServiceStore<T>;
+    fn deref(&self) -> &Self::Target {
+        &self.store
+    }
+}
+
 impl<T: Clone + PartialEq + 'static> ReadOnlyHandle<T> {
     pub fn new(rx: Receiver<T>, initial: T) -> Self {
         Self {
             store: ServiceStore::new(rx, initial),
         }
-    }
-
-    pub fn subscribe(&self, f: impl Fn(&T) + 'static) {
-        self.store.subscribe(f);
-    }
-
-    pub fn get(&self) -> T {
-        self.store.get()
     }
 }
 
