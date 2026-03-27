@@ -1,8 +1,9 @@
 pub mod google;
 pub mod local;
 pub mod provider;
+pub mod utils;
 
-pub use provider::{AuthStatus, Task, TaskList, TaskProvider};
+pub use provider::{AuthStatus, Task, TaskProvider};
 
 pub struct TaskRegistry {
     providers: Vec<Box<dyn TaskProvider>>,
@@ -19,38 +20,37 @@ impl TaskRegistry {
         providers.push(Box::new(local::LocalTodoProvider::new()));
 
         // Google (only if credentials exist)
+        let mut active = 0;
         match google::GoogleTasksProvider::load() {
-            Ok(google) => providers.push(Box::new(google)),
+            Ok(google) => {
+                providers.push(Box::new(google));
+                active = 1; // Default to Google Tasks
+            }
             Err(e) => log::info!("[tasks] Google provider unavailable: {e}"),
         }
 
         Self {
             providers,
-            active: 1,
+            active,
             cached_tasks: Vec::new(),
             last_list_id: None,
         }
     }
 
+    // ── Provider Access (bounds-safe) ──────────────────────────────────
+
     pub fn active(&self) -> &dyn TaskProvider {
-        self.providers[self.active].as_ref()
+        &*self.providers[self.active]
     }
 
     pub fn active_mut(&mut self) -> &mut dyn TaskProvider {
-        self.providers[self.active].as_mut()
+        &mut *self.providers[self.active]
     }
+
+    // ── Cache ──────────────────────────────────────────────────────────
 
     pub fn cached_tasks(&self) -> &[Task] {
         &self.cached_tasks
-    }
-
-    pub fn cached_tasks_mut(&mut self) -> &mut Vec<Task> {
-        &mut self.cached_tasks
-    }
-
-    pub fn set_cached_tasks(&mut self, tasks: Vec<Task>, list_id: String) {
-        self.cached_tasks = tasks;
-        self.last_list_id = Some(list_id);
     }
 
     pub fn update_cached_task(&mut self, task_id: &str, done: bool) {
@@ -63,6 +63,8 @@ impl TaskRegistry {
         self.last_list_id.as_deref()
     }
 
+    // ── Refresh ────────────────────────────────────────────────────────
+
     pub fn refresh_tasks(&mut self) -> Result<Vec<Task>, String> {
         let lists = self.providers[self.active].lists()?;
         let list_id = lists.first().map(|l| l.id.as_str()).unwrap_or("default");
@@ -72,17 +74,43 @@ impl TaskRegistry {
         Ok(tasks)
     }
 
-    pub fn set_active(&mut self, index: usize) {
-        if index < self.providers.len() {
-            self.active = index;
+    // ── Optimistic Add (encapsulates local-vs-remote branching) ────────
+
+    pub fn optimistic_add_task(&mut self, title: &str) -> Option<Task> {
+        if self.providers[self.active].is_async() {
+            // Async provider: add placeholder to cache, caller handles API
+            let placeholder = Task {
+                id: String::new(),
+                title: title.to_string(),
+                done: false,
+                provider: "remote".to_string(),
+            };
+            self.cached_tasks.push(placeholder.clone());
+            Some(placeholder)
+        } else {
+            // Sync provider: do it now
+            let list_id = self.last_list_id().unwrap_or("default").to_string();
+            match self.providers[self.active].add_task(&list_id, title) {
+                Ok(task) => {
+                    self.cached_tasks.push(task.clone());
+                    Some(task)
+                }
+                Err(e) => {
+                    log::warn!("[tasks] add_task failed: {e}");
+                    None
+                }
+            }
         }
     }
 
-    pub fn count(&self) -> usize {
-        self.providers.len()
-    }
+    pub fn optimistic_toggle_task(&mut self, task_id: &str, done: bool) {
+        self.update_cached_task(task_id, done);
 
-    pub fn provider_name(&self, index: usize) -> Option<&str> {
-        self.providers.get(index).map(|p| p.name())
+        if self.providers[self.active].is_async() {
+            // Async: caller must spawn API call separately
+        } else {
+            let list_id = self.last_list_id().unwrap_or("default").to_string();
+            let _ = self.providers[self.active].toggle_task(&list_id, task_id, done);
+        }
     }
 }

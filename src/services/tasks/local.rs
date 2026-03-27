@@ -1,7 +1,7 @@
-use super::provider::{AuthStatus, Task, TaskList, TaskProvider};
+use super::provider::{Task, TaskList, TaskProvider};
+use super::utils::{data_dir, load_json, save_json};
 use log::info;
 use serde::{Deserialize, Serialize};
-use std::fs;
 use std::path::PathBuf;
 
 #[derive(Serialize, Deserialize, Default)]
@@ -24,25 +24,14 @@ pub struct LocalTodoProvider {
 
 impl LocalTodoProvider {
     pub fn new() -> Self {
-        let dir = dirs()
-            .unwrap_or_else(|| PathBuf::from("."));
+        let dir = data_dir().unwrap_or_else(|| PathBuf::from("."));
         let path = dir.join("tasks.json");
-
-        let storage = fs::read_to_string(&path)
-            .ok()
-            .and_then(|s| serde_json::from_str(&s).ok())
-            .unwrap_or_default();
-
+        let storage = load_json(&path);
         Self { path, storage }
     }
 
     fn save(&self) {
-        if let Some(parent) = self.path.parent() {
-            let _ = fs::create_dir_all(parent);
-        }
-        if let Ok(json) = serde_json::to_string_pretty(&self.storage) {
-            let _ = fs::write(&self.path, json);
-        }
+        save_json(&self.path, &self.storage);
     }
 }
 
@@ -53,22 +42,6 @@ impl TaskProvider for LocalTodoProvider {
 
     fn icon(&self) -> &str {
         "checkbox-checked-symbolic"
-    }
-
-    fn is_local(&self) -> bool {
-        true
-    }
-
-    fn auth_status(&mut self) -> AuthStatus {
-        AuthStatus::Authenticated
-    }
-
-    fn authenticate(&mut self) -> Result<AuthStatus, String> {
-        Ok(AuthStatus::Authenticated)
-    }
-
-    fn is_authenticated(&self) -> bool {
-        true
     }
 
     fn lists(&mut self) -> Result<Vec<TaskList>, String> {
@@ -124,14 +97,4 @@ impl TaskProvider for LocalTodoProvider {
             Err("Task not found".to_string())
         }
     }
-}
-
-fn dirs() -> Option<PathBuf> {
-    std::env::var_os("XDG_DATA_HOME")
-        .map(|p| PathBuf::from(p).join("axis"))
-        .or_else(|| {
-            std::env::var_os("HOME").map(|h| {
-                PathBuf::from(h).join(".local/share/axis")
-            })
-        })
 }
