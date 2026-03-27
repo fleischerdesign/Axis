@@ -22,13 +22,12 @@ use std::time::Duration;
 #[derive(Clone)]
 pub struct Bar {
     pub window: gtk4::ApplicationWindow,
-    pub launcher_island: gtk4::Box,
-    pub status_island: gtk4::Box,
-    pub ws_island: gtk4::Box,
-    pub clock_island: gtk4::Box,
-    pub tray_island: gtk4::Box,
-    pub vol_icon: gtk4::Image,
     pub popup_open: ReactiveBool,
+    launcher: gtk4::Box,
+    status: gtk4::Box,
+    ws: gtk4::Box,
+    clock: gtk4::Box,
+    vol_icon: gtk4::Image,
     is_visible: ReactiveBool,
     hide_timeout: Rc<RefCell<Option<glib::SourceId>>>,
     anim_source: Rc<RefCell<Option<glib::SourceId>>>,
@@ -56,7 +55,6 @@ impl Bar {
         window.set_exclusive_zone(-1);
         window.set_margin(Edge::Bottom, -(BAR_HEIGHT - BAR_PEEK_PX));
 
-        // Sub-Komponenten initialisieren
         let launcher = BarLauncher::new();
         let center = BarCenter::new(ctx.clone());
         let status = BarStatus::new(ctx.clone());
@@ -76,13 +74,12 @@ impl Bar {
 
         let bar = Self {
             window: window.clone(),
-            launcher_island: launcher.container,
-            status_island: status.container,
-            ws_island: center.ws_island,
-            clock_island: center.clock_island,
-            tray_island: tray.container,
-            vol_icon: status.vol_icon,
             popup_open: popup_open.clone(),
+            launcher: launcher.container,
+            status: status.container,
+            ws: center.ws_island,
+            clock: center.clock_island,
+            vol_icon: status.vol_icon,
             is_visible: is_visible.clone(),
             hide_timeout: hide_timeout.clone(),
             anim_source: anim_source.clone(),
@@ -114,16 +111,34 @@ impl Bar {
         bar
     }
 
+    pub fn launcher_island(&self) -> &gtk4::Box {
+        &self.launcher
+    }
+
+    pub fn status_island(&self) -> &gtk4::Box {
+        &self.status
+    }
+
+    pub fn workspace_island(&self) -> &gtk4::Box {
+        &self.ws
+    }
+
+    pub fn clock_island(&self) -> &gtk4::Box {
+        &self.clock
+    }
+
+    pub fn volume_icon(&self) -> &gtk4::Image {
+        &self.vol_icon
+    }
+
     pub fn check_auto_hide(&self) {
         let should_be_visible = self.popup_open.get() || self.is_hovered.get();
 
-        // Timer für das Verstecken immer stoppen, wenn sich der Status ändert
         if let Some(src) = self.hide_timeout.borrow_mut().take() {
             src.remove();
         }
 
         if should_be_visible {
-            // SHOW
             if !self.is_visible.get() {
                 self.is_visible.set(true);
                 SlideAnimator::slide_margin(
@@ -134,7 +149,6 @@ impl Bar {
                 );
             }
         } else {
-            // HIDE (mit Delay)
             let is_visible_for_cb = self.is_visible.clone();
             let hide_timeout_for_cb = self.hide_timeout.clone();
             let anim_source_for_cb = self.anim_source.clone();

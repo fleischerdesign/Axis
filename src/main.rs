@@ -167,7 +167,7 @@ fn build_ui(app: &libadwaita::Application, start_locked: bool, wallpaper_path: O
 
     // Popups registrieren
     let ls_lock = lock_screen.clone();
-    let qs = Rc::new(QuickSettingsPopup::new(app, &bar.vol_icon, ctx.clone(), Rc::new(move || ls_lock.lock_session()) as Rc<dyn Fn()>));
+    let qs = Rc::new(QuickSettingsPopup::new(app, bar.volume_icon(), ctx.clone(), Rc::new(move || ls_lock.lock_session()) as Rc<dyn Fn()>));
     shell_ctrl.register(&qs);
 
     // --- ARCHIVE (über dem QS Popup) ---
@@ -207,10 +207,10 @@ fn build_ui(app: &libadwaita::Application, start_locked: bool, wallpaper_path: O
     });
 
     // --- CLICK HANDLER ---
-    setup_click_handler(&bar.launcher_island, shell_ctrl.clone(), "launcher");
-    setup_click_handler(&bar.status_island, shell_ctrl.clone(), "qs");
-    setup_click_handler(&bar.ws_island, shell_ctrl.clone(), "ws");
-    setup_click_handler(&bar.clock_island, shell_ctrl.clone(), "calendar");
+    setup_click_handler(bar.launcher_island(), shell_ctrl.clone(), "launcher");
+    setup_click_handler(bar.status_island(), shell_ctrl.clone(), "qs");
+    setup_click_handler(bar.workspace_island(), shell_ctrl.clone(), "ws");
+    setup_click_handler(bar.clock_island(), shell_ctrl.clone(), "calendar");
 
     log::info!("UI ready, presenting window");
     bar.window.present();
