@@ -71,17 +71,24 @@ pub struct NotificationData {
 
 pub struct NotificationService;
 
+impl super::Service for NotificationService {
+    type Data = NotificationData;
+    type Cmd = NotificationCmd;
+
+    fn spawn() -> (ServiceStore<Self::Data>, Sender<Self::Cmd>) {
+        Self::spawn_inner()
+    }
+}
+
 impl NotificationService {
-    pub fn spawn_with_raw_tx() -> (ServiceStore<NotificationData>, Sender<NotificationCmd>, Sender<Notification>) {
-        let (raw_tx, raw_rx) = bounded::<Notification>(64);
+    fn spawn_inner() -> (ServiceStore<NotificationData>, Sender<NotificationCmd>) {
         let (data_tx, data_rx) = bounded::<NotificationData>(64);
-        let (cmd_tx, cmd_rx) = bounded::<NotificationCmd>(32);
+        let (cmd_tx, cmd_rx) = bounded::<NotificationCmd>(64);
         let server_cmd_tx = cmd_tx.clone();
-        let raw_tx_ret = raw_tx.clone();
-        
+
         tokio::spawn(async move {
             let conn = async {
-                let server = NotificationServer::new(raw_tx, server_cmd_tx);
+                let server = NotificationServer::new(server_cmd_tx);
                 let builder = Builder::session()?;
                 let builder = builder.name("org.freedesktop.Notifications")?;
                 let builder = builder.serve_at("/org/freedesktop/Notifications", server)?;
@@ -114,39 +121,38 @@ impl NotificationService {
 
             loop {
                 tokio::select! {
-                    Ok(n) = raw_rx.recv() => {
-                        info!("[notifications] {} - {}", n.app_name, n.summary);
-                        let id = n.id;
-                        if let Some(pos) = history.iter().position(|x| x.id == id) {
-                            history[pos] = n;
-                        } else {
-                            history.push(n);
-                        }
-                        if history.len() > 20 { history.remove(0); }
-                        let _ = data_tx.send(NotificationData { 
-                            notifications: history.clone(), 
-                            last_id: id 
-                        }).await;
-                    }
-
                     Ok(cmd) = cmd_rx.recv() => {
                         match cmd {
+                            NotificationCmd::Show(n) => {
+                                info!("[notifications] {} - {}", n.app_name, n.summary);
+                                let id = n.id;
+                                if let Some(pos) = history.iter().position(|x| x.id == id) {
+                                    history[pos] = n;
+                                } else {
+                                    history.push(n);
+                                }
+                                if history.len() > 20 { history.remove(0); }
+                                let _ = data_tx.send(NotificationData {
+                                    notifications: history.clone(),
+                                    last_id: id
+                                }).await;
+                            }
                             NotificationCmd::Close(id) => {
                                 info!("[notifications] Notification {id} closed");
                                 history.retain(|n| n.id != id);
-                                let _ = data_tx.send(NotificationData { 
-                                    notifications: history.clone(), 
-                                    last_id: 0 
+                                let _ = data_tx.send(NotificationData {
+                                    notifications: history.clone(),
+                                    last_id: 0
                                 }).await;
                                 let _ = interface_ref.notification_closed(id, 2).await;
-                            },
+                            }
                             NotificationCmd::Action(id, key) => {
                                 info!("[notifications] Notification {id} action: {key}");
                                 let _ = interface_ref.action_invoked(id, &key).await;
                                 history.retain(|n| n.id != id);
-                                let _ = data_tx.send(NotificationData { 
-                                    notifications: history.clone(), 
-                                    last_id: 0 
+                                let _ = data_tx.send(NotificationData {
+                                    notifications: history.clone(),
+                                    last_id: 0
                                 }).await;
                                 let _ = interface_ref.notification_closed(id, 2).await;
                             }
@@ -156,6 +162,6 @@ impl NotificationService {
             }
         });
 
-        (ServiceStore::new(data_rx, Default::default()), cmd_tx, raw_tx_ret)
+        (ServiceStore::new(data_rx, Default::default()), cmd_tx)
     }
 }

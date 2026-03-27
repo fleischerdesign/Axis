@@ -1,4 +1,4 @@
-use async_channel::Sender;
+use crate::services::notifications::{server::NotificationCmd, NotificationData};
 use chrono::{DateTime, Local};
 
 use crate::services::airplane::{AirplaneCmd, AirplaneData};
@@ -11,7 +11,6 @@ use crate::services::launcher::{LauncherCmd, LauncherData};
 use crate::services::network::{NetworkCmd, NetworkData};
 use crate::services::nightlight::{NightlightCmd, NightlightData};
 use crate::services::niri::NiriData;
-use crate::services::notifications::{server::NotificationCmd, Notification, NotificationData};
 use crate::services::power::PowerData;
 use crate::services::tasks::TaskRegistry;
 use crate::services::tray::{TrayCmd, TrayData};
@@ -39,7 +38,6 @@ pub struct AppContext {
     pub nightlight: ServiceHandle<NightlightData, NightlightCmd>,
     pub launcher: ServiceHandle<LauncherData, LauncherCmd>,
     pub notifications: ServiceHandle<NotificationData, NotificationCmd>,
-    pub notification_raw_tx: Sender<Notification>,
     pub dnd: ServiceHandle<DndData, DndCmd>,
     pub tray: ServiceHandle<TrayData, TrayCmd>,
     pub kdeconnect: ServiceHandle<KdeConnectData, KdeConnectCmd>,

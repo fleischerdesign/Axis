@@ -126,7 +126,7 @@ fn build_ui(app: &libadwaita::Application, start_locked: bool, wallpaper_path: O
                 crate::widgets::quick_settings::bluetooth_pair_dialog::send_pairing_notification(
                     req,
                     ctx_bt.bluetooth.tx.clone(),
-                    &ctx_bt.notification_raw_tx,
+                    &ctx_bt.notifications.tx,
                 );
             }
         }
@@ -338,8 +338,6 @@ fn setup_lock_triggers(lock_screen: &Rc<LockScreen>) {
 fn setup_services() -> AppContext {
     use crate::app_context::{spawn_readonly, spawn_service};
 
-    let (notifications_store, notifications_tx, notification_raw_tx) = NotificationService::spawn_with_raw_tx();
-
     AppContext {
         airplane:     spawn_service::<AirplaneService>(),
         network:      spawn_service::<NetworkService>(),
@@ -348,11 +346,10 @@ fn setup_services() -> AppContext {
         backlight:    spawn_service::<BacklightService>(),
         nightlight:   spawn_service::<NightlightService>(),
         launcher:     spawn_service::<LauncherService>(),
+        notifications: spawn_service::<NotificationService>(),
         dnd:          spawn_service::<DndService>(),
         tray:         spawn_service::<TrayService>(),
         kdeconnect:   spawn_service::<KdeConnectService>(),
-        notifications: ServiceHandle { store: notifications_store, tx: notifications_tx },
-        notification_raw_tx,
         power:        spawn_readonly::<PowerService>(),
         niri:         spawn_readonly::<NiriService>(),
         clock:        spawn_readonly::<ClockService>(),

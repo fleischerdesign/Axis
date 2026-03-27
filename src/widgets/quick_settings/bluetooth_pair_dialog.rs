@@ -1,5 +1,6 @@
-use crate::services::bluetooth::{self, BluetoothCmd, PairingRequest, PairingType};
+use crate::services::bluetooth::{BluetoothCmd, PairingRequest, PairingType};
 use crate::services::notifications::{Notification, NotificationAction};
+use crate::services::notifications::server::NotificationCmd;
 use async_channel::Sender;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -69,9 +70,8 @@ fn create_pairing_notification(req: &PairingRequest, tx: Sender<BluetoothCmd>) -
 pub fn send_pairing_notification(
     req: &PairingRequest,
     tx: Sender<BluetoothCmd>,
-    raw_tx: &async_channel::Sender<Notification>,
+    cmd_tx: &Sender<NotificationCmd>,
 ) {
     let notification = create_pairing_notification(req, tx);
-    bluetooth::set_pairing_notification_id(BLUETOOTH_PAIRING_NOTIF_ID);
-    let _ = raw_tx.try_send(notification);
+    let _ = cmd_tx.try_send(NotificationCmd::Show(notification));
 }

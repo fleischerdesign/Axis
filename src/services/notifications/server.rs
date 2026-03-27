@@ -8,18 +8,18 @@ use zbus::object_server::SignalEmitter;
 
 #[derive(Debug, Clone)]
 pub enum NotificationCmd {
+    Show(Notification),
     Close(u32),
     Action(u32, String),
 }
 
 pub struct NotificationServer {
-    tx: Sender<Notification>,
     cmd_tx: Sender<NotificationCmd>,
 }
 
 impl NotificationServer {
-    pub fn new(tx: Sender<Notification>, cmd_tx: Sender<NotificationCmd>) -> Self {
-        Self { tx, cmd_tx }
+    pub fn new(cmd_tx: Sender<NotificationCmd>) -> Self {
+        Self { cmd_tx }
     }
 }
 
@@ -69,7 +69,7 @@ impl NotificationServer {
             internal_id: 0,
         };
 
-        let _ = self.tx.send_blocking(notification);
+        let _ = self.cmd_tx.send_blocking(NotificationCmd::Show(notification));
         id
     }
 
@@ -77,8 +77,6 @@ impl NotificationServer {
         let _ = self.cmd_tx.send_blocking(NotificationCmd::Close(id));
     }
 
-    // --- SIGNALE (Zbus 5 Style) ---
-    // Wichtig: Kein &self, SignalEmitter als erstes Argument
     #[zbus(signal)]
     async fn action_invoked(emitter: &SignalEmitter<'_>, id: u32, action_key: &str) -> zbus::Result<()>;
 
