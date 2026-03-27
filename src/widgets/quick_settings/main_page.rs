@@ -164,104 +164,59 @@ impl MainPage {
         container.append(&bottom_row);
 
         // --- BUTTON ACTIONS ---
+        use crate::widgets::components::toggle_tile::ToggleTile;
 
-        // WiFi toggle: liest aktuellen State direkt aus dem Store
-        let ctx_wifi = ctx.clone();
-        let network_store = ctx.network.clone();
-        wifi_tile.main_btn.connect_clicked(move |_| {
-            let current = network_store.get().is_wifi_enabled;
-            let _ = ctx_wifi
-                .network
-                .tx
-                .try_send(NetworkCmd::ToggleWifi(!current));
+        ToggleTile::wire_service(&wifi_tile, &ctx.network,
+            |on| NetworkCmd::ToggleWifi(on),
+            |d| d.is_wifi_enabled,
+            open_wifi,
+            |_, _| {},
+        );
+
+        ToggleTile::wire_service(&bt_tile, &ctx.bluetooth,
+            |on| BluetoothCmd::TogglePower(on),
+            |d| d.is_powered,
+            open_bt,
+            |_, _| {},
+        );
+
+        ToggleTile::wire_service(&nl_tile, &ctx.nightlight,
+            |on| NightlightCmd::Toggle(on),
+            |d| d.enabled,
+            open_nl,
+            |tile, data| { tile.set_sensitive(data.available); },
+        );
+
+        ToggleTile::wire_service(&dnd_tile, &ctx.dnd,
+            |on| DndCmd::Toggle(on),
+            |d| d.enabled,
+            || {},
+            |_, _| {},
+        );
+
+        ToggleTile::wire_service(&airplane_tile, &ctx.airplane,
+            |on| AirplaneCmd::Toggle(on),
+            |d| d.enabled,
+            || {},
+            |_, _| {},
+        );
+
+        // KDE Connect: no toggle, only arrow + subscribe
+        let kdeconnect_tile = Rc::new(kdeconnect_tile);
+        kdeconnect_tile.arrow_btn.as_ref().unwrap().connect_clicked(move |_| {
+            open_kdeconnect();
         });
-        wifi_tile
-            .arrow_btn
-            .as_ref()
-            .unwrap()
-            .connect_clicked(move |_| {
-                open_wifi();
-            });
-
-        nl_tile
-            .arrow_btn
-            .as_ref()
-            .unwrap()
-            .connect_clicked(move |_| {
-                open_nl();
-            });
-
-        // Bluetooth toggle: liest aktuellen State direkt aus dem Store
-        let ctx_bt = ctx.clone();
-        let bt_store = ctx.bluetooth.clone();
-        bt_tile.main_btn.connect_clicked(move |_| {
-            let current = bt_store.get().is_powered;
-            let _ = ctx_bt
-                .bluetooth
-                .tx
-                .try_send(BluetoothCmd::TogglePower(!current));
-        });
-        bt_tile
-            .arrow_btn
-            .as_ref()
-            .unwrap()
-            .connect_clicked(move |_| {
-                open_bt();
-            });
-
-        // Night Light toggle
-        let ctx_nl = ctx.clone();
-        let night_store = ctx.nightlight.clone();
-        nl_tile.main_btn.connect_clicked(move |_| {
-            let current = night_store.get().enabled;
-            let _ = ctx_nl
-                .nightlight
-                .tx
-                .try_send(NightlightCmd::Toggle(!current));
+        let kdeconnect_tile_c = kdeconnect_tile.clone();
+        ctx.kdeconnect.subscribe(move |data| {
+            let has_paired = data.devices.iter().any(|d| d.is_paired && d.is_reachable);
+            kdeconnect_tile_c.set_active(has_paired);
+            kdeconnect_tile_c.set_sensitive(data.available);
         });
 
-        // DND toggle
-        let ctx_dnd = ctx.clone();
-        let dnd_store = ctx.dnd.clone();
-        dnd_tile.main_btn.connect_clicked(move |_| {
-            let current = dnd_store.get().enabled;
-            let _ = ctx_dnd.dnd.tx.try_send(DndCmd::Toggle(!current));
-        });
-
-        // Airplane toggle
-        let ctx_ap = ctx.clone();
-        let ap_store = ctx.airplane.clone();
-        airplane_tile.main_btn.connect_clicked(move |_| {
-            let current = ap_store.get().enabled;
-            let _ = ctx_ap.airplane.tx.try_send(AirplaneCmd::Toggle(!current));
-        });
-
-        // KDE Connect → open page
-        kdeconnect_tile
-            .arrow_btn
-            .as_ref()
-            .unwrap()
-            .connect_clicked(move |_| {
-                open_kdeconnect();
-            });
-
-        // Network → Tile-States
-        let wifi_tile_c = wifi_tile.clone();
-        let eth_tile_c = eth_tile.clone();
-        ctx.network.subscribe(move |data| {
-            wifi_tile_c.set_active(data.is_wifi_enabled);
-            eth_tile_c.set_active(data.is_ethernet_connected);
-        });
-
+        // Dynamic icon subscriptions (separate concern from toggle wiring)
         let wifi_tile_c2 = wifi_tile.clone();
         WifiIcon::on_change(&ctx, move |name, _visible| {
             wifi_tile_c2.set_icon(name);
-        });
-
-        // Bluetooth → Tile-State
-        let bt_tile_c = bt_tile.clone();
-        ctx.bluetooth.subscribe(move |data| {
-            bt_tile_c.set_active(data.is_powered);
         });
 
         let bt_tile_c2 = bt_tile.clone();
@@ -269,31 +224,10 @@ impl MainPage {
             bt_tile_c2.set_icon(name);
         });
 
-        // Nightlight → Tile-State
-        let nl_tile_c = nl_tile.clone();
-        ctx.nightlight.subscribe(move |data| {
-            nl_tile_c.set_active(data.enabled);
-            nl_tile_c.set_sensitive(data.available);
-        });
-
-        // DND → Tile-State
-        let dnd_tile_c = dnd_tile.clone();
-        ctx.dnd.subscribe(move |data| {
-            dnd_tile_c.set_active(data.enabled);
-        });
-
-        // Airplane → Tile-State
-        let airplane_tile_c = airplane_tile.clone();
-        ctx.airplane.subscribe(move |data| {
-            airplane_tile_c.set_active(data.enabled);
-        });
-
-        // KDE Connect → Tile-State
-        let kdeconnect_tile_c = Rc::new(kdeconnect_tile);
-        ctx.kdeconnect.subscribe(move |data| {
-            let has_paired = data.devices.iter().any(|d| d.is_paired && d.is_reachable);
-            kdeconnect_tile_c.set_active(has_paired);
-            kdeconnect_tile_c.set_sensitive(data.available);
+        // Network → eth tile (separate from wifi toggle)
+        let eth_tile_c = eth_tile.clone();
+        ctx.network.subscribe(move |data| {
+            eth_tile_c.set_active(data.is_ethernet_connected);
         });
 
         // Volume highlight style (on subscribe + on user change)
