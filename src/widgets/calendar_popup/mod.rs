@@ -103,38 +103,18 @@ impl CalendarPopup {
     pub fn new(app: &libadwaita::Application, ctx: AppContext) -> Self {
         let base = PopupBase::new_centered(app, "AXIS Daily Panel");
 
-        // ── Main wrapper ──
+        // ── Main wrapper (horizontal: Tasks | Kalender | Termine) ──
         let wrapper = gtk4::Box::builder()
-            .orientation(gtk4::Orientation::Vertical)
+            .orientation(gtk4::Orientation::Horizontal)
             .css_classes(vec!["calendar-wrapper".to_string()])
-            .spacing(0)
+            .spacing(16)
             .build();
 
-        // ── Date header ──
-        let date_label = gtk4::Label::builder()
-            .label(&date::format_date())
-            .css_classes(vec!["calendar-date-header".to_string()])
-            .halign(gtk4::Align::Start)
-            .build();
-        wrapper.append(&date_label);
-
-        // ── Calendar widget ──
-        let calendar = gtk4::Calendar::builder()
-            .show_heading(false)
-            .show_day_names(true)
-            .show_week_numbers(false)
-            .build();
-        calendar.add_css_class("calendar-grid");
-        wrapper.append(&calendar);
-
-        // ── Separator ──
-        wrapper.append(&gtk4::Separator::new(gtk4::Orientation::Horizontal));
-
-        // ── Tasks section ──
-        let tasks_box = gtk4::Box::builder()
+        // ── LEFT: Tasks section ──
+        let tasks_section = gtk4::Box::builder()
             .orientation(gtk4::Orientation::Vertical)
             .spacing(4)
-            .margin_top(4)
+            .css_classes(vec!["calendar-section".to_string()])
             .build();
 
         let list_selector = gtk4::Box::builder()
@@ -142,13 +122,13 @@ impl CalendarPopup {
             .spacing(10)
             .css_classes(vec!["calendar-tasks-header-row".to_string()])
             .build();
-        tasks_box.append(&list_selector);
+        tasks_section.append(&list_selector);
 
         let task_list = gtk4::Box::builder()
             .orientation(gtk4::Orientation::Vertical)
             .spacing(2)
             .build();
-        tasks_box.append(&task_list);
+        tasks_section.append(&task_list);
 
         let spinner = gtk4::Spinner::builder()
             .spinning(true)
@@ -157,7 +137,7 @@ impl CalendarPopup {
             .margin_top(8)
             .margin_bottom(8)
             .build();
-        tasks_box.append(&spinner);
+        tasks_section.append(&spinner);
 
         let auth_box = gtk4::Box::builder()
             .orientation(gtk4::Orientation::Vertical)
@@ -165,27 +145,48 @@ impl CalendarPopup {
             .visible(false)
             .margin_top(8)
             .build();
-        tasks_box.append(&auth_box);
+        tasks_section.append(&auth_box);
 
-        // ── Calendar section ──
-        let calendar_box = gtk4::Box::builder()
+        // ── CENTER: Calendar widget ──
+        let calendar_center = gtk4::Box::builder()
             .orientation(gtk4::Orientation::Vertical)
             .spacing(4)
-            .margin_top(4)
+            .css_classes(vec!["calendar-section".to_string()])
+            .build();
+
+        let date_label = gtk4::Label::builder()
+            .label(&date::format_date())
+            .css_classes(vec!["calendar-date-header".to_string()])
+            .halign(gtk4::Align::Center)
+            .build();
+        calendar_center.append(&date_label);
+
+        let calendar = gtk4::Calendar::builder()
+            .show_heading(false)
+            .show_day_names(true)
+            .show_week_numbers(false)
+            .build();
+        calendar.add_css_class("calendar-grid");
+        calendar_center.append(&calendar);
+
+        // ── RIGHT: Calendar events section ──
+        let events_section = gtk4::Box::builder()
+            .orientation(gtk4::Orientation::Vertical)
+            .spacing(4)
+            .css_classes(vec!["calendar-section".to_string()])
             .build();
 
         let calendar_range_toggle = gtk4::Box::builder()
             .orientation(gtk4::Orientation::Horizontal)
             .spacing(10)
-            .css_classes(vec!["calendar-range-row".to_string()])
             .build();
-        calendar_box.append(&calendar_range_toggle);
+        events_section.append(&calendar_range_toggle);
 
         let calendar_list = gtk4::Box::builder()
             .orientation(gtk4::Orientation::Vertical)
             .spacing(2)
             .build();
-        calendar_box.append(&calendar_list);
+        events_section.append(&calendar_list);
 
         let calendar_auth_box = gtk4::Box::builder()
             .orientation(gtk4::Orientation::Vertical)
@@ -193,11 +194,14 @@ impl CalendarPopup {
             .visible(false)
             .margin_top(8)
             .build();
-        calendar_box.append(&calendar_auth_box);
+        events_section.append(&calendar_auth_box);
 
-        wrapper.append(&calendar_box);
+        // Add all three sections to wrapper
+        wrapper.append(&tasks_section);
+        wrapper.append(&calendar_center);
+        wrapper.append(&events_section);
 
-        // ── Add task row ──
+        // ── Add task row (at bottom of left section) ──
         let add_row = gtk4::Box::builder()
             .orientation(gtk4::Orientation::Horizontal)
             .spacing(8)
@@ -217,9 +221,8 @@ impl CalendarPopup {
 
         add_row.append(&add_entry);
         add_row.append(&add_btn);
-        tasks_box.append(&add_row);
+        tasks_section.append(&add_row);
 
-        wrapper.append(&tasks_box);
         base.set_content(&wrapper);
 
         let (refresh_tx, refresh_rx) = mpsc::channel::<()>();
