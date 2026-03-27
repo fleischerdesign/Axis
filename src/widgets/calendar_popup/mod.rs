@@ -124,11 +124,17 @@ impl CalendarPopup {
             .build();
         tasks_section.append(&list_selector);
 
+        let task_scroll = gtk4::ScrolledWindow::builder()
+            .vexpand(true)
+            .css_classes(vec!["calendar-task-scroll".to_string()])
+            .build();
+
         let task_list = gtk4::Box::builder()
             .orientation(gtk4::Orientation::Vertical)
             .spacing(2)
             .build();
-        tasks_section.append(&task_list);
+        task_scroll.set_child(Some(&task_list));
+        tasks_section.append(&task_scroll);
 
         let spinner = gtk4::Spinner::builder()
             .spinning(true)
@@ -182,11 +188,17 @@ impl CalendarPopup {
             .build();
         events_section.append(&calendar_range_toggle);
 
+        let calendar_scroll = gtk4::ScrolledWindow::builder()
+            .vexpand(true)
+            .css_classes(vec!["calendar-event-scroll".to_string()])
+            .build();
+
         let calendar_list = gtk4::Box::builder()
             .orientation(gtk4::Orientation::Vertical)
             .spacing(2)
             .build();
-        events_section.append(&calendar_list);
+        calendar_scroll.set_child(Some(&calendar_list));
+        events_section.append(&calendar_scroll);
 
         let calendar_auth_box = gtk4::Box::builder()
             .orientation(gtk4::Orientation::Vertical)
