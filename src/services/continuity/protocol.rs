@@ -101,7 +101,7 @@ pub async fn write_message<W: AsyncWriteExt + Unpin>(
     wire.extend_from_slice(&len.to_be_bytes());
     wire.extend_from_slice(&payload);
 
-    log::info!(
+    log::trace!(
         "[continuity:protocol] TX {} bytes: {:02x?}",
         wire.len(),
         &wire[..wire.len().min(24)]
@@ -118,7 +118,7 @@ pub async fn read_message<R: AsyncReadExt + Unpin>(
     let mut magic = [0u8; 4];
     reader.read_exact(&mut magic).await?;
 
-    log::info!(
+    log::debug!(
         "[continuity:protocol] RX magic: {:02x?} (expect {:02x?})",
         magic,
         MAGIC
@@ -131,7 +131,7 @@ pub async fn read_message<R: AsyncReadExt + Unpin>(
         let _ = reader.read_exact(&mut ver).await;
         let _ = reader.read_exact(&mut len_bytes).await;
 
-        log::warn!(
+        log::debug!(
             "[continuity:protocol] RX BAD: magic={magic:02x?} ver={ver:02x?} len={len_bytes:02x?}"
         );
         return Err(io::Error::new(
@@ -149,8 +149,8 @@ pub async fn read_message<R: AsyncReadExt + Unpin>(
     let version = u32::from_be_bytes(ver_bytes);
     let len = u32::from_be_bytes(len_bytes) as usize;
 
-    log::info!(
-        "[continuity:protocol] RX header ok: ver={version} len={len}"
+    log::debug!(
+        "[continuity:protocol] RX header: ver={version} len={len}"
     );
 
     if version != PROTOCOL_VERSION {

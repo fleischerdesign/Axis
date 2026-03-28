@@ -1,5 +1,5 @@
 use async_channel::Sender;
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 use std::net::SocketAddr;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::oneshot;
@@ -201,7 +201,7 @@ async fn listen_loop(
             result = listener.accept() => {
                 match result {
                     Ok((stream, addr)) => {
-                        info!("[continuity:connection] incoming from {addr}");
+                        debug!("[continuity:connection] incoming from {addr}");
                         let tx = event_tx.clone();
                         let (write_tx, write_rx) =
                             tokio::sync::mpsc::channel::<Message>(64);
@@ -244,14 +244,13 @@ async fn run_connection(
     let peer = stream.peer_addr().map(|a| a.to_string()).unwrap_or_default();
     let local = stream.local_addr().map(|a| a.to_string()).unwrap_or_default();
     info!(
-        "[continuity:connection] run_connection: local={local} peer={peer} initiator={is_initiator}"
+        "[continuity:connection] connected {local} → {peer}"
     );
 
     let (mut reader, mut writer) = split(stream);
 
     // If we initiated the connection, send Hello first
     if is_initiator {
-        info!("[continuity:connection] sending Hello as initiator");
         let hello = Message::Hello {
             device_id,
             device_name,
@@ -262,10 +261,10 @@ async fn run_connection(
             return;
         }
     } else {
-        info!("[continuity:connection] waiting for Hello from initiator ({peer})");
+        debug!("[continuity:connection] waiting for Hello from {peer}");
     }
 
-    info!("[continuity:connection] entering message loop ({peer})");
+    debug!("[continuity:connection] message loop started ({peer})");
     loop {
         tokio::select! {
             result = protocol::read_message(&mut reader) => {
