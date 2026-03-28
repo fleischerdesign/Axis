@@ -90,13 +90,25 @@ impl ConnectionProvider for TcpConnectionProvider {
         let (write_tx, write_rx) = tokio::sync::mpsc::channel::<Message>(64);
 
         let task = tokio::spawn(async move {
-            match TcpStream::connect(addr).await {
-                Ok(stream) => {
+            match tokio::time::timeout(
+                std::time::Duration::from_secs(5),
+                TcpStream::connect(addr),
+            )
+            .await
+            {
+                Ok(Ok(stream)) => {
                     info!("[continuity:connection] connected to {addr}");
                     run_connection(stream, write_rx, tx, true).await;
                 }
-                Err(e) => {
+                Ok(Err(e)) => {
                     error!("[continuity:connection] connect to {addr} failed: {e}");
+                    let _ = tx.send(ConnectionEvent::Error(e.to_string())).await;
+                }
+                Err(_) => {
+                    error!("[continuity:connection] connect to {addr} timed out");
+                    let _ = tx
+                        .send(ConnectionEvent::Error("connection timed out".into()))
+                        .await;
                 }
             }
         });

@@ -245,11 +245,22 @@ async fn browse_services(
     let conn_scan = conn.clone();
     let tx_scan = event_tx.clone();
     tokio::spawn(async move {
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
         for i in 0..10 {
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-            if let Err(e) = scan_cached_services(&conn_scan, &tx_scan).await {
-                if i == 0 {
-                    warn!("[continuity:discovery] initial scan failed: {e}");
+            match scan_cached_services(&conn_scan).await {
+                Ok(peers) => {
+                    for peer in peers {
+                        if seen.insert(peer.device_id.clone()) {
+                            info!("[continuity:discovery] peer: {} at {}", peer.device_name, peer.address);
+                            let _ = tx_scan.send(DiscoveryEvent::PeerFound(peer)).await;
+                        }
+                    }
+                }
+                Err(e) => {
+                    if i == 0 {
+                        warn!("[continuity:discovery] initial scan failed: {e}");
+                    }
                 }
             }
         }
@@ -377,8 +388,7 @@ async fn resolve_service(
 /// Deduplicates by hostname, collects IPv4 + LAN-scope IPv6, skips self.
 async fn scan_cached_services(
     _conn: &Connection,
-    event_tx: &Sender<DiscoveryEvent>,
-) -> Result<(), String> {
+) -> Result<Vec<PeerInfo>, String> {
     let output = tokio::process::Command::new("avahi-browse")
         .args(["-t", AVAHI_SERVICE, "--resolve", "-p", "-r"])
         .output()
@@ -449,22 +459,16 @@ async fn scan_cached_services(
     }
 
     // Second pass: build PeerInfo (need IPv4 as primary)
+    let mut result = Vec::new();
     for (_, entry) in raw {
         let Some(addr_v4) = entry.addr_v4 else { continue };
-        let peer = PeerInfo {
+        result.push(PeerInfo {
             device_id: entry.name,
             device_name: entry.host,
             address: addr_v4,
             address_v6: entry.addr_v6,
-        };
-        info!(
-            "[continuity:discovery] peer: {} at {}{}",
-            peer.device_name,
-            peer.address,
-            peer.address_v6.map(|v6| format!(" + {v6}")).unwrap_or_default()
-        );
-        let _ = event_tx.send(DiscoveryEvent::PeerFound(peer)).await;
+        });
     }
 
-    Ok(())
+    Ok(result)
 }
