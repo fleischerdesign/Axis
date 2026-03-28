@@ -136,6 +136,11 @@ fn build_ui(app: &libadwaita::Application, start_locked: bool, wallpaper_path: O
         let last_notified: std::cell::RefCell<Option<String>> = std::cell::RefCell::new(None);
         ctx.continuity.subscribe(move |data| {
             if let Some(pending) = &data.pending_pin {
+                // Only show notification for INCOMING requests
+                if !pending.is_incoming {
+                    return;
+                }
+
                 let peer_id = &pending.peer_id;
                 if last_notified.borrow().as_deref() != Some(peer_id) {
                     *last_notified.borrow_mut() = Some(peer_id.clone());

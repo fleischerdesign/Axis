@@ -108,6 +108,8 @@ impl ContinuityPage {
         let role_label_c = role_label.clone();
         let pin_box_c = pin_box.clone();
         let pin_value_c = pin_value.clone();
+        let pin_label_c = pin_label.clone();
+        let confirm_btn_c = confirm_btn.clone();
         let disconnect_btn_c = disconnect_btn.clone();
 
         ctx.continuity.subscribe(move |data| {
@@ -137,6 +139,13 @@ impl ContinuityPage {
             if let Some(pending) = &data.pending_pin {
                 pin_box_c.set_visible(true);
                 pin_value_c.set_label(&pending.pin);
+                if pending.is_incoming {
+                    pin_label_c.set_label("Eingehende Kopplungsanfrage");
+                    confirm_btn_c.set_visible(true);
+                } else {
+                    pin_label_c.set_label(&format!("Warten auf {}", pending.peer_name));
+                    confirm_btn_c.set_visible(false);
+                }
             } else {
                 pin_box_c.set_visible(false);
             }
