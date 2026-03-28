@@ -227,8 +227,7 @@ impl MainPage {
             |d| d.enabled,
             || {},
             |tile, data| {
-                let has_connection = data.active_connection.is_some();
-                tile.set_active(data.enabled && has_connection);
+                tile.set_active(data.enabled);
             },
         );
 

@@ -27,12 +27,16 @@ pub trait DiscoveryProvider: Send {
 const AVAHI_SERVICE: &str = "_axis-share._tcp";
 
 pub struct AvahiDiscovery {
+    conn: Option<Connection>,
+    entry_group_path: Option<OwnedObjectPath>,
     browse_task: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl AvahiDiscovery {
     pub fn new() -> Self {
         Self {
+            conn: None,
+            entry_group_path: None,
             browse_task: None,
         }
     }
@@ -40,21 +44,27 @@ impl AvahiDiscovery {
 
 impl DiscoveryProvider for AvahiDiscovery {
     fn register(&mut self, name: &str, port: u16) -> Result<(), String> {
-        let name_owned = name.to_string();
+        let name = name.to_string();
 
-        // Spawn registration as a non-blocking tokio task.
-        tokio::spawn(async move {
-            match register_service(&name_owned, port).await {
-                Ok((_group_path, _conn)) => {
-                    info!("[continuity:discovery] registration complete");
-                }
-                Err(e) => {
-                    error!("[continuity:discovery] registration failed: {e}");
-                }
-            }
+        // Synchronous registration — we need to keep the connection and
+        // EntryGroup alive. If we spawned a task and dropped the result,
+        // Avahi would free the EntryGroup and unpublish the service.
+        let (tx, rx) = std::sync::mpsc::channel();
+
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let result = rt.block_on(register_service(&name, port));
+            let _ = tx.send(result);
         });
 
-        info!("[continuity:discovery] registration started for '{name}' on port {port}");
+        let (group_path, conn) = rx
+            .recv()
+            .map_err(|e| format!("register thread error: {e}"))??;
+
+        self.conn = Some(conn);
+        self.entry_group_path = Some(group_path);
+
+        info!("[continuity:discovery] service registered and held alive");
         Ok(())
     }
 
@@ -81,6 +91,26 @@ impl DiscoveryProvider for AvahiDiscovery {
         if let Some(task) = self.browse_task.take() {
             task.abort();
         }
+
+        if let Some(conn) = &self.conn {
+            if let Some(path) = self.entry_group_path.take() {
+                let conn = conn.clone();
+                tokio::spawn(async move {
+                    if let Ok(group) = zbus::Proxy::new(
+                        &conn,
+                        "org.freedesktop.Avahi",
+                        &path,
+                        "org.freedesktop.Avahi.EntryGroup",
+                    )
+                    .await
+                    {
+                        let _ = group.call_method("Free", &()).await;
+                    }
+                });
+            }
+        }
+
+        self.conn = None;
     }
 }
 
