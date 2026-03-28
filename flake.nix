@@ -14,7 +14,7 @@
       crane,
       flake-utils,
     }:
-    flake-utils.lib.eachDefaultSystem (
+    (flake-utils.lib.eachDefaultSystem (
       system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
@@ -82,5 +82,21 @@
           '';
         };
       }
-    );
+    ))
+    // {
+      nixosModules.default =
+        { ... }:
+        {
+          services.avahi = {
+            enable = true;
+            nssmdns4 = true;
+            publish = {
+              enable = true;
+              addresses = true;
+              userServices = true;
+            };
+          };
+          networking.firewall.allowedTCPPorts = [ 7391 ];
+        };
+    };
 }
