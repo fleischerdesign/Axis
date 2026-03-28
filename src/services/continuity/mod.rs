@@ -9,6 +9,7 @@ use std::time::Instant;
 
 use super::Service;
 use crate::store::ServiceStore;
+use clipboard::ClipboardSync;
 use connection::{ConnectionEvent, ConnectionProvider};
 use discovery::{DiscoveryEvent, DiscoveryProvider};
 use log::{error, info, warn};
@@ -143,9 +144,11 @@ impl ContinuityInner {
 
         let (discovery_tx, discovery_rx) = bounded::<DiscoveryEvent>(32);
         let (conn_tx, conn_rx) = bounded::<ConnectionEvent>(64);
+        let (clipboard_tx, clipboard_rx) = bounded::<clipboard::ClipboardEvent>(32);
 
         let mut discovery = discovery::AvahiDiscovery::new();
         let mut connection = connection::TcpConnectionProvider::new();
+        let mut clipboard = clipboard::WaylandClipboard::new();
         let mut heartbeat = interval(Duration::from_secs(HEARTBEAT_INTERVAL_SECS));
 
         info!("[continuity] service started, device: {}", self.data.device_name);
@@ -155,13 +158,16 @@ impl ContinuityInner {
 
             select! {
                 Ok(cmd) = cmd_rx.recv() => {
-                    self.handle_cmd(cmd, &mut discovery, &mut connection, &discovery_tx, &conn_tx).await;
+                    self.handle_cmd(cmd, &mut discovery, &mut connection, &mut clipboard, &discovery_tx, &conn_tx, &clipboard_tx).await;
                 }
                 Ok(event) = discovery_rx.recv() => {
                     self.handle_discovery_event(event).await;
                 }
                 Ok(event) = conn_rx.recv() => {
-                    self.handle_connection_event(event, &mut connection).await;
+                    self.handle_connection_event(event, &mut connection, &mut clipboard, &clipboard_tx).await;
+                }
+                Ok(event) = clipboard_rx.recv() => {
+                    self.handle_clipboard_event(event, &connection).await;
                 }
                 _ = heartbeat.tick(), if is_connected => {
                     self.handle_heartbeat(&mut connection);
@@ -175,8 +181,10 @@ impl ContinuityInner {
         cmd: ContinuityCmd,
         discovery: &mut discovery::AvahiDiscovery,
         connection: &mut connection::TcpConnectionProvider,
+        clipboard: &mut clipboard::WaylandClipboard,
         discovery_tx: &Sender<DiscoveryEvent>,
         conn_tx: &Sender<ConnectionEvent>,
+        clipboard_tx: &Sender<clipboard::ClipboardEvent>,
     ) {
         match cmd {
             ContinuityCmd::ToggleEnabled => {
@@ -193,6 +201,7 @@ impl ContinuityInner {
                     info!("[continuity] disabled");
                     discovery.stop();
                     connection.stop();
+                    clipboard.stop_monitoring();
                     self.data.peers.clear();
                     self.data.active_connection = None;
                     self.data.sharing_mode = SharingMode::Idle;
@@ -243,6 +252,11 @@ impl ContinuityInner {
                             since: Instant::now(),
                         });
                         self.last_message_at = Some(Instant::now());
+
+                        // Start clipboard sync
+                        if let Err(e) = clipboard.start_monitoring(clipboard_tx.clone()) {
+                            error!("[continuity] failed to start clipboard monitoring: {e}");
+                        }
                     }
                 }
                 self.push();
@@ -254,6 +268,7 @@ impl ContinuityInner {
                     reason: "PIN rejected".to_string(),
                 });
                 connection.disconnect_active();
+                clipboard.stop_monitoring();
                 self.data.active_connection = None;
                 self.data.sharing_mode = SharingMode::Idle;
                 self.push();
@@ -261,6 +276,7 @@ impl ContinuityInner {
             ContinuityCmd::Disconnect => {
                 info!("[continuity] disconnecting");
                 connection.disconnect_active();
+                clipboard.stop_monitoring();
                 self.data.active_connection = None;
                 self.data.sharing_mode = SharingMode::Idle;
                 self.last_message_at = None;
@@ -329,6 +345,8 @@ impl ContinuityInner {
         &mut self,
         event: ConnectionEvent,
         connection: &mut connection::TcpConnectionProvider,
+        clipboard: &mut clipboard::WaylandClipboard,
+        clipboard_tx: &Sender<clipboard::ClipboardEvent>,
     ) {
         match event {
             ConnectionEvent::IncomingConnection { addr, write_tx } => {
@@ -355,6 +373,7 @@ impl ContinuityInner {
                 self.data.pending_pin = None;
                 self.pending_peer = None;
                 self.last_message_at = None;
+                clipboard.stop_monitoring();
                 self.push();
             }
             ConnectionEvent::MessageReceived(msg) => {
@@ -407,10 +426,20 @@ impl ContinuityInner {
                                 });
                                 self.data.pending_pin = None;
                                 self.push();
+
+                                // Start clipboard sync
+                                if let Err(e) = clipboard.start_monitoring(clipboard_tx.clone()) {
+                                    error!("[continuity] failed to start clipboard monitoring: {e}");
+                                }
                             } else {
                                 warn!("[continuity] peer sent incorrect PIN confirmation");
                                 connection.disconnect_active();
                             }
+                        }
+                    }
+                    protocol::Message::ClipboardUpdate { content, mime_type } => {
+                        if let Err(e) = clipboard.set_content(&content, &mime_type) {
+                            error!("[continuity] failed to set clipboard: {e}");
                         }
                     }
                     protocol::Message::Connected => {
@@ -424,6 +453,7 @@ impl ContinuityInner {
                         self.data.pending_pin = None;
                         self.pending_peer = None;
                         self.last_message_at = None;
+                        clipboard.stop_monitoring();
                         self.push();
                     }
                     other => {
@@ -433,6 +463,24 @@ impl ContinuityInner {
             }
             ConnectionEvent::Error(e) => {
                 error!("[continuity] connection error: {e}");
+            }
+        }
+    }
+
+    async fn handle_clipboard_event(
+        &mut self,
+        event: clipboard::ClipboardEvent,
+        connection: &connection::TcpConnectionProvider,
+    ) {
+        match event {
+            clipboard::ClipboardEvent::ContentChanged { content, mime_type } => {
+                if self.data.active_connection.is_some() {
+                    info!("[continuity] clipboard changed, sending to peer");
+                    connection.send_message(protocol::Message::ClipboardUpdate {
+                        content,
+                        mime_type,
+                    });
+                }
             }
         }
     }

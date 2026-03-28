@@ -49,6 +49,7 @@
             pkgs.gtk4-layer-shell
             pkgs.libpulseaudio
             pkgs.linux-pam
+            pkgs.wl-clipboard
           ];
 
           env = {
@@ -85,8 +86,9 @@
     ))
     // {
       nixosModules.default =
-        { ... }:
+        { pkgs, ... }:
         {
+          environment.systemPackages = [ pkgs.wl-clipboard ];
           services.avahi = {
             enable = true;
             nssmdns4 = true;
