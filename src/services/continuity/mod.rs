@@ -10,6 +10,7 @@ use std::time::Instant;
 use super::Service;
 use crate::store::ServiceStore;
 use clipboard::ClipboardSync;
+use input::{InputCapture, InputInjection};
 use connection::{ConnectionEvent, ConnectionProvider};
 use discovery::{DiscoveryEvent, DiscoveryProvider};
 use log::{error, info, warn};
@@ -145,10 +146,13 @@ impl ContinuityInner {
         let (discovery_tx, discovery_rx) = bounded::<DiscoveryEvent>(32);
         let (conn_tx, conn_rx) = bounded::<ConnectionEvent>(64);
         let (clipboard_tx, clipboard_rx) = bounded::<clipboard::ClipboardEvent>(32);
+        let (input_tx, _input_rx) = bounded::<input::InputEvent>(64);
 
         let mut discovery = discovery::AvahiDiscovery::new();
         let mut connection = connection::TcpConnectionProvider::new();
         let mut clipboard = clipboard::WaylandClipboard::new();
+        let mut injection = input::WaylandInjection::new();
+        let mut capture = input::StubCapture::new();
         let mut heartbeat = interval(Duration::from_secs(HEARTBEAT_INTERVAL_SECS));
 
         info!("[continuity] service started, device: {}", self.data.device_name);
@@ -158,13 +162,13 @@ impl ContinuityInner {
 
             select! {
                 Ok(cmd) = cmd_rx.recv() => {
-                    self.handle_cmd(cmd, &mut discovery, &mut connection, &mut clipboard, &discovery_tx, &conn_tx, &clipboard_tx).await;
+                    self.handle_cmd(cmd, &mut discovery, &mut connection, &mut clipboard, &mut injection, &mut capture, &discovery_tx, &conn_tx, &clipboard_tx, &input_tx).await;
                 }
                 Ok(event) = discovery_rx.recv() => {
                     self.handle_discovery_event(event).await;
                 }
                 Ok(event) = conn_rx.recv() => {
-                    self.handle_connection_event(event, &mut connection, &mut clipboard, &clipboard_tx).await;
+                    self.handle_connection_event(event, &mut connection, &mut clipboard, &mut injection, &clipboard_tx).await;
                 }
                 Ok(event) = clipboard_rx.recv() => {
                     self.handle_clipboard_event(event, &connection).await;
@@ -182,9 +186,12 @@ impl ContinuityInner {
         discovery: &mut discovery::AvahiDiscovery,
         connection: &mut connection::TcpConnectionProvider,
         clipboard: &mut clipboard::WaylandClipboard,
+        injection: &mut input::WaylandInjection,
+        capture: &mut input::StubCapture,
         discovery_tx: &Sender<DiscoveryEvent>,
         conn_tx: &Sender<ConnectionEvent>,
         clipboard_tx: &Sender<clipboard::ClipboardEvent>,
+        input_tx: &Sender<input::InputEvent>,
     ) {
         match cmd {
             ContinuityCmd::ToggleEnabled => {
@@ -202,6 +209,8 @@ impl ContinuityInner {
                     discovery.stop();
                     connection.stop();
                     clipboard.stop_monitoring();
+                    injection.stop();
+                    capture.stop();
                     self.data.peers.clear();
                     self.data.active_connection = None;
                     self.data.sharing_mode = SharingMode::Idle;
@@ -257,6 +266,12 @@ impl ContinuityInner {
                         if let Err(e) = clipboard.start_monitoring(clipboard_tx.clone()) {
                             error!("[continuity] failed to start clipboard monitoring: {e}");
                         }
+                        
+                        // Start injection
+                        use input::InputInjection;
+                        if let Err(e) = injection.start() {
+                            error!("[continuity] failed to start input injection: {e}");
+                        }
                     }
                 }
                 self.push();
@@ -269,6 +284,8 @@ impl ContinuityInner {
                 });
                 connection.disconnect_active();
                 clipboard.stop_monitoring();
+                injection.stop();
+                capture.stop();
                 self.data.active_connection = None;
                 self.data.sharing_mode = SharingMode::Idle;
                 self.push();
@@ -277,6 +294,8 @@ impl ContinuityInner {
                 info!("[continuity] disconnecting");
                 connection.disconnect_active();
                 clipboard.stop_monitoring();
+                injection.stop();
+                capture.stop();
                 self.data.active_connection = None;
                 self.data.sharing_mode = SharingMode::Idle;
                 self.last_message_at = None;
@@ -346,6 +365,7 @@ impl ContinuityInner {
         event: ConnectionEvent,
         connection: &mut connection::TcpConnectionProvider,
         clipboard: &mut clipboard::WaylandClipboard,
+        injection: &mut input::WaylandInjection,
         clipboard_tx: &Sender<clipboard::ClipboardEvent>,
     ) {
         match event {
@@ -374,6 +394,7 @@ impl ContinuityInner {
                 self.pending_peer = None;
                 self.last_message_at = None;
                 clipboard.stop_monitoring();
+                injection.stop();
                 self.push();
             }
             ConnectionEvent::MessageReceived(msg) => {
@@ -431,6 +452,12 @@ impl ContinuityInner {
                                 if let Err(e) = clipboard.start_monitoring(clipboard_tx.clone()) {
                                     error!("[continuity] failed to start clipboard monitoring: {e}");
                                 }
+
+                                // Start injection
+                                use input::InputInjection;
+                                if let Err(e) = injection.start() {
+                                    error!("[continuity] failed to start input injection: {e}");
+                                }
                             } else {
                                 warn!("[continuity] peer sent incorrect PIN confirmation");
                                 connection.disconnect_active();
@@ -441,6 +468,14 @@ impl ContinuityInner {
                         if let Err(e) = clipboard.set_content(&content, &mime_type) {
                             error!("[continuity] failed to set clipboard: {e}");
                         }
+                    }
+                    protocol::Message::CursorMove { .. }
+                    | protocol::Message::KeyPress { .. }
+                    | protocol::Message::KeyRelease { .. }
+                    | protocol::Message::PointerButton { .. }
+                    | protocol::Message::PointerAxis { .. } => {
+                        use input::InputInjection;
+                        let _ = injection.inject(&msg);
                     }
                     protocol::Message::Connected => {
                         info!("[continuity] connection established");
@@ -454,6 +489,7 @@ impl ContinuityInner {
                         self.pending_peer = None;
                         self.last_message_at = None;
                         clipboard.stop_monitoring();
+                        injection.stop();
                         self.push();
                     }
                     other => {

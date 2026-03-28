@@ -50,6 +50,7 @@
             pkgs.libpulseaudio
             pkgs.linux-pam
             pkgs.wl-clipboard
+            pkgs.libevdev
           ];
 
           env = {
@@ -89,6 +90,9 @@
         { pkgs, ... }:
         {
           environment.systemPackages = [ pkgs.wl-clipboard ];
+          services.udev.extraRules = ''
+            KERNEL=="uinput", GROUP="uinput", MODE="0660", OPTIONS+="static_node=uinput"
+          '';
           services.avahi = {
             enable = true;
             nssmdns4 = true;
