@@ -34,6 +34,7 @@ pub struct PeerInfo {
     pub device_id: String,
     pub device_name: String,
     pub address: std::net::SocketAddr,
+    pub address_v6: Option<std::net::SocketAddr>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -193,11 +194,25 @@ impl ContinuityInner {
             }
             ContinuityCmd::ConnectToPeer(peer_id) => {
                 if let Some(peer) = self.data.peers.iter().find(|p| p.device_id == peer_id) {
-                    let addr = peer.address;
                     let name = peer.device_name.clone();
-                    info!("[continuity] connecting to {name} at {addr}");
-                    if let Err(e) = connection.connect(addr, conn_tx.clone()) {
-                        error!("[continuity] connect failed: {e}");
+
+                    // Try IPv6 first (dual-stack), fall back to IPv4
+                    if let Some(addr_v6) = peer.address_v6 {
+                        info!("[continuity] connecting to {name} at {addr_v6} (IPv6)");
+                        if let Err(e) = connection.connect(addr_v6, conn_tx.clone()) {
+                            error!("[continuity] connect IPv6 failed: {e}, trying IPv4");
+                            let addr = peer.address;
+                            info!("[continuity] connecting to {name} at {addr} (IPv4)");
+                            if let Err(e) = connection.connect(addr, conn_tx.clone()) {
+                                error!("[continuity] connect IPv4 failed: {e}");
+                            }
+                        }
+                    } else {
+                        let addr = peer.address;
+                        info!("[continuity] connecting to {name} at {addr}");
+                        if let Err(e) = connection.connect(addr, conn_tx.clone()) {
+                            error!("[continuity] connect failed: {e}");
+                        }
                     }
                 }
             }

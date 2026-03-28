@@ -363,6 +363,7 @@ async fn resolve_service(
                     address: addr_str
                         .parse()
                         .map_err(|e| format!("parse address '{addr_str}': {e}"))?,
+                    address_v6: None,
                 });
             }
             Err(e) => return Err(format!("deserialize Found: {e}")),
@@ -373,9 +374,9 @@ async fn resolve_service(
 }
 
 /// Try to find Axis services via avahi-browse CLI.
-/// Deduplicates by hostname, filters IPv4, skips self.
+/// Deduplicates by hostname, collects IPv4 + LAN-scope IPv6, skips self.
 async fn scan_cached_services(
-    conn: &Connection,
+    _conn: &Connection,
     event_tx: &Sender<DiscoveryEvent>,
 ) -> Result<(), String> {
     let output = tokio::process::Command::new("avahi-browse")
@@ -384,8 +385,6 @@ async fn scan_cached_services(
         .await
         .map_err(|e| format!("avahi-browse: {e}"))?;
 
-    // Collect unique peers: one IPv4 address per hostname
-    let mut seen: std::collections::HashMap<String, PeerInfo> = std::collections::HashMap::new();
     let self_hostname = std::process::Command::new("hostname")
         .output()
         .ok()
@@ -393,47 +392,77 @@ async fn scan_cached_services(
         .map(|s| s.trim().to_string())
         .unwrap_or_default();
 
+    // First pass: collect all valid addresses grouped by service name
+    struct RawEntry {
+        name: String,
+        host: String,
+        addr_v4: Option<std::net::SocketAddr>,
+        addr_v6: Option<std::net::SocketAddr>,
+    }
+    let mut raw: std::collections::HashMap<String, RawEntry> = std::collections::HashMap::new();
+
     let stdout = String::from_utf8_lossy(&output.stdout);
     for line in stdout.lines() {
         let parts: Vec<&str> = line.split(';').collect();
-        if parts.len() >= 9 && parts[0] == "=" {
-            let name = parts[3].to_string();
-            let host = parts[6].to_string();
-            let address = parts[7].to_string();
-            let port: u16 = parts[8].parse().unwrap_or(0);
+        if parts.len() < 9 || parts[0] != "=" {
+            continue;
+        }
 
-            if port == 0 || address.is_empty() {
-                continue;
-            }
+        let name = parts[3].to_string();
+        let host = parts[6].to_string();
+        let address = parts[7].to_string();
+        let port: u16 = parts[8].parse().unwrap_or(0);
 
-            // Skip self
-            if name == self_hostname {
-                continue;
-            }
+        if port == 0 || address.is_empty() || name == self_hostname {
+            continue;
+        }
+        if address == "127.0.0.1" || address == "::1" {
+            continue;
+        }
+        if address.starts_with("172.17.") || address.starts_with("172.18.") {
+            continue;
+        }
 
-            // Prefer IPv4, skip IPv6
-            if address.contains(':') {
-                continue;
-            }
+        let is_ipv6 = address.contains(':');
+        let addr_str = if is_ipv6 {
+            format!("[{address}]:{port}")
+        } else {
+            format!("{address}:{port}")
+        };
+        let Ok(socket_addr) = addr_str.parse() else { continue };
 
-            // Only keep first IPv4 address per hostname
-            if seen.contains_key(&name) {
-                continue;
-            }
+        let entry = raw.entry(name.clone()).or_insert_with(|| RawEntry {
+            name: name.clone(),
+            host: host.clone(),
+            addr_v4: None,
+            addr_v6: None,
+        });
 
-            let addr_str = format!("{address}:{port}");
-            if let Ok(socket_addr) = addr_str.parse() {
-                seen.insert(name.clone(), PeerInfo {
-                    device_id: name,
-                    device_name: host,
-                    address: socket_addr,
-                });
+        if is_ipv6 {
+            let lower = address.to_lowercase();
+            if lower.starts_with("fd") || lower.starts_with("fe80") {
+                entry.addr_v6.get_or_insert(socket_addr);
             }
+        } else {
+            entry.addr_v4.get_or_insert(socket_addr);
         }
     }
 
-    for (_, peer) in seen {
-        info!("[continuity:discovery] peer: {} at {}", peer.device_name, peer.address);
+    // Second pass: build PeerInfo (need IPv4 as primary)
+    for (_, entry) in raw {
+        let Some(addr_v4) = entry.addr_v4 else { continue };
+        let peer = PeerInfo {
+            device_id: entry.name,
+            device_name: entry.host,
+            address: addr_v4,
+            address_v6: entry.addr_v6,
+        };
+        info!(
+            "[continuity:discovery] peer: {} at {}{}",
+            peer.device_name,
+            peer.address,
+            peer.address_v6.map(|v6| format!(" + {v6}")).unwrap_or_default()
+        );
         let _ = event_tx.send(DiscoveryEvent::PeerFound(peer)).await;
     }
 
