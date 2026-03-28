@@ -315,14 +315,26 @@ async fn resolve_service(
         type AvahiFoundBody = (i32, i32, String, String, String, String, i32, String, u16, Vec<Vec<u8>>, u32);
         let body = msg.body();
         match body.deserialize::<AvahiFoundBody>() {
-            Ok((_if, _proto, resolved_name, _stype, _domain, address, _a, _aa, port, _txt, _flags)) => {
+            Ok((_if, _proto, resolved_name, _stype, _domain, host, _a, address, port, _txt, _flags)) => {
+                info!(
+                    "[continuity:discovery] resolved: name={resolved_name} host={host} addr={address} port={port}"
+                );
+
                 let device_id = resolved_name.clone();
+
+                // IPv6 needs brackets: [::1]:7391 vs IPv4: 192.168.1.1:7391
+                let addr_str = if address.contains(':') {
+                    format!("[{address}]:{port}")
+                } else {
+                    format!("{address}:{port}")
+                };
+
                 return Ok(PeerInfo {
                     device_id,
                     device_name: resolved_name,
-                    address: format!("{address}:{port}")
+                    address: addr_str
                         .parse()
-                        .map_err(|e| format!("parse address: {e}"))?,
+                        .map_err(|e| format!("parse address '{addr_str}': {e}"))?,
                 });
             }
             Err(e) => return Err(format!("deserialize Found: {e}")),
