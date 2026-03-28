@@ -372,32 +372,29 @@ async fn resolve_service(
     Err("resolver timed out".into())
 }
 
-/// Try to find Axis services via Avahi's ResolveService for all interfaces.
-/// This catches services that may have been registered after our browser started.
+/// Try to find Axis services via avahi-browse CLI.
+/// Deduplicates by hostname, filters IPv4, skips self.
 async fn scan_cached_services(
     conn: &Connection,
     event_tx: &Sender<DiscoveryEvent>,
 ) -> Result<(), String> {
-    let server = zbus::Proxy::new(
-        conn,
-        "org.freedesktop.Avahi",
-        "/",
-        "org.freedesktop.Avahi.Server",
-    )
-    .await
-    .map_err(|e| format!("server proxy: {e}"))?;
-
-    // Use avahi-browse CLI to list services (simpler than manual D-Bus browsing)
     let output = tokio::process::Command::new("avahi-browse")
         .args(["-t", AVAHI_SERVICE, "--resolve", "-p", "-r"])
         .output()
         .await
         .map_err(|e| format!("avahi-browse: {e}"))?;
 
+    // Collect unique peers: one IPv4 address per hostname
+    let mut seen: std::collections::HashMap<String, PeerInfo> = std::collections::HashMap::new();
+    let self_hostname = std::process::Command::new("hostname")
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default();
+
     let stdout = String::from_utf8_lossy(&output.stdout);
     for line in stdout.lines() {
-        // avahi-browse -p format:
-        // =;interface;protocol;name;type;domain;hostname;address;port;txt;flags
         let parts: Vec<&str> = line.split(';').collect();
         if parts.len() >= 9 && parts[0] == "=" {
             let name = parts[3].to_string();
@@ -409,22 +406,35 @@ async fn scan_cached_services(
                 continue;
             }
 
-            let addr_str = if address.contains(':') {
-                format!("[{address}]:{port}")
-            } else {
-                format!("{address}:{port}")
-            };
+            // Skip self
+            if name == self_hostname {
+                continue;
+            }
 
+            // Prefer IPv4, skip IPv6
+            if address.contains(':') {
+                continue;
+            }
+
+            // Only keep first IPv4 address per hostname
+            if seen.contains_key(&name) {
+                continue;
+            }
+
+            let addr_str = format!("{address}:{port}");
             if let Ok(socket_addr) = addr_str.parse() {
-                let peer = PeerInfo {
-                    device_id: name.clone(),
+                seen.insert(name.clone(), PeerInfo {
+                    device_id: name,
                     device_name: host,
                     address: socket_addr,
-                };
-                info!("[continuity:discovery] scan found: {} at {}", peer.device_name, peer.address);
-                let _ = event_tx.send(DiscoveryEvent::PeerFound(peer)).await;
+                });
             }
         }
+    }
+
+    for (_, peer) in seen {
+        info!("[continuity:discovery] peer: {} at {}", peer.device_name, peer.address);
+        let _ = event_tx.send(DiscoveryEvent::PeerFound(peer)).await;
     }
 
     Ok(())
