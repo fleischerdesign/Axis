@@ -206,12 +206,13 @@ async fn listen_loop(
                         let (write_tx, write_rx) =
                             tokio::sync::mpsc::channel::<Message>(64);
 
-                        // Notify service about incoming connection with write channel
+                        // Send IncomingConnection with write channel — service uses this to send messages
                         let _ = tx.send(ConnectionEvent::IncomingConnection {
                             addr,
-                            write_tx: write_tx.clone(),
+                            write_tx,
                         }).await;
 
+                        // Start reading from the stream — service sends messages via write_rx
                         tokio::spawn(async move {
                             run_connection(stream, write_rx, tx, false, String::new(), String::new()).await;
                         });
@@ -240,6 +241,12 @@ async fn run_connection(
     device_name: String,
 ) {
     use tokio::io::split;
+    let peer = stream.peer_addr().map(|a| a.to_string()).unwrap_or_default();
+    let local = stream.local_addr().map(|a| a.to_string()).unwrap_or_default();
+    info!(
+        "[continuity:connection] run_connection: local={local} peer={peer} initiator={is_initiator}"
+    );
+
     let (mut reader, mut writer) = split(stream);
 
     // If we initiated the connection, send Hello first
@@ -255,9 +262,10 @@ async fn run_connection(
             return;
         }
     } else {
-        info!("[continuity:connection] waiting for Hello from initiator");
+        info!("[continuity:connection] waiting for Hello from initiator ({peer})");
     }
 
+    info!("[continuity:connection] entering message loop ({peer})");
     loop {
         tokio::select! {
             result = protocol::read_message(&mut reader) => {
