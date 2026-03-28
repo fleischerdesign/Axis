@@ -3,6 +3,7 @@ use crate::services::airplane::AirplaneCmd;
 use crate::services::audio::AudioCmd;
 use crate::services::backlight::BacklightCmd;
 use crate::services::bluetooth::BluetoothCmd;
+use crate::services::continuity::ContinuityCmd;
 use crate::services::dnd::DndCmd;
 use crate::services::network::NetworkCmd;
 use crate::services::nightlight::NightlightCmd;
@@ -37,6 +38,7 @@ impl MainPage {
         open_nl: impl Fn() + 'static,
         open_audio: impl Fn() + 'static,
         open_kdeconnect: impl Fn() + 'static,
+        open_continuity: impl Fn() + 'static,
         on_lock: Rc<dyn Fn()>,
     ) -> Self {
         let container = gtk4::Box::new(gtk4::Orientation::Vertical, 20);
@@ -66,6 +68,7 @@ impl MainPage {
             false,
         ));
         let kdeconnect_tile = ToggleTile::new("KDE Connect", "phone-symbolic", true);
+        let continuity_tile = ToggleTile::new("Continuity", "input-mouse-symbolic", true);
 
         grid.attach(&wifi_tile.container, 0, 0, 1, 1);
         grid.attach(&eth_tile.container, 1, 0, 1, 1);
@@ -73,7 +76,8 @@ impl MainPage {
         grid.attach(&nl_tile.container, 1, 1, 1, 1);
         grid.attach(&airplane_tile.container, 0, 2, 1, 1);
         grid.attach(&dnd_tile.container, 1, 2, 1, 1);
-        grid.attach(&kdeconnect_tile.container, 0, 3, 2, 1);
+        grid.attach(&kdeconnect_tile.container, 0, 3, 1, 1);
+        grid.attach(&continuity_tile.container, 1, 3, 1, 1);
 
         // --- VOLUME SLIDER ROW ---
         let vol_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
@@ -212,6 +216,21 @@ impl MainPage {
             kdeconnect_tile_c.set_active(has_paired);
             kdeconnect_tile_c.set_sensitive(data.available);
         });
+
+        // Continuity: toggle + arrow
+        let continuity_tile = Rc::new(continuity_tile);
+        continuity_tile.arrow_btn.as_ref().unwrap().connect_clicked(move |_| {
+            open_continuity();
+        });
+        ToggleTile::wire_service(&continuity_tile, &ctx.continuity,
+            |_on| ContinuityCmd::ToggleEnabled,
+            |d| d.enabled,
+            || {},
+            |tile, data| {
+                let has_connection = data.active_connection.is_some();
+                tile.set_active(data.enabled && has_connection);
+            },
+        );
 
         // Dynamic icon subscriptions (separate concern from toggle wiring)
         let wifi_tile_c2 = wifi_tile.clone();

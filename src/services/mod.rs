@@ -25,6 +25,7 @@ pub mod dnd;
 pub mod tray;
 pub mod kdeconnect;
 pub mod airplane;
+pub mod continuity;
 pub mod tasks;
 pub mod google;
 pub mod calendar;

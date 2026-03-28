@@ -13,6 +13,7 @@ use crate::services::backlight::BacklightService;
 use crate::services::tasks::TaskRegistry;
 use crate::services::bluetooth::BluetoothService;
 use crate::services::clock::ClockService;
+use crate::services::continuity::ContinuityService;
 use crate::services::dnd::DndService;
 use crate::services::kdeconnect::KdeConnectService;
 use crate::services::tray::TrayService;
@@ -346,6 +347,7 @@ fn setup_services() -> AppContext {
         kdeconnect:   spawn_service::<KdeConnectService>(),
         power:        spawn_readonly::<PowerService>(),
         niri:         spawn_readonly::<NiriService>(),
+        continuity:    spawn_service::<ContinuityService>(),
         clock:        spawn_readonly::<ClockService>(),
         task_registry: Arc::new(Mutex::new(TaskRegistry::new())),
         calendar_registry: Arc::new(Mutex::new(CalendarRegistry::new())),

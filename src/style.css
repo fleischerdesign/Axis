@@ -1043,3 +1043,14 @@ levelbar.osd-level-bar block.empty {
     font-weight: 600;
     transition: opacity 0.2s ease;
 }
+
+/* Continuity PIN Display */
+.pin-display {
+    font-size: 28px;
+    font-weight: 700;
+    font-family: monospace;
+    letter-spacing: 0.3em;
+    padding: 12px 16px;
+    background: alpha(@card_bg_color, 0.5);
+    border-radius: 8px;
+}

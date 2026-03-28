@@ -1,6 +1,7 @@
 mod audio_page;
 mod bluetooth_page;
 pub mod bluetooth_pair_dialog;
+mod continuity_page;
 pub mod components;
 mod kdeconnect_page;
 mod main_page;
@@ -13,6 +14,7 @@ use crate::widgets::base::PopupBase;
 use crate::widgets::quick_settings::nightlight_page::NightlightPage;
 use audio_page::AudioPage;
 use bluetooth_page::BluetoothPage;
+use continuity_page::ContinuityPage;
 use kdeconnect_page::KdeConnectPage;
 use main_page::MainPage;
 use wifi_page::WifiPage;
@@ -118,6 +120,11 @@ impl QuickSettingsPopup {
             stack_kc.set_visible_child_name("kdeconnect");
         };
 
+        let stack_ct = qs_stack.clone();
+        let open_continuity = move || {
+            stack_ct.set_visible_child_name("continuity");
+        };
+
         let main_page = MainPage::new(
             ctx.clone(),
             vol_icon_bar.clone(),
@@ -126,6 +133,7 @@ impl QuickSettingsPopup {
             open_nl,
             open_audio,
             open_kdeconnect,
+            open_continuity,
             on_lock,
         );
 
@@ -174,12 +182,21 @@ impl QuickSettingsPopup {
             },
         );
 
+        let stack_back_ct = qs_stack.clone();
+        let continuity_page = ContinuityPage::new(
+            ctx.clone(),
+            move || {
+                stack_back_ct.set_visible_child_name("main");
+            },
+        );
+
         qs_stack.add_named(&main_page.container, Some("main"));
         qs_stack.add_named(&wifi_page.container, Some("wifi"));
         qs_stack.add_named(&bluetooth_page.container, Some("bluetooth"));
         qs_stack.add_named(&nightlight_page.container, Some("nightlight"));
         qs_stack.add_named(&audio_page.container, Some("audio"));
         qs_stack.add_named(&kdeconnect_page.container, Some("kdeconnect"));
+        qs_stack.add_named(&continuity_page.container, Some("continuity"));
 
         qs_container.append(&qs_stack);
 
