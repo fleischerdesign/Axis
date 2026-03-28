@@ -516,7 +516,6 @@ separator {
     padding: 20px;
     border-radius: 24px;
     box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-    min-width: 360px;
     border: none;
     margin: 0 10px;
 }
@@ -528,23 +527,16 @@ separator {
     margin-bottom: 14px;
 }
 
-.calendar-wrapper calendar {
-    background-color: transparent;
-    color: white;
-    border: none;
-    border-radius: 12px;
-    padding: 4px;
+/* Custom Calendar Grid */
+.cal-grid-wrapper {
     margin-bottom: 8px;
 }
 
-.calendar-wrapper calendar header {
-    background-color: transparent;
-    border: none;
-    color: white;
-    padding: 4px 0;
+.cal-grid-header {
+    margin-bottom: 8px;
 }
 
-.calendar-wrapper calendar header button {
+.cal-grid-header button {
     background: none;
     border: none;
     border-radius: 8px;
@@ -555,32 +547,150 @@ separator {
     box-shadow: none;
 }
 
-.calendar-wrapper calendar header button:hover {
+.cal-grid-header button:hover {
     background-color: rgba(255, 255, 255, 0.1);
     color: white;
 }
 
-.calendar-wrapper calendar header label {
+.cal-grid-month-label {
     color: white;
+    font-weight: 700;
+    font-size: 14px;
+}
+
+.cal-grid-table {
+    margin: 0;
+}
+
+.cal-grid-day-name {
+    color: rgba(255, 255, 255, 0.45);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 0;
+}
+
+.cal-grid-cell {
+    background: none;
+    border: none;
+    border-radius: 10px;
+    padding: 6px 2px;
+    min-width: 0;
+    min-height: 0;
+    box-shadow: none;
+    margin: 0;
+}
+
+.cal-grid-cell:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.cal-grid-cell-today .cal-grid-day-num {
+    color: #3584e4;
     font-weight: 700;
 }
 
-.calendar-wrapper calendar .day-label {
-    color: rgba(255, 255, 255, 0.45);
+.cal-grid-cell-selected {
+    background-color: rgba(53, 132, 228, 0.25);
+}
+
+.cal-grid-cell-other {
+    opacity: 0.3;
+}
+
+.cal-grid-cell-other:hover {
+    background: none;
+}
+
+.cal-grid-day-num {
+    color: white;
     font-size: 12px;
+    font-weight: 500;
+    min-height: 18px;
+}
+
+.cal-grid-cell-selected .cal-grid-day-num {
+    font-weight: 700;
+}
+
+/* Calendar Sections */
+.calendar-section {
+}
+
+/* Event List */
+.calendar-event-scroll {
+}
+
+.calendar-task-scroll {
+    min-height: 200px;
+}
+
+.calendar-event-row {
+    padding: 6px 8px;
+    border-radius: 10px;
+    margin-bottom: 2px;
+}
+
+.calendar-event-row:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.calendar-event-time {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
+    min-width: 0;
+}
+
+.calendar-event-summary {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+/* Range Toggle */
+.calendar-range-btn {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 8px;
+    min-width: 0;
+    min-height: 0;
+    box-shadow: none;
+}
+
+.calendar-range-btn:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+    color: white;
+}
+
+.calendar-range-active {
+    background-color: rgba(53, 132, 228, 0.25);
+    color: #3584e4;
+}
+
+.calendar-range-active:hover {
+    background-color: rgba(53, 132, 228, 0.35);
+    color: #3584e4;
+}
+
+/* Auth Prompt */
+.auth-prompt-label {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.auth-prompt-btn {
+    background-color: #3584e4;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 8px 16px;
     font-weight: 600;
 }
 
-.calendar-wrapper calendar .today {
-    outline: 2px solid #3584e4;
-    outline-offset: -2px;
-    border-radius: 50%;
-}
-
-.calendar-wrapper calendar:selected {
-    background-color: #3584e4;
-    color: white;
-    border-radius: 50%;
+.auth-prompt-btn:hover {
+    background-color: #4a9af5;
 }
 
 /* Task List */

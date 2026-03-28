@@ -2,21 +2,21 @@ use crate::app_context::AppContext;
 use crate::services::calendar::{CalendarEvent, DateRange};
 use crate::services::google::{auth_flow, GoogleAuthRegistry};
 use gtk4::prelude::*;
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::mpsc;
 
 pub fn render_calendar(
     calendar_box: &gtk4::Box,
-    range_toggle: &gtk4::Box,
+    _range_toggle: &gtk4::Box,
     ctx: &AppContext,
     spinner: &gtk4::Spinner,
     auth_box: &gtk4::Box,
     refresh_tx: &mpsc::Sender<()>,
+    selected_date: &Rc<RefCell<(i32, u32, u32)>>,
 ) {
     while let Some(child) = calendar_box.first_child() {
         calendar_box.remove(&child);
-    }
-    while let Some(child) = range_toggle.first_child() {
-        range_toggle.remove(&child);
     }
     auth_box.set_visible(false);
     spinner.set_visible(false);
@@ -31,27 +31,45 @@ pub fn render_calendar(
     }
 
     let registry = ctx.calendar_registry.lock().unwrap();
-    let events = registry.cached_events().to_vec();
+    let all_events = registry.month_events().to_vec();
     let selected_range = registry.selected_range();
     drop(registry);
 
-    render_range_toggle(range_toggle, ctx, selected_range, refresh_tx.clone());
+    let (sel_year, sel_month, sel_day) = *selected_date.borrow();
+
+    // Header row: "Termine" + Tag/Woche buttons side by side
+    let header_row = gtk4::Box::builder()
+        .orientation(gtk4::Orientation::Horizontal)
+        .spacing(10)
+        .css_classes(vec!["calendar-tasks-header-row".to_string()])
+        .build();
 
     let label = gtk4::Label::builder()
         .label("Termine")
         .css_classes(vec!["calendar-tasks-header".to_string()])
         .halign(gtk4::Align::Start)
+        .hexpand(true)
         .build();
-    calendar_box.append(&label);
+    header_row.append(&label);
 
-    for event in &events {
+    build_range_buttons(&header_row, ctx, selected_range, refresh_tx.clone());
+    calendar_box.append(&header_row);
+
+    let filtered = filter_events(&all_events, sel_year, sel_month, sel_day, selected_range);
+
+    for event in &filtered {
         let row = build_event_row(event);
         calendar_box.append(&row);
     }
 
-    if events.is_empty() {
+    if filtered.is_empty() {
+        let empty_label = if selected_range == DateRange::Today {
+            format!("Keine Termine am {}.{}.{}", sel_day, sel_month, sel_year)
+        } else {
+            "Keine Termine in dieser Woche".to_string()
+        };
         let empty = gtk4::Label::builder()
-            .label("Keine Termine")
+            .label(&empty_label)
             .css_classes(vec!["calendar-empty".to_string()])
             .halign(gtk4::Align::Start)
             .margin_top(8)
@@ -60,14 +78,70 @@ pub fn render_calendar(
     }
 }
 
-fn render_range_toggle(
-    range_toggle: &gtk4::Box,
+fn filter_events(
+    events: &[CalendarEvent],
+    year: i32,
+    month: u32,
+    day: u32,
+    range: DateRange,
+) -> Vec<CalendarEvent> {
+    let day_start = chrono::NaiveDate::from_ymd_opt(year, month, day)
+        .unwrap_or_default()
+        .and_hms_opt(0, 0, 0).unwrap_or_default();
+
+    let range_end = match range {
+        DateRange::Today => {
+            chrono::NaiveDate::from_ymd_opt(year, month, day)
+                .unwrap_or_default()
+                .and_hms_opt(23, 59, 59).unwrap_or_default()
+        }
+        DateRange::Week => {
+            day_start + chrono::Duration::days(7)
+        }
+    };
+
+    events
+        .iter()
+        .filter(|e| {
+            let (ev_start, ev_end) = parse_event_times(e);
+            ev_start <= range_end && ev_end >= day_start
+        })
+        .cloned()
+        .collect()
+}
+
+fn parse_event_times(event: &CalendarEvent) -> (chrono::NaiveDateTime, chrono::NaiveDateTime) {
+    let parse_dt = |s: &str| -> chrono::NaiveDateTime {
+        let clean = s.split('+').next().unwrap_or(s).trim_end_matches('Z');
+        chrono::NaiveDateTime::parse_from_str(clean, "%Y-%m-%dT%H:%M:%S")
+            .or_else(|_| chrono::NaiveDateTime::parse_from_str(clean, "%Y-%m-%dT%H:%M:%S%.f"))
+            .unwrap_or_else(|_| {
+                chrono::NaiveDate::parse_from_str(clean, "%Y-%m-%d")
+                    .unwrap_or_default()
+                    .and_hms_opt(0, 0, 0).unwrap_or_default()
+            })
+    };
+
+    let start = parse_dt(&event.start);
+    let mut end = parse_dt(&event.end);
+
+    if event.all_day
+        && end.time() == chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap_or_default()
+    {
+        end = end - chrono::Duration::seconds(1);
+    }
+
+    (start, end)
+}
+
+fn build_range_buttons(
+    container: &gtk4::Box,
     ctx: &AppContext,
     selected_range: DateRange,
     refresh_tx: mpsc::Sender<()>,
 ) {
-    let today_btn = gtk4::Button::builder()
-        .label("Heute")
+    let day_btn = gtk4::Button::builder()
+        .label("Tag")
         .css_classes(vec!["calendar-range-btn".to_string()])
         .build();
     let week_btn = gtk4::Button::builder()
@@ -76,14 +150,14 @@ fn render_range_toggle(
         .build();
 
     if selected_range == DateRange::Today {
-        today_btn.add_css_class("calendar-range-active");
+        day_btn.add_css_class("calendar-range-active");
     } else {
         week_btn.add_css_class("calendar-range-active");
     }
 
     let ctx_c = ctx.clone();
     let tx = refresh_tx.clone();
-    today_btn.connect_clicked(move |_| {
+    day_btn.connect_clicked(move |_| {
         let mut reg = ctx_c.calendar_registry.lock().unwrap();
         reg.set_range(DateRange::Today);
         drop(reg);
@@ -99,21 +173,19 @@ fn render_range_toggle(
         trigger_calendar_refresh(&ctx_c, tx.clone());
     });
 
-    range_toggle.append(&today_btn);
-    range_toggle.append(&week_btn);
+    container.append(&day_btn);
+    container.append(&week_btn);
 }
 
 fn build_event_row(event: &CalendarEvent) -> gtk4::Box {
     let row = gtk4::Box::builder()
-        .orientation(gtk4::Orientation::Horizontal)
-        .spacing(10)
+        .orientation(gtk4::Orientation::Vertical)
+        .spacing(1)
         .css_classes(vec!["calendar-event-row".to_string()])
         .build();
 
-    let time_label = event.format_time_range();
-
     let time = gtk4::Label::builder()
-        .label(&time_label)
+        .label(&event.format_time_range())
         .css_classes(vec!["calendar-event-time".to_string()])
         .halign(gtk4::Align::Start)
         .build();

@@ -34,6 +34,7 @@ pub enum CalendarCmd {
 pub struct CalendarRegistry {
     provider: Box<dyn CalendarProvider>,
     cached_events: Vec<CalendarEvent>,
+    month_events: Vec<CalendarEvent>,
     selected_range: DateRange,
 }
 
@@ -44,6 +45,7 @@ impl CalendarRegistry {
         Self {
             provider,
             cached_events: Vec::new(),
+            month_events: Vec::new(),
             selected_range: DateRange::Today,
         }
     }
@@ -82,6 +84,17 @@ impl CalendarRegistry {
     pub fn selected_range(&self) -> DateRange {
         self.selected_range
     }
+
+    pub fn refresh_month_events(&mut self, year: i32, month: u32) -> Result<Vec<CalendarEvent>, String> {
+        let (start, end) = get_month_range(year, month);
+        let events = self.provider.events(&start, &end)?;
+        self.month_events = events.clone();
+        Ok(events)
+    }
+
+    pub fn month_events(&self) -> &[CalendarEvent] {
+        &self.month_events
+    }
 }
 
 fn get_date_range(range: DateRange) -> (String, String) {
@@ -97,5 +110,34 @@ fn get_date_range(range: DateRange) -> (String, String) {
             let end = (now + chrono::Duration::days(7)).format("%Y-%m-%dT23:59:59Z").to_string();
             (start, end)
         }
+    }
+}
+
+fn get_month_range(year: i32, month: u32) -> (String, String) {
+    let start = chrono::NaiveDate::from_ymd_opt(year, month, 1)
+        .unwrap_or_default()
+        .and_hms_opt(0, 0, 0).unwrap();
+    let last_day = last_day_of_month(year, month);
+    let end = chrono::NaiveDate::from_ymd_opt(year, month, last_day)
+        .unwrap_or_default()
+        .and_hms_opt(23, 59, 59).unwrap();
+    (
+        format!("{}Z", start.format("%Y-%m-%dT%H:%M:%S")),
+        format!("{}Z", end.format("%Y-%m-%dT%H:%M:%S")),
+    )
+}
+
+fn last_day_of_month(year: i32, month: u32) -> u32 {
+    match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 => {
+            if (year % 4 == 0 && year % 100 != 0) || year % 400 == 0 {
+                29
+            } else {
+                28
+            }
+        }
+        _ => 30,
     }
 }

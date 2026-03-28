@@ -1,4 +1,5 @@
 mod auth_flow;
+mod calendar_grid;
 mod calendar_section;
 mod date;
 mod task_section;
@@ -6,6 +7,7 @@ mod task_section;
 use crate::app_context::AppContext;
 use crate::shell::PopupExt;
 use crate::widgets::base::PopupBase;
+use chrono::Datelike;
 use gtk4::prelude::*;
 use gtk4_layer_shell::{KeyboardMode, LayerShell};
 use std::cell::RefCell;
@@ -19,9 +21,11 @@ pub struct CalendarPopup {
     auth_box: gtk4::Box,
     add_entry: gtk4::Entry,
     spinner: gtk4::Spinner,
+    calendar_grid: Rc<calendar_grid::CalendarGrid>,
     calendar_list: gtk4::Box,
     calendar_range_toggle: gtk4::Box,
     calendar_auth_box: gtk4::Box,
+    selected_date: Rc<RefCell<(i32, u32, u32)>>,
     ctx: AppContext,
     refresh_tx: mpsc::Sender<()>,
     refresh_rx: Rc<RefCell<Option<mpsc::Receiver<()>>>>,
@@ -54,12 +58,14 @@ impl PopupExt for CalendarPopup {
             &self.spinner,
             &self.calendar_auth_box,
             &self.refresh_tx,
+            &self.selected_date,
         );
 
         // Start refresh timer once (survives popup close/open cycles)
         if self.refresh_source.borrow().is_some() {
             self.trigger_background_refresh();
             self.trigger_calendar_refresh();
+            self.trigger_month_refresh();
             return;
         }
 
@@ -77,12 +83,18 @@ impl PopupExt for CalendarPopup {
         let cl = self.calendar_list.clone();
         let rt = self.calendar_range_toggle.clone();
         let cab = self.calendar_auth_box.clone();
+        let grid = self.calendar_grid.clone();
+        let sel = self.selected_date.clone();
         let src = gtk4::glib::timeout_add_local(
             std::time::Duration::from_millis(300),
             move || {
                 if rx.try_recv().is_ok() && base_is_open.get() {
                     task_section::render_tasks(&tl, &ls, &ctx, &sp, &ab, &tx);
-                    calendar_section::render_calendar(&cl, &rt, &ctx, &sp, &cab, &tx);
+                    calendar_section::render_calendar(&cl, &rt, &ctx, &sp, &cab, &tx, &sel);
+                    let registry = ctx.calendar_registry.lock().unwrap();
+                    let month_evts = registry.month_events().to_vec();
+                    drop(registry);
+                    grid.set_events(month_evts);
                 }
                 gtk4::glib::ControlFlow::Continue
             },
@@ -91,6 +103,7 @@ impl PopupExt for CalendarPopup {
 
         self.trigger_background_refresh();
         self.trigger_calendar_refresh();
+        self.trigger_month_refresh();
         self.wire_add_task();
     }
 
@@ -102,12 +115,21 @@ impl PopupExt for CalendarPopup {
 impl CalendarPopup {
     pub fn new(app: &libadwaita::Application, ctx: AppContext) -> Self {
         let base = PopupBase::new_centered(app, "AXIS Daily Panel");
+        let (refresh_tx, refresh_rx) = mpsc::channel::<()>();
+
+        let now = chrono::Local::now();
+        let selected_date = Rc::new(RefCell::new((
+            now.year(),
+            now.month(),
+            now.day(),
+        )));
 
         // ── Main wrapper (horizontal: Tasks | Kalender | Termine) ──
         let wrapper = gtk4::Box::builder()
             .orientation(gtk4::Orientation::Horizontal)
             .css_classes(vec!["calendar-wrapper".to_string()])
             .spacing(16)
+            .width_request(520)
             .build();
 
         // ── LEFT: Tasks section ──
@@ -115,6 +137,7 @@ impl CalendarPopup {
             .orientation(gtk4::Orientation::Vertical)
             .spacing(4)
             .css_classes(vec!["calendar-section".to_string()])
+            .hexpand(true)
             .build();
 
         let list_selector = gtk4::Box::builder()
@@ -126,6 +149,7 @@ impl CalendarPopup {
 
         let task_scroll = gtk4::ScrolledWindow::builder()
             .vexpand(true)
+            .hscrollbar_policy(gtk4::PolicyType::Never)
             .css_classes(vec!["calendar-task-scroll".to_string()])
             .build();
 
@@ -153,11 +177,12 @@ impl CalendarPopup {
             .build();
         tasks_section.append(&auth_box);
 
-        // ── CENTER: Calendar widget ──
+        // ── CENTER: Custom calendar grid ──
         let calendar_center = gtk4::Box::builder()
             .orientation(gtk4::Orientation::Vertical)
             .spacing(4)
             .css_classes(vec!["calendar-section".to_string()])
+            .hexpand(true)
             .build();
 
         let date_label = gtk4::Label::builder()
@@ -167,19 +192,15 @@ impl CalendarPopup {
             .build();
         calendar_center.append(&date_label);
 
-        let calendar = gtk4::Calendar::builder()
-            .show_heading(false)
-            .show_day_names(true)
-            .show_week_numbers(false)
-            .build();
-        calendar.add_css_class("calendar-grid");
-        calendar_center.append(&calendar);
+        let cal_grid = Rc::new(calendar_grid::CalendarGrid::new());
+        calendar_center.append(cal_grid.container());
 
         // ── RIGHT: Calendar events section ──
         let events_section = gtk4::Box::builder()
             .orientation(gtk4::Orientation::Vertical)
             .spacing(4)
             .css_classes(vec!["calendar-section".to_string()])
+            .hexpand(true)
             .build();
 
         let calendar_range_toggle = gtk4::Box::builder()
@@ -190,6 +211,7 @@ impl CalendarPopup {
 
         let calendar_scroll = gtk4::ScrolledWindow::builder()
             .vexpand(true)
+            .hscrollbar_policy(gtk4::PolicyType::Never)
             .css_classes(vec!["calendar-event-scroll".to_string()])
             .build();
 
@@ -207,6 +229,21 @@ impl CalendarPopup {
             .margin_top(8)
             .build();
         events_section.append(&calendar_auth_box);
+
+        // Wire day-click: update selected_date, re-render event panel
+        let sel_date_c = selected_date.clone();
+        let cl_c = calendar_list.clone();
+        let rt_c = calendar_range_toggle.clone();
+        let cab_c = calendar_auth_box.clone();
+        let sp_c = spinner.clone();
+        let ctx_c = ctx.clone();
+        let tx_c = refresh_tx.clone();
+        cal_grid.set_on_day_click(move |year, month, day| {
+            *sel_date_c.borrow_mut() = (year, month, day);
+            calendar_section::render_calendar(
+                &cl_c, &rt_c, &ctx_c, &sp_c, &cab_c, &tx_c, &sel_date_c,
+            );
+        });
 
         // Add all three sections to wrapper
         wrapper.append(&tasks_section);
@@ -237,8 +274,6 @@ impl CalendarPopup {
 
         base.set_content(&wrapper);
 
-        let (refresh_tx, refresh_rx) = mpsc::channel::<()>();
-
         Self {
             base,
             task_list,
@@ -246,9 +281,11 @@ impl CalendarPopup {
             auth_box,
             add_entry,
             spinner,
+            calendar_grid: cal_grid,
             calendar_list,
             calendar_range_toggle,
             calendar_auth_box,
+            selected_date,
             ctx,
             refresh_tx,
             refresh_rx: Rc::new(RefCell::new(Some(refresh_rx))),
@@ -265,7 +302,7 @@ impl CalendarPopup {
                 Ok(tasks) => log::info!("[calendar] Refreshed {} tasks", tasks.len()),
                 Err(e) => log::warn!("[calendar] Refresh failed: {e}"),
             }
-let _ = tx.send(());
+            let _ = tx.send(());
         });
     }
 
@@ -277,6 +314,22 @@ let _ = tx.send(());
             match r.refresh_events() {
                 Ok(events) => log::info!("[calendar] Refreshed {} events", events.len()),
                 Err(e) => log::warn!("[calendar] Refresh failed: {}", e),
+            }
+            let _ = tx.send(());
+        });
+    }
+
+    fn trigger_month_refresh(&self) {
+        let reg = self.ctx.calendar_registry.clone();
+        let tx = self.refresh_tx.clone();
+        let now = chrono::Local::now();
+        let year = now.year();
+        let month = now.month();
+        std::thread::spawn(move || {
+            let mut r = reg.lock().unwrap();
+            match r.refresh_month_events(year, month) {
+                Ok(events) => log::info!("[calendar] Refreshed {} month events", events.len()),
+                Err(e) => log::warn!("[calendar] Month refresh failed: {}", e),
             }
             let _ = tx.send(());
         });
