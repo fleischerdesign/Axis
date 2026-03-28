@@ -77,6 +77,8 @@ pub enum ContinuityCmd {
     RejectPin,
     Disconnect,
     ForceLocal,
+    StartDiscovery,
+    StopDiscovery,
 }
 
 // ── Service ────────────────────────────────────────────────────────────
@@ -162,9 +164,6 @@ impl ContinuityInner {
                     if let Err(e) = discovery.register(&self.data.device_name, CONTINUITY_PORT) {
                         error!("[continuity] discovery register failed: {e}");
                     }
-                    if let Err(e) = discovery.browse(discovery_tx.clone()) {
-                        error!("[continuity] discovery browse failed: {e}");
-                    }
                     if let Err(e) = connection.listen(CONTINUITY_PORT, conn_tx.clone()) {
                         error!("[continuity] listen failed: {e}");
                     }
@@ -177,6 +176,19 @@ impl ContinuityInner {
                     self.data.sharing_mode = SharingMode::Idle;
                     self.data.pending_pin = None;
                 }
+                self.push();
+            }
+            ContinuityCmd::StartDiscovery => {
+                if self.data.enabled {
+                    info!("[continuity] starting peer discovery");
+                    if let Err(e) = discovery.browse(discovery_tx.clone()) {
+                        error!("[continuity] discovery browse failed: {e}");
+                    }
+                }
+            }
+            ContinuityCmd::StopDiscovery => {
+                discovery.stop_browse();
+                self.data.peers.clear();
                 self.push();
             }
             ContinuityCmd::ConnectToPeer(peer_id) => {

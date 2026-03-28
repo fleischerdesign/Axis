@@ -77,6 +77,14 @@ impl QuickSettingsPopup {
             }
         });
 
+        // Stop continuity discovery on close
+        let tx_ct_stop = ctx.continuity.tx.clone();
+        base.window.connect_visible_notify(move |win| {
+            if !win.is_visible() {
+                let _ = tx_ct_stop.try_send(crate::services::continuity::ContinuityCmd::StopDiscovery);
+            }
+        });
+
         let qs_container = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
         qs_container.add_css_class("qs-panel");
         qs_container.set_width_request(380);
@@ -121,8 +129,10 @@ impl QuickSettingsPopup {
         };
 
         let stack_ct = qs_stack.clone();
+        let tx_ct = ctx.continuity.tx.clone();
         let open_continuity = move || {
             stack_ct.set_visible_child_name("continuity");
+            let _ = tx_ct.try_send(crate::services::continuity::ContinuityCmd::StartDiscovery);
         };
 
         let main_page = MainPage::new(

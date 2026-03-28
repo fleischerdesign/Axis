@@ -19,6 +19,7 @@ pub enum DiscoveryEvent {
 pub trait DiscoveryProvider: Send {
     fn register(&mut self, name: &str, port: u16) -> Result<(), String>;
     fn browse(&mut self, tx: Sender<DiscoveryEvent>) -> Result<(), String>;
+    fn stop_browse(&mut self);
     fn stop(&mut self);
 }
 
@@ -85,6 +86,12 @@ impl DiscoveryProvider for AvahiDiscovery {
 
         self.browse_task = Some(task);
         Ok(())
+    }
+
+    fn stop_browse(&mut self) {
+        if let Some(task) = self.browse_task.take() {
+            task.abort();
+        }
     }
 
     fn stop(&mut self) {
