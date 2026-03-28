@@ -232,6 +232,22 @@ async fn browse_services(
         .await
         .map_err(|e| format!("ItemRemove signal: {e}"))?;
 
+    // Avahi may cache services that registered before our browser started.
+    // But if both peers started simultaneously, the cache might be empty.
+    // Try resolving known services a few times to catch late registrations.
+    let conn_scan = conn.clone();
+    let tx_scan = event_tx.clone();
+    tokio::spawn(async move {
+        for i in 0..10 {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            if let Err(e) = scan_cached_services(&conn_scan, &tx_scan).await {
+                if i == 0 {
+                    warn!("[continuity:discovery] initial scan failed: {e}");
+                }
+            }
+        }
+    });
+
     loop {
         tokio::select! {
             Some(msg) = item_new.next() => {
@@ -347,4 +363,62 @@ async fn resolve_service(
     }
 
     Err("resolver timed out".into())
+}
+
+/// Try to find Axis services via Avahi's ResolveService for all interfaces.
+/// This catches services that may have been registered after our browser started.
+async fn scan_cached_services(
+    conn: &Connection,
+    event_tx: &Sender<DiscoveryEvent>,
+) -> Result<(), String> {
+    let server = zbus::Proxy::new(
+        conn,
+        "org.freedesktop.Avahi",
+        "/",
+        "org.freedesktop.Avahi.Server",
+    )
+    .await
+    .map_err(|e| format!("server proxy: {e}"))?;
+
+    // Use avahi-browse CLI to list services (simpler than manual D-Bus browsing)
+    let output = tokio::process::Command::new("avahi-browse")
+        .args(["-t", AVAHI_SERVICE, "--resolve", "-p", "-r"])
+        .output()
+        .await
+        .map_err(|e| format!("avahi-browse: {e}"))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for line in stdout.lines() {
+        // avahi-browse -p format:
+        // =;interface;protocol;name;type;domain;hostname;address;port;txt;flags
+        let parts: Vec<&str> = line.split(';').collect();
+        if parts.len() >= 9 && parts[0] == "=" {
+            let name = parts[3].to_string();
+            let host = parts[6].to_string();
+            let address = parts[7].to_string();
+            let port: u16 = parts[8].parse().unwrap_or(0);
+
+            if port == 0 || address.is_empty() {
+                continue;
+            }
+
+            let addr_str = if address.contains(':') {
+                format!("[{address}]:{port}")
+            } else {
+                format!("{address}:{port}")
+            };
+
+            if let Ok(socket_addr) = addr_str.parse() {
+                let peer = PeerInfo {
+                    device_id: name.clone(),
+                    device_name: host,
+                    address: socket_addr,
+                };
+                info!("[continuity:discovery] scan found: {} at {}", peer.device_name, peer.address);
+                let _ = event_tx.send(DiscoveryEvent::PeerFound(peer)).await;
+            }
+        }
+    }
+
+    Ok(())
 }

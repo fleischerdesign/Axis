@@ -222,9 +222,11 @@ impl ContinuityInner {
     async fn handle_discovery_event(&mut self, event: DiscoveryEvent) {
         match event {
             DiscoveryEvent::PeerFound(peer) => {
-                if peer.device_id != self.data.device_id
-                    && !self.data.peers.iter().any(|p| p.device_id == peer.device_id)
-                {
+                // Skip ourselves (match by hostname) and duplicates
+                if peer.device_id == self.data.device_name {
+                    return;
+                }
+                if !self.data.peers.iter().any(|p| p.device_id == peer.device_id) {
                     info!("[continuity] peer found: {} at {}", peer.device_name, peer.address);
                     self.data.peers.push(peer);
                     self.push();
