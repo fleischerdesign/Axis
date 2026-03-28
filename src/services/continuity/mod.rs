@@ -195,25 +195,10 @@ impl ContinuityInner {
             ContinuityCmd::ConnectToPeer(peer_id) => {
                 if let Some(peer) = self.data.peers.iter().find(|p| p.device_id == peer_id) {
                     let name = peer.device_name.clone();
-
-                    // Try IPv6 first (dual-stack), fall back to IPv4
-                    if let Some(addr_v6) = peer.address_v6 {
-                        info!("[continuity] connecting to {name} at {addr_v6} (IPv6)");
-                        if let Err(e) = connection.connect(addr_v6, conn_tx.clone()) {
-                            error!("[continuity] connect IPv6 failed: {e}, trying IPv4");
-                            let addr = peer.address;
-                            info!("[continuity] connecting to {name} at {addr} (IPv4)");
-                            if let Err(e) = connection.connect(addr, conn_tx.clone()) {
-                                error!("[continuity] connect IPv4 failed: {e}");
-                            }
-                        }
-                    } else {
-                        let addr = peer.address;
-                        info!("[continuity] connecting to {name} at {addr}");
-                        if let Err(e) = connection.connect(addr, conn_tx.clone()) {
-                            error!("[continuity] connect failed: {e}");
-                        }
-                    }
+                    let addr_v4 = peer.address;
+                    let addr_v6 = peer.address_v6;
+                    info!("[continuity] connecting to {name}");
+                    connection.connect_dual(addr_v4, addr_v6, conn_tx.clone());
                 }
             }
             ContinuityCmd::ConfirmPin(pin) => {

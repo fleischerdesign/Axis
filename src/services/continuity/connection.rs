@@ -34,6 +34,12 @@ pub trait ConnectionProvider: Send {
         addr: SocketAddr,
         tx: Sender<ConnectionEvent>,
     ) -> Result<(), String>;
+    fn connect_dual(
+        &mut self,
+        addr_v4: SocketAddr,
+        addr_v6: Option<SocketAddr>,
+        tx: Sender<ConnectionEvent>,
+    );
     fn disconnect_active(&mut self);
     fn stop(&mut self);
     fn send_message(&self, msg: Message);
@@ -119,6 +125,71 @@ impl ConnectionProvider for TcpConnectionProvider {
         });
 
         Ok(())
+    }
+
+    fn connect_dual(
+        &mut self,
+        addr_v4: SocketAddr,
+        addr_v6: Option<SocketAddr>,
+        tx: Sender<ConnectionEvent>,
+    ) {
+        self.disconnect_active();
+
+        let (write_tx, write_rx) = tokio::sync::mpsc::channel::<Message>(64);
+
+        let task = tokio::spawn(async move {
+            // Try IPv6 first if available (3s timeout)
+            if let Some(v6) = addr_v6 {
+                info!("[continuity:connection] trying IPv6 {v6}");
+                match tokio::time::timeout(
+                    std::time::Duration::from_secs(3),
+                    TcpStream::connect(v6),
+                )
+                .await
+                {
+                    Ok(Ok(stream)) => {
+                        info!("[continuity:connection] connected via IPv6 to {v6}");
+                        run_connection(stream, write_rx, tx, true).await;
+                        return;
+                    }
+                    Ok(Err(e)) => {
+                        warn!("[continuity:connection] IPv6 failed: {e}");
+                    }
+                    Err(_) => {
+                        warn!("[continuity:connection] IPv6 timed out");
+                    }
+                }
+            }
+
+            // Fallback to IPv4 (5s timeout)
+            info!("[continuity:connection] trying IPv4 {addr_v4}");
+            match tokio::time::timeout(
+                std::time::Duration::from_secs(5),
+                TcpStream::connect(addr_v4),
+            )
+            .await
+            {
+                Ok(Ok(stream)) => {
+                    info!("[continuity:connection] connected via IPv4 to {addr_v4}");
+                    run_connection(stream, write_rx, tx, true).await;
+                }
+                Ok(Err(e)) => {
+                    error!("[continuity:connection] IPv4 failed: {e}");
+                    let _ = tx.send(ConnectionEvent::Error(e.to_string())).await;
+                }
+                Err(_) => {
+                    error!("[continuity:connection] IPv4 timed out");
+                    let _ = tx
+                        .send(ConnectionEvent::Error("connection timed out".into()))
+                        .await;
+                }
+            }
+        });
+
+        self.active = Some(ActiveConnection {
+            write_tx,
+            task,
+        });
     }
 
     fn disconnect_active(&mut self) {
