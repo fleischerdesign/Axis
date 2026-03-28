@@ -95,6 +95,7 @@ pub async fn write_message<W: AsyncWriteExt + Unpin>(
     let payload = serde_json::to_vec(msg)?;
     let len = payload.len() as u32;
 
+    log::debug!("[continuity:protocol] writing {} bytes (magic + {} payload)", len as usize + 12, len);
     writer.write_all(MAGIC).await?;
     writer.write_all(&PROTOCOL_VERSION.to_be_bytes()).await?;
     writer.write_all(&len.to_be_bytes()).await?;
@@ -109,6 +110,11 @@ pub async fn read_message<R: AsyncReadExt + Unpin>(
     let mut magic = [0u8; 4];
     reader.read_exact(&mut magic).await?;
     if &magic != MAGIC {
+        log::warn!(
+            "[continuity:protocol] invalid magic bytes: {:02x?} (expected {:02x?})",
+            magic,
+            MAGIC
+        );
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             "invalid magic bytes",

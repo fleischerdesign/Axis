@@ -244,6 +244,7 @@ async fn run_connection(
 
     // If we initiated the connection, send Hello first
     if is_initiator {
+        info!("[continuity:connection] sending Hello as initiator");
         let hello = Message::Hello {
             device_id,
             device_name,
@@ -253,6 +254,8 @@ async fn run_connection(
             error!("[continuity:connection] send hello failed: {e}");
             return;
         }
+    } else {
+        info!("[continuity:connection] waiting for Hello from initiator");
     }
 
     loop {
