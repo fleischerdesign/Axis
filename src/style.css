@@ -647,31 +647,31 @@ separator {
 
 /* Range Toggle */
 .calendar-range-btn {
-    background: none;
+    min-height: 0;
+    padding: 6px 12px;
+    background-color: rgba(255, 255, 255, 0.06);
     border: none;
-    color: rgba(255, 255, 255, 0.5);
+    box-shadow: none;
+    color: rgba(255, 255, 255, 0.6);
     font-size: 12px;
     font-weight: 600;
-    padding: 4px 10px;
-    border-radius: 8px;
     min-width: 0;
-    min-height: 0;
-    box-shadow: none;
+    border-radius: 8px;
 }
 
 .calendar-range-btn:hover {
-    background-color: rgba(255, 255, 255, 0.08);
+    background-color: rgba(255, 255, 255, 0.1);
     color: white;
 }
 
 .calendar-range-active {
     background-color: rgba(53, 132, 228, 0.25);
-    color: #3584e4;
+    color: white;
 }
 
 .calendar-range-active:hover {
     background-color: rgba(53, 132, 228, 0.35);
-    color: #3584e4;
+    color: white;
 }
 
 /* Auth Prompt */
