@@ -75,8 +75,7 @@ impl ContinuityPage {
         confirm_btn.add_css_class("suggested-action");
         let tx_confirm = ctx.continuity.tx.clone();
         confirm_btn.connect_clicked(move |_| {
-            // TODO: get actual PIN value
-            let _ = tx_confirm.try_send(ContinuityCmd::ConfirmPin(String::new()));
+            let _ = tx_confirm.try_send(ContinuityCmd::ConfirmPin);
         });
 
         pin_actions.append(&reject_btn);
@@ -135,9 +134,9 @@ impl ContinuityPage {
             }
 
             // PIN confirmation
-            if let Some(pin) = &data.pending_pin {
+            if let Some(pending) = &data.pending_pin {
                 pin_box_c.set_visible(true);
-                pin_value_c.set_label(pin);
+                pin_value_c.set_label(&pending.pin);
             } else {
                 pin_box_c.set_visible(false);
             }

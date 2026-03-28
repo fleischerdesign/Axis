@@ -45,6 +45,14 @@ pub struct ActiveConnectionInfo {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct PendingPin {
+    pub pin: String,
+    pub peer_id: String,
+    pub peer_name: String,
+    pub is_incoming: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct ContinuityData {
     pub device_id: String,
     pub device_name: String,
@@ -52,7 +60,7 @@ pub struct ContinuityData {
     pub peers: Vec<PeerInfo>,
     pub active_connection: Option<ActiveConnectionInfo>,
     pub sharing_mode: SharingMode,
-    pub pending_pin: Option<String>,
+    pub pending_pin: Option<PendingPin>,
 }
 
 impl Default for ContinuityData {
@@ -74,7 +82,7 @@ impl Default for ContinuityData {
 pub enum ContinuityCmd {
     ToggleEnabled,
     ConnectToPeer(String),
-    ConfirmPin(String),
+    ConfirmPin,
     RejectPin,
     Disconnect,
     ForceLocal,
@@ -109,6 +117,9 @@ impl Service for ContinuityService {
 struct ContinuityInner {
     data_tx: Sender<ContinuityData>,
     data: ContinuityData,
+    last_message_at: Option<Instant>,
+    is_initiating: bool,
+    pending_peer: Option<(String, String)>,
 }
 
 impl ContinuityInner {
@@ -116,6 +127,9 @@ impl ContinuityInner {
         Self {
             data_tx,
             data: ContinuityData::default(),
+            last_message_at: None,
+            is_initiating: false,
+            pending_peer: None,
         }
     }
 
@@ -125,16 +139,20 @@ impl ContinuityInner {
 
     async fn run(&mut self, cmd_rx: async_channel::Receiver<ContinuityCmd>) {
         use tokio::select;
+        use tokio::time::{interval, Duration};
 
         let (discovery_tx, discovery_rx) = bounded::<DiscoveryEvent>(32);
         let (conn_tx, conn_rx) = bounded::<ConnectionEvent>(64);
 
         let mut discovery = discovery::AvahiDiscovery::new();
         let mut connection = connection::TcpConnectionProvider::new();
+        let mut heartbeat = interval(Duration::from_secs(HEARTBEAT_INTERVAL_SECS));
 
         info!("[continuity] service started, device: {}", self.data.device_name);
 
         loop {
+            let is_connected = self.data.active_connection.is_some();
+
             select! {
                 Ok(cmd) = cmd_rx.recv() => {
                     self.handle_cmd(cmd, &mut discovery, &mut connection, &discovery_tx, &conn_tx).await;
@@ -144,6 +162,9 @@ impl ContinuityInner {
                 }
                 Ok(event) = conn_rx.recv() => {
                     self.handle_connection_event(event, &mut connection).await;
+                }
+                _ = heartbeat.tick(), if is_connected => {
+                    self.handle_heartbeat(&mut connection);
                 }
             }
         }
@@ -176,6 +197,7 @@ impl ContinuityInner {
                     self.data.active_connection = None;
                     self.data.sharing_mode = SharingMode::Idle;
                     self.data.pending_pin = None;
+                    self.last_message_at = None;
                 }
                 self.push();
             }
@@ -198,6 +220,7 @@ impl ContinuityInner {
                     let addr_v4 = peer.address;
                     let addr_v6 = peer.address_v6;
                     info!("[continuity] connecting to {name}");
+                    self.is_initiating = true;
                     connection.connect_dual(
                         addr_v4,
                         addr_v6,
@@ -207,16 +230,32 @@ impl ContinuityInner {
                     );
                 }
             }
-            ContinuityCmd::ConfirmPin(pin) => {
-                info!("[continuity] PIN confirmed: {pin}");
-                self.data.pending_pin = None;
-                // TODO: send PinConfirm message via connection
+            ContinuityCmd::ConfirmPin => {
+                if let Some(pending) = self.data.pending_pin.take() {
+                    info!("[continuity] PIN confirmed locally");
+                    connection.send_message(protocol::Message::PinConfirm { pin: pending.pin });
+                    if pending.is_incoming {
+                        // We received the pin and accepted it. We can now consider the connection active.
+                        info!("[continuity] Connection to {} is now active", pending.peer_name);
+                        self.data.active_connection = Some(ActiveConnectionInfo {
+                            peer_id: pending.peer_id,
+                            peer_name: pending.peer_name,
+                            since: Instant::now(),
+                        });
+                        self.last_message_at = Some(Instant::now());
+                    }
+                }
                 self.push();
             }
             ContinuityCmd::RejectPin => {
                 info!("[continuity] PIN rejected");
                 self.data.pending_pin = None;
-                // TODO: send Disconnect message
+                connection.send_message(protocol::Message::Disconnect {
+                    reason: "PIN rejected".to_string(),
+                });
+                connection.disconnect_active();
+                self.data.active_connection = None;
+                self.data.sharing_mode = SharingMode::Idle;
                 self.push();
             }
             ContinuityCmd::Disconnect => {
@@ -224,6 +263,7 @@ impl ContinuityInner {
                 connection.disconnect_active();
                 self.data.active_connection = None;
                 self.data.sharing_mode = SharingMode::Idle;
+                self.last_message_at = None;
                 self.push();
             }
             ContinuityCmd::ForceLocal => {
@@ -235,6 +275,23 @@ impl ContinuityInner {
                 }
             }
         }
+    }
+
+    fn handle_heartbeat(&mut self, connection: &mut connection::TcpConnectionProvider) {
+        if let Some(last) = self.last_message_at {
+            if last.elapsed().as_secs() > CONNECTION_TIMEOUT_SECS {
+                warn!("[continuity] peer timed out (no message for {CONNECTION_TIMEOUT_SECS}s)");
+                connection.disconnect_active();
+                self.data.active_connection = None;
+                self.data.sharing_mode = SharingMode::Idle;
+                self.last_message_at = None;
+                self.push();
+                return;
+            }
+        }
+
+        // Send heartbeat
+        connection.send_message(protocol::Message::Heartbeat);
     }
 
     async fn handle_discovery_event(&mut self, event: DiscoveryEvent) {
@@ -261,6 +318,7 @@ impl ContinuityInner {
                     info!("[continuity] active peer lost");
                     self.data.active_connection = None;
                     self.data.sharing_mode = SharingMode::Idle;
+                    self.last_message_at = None;
                 }
                 self.push();
             }
@@ -275,6 +333,7 @@ impl ContinuityInner {
         match event {
             ConnectionEvent::IncomingConnection { addr, write_tx } => {
                 info!("[continuity] incoming connection from {addr}");
+                self.is_initiating = false;
                 // Store the write channel so we can send messages back
                 connection.set_active_write(write_tx);
 
@@ -287,37 +346,72 @@ impl ContinuityInner {
                 connection.send_message(hello);
             }
             ConnectionEvent::HandshakeComplete { peer_id, peer_name } => {
-                info!("[continuity] handshake complete with {peer_name}");
-                self.data.active_connection = Some(ActiveConnectionInfo {
-                    peer_id,
-                    peer_name,
-                    since: Instant::now(),
-                });
-                self.data.sharing_mode = SharingMode::Idle;
-                self.push();
+                // Not used much with the new flow, handled inside MessageReceived
             }
             ConnectionEvent::Disconnected { reason } => {
                 info!("[continuity] disconnected: {reason}");
                 self.data.active_connection = None;
                 self.data.sharing_mode = SharingMode::Idle;
+                self.data.pending_pin = None;
+                self.pending_peer = None;
+                self.last_message_at = None;
                 self.push();
             }
             ConnectionEvent::MessageReceived(msg) => {
+                self.last_message_at = Some(Instant::now());
                 match msg {
                     protocol::Message::Hello { device_id, device_name, version } => {
                         if version != protocol::PROTOCOL_VERSION {
                             warn!("[continuity] peer version mismatch: {version}");
                             connection.disconnect_active();
+                            self.last_message_at = None;
                             return;
                         }
                         info!("[continuity] handshake from {device_name} ({device_id})");
-                        self.data.active_connection = Some(ActiveConnectionInfo {
-                            peer_id: device_id,
-                            peer_name: device_name,
-                            since: std::time::Instant::now(),
-                        });
-                        self.data.sharing_mode = SharingMode::Idle;
-                        self.push();
+                        
+                        self.pending_peer = Some((device_id.clone(), device_name.clone()));
+                        
+                        if self.is_initiating {
+                            let pin = format!("{:06}", uuid::Uuid::new_v4().as_u128() % 1000000);
+                            info!("[continuity] initiating pairing, generating PIN: {pin}");
+                            self.data.pending_pin = Some(PendingPin {
+                                pin: pin.clone(),
+                                peer_id: device_id,
+                                peer_name: device_name,
+                                is_incoming: false,
+                            });
+                            connection.send_message(protocol::Message::PinRequest { pin });
+                            self.push();
+                        }
+                    }
+                    protocol::Message::PinRequest { pin } => {
+                        if let Some((peer_id, peer_name)) = self.pending_peer.clone() {
+                            info!("[continuity] received pairing request with PIN: {pin}");
+                            self.data.pending_pin = Some(PendingPin {
+                                pin,
+                                peer_id,
+                                peer_name,
+                                is_incoming: true,
+                            });
+                            self.push();
+                        }
+                    }
+                    protocol::Message::PinConfirm { pin } => {
+                        if let Some(pending) = &self.data.pending_pin {
+                            if pending.pin == pin {
+                                info!("[continuity] peer confirmed PIN, connection active");
+                                self.data.active_connection = Some(ActiveConnectionInfo {
+                                    peer_id: pending.peer_id.clone(),
+                                    peer_name: pending.peer_name.clone(),
+                                    since: Instant::now(),
+                                });
+                                self.data.pending_pin = None;
+                                self.push();
+                            } else {
+                                warn!("[continuity] peer sent incorrect PIN confirmation");
+                                connection.disconnect_active();
+                            }
+                        }
                     }
                     protocol::Message::Connected => {
                         info!("[continuity] connection established");
@@ -327,6 +421,9 @@ impl ContinuityInner {
                         info!("[continuity] peer disconnected: {reason}");
                         self.data.active_connection = None;
                         self.data.sharing_mode = SharingMode::Idle;
+                        self.data.pending_pin = None;
+                        self.pending_peer = None;
+                        self.last_message_at = None;
                         self.push();
                     }
                     other => {

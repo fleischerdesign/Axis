@@ -130,6 +130,66 @@ fn build_ui(app: &libadwaita::Application, start_locked: bool, wallpaper_path: O
         });
     }
 
+    // Continuity pairing — reactive via store subscription
+    {
+        let ctx_c = ctx.clone();
+        let last_notified: std::cell::RefCell<Option<String>> = std::cell::RefCell::new(None);
+        ctx.continuity.subscribe(move |data| {
+            if let Some(pending) = &data.pending_pin {
+                let peer_id = &pending.peer_id;
+                if last_notified.borrow().as_deref() != Some(peer_id) {
+                    *last_notified.borrow_mut() = Some(peer_id.clone());
+                    
+                    let tx_c = ctx_c.continuity.tx.clone();
+                    
+                    let mut on_action: std::collections::HashMap<String, std::sync::Arc<dyn Fn() + Send + Sync>> = std::collections::HashMap::new();
+                    
+                    on_action.insert(
+                        "accept".to_string(),
+                        std::sync::Arc::new({
+                            let tx = tx_c.clone();
+                            move || { let _ = tx.try_send(crate::services::continuity::ContinuityCmd::ConfirmPin); }
+                        })
+                    );
+                    on_action.insert(
+                        "reject".to_string(),
+                        std::sync::Arc::new({
+                            let tx = tx_c.clone();
+                            move || { let _ = tx.try_send(crate::services::continuity::ContinuityCmd::RejectPin); }
+                        })
+                    );
+
+                    let body = if pending.is_incoming {
+                        format!("Kopplungsanfrage von {}\nPIN: {}", pending.peer_name, pending.pin)
+                    } else {
+                        format!("Bitte bestätigen Sie die PIN {} auf dem Gerät {}", pending.pin, pending.peer_name)
+                    };
+
+                    let notification = crate::services::notifications::Notification {
+                        id: 4294967294, // distinct from bluetooth
+                        app_name: "Continuity".to_string(),
+                        app_icon: "computer-symbolic".to_string(),
+                        summary: "Gerätekopplung".to_string(),
+                        body,
+                        urgency: 2,
+                        timestamp: chrono::Local::now().timestamp(),
+                        actions: vec![
+                            crate::services::notifications::NotificationAction { key: "accept".to_string(), label: "Bestätigen".to_string() },
+                            crate::services::notifications::NotificationAction { key: "reject".to_string(), label: "Ablehnen".to_string() },
+                        ],
+                        on_action: Some(on_action),
+                        internal_id: 2,
+                    };
+                    
+                    let _ = ctx_c.notifications.tx.try_send(crate::services::notifications::server::NotificationCmd::Show(notification));
+                }
+            } else {
+                *last_notified.borrow_mut() = None;
+                // Optionally close the notification if pairing ends, but for now we just clear the state.
+            }
+        });
+    }
+
     // --- WIDGETS & CONTROLLER ---
     let bar = Bar::new(app, ctx.clone());
     let bar_popup_state = bar.popup_open.clone();
