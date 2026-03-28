@@ -11,8 +11,8 @@ use super::protocol::{self, Message};
 #[derive(Debug)]
 pub enum ConnectionEvent {
     IncomingConnection {
-        peer_name: String,
-        stream: TcpStream,
+        addr: std::net::SocketAddr,
+        write_tx: tokio::sync::mpsc::Sender<Message>,
     },
     HandshakeComplete {
         peer_id: String,
@@ -29,20 +29,18 @@ pub enum ConnectionEvent {
 
 pub trait ConnectionProvider: Send {
     fn listen(&mut self, port: u16, tx: Sender<ConnectionEvent>) -> Result<(), String>;
-    fn connect(
-        &mut self,
-        addr: SocketAddr,
-        tx: Sender<ConnectionEvent>,
-    ) -> Result<(), String>;
     fn connect_dual(
         &mut self,
         addr_v4: SocketAddr,
         addr_v6: Option<SocketAddr>,
         tx: Sender<ConnectionEvent>,
+        device_id: String,
+        device_name: String,
     );
     fn disconnect_active(&mut self);
     fn stop(&mut self);
     fn send_message(&self, msg: Message);
+    fn set_active_write(&mut self, write_tx: tokio::sync::mpsc::Sender<Message>);
 }
 
 // ── Active Connection State ────────────────────────────────────────────
@@ -85,53 +83,13 @@ impl ConnectionProvider for TcpConnectionProvider {
         Ok(())
     }
 
-    fn connect(
-        &mut self,
-        addr: SocketAddr,
-        tx: Sender<ConnectionEvent>,
-    ) -> Result<(), String> {
-        // Disconnect any existing connection first
-        self.disconnect_active();
-
-        let (write_tx, write_rx) = tokio::sync::mpsc::channel::<Message>(64);
-
-        let task = tokio::spawn(async move {
-            match tokio::time::timeout(
-                std::time::Duration::from_secs(5),
-                TcpStream::connect(addr),
-            )
-            .await
-            {
-                Ok(Ok(stream)) => {
-                    info!("[continuity:connection] connected to {addr}");
-                    run_connection(stream, write_rx, tx, true).await;
-                }
-                Ok(Err(e)) => {
-                    error!("[continuity:connection] connect to {addr} failed: {e}");
-                    let _ = tx.send(ConnectionEvent::Error(e.to_string())).await;
-                }
-                Err(_) => {
-                    error!("[continuity:connection] connect to {addr} timed out");
-                    let _ = tx
-                        .send(ConnectionEvent::Error("connection timed out".into()))
-                        .await;
-                }
-            }
-        });
-
-        self.active = Some(ActiveConnection {
-            write_tx,
-            task,
-        });
-
-        Ok(())
-    }
-
     fn connect_dual(
         &mut self,
         addr_v4: SocketAddr,
         addr_v6: Option<SocketAddr>,
         tx: Sender<ConnectionEvent>,
+        device_id: String,
+        device_name: String,
     ) {
         self.disconnect_active();
 
@@ -149,7 +107,7 @@ impl ConnectionProvider for TcpConnectionProvider {
                 {
                     Ok(Ok(stream)) => {
                         info!("[continuity:connection] connected via IPv6 to {v6}");
-                        run_connection(stream, write_rx, tx, true).await;
+                        run_connection(stream, write_rx, tx, true, device_id, device_name).await;
                         return;
                     }
                     Ok(Err(e)) => {
@@ -171,7 +129,7 @@ impl ConnectionProvider for TcpConnectionProvider {
             {
                 Ok(Ok(stream)) => {
                     info!("[continuity:connection] connected via IPv4 to {addr_v4}");
-                    run_connection(stream, write_rx, tx, true).await;
+                    run_connection(stream, write_rx, tx, true, device_id, device_name).await;
                 }
                 Ok(Err(e)) => {
                     error!("[continuity:connection] IPv4 failed: {e}");
@@ -186,10 +144,7 @@ impl ConnectionProvider for TcpConnectionProvider {
             }
         });
 
-        self.active = Some(ActiveConnection {
-            write_tx,
-            task,
-        });
+        self.active = Some(ActiveConnection { write_tx, task });
     }
 
     fn disconnect_active(&mut self) {
@@ -213,6 +168,13 @@ impl ConnectionProvider for TcpConnectionProvider {
         if let Some(conn) = &self.active {
             let _ = conn.write_tx.try_send(msg);
         }
+    }
+
+    fn set_active_write(&mut self, write_tx: tokio::sync::mpsc::Sender<Message>) {
+        self.active = Some(ActiveConnection {
+            write_tx,
+            task: tokio::spawn(async {}),
+        });
     }
 }
 
@@ -241,11 +203,17 @@ async fn listen_loop(
                     Ok((stream, addr)) => {
                         info!("[continuity:connection] incoming from {addr}");
                         let tx = event_tx.clone();
+                        let (write_tx, write_rx) =
+                            tokio::sync::mpsc::channel::<Message>(64);
+
+                        // Notify service about incoming connection with write channel
+                        let _ = tx.send(ConnectionEvent::IncomingConnection {
+                            addr,
+                            write_tx: write_tx.clone(),
+                        }).await;
+
                         tokio::spawn(async move {
-                            // Start handshake as server side
-                            let (_write_tx, write_rx) =
-                                tokio::sync::mpsc::channel::<Message>(64);
-                            run_connection(stream, write_rx, tx, false).await;
+                            run_connection(stream, write_rx, tx, false, String::new(), String::new()).await;
                         });
                     }
                     Err(e) => {
@@ -268,6 +236,8 @@ async fn run_connection(
     mut write_rx: tokio::sync::mpsc::Receiver<Message>,
     event_tx: Sender<ConnectionEvent>,
     is_initiator: bool,
+    device_id: String,
+    device_name: String,
 ) {
     use tokio::io::split;
     let (mut reader, mut writer) = split(stream);
@@ -275,8 +245,8 @@ async fn run_connection(
     // If we initiated the connection, send Hello first
     if is_initiator {
         let hello = Message::Hello {
-            device_id: String::new(), // TODO: pass device_id
-            device_name: String::new(), // TODO: pass device_name
+            device_id,
+            device_name,
             version: protocol::PROTOCOL_VERSION,
         };
         if let Err(e) = protocol::write_message(&mut writer, &hello).await {

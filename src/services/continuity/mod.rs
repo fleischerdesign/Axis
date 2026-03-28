@@ -11,7 +11,7 @@ use super::Service;
 use crate::store::ServiceStore;
 use connection::{ConnectionEvent, ConnectionProvider};
 use discovery::{DiscoveryEvent, DiscoveryProvider};
-use log::{error, info};
+use log::{error, info, warn};
 
 // ── Constants ──────────────────────────────────────────────────────────
 
@@ -198,7 +198,13 @@ impl ContinuityInner {
                     let addr_v4 = peer.address;
                     let addr_v6 = peer.address_v6;
                     info!("[continuity] connecting to {name}");
-                    connection.connect_dual(addr_v4, addr_v6, conn_tx.clone());
+                    connection.connect_dual(
+                        addr_v4,
+                        addr_v6,
+                        conn_tx.clone(),
+                        self.data.device_id.clone(),
+                        self.data.device_name.clone(),
+                    );
                 }
             }
             ContinuityCmd::ConfirmPin(pin) => {
@@ -267,10 +273,18 @@ impl ContinuityInner {
         connection: &mut connection::TcpConnectionProvider,
     ) {
         match event {
-            ConnectionEvent::IncomingConnection { peer_name, .. } => {
-                info!("[continuity] incoming connection from {peer_name}");
-                // TODO: start handshake, generate PIN
-                self.push();
+            ConnectionEvent::IncomingConnection { addr, write_tx } => {
+                info!("[continuity] incoming connection from {addr}");
+                // Store the write channel so we can send messages back
+                connection.set_active_write(write_tx);
+
+                // Send our Hello as server response
+                let hello = protocol::Message::Hello {
+                    device_id: self.data.device_id.clone(),
+                    device_name: self.data.device_name.clone(),
+                    version: protocol::PROTOCOL_VERSION,
+                };
+                connection.send_message(hello);
             }
             ConnectionEvent::HandshakeComplete { peer_id, peer_name } => {
                 info!("[continuity] handshake complete with {peer_name}");
@@ -289,8 +303,36 @@ impl ContinuityInner {
                 self.push();
             }
             ConnectionEvent::MessageReceived(msg) => {
-                // TODO: handle protocol messages
-                info!("[continuity] received: {:?}", msg);
+                match msg {
+                    protocol::Message::Hello { device_id, device_name, version } => {
+                        if version != protocol::PROTOCOL_VERSION {
+                            warn!("[continuity] peer version mismatch: {version}");
+                            connection.disconnect_active();
+                            return;
+                        }
+                        info!("[continuity] handshake from {device_name} ({device_id})");
+                        self.data.active_connection = Some(ActiveConnectionInfo {
+                            peer_id: device_id,
+                            peer_name: device_name,
+                            since: std::time::Instant::now(),
+                        });
+                        self.data.sharing_mode = SharingMode::Idle;
+                        self.push();
+                    }
+                    protocol::Message::Connected => {
+                        info!("[continuity] connection established");
+                    }
+                    protocol::Message::Heartbeat => {}
+                    protocol::Message::Disconnect { reason } => {
+                        info!("[continuity] peer disconnected: {reason}");
+                        self.data.active_connection = None;
+                        self.data.sharing_mode = SharingMode::Idle;
+                        self.push();
+                    }
+                    other => {
+                        info!("[continuity] received: {:?}", other);
+                    }
+                }
             }
             ConnectionEvent::Error(e) => {
                 error!("[continuity] connection error: {e}");
