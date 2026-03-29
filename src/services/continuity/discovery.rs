@@ -269,7 +269,7 @@ async fn browse_services(
     loop {
         tokio::select! {
             Some(msg) = item_new.next() => {
-                if let Ok((interface, protocol, name, stype, domain, flags)) =
+                if let Ok((interface, protocol, name, stype, domain, _flags)) =
                     msg.body().deserialize::<(i32, i32, String, String, String, u32)>()
                 {
                     // Only resolve IPv4 to avoid duplicate IPv4+IPv6 results
@@ -371,6 +371,7 @@ async fn resolve_service(
                 return Ok(PeerInfo {
                     device_id,
                     device_name: resolved_name,
+                    hostname: host,
                     address: addr_str
                         .parse()
                         .map_err(|e| format!("parse address '{addr_str}': {e}"))?,
@@ -464,7 +465,8 @@ async fn scan_cached_services(
         let Some(addr_v4) = entry.addr_v4 else { continue };
         result.push(PeerInfo {
             device_id: entry.name,
-            device_name: entry.host,
+            device_name: entry.host.clone(),
+            hostname: entry.host,
             address: addr_v4,
             address_v6: entry.addr_v6,
         });

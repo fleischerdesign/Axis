@@ -28,6 +28,7 @@ pub const PIN_LENGTH: usize = 6;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SharingMode {
     Idle,
+    Pending,
     Sharing,
     Receiving,
 }
@@ -36,6 +37,7 @@ pub enum SharingMode {
 pub struct PeerInfo {
     pub device_id: String,
     pub device_name: String,
+    pub hostname: String,
     pub address: std::net::SocketAddr,
     pub address_v6: Option<std::net::SocketAddr>,
 }
@@ -72,7 +74,7 @@ pub struct ContinuityData {
 impl Default for ContinuityData {
     fn default() -> Self {
         Self {
-            device_id: uuid::Uuid::new_v4().to_string(),
+            device_id: persistent_device_id(),
             device_name: hostname(),
             enabled: false,
             peers: Vec::new(),
@@ -136,6 +138,7 @@ struct ContinuityInner {
     pending_peer: Option<(String, String)>,
     virtual_pos: (f64, f64),
     entry_side: Option<Side>,
+    pending_transition_side: Option<Side>,
     last_transition_at: Instant,
 }
 
@@ -149,6 +152,7 @@ impl ContinuityInner {
             pending_peer: None,
             virtual_pos: (0.0, 0.0),
             entry_side: None,
+            pending_transition_side: None,
             last_transition_at: Instant::now() - Duration::from_secs(10),
         }
     }
@@ -173,16 +177,19 @@ impl ContinuityInner {
         let mut capture = input::EvdevCapture::new();
         let mut heartbeat = interval(Duration::from_secs(HEARTBEAT_INTERVAL_SECS));
 
-        // Get initial screen dimensions from Niri
+        // Get initial screen dimensions from Niri (physical pixel mode)
         if let Ok(mut sock) = niri_ipc::socket::Socket::connect() {
             if let Ok(Ok(niri_ipc::Response::Outputs(outputs))) = sock.send(niri_ipc::Request::Outputs) {
-                if let Some(output) = outputs.values().next() {
-                    if let Some(logical) = &output.logical {
-                        let w = logical.width as i32;
-                        let h = logical.height as i32;
-                        info!("[continuity] detected logical resolution: {}x{}", w, h);
-                        self.data.screen_width = w;
-                        self.data.screen_height = h;
+                // Pick the first enabled output with a current mode
+                if let Some(output) = outputs.values().find(|o| o.logical.is_some()) {
+                    if let Some(mode_idx) = output.current_mode {
+                        if let Some(mode) = output.modes.get(mode_idx) {
+                            let w = mode.width as i32;
+                            let h = mode.height as i32;
+                            info!("[continuity] detected physical resolution: {}x{}", w, h);
+                            self.data.screen_width = w;
+                            self.data.screen_height = h;
+                        }
                     }
                 }
             }
@@ -195,13 +202,13 @@ impl ContinuityInner {
 
             select! {
                 Ok(cmd) = cmd_rx.recv() => {
-                    self.handle_cmd(cmd, &mut discovery, &mut connection, &mut clipboard, &mut injection, &mut capture, &discovery_tx, &conn_tx, &clipboard_tx, &input_tx).await;
+                    self.handle_cmd(cmd, &mut discovery, &mut connection, &mut clipboard, &mut injection, &mut capture, &discovery_tx, &conn_tx, &clipboard_tx).await;
                 }
                 Ok(event) = discovery_rx.recv() => {
                     self.handle_discovery_event(event).await;
                 }
                 Ok(event) = conn_rx.recv() => {
-                    self.handle_connection_event(event, &mut connection, &mut clipboard, &mut injection, &mut capture, &clipboard_tx).await;
+                    self.handle_connection_event(event, &mut connection, &mut clipboard, &mut injection, &mut capture, &clipboard_tx, &input_tx).await;
                 }
                 Ok(event) = clipboard_rx.recv() => {
                     self.handle_clipboard_event(event, &connection).await;
@@ -227,7 +234,6 @@ impl ContinuityInner {
         discovery_tx: &Sender<DiscoveryEvent>,
         conn_tx: &Sender<ConnectionEvent>,
         clipboard_tx: &Sender<clipboard::ClipboardEvent>,
-        input_tx: &Sender<input::InputEvent>,
     ) {
         match cmd {
             ContinuityCmd::ToggleEnabled => {
@@ -337,9 +343,10 @@ impl ContinuityInner {
                 self.push();
             }
             ContinuityCmd::ForceLocal => {
-                if self.data.sharing_mode == SharingMode::Sharing {
+                if self.data.sharing_mode == SharingMode::Sharing || self.data.sharing_mode == SharingMode::Pending {
                     info!("[continuity] forcing cursor back to local");
                     self.data.sharing_mode = SharingMode::Idle;
+                    self.pending_transition_side = None;
                     capture.stop();
                     connection.send_message(protocol::Message::TransitionCancel);
                     self.push();
@@ -352,37 +359,20 @@ impl ContinuityInner {
                         return;
                     }
 
-                    info!("[continuity] starting sharing via {:?}", side);
-                    self.data.sharing_mode = SharingMode::Sharing;
-                    self.entry_side = Some(side);
+                    info!("[continuity] initiating sharing via {:?}, waiting for ack", side);
+                    self.data.sharing_mode = SharingMode::Pending;
+                    self.pending_transition_side = Some(side);
                     self.last_transition_at = Instant::now();
-                    
-                    // Start cursor at the edge we just crossed, but with a buffer
-                    // to prevent immediate return.
-                    let buffer = 500.0;
-                    self.virtual_pos = match side {
-                        Side::Left => (self.data.screen_width as f64 - buffer, self.data.screen_height as f64 / 2.0),
-                        Side::Right => (buffer, self.data.screen_height as f64 / 2.0),
-                        Side::Top => (self.data.screen_width as f64 / 2.0, self.data.screen_height as f64 - buffer),
-                        Side::Bottom => (self.data.screen_width as f64 / 2.0, buffer),
-                    };
 
-                    if let Err(e) = capture.start(input_tx.clone()) {
-                        error!("[continuity] failed to start input capture: {e}");
-                        // Rollback state if we can't grab devices
-                        self.data.sharing_mode = SharingMode::Idle;
-                        self.entry_side = None;
-                        self.push();
-                        return;
-                    }
                     connection.send_message(protocol::Message::EdgeTransition { side });
                     self.push();
                 }
             }
             ContinuityCmd::StopSharing => {
-                if self.data.sharing_mode == SharingMode::Sharing {
+                if self.data.sharing_mode == SharingMode::Sharing || self.data.sharing_mode == SharingMode::Pending {
                     info!("[continuity] stopping sharing");
                     self.data.sharing_mode = SharingMode::Idle;
+                    self.pending_transition_side = None;
                     capture.stop();
                     connection.send_message(protocol::Message::TransitionCancel);
                     self.push();
@@ -412,6 +402,9 @@ impl ContinuityInner {
             // so the user isn't "trapped" if the other side crashes.
             let timeout = if self.data.sharing_mode == SharingMode::Receiving {
                 Duration::from_secs(5)
+            } else if self.data.sharing_mode == SharingMode::Pending {
+                // Short timeout for pending transitions (don't wait forever for ack)
+                Duration::from_secs(5)
             } else {
                 Duration::from_secs(CONNECTION_TIMEOUT_SECS)
             };
@@ -436,7 +429,7 @@ impl ContinuityInner {
         match event {
             DiscoveryEvent::PeerFound(peer) => {
                 // Skip ourselves (match by hostname) and duplicates
-                if peer.device_id == self.data.device_name {
+                if peer.hostname == self.data.device_name {
                     return;
                 }
                 if !self.data.peers.iter().any(|p| p.device_id == peer.device_id) {
@@ -471,6 +464,7 @@ impl ContinuityInner {
         injection: &mut input::WaylandInjection,
         capture: &mut input::EvdevCapture,
         clipboard_tx: &Sender<clipboard::ClipboardEvent>,
+        input_tx: &Sender<input::InputEvent>,
     ) {
         match event {
             ConnectionEvent::IncomingConnection { addr, write_tx } => {
@@ -487,7 +481,7 @@ impl ContinuityInner {
                 };
                 connection.send_message(hello);
             }
-            ConnectionEvent::HandshakeComplete { peer_id, peer_name } => {
+            ConnectionEvent::HandshakeComplete { .. } => {
                 // Not used much with the new flow, handled inside MessageReceived
             }
             ConnectionEvent::Disconnected { reason } => {
@@ -583,13 +577,52 @@ impl ContinuityInner {
                         let _ = injection.inject(&msg);
                     }
                     protocol::Message::EdgeTransition { side } => {
-                        info!("[continuity] peer started sharing (we are receiving) via {:?}", side);
-                        self.data.sharing_mode = SharingMode::Receiving;
-                        self.push();
+                        if self.data.sharing_mode == SharingMode::Idle {
+                            info!("[continuity] accepting sharing from peer via {:?}", side);
+                            self.data.sharing_mode = SharingMode::Receiving;
+                            connection.send_message(protocol::Message::TransitionAck { accepted: true });
+                            self.push();
+                        } else {
+                            info!("[continuity] rejecting sharing from peer (already in {:?})", self.data.sharing_mode);
+                            connection.send_message(protocol::Message::TransitionAck { accepted: false });
+                        }
+                    }
+                    protocol::Message::TransitionAck { accepted } => {
+                        if self.data.sharing_mode == SharingMode::Pending {
+                            if accepted {
+                                let side = self.pending_transition_side.unwrap_or(Side::Right);
+                                info!("[continuity] transition accepted, starting sharing via {:?}", side);
+                                self.data.sharing_mode = SharingMode::Sharing;
+                                self.entry_side = Some(side);
+                                self.pending_transition_side = None;
+
+                                // Start cursor at the edge we just crossed, with a buffer
+                                let buffer = 500.0;
+                                self.virtual_pos = match side {
+                                    Side::Left => (self.data.screen_width as f64 - buffer, self.data.screen_height as f64 / 2.0),
+                                    Side::Right => (buffer, self.data.screen_height as f64 / 2.0),
+                                    Side::Top => (self.data.screen_width as f64 / 2.0, self.data.screen_height as f64 - buffer),
+                                    Side::Bottom => (self.data.screen_width as f64 / 2.0, buffer),
+                                };
+
+                                if let Err(e) = capture.start(input_tx.clone()) {
+                                    error!("[continuity] failed to start input capture: {e}");
+                                    self.data.sharing_mode = SharingMode::Idle;
+                                    self.entry_side = None;
+                                    connection.send_message(protocol::Message::TransitionCancel);
+                                }
+                            } else {
+                                info!("[continuity] transition rejected by peer");
+                                self.data.sharing_mode = SharingMode::Idle;
+                                self.pending_transition_side = None;
+                            }
+                            self.push();
+                        }
                     }
                     protocol::Message::TransitionCancel => {
                         info!("[continuity] peer cancelled sharing");
                         self.data.sharing_mode = SharingMode::Idle;
+                        self.pending_transition_side = None;
                         self.push();
                     }
                     protocol::Message::Connected => {
@@ -607,9 +640,6 @@ impl ContinuityInner {
                         injection.stop();
                         capture.stop();
                         self.push();
-                    }
-                    other => {
-                        info!("[continuity] received: {:?}", other);
                     }
                 }
             }
@@ -667,8 +697,9 @@ impl ContinuityInner {
                         if should_return {
                             info!("[continuity] return transition triggered via movement");
                             self.data.sharing_mode = SharingMode::Idle;
-                            // 3 second cooldown specifically for returning, to give time to move mouse away
-                            self.last_transition_at = Instant::now() + Duration::from_secs(1); 
+                            self.entry_side = None;
+                            // Reset cooldown timer to prevent immediate re-transition
+                            self.last_transition_at = Instant::now();
                             
                             connection.send_message(protocol::Message::TransitionCancel);
                             self.push();
@@ -703,6 +734,32 @@ impl ContinuityInner {
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────
+
+fn config_dir() -> std::path::PathBuf {
+    let base = std::env::var("XDG_CONFIG_HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| {
+            let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+            std::path::PathBuf::from(home).join(".config")
+        });
+    base.join("axis")
+}
+
+fn persistent_device_id() -> String {
+    let path = config_dir().join("continuity_id");
+    if let Ok(id) = std::fs::read_to_string(&path) {
+        let id = id.trim().to_string();
+        if !id.is_empty() {
+            return id;
+        }
+    }
+    let id = uuid::Uuid::new_v4().to_string();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(&path, &id);
+    id
+}
 
 fn hostname() -> String {
     std::process::Command::new("hostname")

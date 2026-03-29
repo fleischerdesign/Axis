@@ -171,10 +171,9 @@ impl ConnectionProvider for TcpConnectionProvider {
     }
 
     fn set_active_write(&mut self, write_tx: tokio::sync::mpsc::Sender<Message>) {
-        self.active = Some(ActiveConnection {
-            write_tx,
-            task: tokio::spawn(async {}),
-        });
+        // Preserve existing task handle if present, otherwise use a no-op handle
+        let task = self.active.take().map(|c| c.task).unwrap_or_else(|| tokio::spawn(async {}));
+        self.active = Some(ActiveConnection { write_tx, task });
     }
 }
 
@@ -191,7 +190,7 @@ async fn listen_loop(
     event_tx: Sender<ConnectionEvent>,
     stop_rx: oneshot::Receiver<()>,
 ) -> Result<(), std::io::Error> {
-    let listener = TcpListener::bind(format!("0.0.0.0:{port}")).await?;
+    let listener = TcpListener::bind(format!("[::]:{port}")).await?;
     info!("[continuity:connection] listening on port {port}");
 
     tokio::pin!(let stop = stop_rx;);
