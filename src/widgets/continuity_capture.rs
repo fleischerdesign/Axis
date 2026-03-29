@@ -59,10 +59,14 @@ impl ContinuityCaptureController {
                     };
                     let w = ctrl_c.create_edge_window(&app_c, side);
                     w.present();
+                    info!("[continuity:edge] presenting edge window for {:?}", side);
                     *edge = Some(w);
                 }
             } else {
-                if let Some(w) = edge.take() { w.close(); }
+                if let Some(w) = edge.take() {
+                    info!("[continuity:edge] closing edge window");
+                    w.close();
+                }
                 *ctrl_c.pressure.borrow_mut() = 0.0;
             }
 
@@ -91,15 +95,18 @@ impl ContinuityCaptureController {
             .decorated(false)
             .build();
 
-        // Fullscreen transparent window — works on all monitors regardless of output config.
-        // No layer-shell so we avoid multi-monitor anchoring issues.
         window.fullscreen();
-        window.set_opacity(0.0);
+        window.set_opacity(0.01);
         window.set_cursor_from_name(Some("none"));
 
-        // Invisible container to receive events.
         let container = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
         window.set_child(Some(&container));
+
+        // Log window dimensions once realized
+        let side_dbg = side;
+        window.connect_map(move |w| {
+            info!("[continuity:edge] window mapped, side={:?}, allocated={}x{}", side_dbg, w.allocated_width(), w.allocated_height());
+        });
 
         let motion = gtk4::EventControllerMotion::new();
         let ctrl_c = self.clone();
@@ -118,6 +125,11 @@ impl ContinuityCaptureController {
                 _ => false,
             };
 
+            // Log every 50th motion event to avoid spam
+            if (x as i64) % 200 < 5 {
+                info!("[continuity:edge] motion {:?}: x={:.0} y={:.0} size={}x{} at_edge={} pressure={:.0}", side, x, y, width, height, at_edge, *ctrl_c.pressure.borrow());
+            }
+
             if at_edge {
                 ctrl_c.check_transition(side, 5.0);
             }
@@ -125,6 +137,7 @@ impl ContinuityCaptureController {
 
         let ctrl_leave = self.clone();
         motion.connect_leave(move |_| {
+            info!("[continuity:edge] cursor left edge window {:?}", side);
             *ctrl_leave.pressure.borrow_mut() = 0.0;
         });
 
