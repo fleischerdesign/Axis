@@ -30,6 +30,7 @@ pub trait InputCapture: Send {
 
 pub trait InputInjection: Send {
     fn inject(&mut self, msg: &Message) -> Result<(), String>;
+    fn warp(&mut self, side: Side, edge_pos: f64) -> Result<(), String>;
     fn start(&mut self) -> Result<(), String>;
     fn stop(&mut self);
 }
@@ -66,9 +67,6 @@ impl InputInjection for WaylandInjection {
             .map_err(|e| format!("failed to build keyboard device: {e}"))?;
 
         // Device 2: Virtual Pointer — mouse buttons + relative axes + POINTER property
-        // BTN_LEFT+REL_X+REL_Y is the canonical mouse signature libinput uses to classify
-        // a device as a pointer. Without these, libinput may classify it as keyboard
-        // and drop REL events (the 512 key codes confuse the classifier).
         let mut ptr_keys = AttributeSet::<KeyCode>::new();
         ptr_keys.insert(KeyCode::BTN_LEFT);
         ptr_keys.insert(KeyCode::BTN_RIGHT);
@@ -105,6 +103,42 @@ impl InputInjection for WaylandInjection {
     fn stop(&mut self) {
         self.keyboard = None;
         self.pointer = None;
+    }
+
+    fn warp(&mut self, side: Side, edge_pos: f64) -> Result<(), String> {
+        let ptr = self.pointer.as_mut().ok_or("pointer device not started")?;
+        use evdev::InputEvent;
+
+        info!("[continuity:input] warping cursor to {:?} at {:.0}", side, edge_pos);
+
+        // 1. "Slam" the cursor against the entry edge corner to guarantee starting position.
+        // We use a delta larger than any reasonable screen resolution.
+        let (dx, dy) = match side {
+            Side::Left => (-10000, -10000),   // Top-left
+            Side::Right => (10000, -10000),   // Top-right
+            Side::Top => (-10000, -10000),    // Top-left
+            Side::Bottom => (-10000, 10000),  // Bottom-left
+        };
+
+        let events = vec![
+            InputEvent::from(RelativeAxisEvent::new(RelativeAxisCode::REL_X, dx)),
+            InputEvent::from(RelativeAxisEvent::new(RelativeAxisCode::REL_Y, dy)),
+        ];
+        ptr.emit(&events).map_err(|e| e.to_string())?;
+
+        // 2. Move from the corner to the actual edge_pos along the edge.
+        let mut move_events = Vec::new();
+        match side {
+            Side::Left | Side::Right => {
+                move_events.push(InputEvent::from(RelativeAxisEvent::new(RelativeAxisCode::REL_Y, edge_pos as i32)));
+            }
+            Side::Top | Side::Bottom => {
+                move_events.push(InputEvent::from(RelativeAxisEvent::new(RelativeAxisCode::REL_X, edge_pos as i32)));
+            }
+        }
+        ptr.emit(&move_events).map_err(|e| e.to_string())?;
+
+        Ok(())
     }
 
     fn inject(&mut self, msg: &Message) -> Result<(), String> {

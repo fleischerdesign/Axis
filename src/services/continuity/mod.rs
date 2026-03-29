@@ -745,11 +745,21 @@ impl ContinuityInner {
                     }
                     protocol::Message::EdgeTransition { side, edge_pos } => {
                         if self.data.sharing_mode == SharingMode::Idle {
-                            info!("[continuity] accepting sharing from peer via {:?}, edge_pos={:.0}", side, edge_pos);
+                            // Map the peer's exit position to our local entry position
+                            let mapped_pos = self.data.peer_arrangement.remote_to_local_edge(edge_pos);
+                            let local_side = side.opposite();
+
+                            info!("[continuity] accepting sharing from peer: peer_exit={:?}@{} -> local_entry={:?}@{}", 
+                                side, edge_pos, local_side, mapped_pos);
+
                             self.data.sharing_mode = SharingMode::Receiving;
-                            // The peer's side tells us which edge they exited from.
-                            // We store it so the edge window appears on the correct side.
-                            self.data.receiving_entry_side = Some(side);
+                            self.data.receiving_entry_side = Some(local_side);
+
+                            // Physical cursor positioning
+                            if let Err(e) = injection.warp(local_side, mapped_pos) {
+                                error!("[continuity] failed to warp cursor: {e}");
+                            }
+
                             connection.send_message(protocol::Message::TransitionAck { accepted: true });
                             self.push();
                         } else {
@@ -809,22 +819,21 @@ impl ContinuityInner {
                     protocol::Message::SwitchConfirm { side, edge_pos } => {
                         if self.data.sharing_mode == SharingMode::PendingSwitch {
                             info!("[continuity] switch confirmed, sharing via {:?}, edge_pos={:.0}", side, edge_pos);
-                            self.data.sharing_mode = SharingMode::Sharing;
-                            self.entry_side = Some(side);
-                            self.data.receiving_entry_side = None;
 
-                            // The old sharer sent us their virtual_pos along the edge (in remote coords).
-                            // Map it to our coordinate system for init.
-                            let mapped_pos = self.data.peer_arrangement.local_to_remote_edge(edge_pos);
-                            self.init_virtual_pos(side, mapped_pos);
-                            info!("[continuity] virtual_pos initialized to ({:.0}, {:.0})", self.virtual_pos.0, self.virtual_pos.1);
+                            // In a switch, we were the Sharer and now the Peer takes over.
+                            // We (the former Sharer) become the Receiver.
+                            let local_side = side.opposite();
+                            let mapped_pos = self.data.peer_arrangement.remote_to_local_edge(edge_pos);
 
-                            if let Err(e) = capture.start(input_tx.clone()) {
-                                error!("[continuity] failed to start input capture after switch: {e}");
-                                self.data.sharing_mode = SharingMode::Idle;
-                                self.entry_side = None;
-                                connection.send_message(protocol::Message::TransitionCancel);
+                            self.data.sharing_mode = SharingMode::Receiving;
+                            self.data.receiving_entry_side = Some(local_side);
+                            self.entry_side = None;
+
+                            // Warping the physical cursor on our screen
+                            if let Err(e) = injection.warp(local_side, mapped_pos) {
+                                error!("[continuity] failed to warp cursor after switch: {e}");
                             }
+
                             self.push();
                         }
                     }
