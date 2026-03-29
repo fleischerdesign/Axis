@@ -30,7 +30,7 @@ pub trait InputCapture: Send {
 
 pub trait InputInjection: Send {
     fn inject(&mut self, msg: &Message) -> Result<(), String>;
-    fn warp(&mut self, side: Side, edge_pos: f64) -> Result<(), String>;
+    fn warp(&mut self, side: Side, edge_pos: f64, screen_w: i32, screen_h: i32) -> Result<(), String>;
     fn start(&mut self) -> Result<(), String>;
     fn stop(&mut self);
 }
@@ -52,12 +52,11 @@ impl InputInjection for WaylandInjection {
     fn start(&mut self) -> Result<(), String> {
         info!("[continuity:input] creating virtual uinput devices");
 
-        // Device 1: Virtual Keyboard — all key codes
+        // Device 1: Virtual Keyboard
         let mut kb_keys = AttributeSet::<KeyCode>::new();
         for i in 0..512u16 {
             kb_keys.insert(KeyCode::new(i));
         }
-
         let keyboard = VirtualDevice::builder()
             .map_err(|e| e.to_string())?
             .name("Axis Continuity Virtual Keyboard")
@@ -66,7 +65,7 @@ impl InputInjection for WaylandInjection {
             .build()
             .map_err(|e| format!("failed to build keyboard device: {e}"))?;
 
-        // Device 2: Virtual Pointer — mouse buttons + relative axes + POINTER property
+        // Device 2: Virtual Pointer (Relative + Absolute capabilities)
         let mut ptr_keys = AttributeSet::<KeyCode>::new();
         ptr_keys.insert(KeyCode::BTN_LEFT);
         ptr_keys.insert(KeyCode::BTN_RIGHT);
@@ -80,6 +79,10 @@ impl InputInjection for WaylandInjection {
         rel_axes.insert(RelativeAxisCode::REL_WHEEL);
         rel_axes.insert(RelativeAxisCode::REL_HWHEEL);
 
+        use evdev::uinput::AbsSetup;
+        let x_setup = AbsSetup::new(AbsoluteAxisCode::ABS_X, 0, 32767, 0, 0, 0);
+        let y_setup = AbsSetup::new(AbsoluteAxisCode::ABS_Y, 0, 32767, 0, 0, 0);
+
         let mut props = AttributeSet::<PropType>::new();
         props.insert(PropType::POINTER);
 
@@ -89,6 +92,10 @@ impl InputInjection for WaylandInjection {
             .with_keys(&ptr_keys)
             .map_err(|e| e.to_string())?
             .with_relative_axes(&rel_axes)
+            .map_err(|e| e.to_string())?
+            .with_absolute_axis(&x_setup)
+            .map_err(|e| e.to_string())?
+            .with_absolute_axis(&y_setup)
             .map_err(|e| e.to_string())?
             .with_properties(&props)
             .map_err(|e| e.to_string())?
@@ -105,38 +112,30 @@ impl InputInjection for WaylandInjection {
         self.pointer = None;
     }
 
-    fn warp(&mut self, side: Side, edge_pos: f64) -> Result<(), String> {
+    fn warp(&mut self, side: Side, edge_pos: f64, screen_w: i32, screen_h: i32) -> Result<(), String> {
         let ptr = self.pointer.as_mut().ok_or("pointer device not started")?;
-        use evdev::InputEvent;
+        use evdev::AbsoluteAxisEvent;
 
-        info!("[continuity:input] warping cursor to {:?} at {:.0}", side, edge_pos);
-
-        // 1. "Slam" the cursor against the entry edge corner to guarantee starting position.
-        // We use a delta larger than any reasonable screen resolution.
-        let (dx, dy) = match side {
-            Side::Left => (-10000, -10000),   // Top-left
-            Side::Right => (10000, -10000),   // Top-right
-            Side::Top => (-10000, -10000),    // Top-left
-            Side::Bottom => (-10000, 10000),  // Bottom-left
+        // Calculate absolute pixel coordinates based on entry side.
+        // We stay 1 pixel away from the absolute edge to be safe against some compositor triggers.
+        let (px, py) = match side {
+            Side::Left => (1.0, edge_pos),
+            Side::Right => (screen_w as f64 - 1.0, edge_pos),
+            Side::Top => (edge_pos, 1.0),
+            Side::Bottom => (edge_pos, screen_h as f64 - 1.0),
         };
 
+        // Scale pixels to 0..32767 range for uinput ABS axes
+        let x = (px / screen_w as f64 * 32767.0) as i32;
+        let y = (py / screen_h as f64 * 32767.0) as i32;
+
+        info!("[continuity:input] warping cursor to {:?} at pixel ({:.0}, {:.0}) -> abs ({}, {})", side, px, py, x, y);
+
         let events = vec![
-            InputEvent::from(RelativeAxisEvent::new(RelativeAxisCode::REL_X, dx)),
-            InputEvent::from(RelativeAxisEvent::new(RelativeAxisCode::REL_Y, dy)),
+            evdev::InputEvent::from(AbsoluteAxisEvent::new(AbsoluteAxisCode::ABS_X, x)),
+            evdev::InputEvent::from(AbsoluteAxisEvent::new(AbsoluteAxisCode::ABS_Y, y)),
         ];
         ptr.emit(&events).map_err(|e| e.to_string())?;
-
-        // 2. Move from the corner to the actual edge_pos along the edge.
-        let mut move_events = Vec::new();
-        match side {
-            Side::Left | Side::Right => {
-                move_events.push(InputEvent::from(RelativeAxisEvent::new(RelativeAxisCode::REL_Y, edge_pos as i32)));
-            }
-            Side::Top | Side::Bottom => {
-                move_events.push(InputEvent::from(RelativeAxisEvent::new(RelativeAxisCode::REL_X, edge_pos as i32)));
-            }
-        }
-        ptr.emit(&move_events).map_err(|e| e.to_string())?;
 
         Ok(())
     }

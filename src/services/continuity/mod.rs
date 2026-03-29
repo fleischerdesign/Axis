@@ -546,7 +546,7 @@ impl ContinuityInner {
                     // Warp the local physical cursor to where it "re-enters" our screen.
                     // When we switch to receiving, the peer is on 'side'.
                     // So we re-enter from 'side'.
-                    if let Err(e) = injection.warp(side, edge_pos) {
+                    if let Err(e) = injection.warp(side, edge_pos, self.data.screen_width, self.data.screen_height) {
                         error!("[continuity] failed to warp cursor for switch: {e}");
                     }
 
@@ -766,7 +766,7 @@ impl ContinuityInner {
                             self.data.receiving_entry_side = Some(local_side);
 
                             // Physical cursor positioning
-                            if let Err(e) = injection.warp(local_side, mapped_pos) {
+                            if let Err(e) = injection.warp(local_side, mapped_pos, self.data.screen_width, self.data.screen_height) {
                                 error!("[continuity] failed to warp cursor: {e}");
                             }
 
