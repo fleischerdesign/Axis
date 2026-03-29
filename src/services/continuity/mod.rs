@@ -343,6 +343,11 @@ impl ContinuityInner {
 
                     if let Err(e) = capture.start(input_tx.clone()) {
                         error!("[continuity] failed to start input capture: {e}");
+                        // Rollback state if we can't grab devices
+                        self.data.sharing_mode = SharingMode::Idle;
+                        self.entry_side = None;
+                        self.push();
+                        return;
                     }
                     connection.send_message(protocol::Message::EdgeTransition { side });
                     self.push();

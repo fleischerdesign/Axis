@@ -1,5 +1,5 @@
 use async_channel::Sender;
-use log::{info, warn};
+use log::{info, warn, debug};
 use evdev::uinput::VirtualDeviceBuilder;
 use evdev::uinput::VirtualDevice;
 use evdev::{AttributeSet, Key, InputEvent as EvEvent, EventType, RelativeAxisType};
@@ -137,19 +137,25 @@ impl InputCapture for EvdevCapture {
 
         let devices = evdev::enumerate();
         let mut grabbed_any = false;
+        let mut found_count = 0;
 
         for (path, mut device) in devices {
+            found_count += 1;
             let name = device.name().unwrap_or("Unknown").to_string();
             
-            // Skip our own virtual device
-            if name.contains("Axis Continuity") { continue; }
+            if name.contains("Axis Continuity") { 
+                debug!("[continuity:input] skipping own virtual device: {}", name);
+                continue; 
+            }
 
-            // Refined detection: 
-            // - Keyboards usually have KEY_ENTER
-            // - Mice usually have REL_X and BTN_LEFT (272)
             let has_rel_x = device.supported_relative_axes().map(|a| a.contains(RelativeAxisType::REL_X)).unwrap_or(false);
             let has_enter = device.supported_keys().map(|k| k.contains(Key::KEY_ENTER)).unwrap_or(false);
             let has_mouse_btn = device.supported_keys().map(|k| k.contains(Key::BTN_LEFT)).unwrap_or(false);
+
+            debug!(
+                "[continuity:input] found device: {} (rel_x={}, enter={}, mouse_btn={})",
+                name, has_rel_x, has_enter, has_mouse_btn
+            );
 
             if !has_rel_x && !has_enter && !has_mouse_btn {
                 continue;
@@ -181,6 +187,8 @@ impl InputCapture for EvdevCapture {
                                             let _ = tx_c.send_blocking(InputEvent::CursorMove { dx: 0.0, dy: ev.value() as f64 });
                                         } else if axis == RelativeAxisType::REL_WHEEL {
                                             let _ = tx_c.send_blocking(InputEvent::PointerAxis { dx: 0.0, dy: ev.value() as f64 });
+                                        } else if axis == RelativeAxisType::REL_WHEEL_HI_RES {
+                                            // Optional: Handle hi-res scrolling
                                         } else if axis == RelativeAxisType::REL_HWHEEL {
                                             let _ = tx_c.send_blocking(InputEvent::PointerAxis { dx: ev.value() as f64, dy: 0.0 });
                                         }
@@ -188,8 +196,6 @@ impl InputCapture for EvdevCapture {
                                     EventType::KEY => {
                                         let code = ev.code() as u32;
                                         let val = ev.value();
-                                        
-                                        // 272-276 are standard mouse buttons
                                         let is_mouse = code >= 272 && code <= 276;
                                         
                                         if is_mouse {
@@ -199,7 +205,6 @@ impl InputCapture for EvdevCapture {
                                                 let _ = tx_c.send_blocking(InputEvent::PointerButton { button: code, state: 0 });
                                             }
                                         } else {
-                                            // Keyboard: 1=pressed, 2=repeat, 0=released
                                             if val == 1 || val == 2 {
                                                 let _ = tx_c.send_blocking(InputEvent::KeyPress { key: code, state: 1 });
                                             } else if val == 0 {
@@ -221,8 +226,12 @@ impl InputCapture for EvdevCapture {
             self.tasks.push(task);
         }
 
+        if found_count == 0 {
+            return Err("no devices found in /dev/input (check permissions/group)".into());
+        }
+
         if !grabbed_any {
-            return Err("no suitable input devices found to grab".into());
+            return Err("no suitable keyboards or mice found to grab".into());
         }
 
         Ok(())
