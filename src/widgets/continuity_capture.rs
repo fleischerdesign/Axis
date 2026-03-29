@@ -85,62 +85,42 @@ impl ContinuityCaptureController {
     fn create_edge_window(self: &Rc<Self>, app: &libadwaita::Application, side: Edge) -> gtk4::Window {
         let window = gtk4::Window::builder()
             .application(app)
-            .title(format!("Continuity Edge {:?}", side))
+            .title("Continuity Edge")
             .can_focus(false)
-            .resizable(false)
+            .resizable(true)
             .decorated(false)
             .build();
 
-        window.init_layer_shell();
-        window.set_layer(Layer::Top);
+        // Fullscreen transparent window — works on all monitors regardless of output config.
+        // No layer-shell so we avoid multi-monitor anchoring issues.
+        window.fullscreen();
+        window.set_opacity(0.0);
+        window.set_cursor_from_name(Some("none"));
 
-        // Anchor 3 edges: target + perpendicular edges.
-        // The opposite edge is unanchored, so the unconstrained dimension
-        // follows the widget's size.
-        match side {
-            Edge::Left => {
-                window.set_anchor(Edge::Left, true);
-                window.set_anchor(Edge::Top, true);
-                window.set_anchor(Edge::Bottom, true);
-            }
-            Edge::Right => {
-                window.set_anchor(Edge::Right, true);
-                window.set_anchor(Edge::Top, true);
-                window.set_anchor(Edge::Bottom, true);
-            }
-            Edge::Top => {
-                window.set_anchor(Edge::Top, true);
-                window.set_anchor(Edge::Left, true);
-                window.set_anchor(Edge::Right, true);
-            }
-            Edge::Bottom => {
-                window.set_anchor(Edge::Bottom, true);
-                window.set_anchor(Edge::Left, true);
-                window.set_anchor(Edge::Right, true);
-            }
-            _ => {}
-        }
-
-        // Default size hints — layer-shell respects this for the unconstrained direction.
-        if side == Edge::Left || side == Edge::Right {
-            window.set_default_size(2, 1);
-        } else {
-            window.set_default_size(1, 2);
-        }
-
-        let edge_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-        edge_box.add_css_class("continuity-edge-debug");
-        window.set_child(Some(&edge_box));
+        // Invisible container to receive events.
+        let container = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+        window.set_child(Some(&container));
 
         let motion = gtk4::EventControllerMotion::new();
-        let ctrl_enter = self.clone();
-        motion.connect_enter(move |_, _x, _y| {
-            ctrl_enter.check_transition(side, 20.0);
-        });
+        let ctrl_c = self.clone();
+        motion.connect_motion(move |ctrl, x, y| {
+            let (width, height) = if let Some(w) = ctrl.widget().and_downcast::<gtk4::Window>() {
+                (w.allocated_width() as f64, w.allocated_height() as f64)
+            } else {
+                (0.0, 0.0)
+            };
 
-        let ctrl_motion = self.clone();
-        motion.connect_motion(move |_ctrl, _x, _y| {
-            ctrl_motion.check_transition(side, 5.0);
+            let at_edge = match side {
+                Edge::Left => x <= 2.0,
+                Edge::Right => width > 0.0 && x >= width - 2.0,
+                Edge::Top => y <= 2.0,
+                Edge::Bottom => height > 0.0 && y >= height - 2.0,
+                _ => false,
+            };
+
+            if at_edge {
+                ctrl_c.check_transition(side, 5.0);
+            }
         });
 
         let ctrl_leave = self.clone();
@@ -148,7 +128,7 @@ impl ContinuityCaptureController {
             *ctrl_leave.pressure.borrow_mut() = 0.0;
         });
 
-        edge_box.add_controller(motion);
+        container.add_controller(motion);
         window
     }
 
