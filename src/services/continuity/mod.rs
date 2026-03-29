@@ -173,6 +173,21 @@ impl ContinuityInner {
         let mut capture = input::EvdevCapture::new();
         let mut heartbeat = interval(Duration::from_secs(HEARTBEAT_INTERVAL_SECS));
 
+        // Get initial screen dimensions from Niri
+        if let Ok(mut sock) = niri_ipc::socket::Socket::connect() {
+            if let Ok(Ok(niri_ipc::Response::Outputs(outputs))) = sock.send(niri_ipc::Request::Outputs) {
+                if let Some(output) = outputs.values().next() {
+                    if let Some(logical) = &output.logical {
+                        let w = logical.width as i32;
+                        let h = logical.height as i32;
+                        info!("[continuity] detected logical resolution: {}x{}", w, h);
+                        self.data.screen_width = w;
+                        self.data.screen_height = h;
+                    }
+                }
+            }
+        }
+
         info!("[continuity] service started, device: {}", self.data.device_name);
 
         loop {
@@ -192,7 +207,7 @@ impl ContinuityInner {
                     self.handle_clipboard_event(event, &connection).await;
                 }
                 Ok(event) = input_rx.recv() => {
-                    self.handle_input_capture_event(event, &connection).await;
+                    self.handle_input_capture_event(event, &connection, &mut capture).await;
                 }
                 _ = heartbeat.tick(), if is_connected => {
                     self.handle_heartbeat(&mut connection, &mut capture);
@@ -344,7 +359,7 @@ impl ContinuityInner {
                     
                     // Start cursor at the edge we just crossed, but with a buffer
                     // to prevent immediate return.
-                    let buffer = 100.0;
+                    let buffer = 500.0;
                     self.virtual_pos = match side {
                         Side::Left => (self.data.screen_width as f64 - buffer, self.data.screen_height as f64 / 2.0),
                         Side::Right => (buffer, self.data.screen_height as f64 / 2.0),
@@ -626,6 +641,7 @@ impl ContinuityInner {
         &mut self,
         event: input::InputEvent,
         connection: &connection::TcpConnectionProvider,
+        capture: &mut input::EvdevCapture,
     ) {
         if self.data.sharing_mode == SharingMode::Sharing {
             match event {
@@ -677,6 +693,7 @@ impl ContinuityInner {
                 input::InputEvent::EmergencyExit => {
                     info!("[continuity] kernel emergency exit requested");
                     self.data.sharing_mode = SharingMode::Idle;
+                    capture.stop();
                     connection.send_message(protocol::Message::TransitionCancel);
                     self.push();
                 }
