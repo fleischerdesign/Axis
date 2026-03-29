@@ -161,7 +161,7 @@ impl ContinuityPage {
                     SharingMode::Idle => {
                         role_label_c.set_label("Cursor ist lokal");
                     }
-                    SharingMode::Pending => {
+                    SharingMode::Pending | SharingMode::PendingSwitch => {
                         role_label_c.set_label("Übergang wird bestätigt...");
                     }
                     SharingMode::Sharing => {

@@ -31,6 +31,7 @@ pub enum SharingMode {
     Pending,
     Sharing,
     Receiving,
+    PendingSwitch,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -67,6 +68,7 @@ pub struct ContinuityData {
     pub sharing_mode: SharingMode,
     pub pending_pin: Option<PendingPin>,
     pub preferred_edge: Side,
+    pub receiving_entry_side: Option<Side>,
     pub screen_width: i32,
     pub screen_height: i32,
 }
@@ -82,6 +84,7 @@ impl Default for ContinuityData {
             sharing_mode: SharingMode::Idle,
             pending_pin: None,
             preferred_edge: Side::Right,
+            receiving_entry_side: None,
             screen_width: 1920,
             screen_height: 1080,
         }
@@ -104,6 +107,7 @@ pub enum ContinuityCmd {
     SendInput(protocol::Message),
     SetPreferredEdge(Side),
     SetScreenSize(i32, i32),
+    SwitchToReceiving(Side),
 }
 
 // ── Service ────────────────────────────────────────────────────────────
@@ -117,10 +121,12 @@ impl Service for ContinuityService {
     fn spawn() -> (ServiceStore<Self::Data>, Sender<Self::Cmd>) {
         let (data_tx, data_rx) = bounded(32);
         let (cmd_tx, cmd_rx) = bounded(32);
+        let (switch_tx, switch_rx) = bounded::<ContinuityCmd>(8);
 
         tokio::spawn(async move {
             let mut service = ContinuityInner::new(data_tx);
-            service.run(cmd_rx).await;
+            service.switch_tx = Some(switch_tx);
+            service.run(cmd_rx, switch_rx).await;
         });
 
         let store = ServiceStore::new(data_rx, ContinuityData::default());
@@ -140,6 +146,7 @@ struct ContinuityInner {
     entry_side: Option<Side>,
     pending_transition_side: Option<Side>,
     last_transition_at: Instant,
+    switch_tx: Option<Sender<ContinuityCmd>>,
 }
 
 impl ContinuityInner {
@@ -154,6 +161,7 @@ impl ContinuityInner {
             entry_side: None,
             pending_transition_side: None,
             last_transition_at: Instant::now() - Duration::from_secs(10),
+            switch_tx: None,
         }
     }
 
@@ -161,7 +169,7 @@ impl ContinuityInner {
         let _ = self.data_tx.try_send(self.data.clone());
     }
 
-    async fn run(&mut self, cmd_rx: async_channel::Receiver<ContinuityCmd>) {
+    async fn run(&mut self, cmd_rx: async_channel::Receiver<ContinuityCmd>, switch_rx: async_channel::Receiver<ContinuityCmd>) {
         use tokio::select;
         use tokio::time::{interval, Duration};
 
@@ -202,6 +210,10 @@ impl ContinuityInner {
 
             select! {
                 Ok(cmd) = cmd_rx.recv() => {
+                    self.handle_cmd(cmd, &mut discovery, &mut connection, &mut clipboard, &mut injection, &mut capture, &discovery_tx, &conn_tx, &clipboard_tx).await;
+                }
+                Ok(cmd) = switch_rx.recv() => {
+                    // Internal commands routed from message handlers
                     self.handle_cmd(cmd, &mut discovery, &mut connection, &mut clipboard, &mut injection, &mut capture, &discovery_tx, &conn_tx, &clipboard_tx).await;
                 }
                 Ok(event) = discovery_rx.recv() => {
@@ -257,6 +269,8 @@ impl ContinuityInner {
                     self.data.active_connection = None;
                     self.data.sharing_mode = SharingMode::Idle;
                     self.data.pending_pin = None;
+                    self.data.receiving_entry_side = None;
+                    self.entry_side = None;
                     self.last_message_at = None;
                 }
                 self.push();
@@ -343,9 +357,14 @@ impl ContinuityInner {
                 self.push();
             }
             ContinuityCmd::ForceLocal => {
-                if self.data.sharing_mode == SharingMode::Sharing || self.data.sharing_mode == SharingMode::Pending {
+                if self.data.sharing_mode == SharingMode::Sharing
+                    || self.data.sharing_mode == SharingMode::Pending
+                    || self.data.sharing_mode == SharingMode::PendingSwitch
+                    || self.data.sharing_mode == SharingMode::Receiving
+                {
                     info!("[continuity] forcing cursor back to local");
                     self.data.sharing_mode = SharingMode::Idle;
+                    self.data.receiving_entry_side = None;
                     self.pending_transition_side = None;
                     capture.stop();
                     connection.send_message(protocol::Message::TransitionCancel);
@@ -372,9 +391,18 @@ impl ContinuityInner {
                 if self.data.sharing_mode == SharingMode::Sharing || self.data.sharing_mode == SharingMode::Pending {
                     info!("[continuity] stopping sharing");
                     self.data.sharing_mode = SharingMode::Idle;
+                    self.data.receiving_entry_side = None;
                     self.pending_transition_side = None;
                     capture.stop();
                     connection.send_message(protocol::Message::TransitionCancel);
+                    self.push();
+                } else if self.data.sharing_mode == SharingMode::Receiving {
+                    // User wants to take over cursor from Receiving mode
+                    let side = self.data.receiving_entry_side.unwrap_or(self.data.preferred_edge);
+                    info!("[continuity] requesting switch to Sharing via {:?}", side);
+                    self.data.sharing_mode = SharingMode::PendingSwitch;
+                    self.data.receiving_entry_side = None;
+                    connection.send_message(protocol::Message::SwitchTransition { side });
                     self.push();
                 }
             }
@@ -393,6 +421,24 @@ impl ContinuityInner {
                 self.data.screen_height = h;
                 self.push();
             }
+            ContinuityCmd::SwitchToReceiving(side) => {
+                // Internal: called from SwitchTransition message handler via switch channel
+                if self.data.sharing_mode == SharingMode::Sharing || self.data.sharing_mode == SharingMode::PendingSwitch {
+                    info!("[continuity] switching to Receiving via {:?}", side);
+                    capture.stop();
+                    self.data.sharing_mode = SharingMode::Receiving;
+                    self.data.receiving_entry_side = Some(side);
+                    self.entry_side = None;
+                    self.pending_transition_side = None;
+                    // Start injection for receiving input from peer
+                    use input::InputInjection;
+                    if let Err(e) = injection.start() {
+                        error!("[continuity] failed to start injection for switch: {e}");
+                    }
+                    connection.send_message(protocol::Message::SwitchConfirm { side });
+                    self.push();
+                }
+            }
         }
     }
 
@@ -402,7 +448,7 @@ impl ContinuityInner {
             // so the user isn't "trapped" if the other side crashes.
             let timeout = if self.data.sharing_mode == SharingMode::Receiving {
                 Duration::from_secs(5)
-            } else if self.data.sharing_mode == SharingMode::Pending {
+            } else if self.data.sharing_mode == SharingMode::Pending || self.data.sharing_mode == SharingMode::PendingSwitch {
                 // Short timeout for pending transitions (don't wait forever for ack)
                 Duration::from_secs(5)
             } else {
@@ -449,6 +495,8 @@ impl ContinuityInner {
                     info!("[continuity] active peer lost");
                     self.data.active_connection = None;
                     self.data.sharing_mode = SharingMode::Idle;
+                    self.data.receiving_entry_side = None;
+                    self.entry_side = None;
                     self.last_message_at = None;
                 }
                 self.push();
@@ -489,7 +537,9 @@ impl ContinuityInner {
                 self.data.active_connection = None;
                 self.data.sharing_mode = SharingMode::Idle;
                 self.data.pending_pin = None;
+                self.data.receiving_entry_side = None;
                 self.pending_peer = None;
+                self.entry_side = None;
                 self.last_message_at = None;
                 clipboard.stop_monitoring();
                 injection.stop();
@@ -580,6 +630,7 @@ impl ContinuityInner {
                         if self.data.sharing_mode == SharingMode::Idle {
                             info!("[continuity] accepting sharing from peer via {:?}", side);
                             self.data.sharing_mode = SharingMode::Receiving;
+                            self.data.receiving_entry_side = Some(side);
                             connection.send_message(protocol::Message::TransitionAck { accepted: true });
                             self.push();
                         } else {
@@ -597,7 +648,7 @@ impl ContinuityInner {
                                 self.pending_transition_side = None;
 
                                 // Start cursor at the edge we just crossed, with a buffer
-                                let buffer = 500.0;
+                                let buffer = 10.0;
                                 self.virtual_pos = match side {
                                     Side::Left => (self.data.screen_width as f64 - buffer, self.data.screen_height as f64 / 2.0),
                                     Side::Right => (buffer, self.data.screen_height as f64 / 2.0),
@@ -622,8 +673,37 @@ impl ContinuityInner {
                     protocol::Message::TransitionCancel => {
                         info!("[continuity] peer cancelled sharing");
                         self.data.sharing_mode = SharingMode::Idle;
+                        self.data.receiving_entry_side = None;
                         self.pending_transition_side = None;
                         self.push();
+                    }
+                    protocol::Message::SwitchTransition { side } => {
+                        // Peer wants to take over (switch from Sharing → Receiving on our side)
+                        if self.data.sharing_mode == SharingMode::Sharing {
+                            info!("[continuity] peer requesting switch via {:?}", side);
+                            self.data.sharing_mode = SharingMode::PendingSwitch;
+                            self.push();
+                            // We need capture to stop, route through cmd
+                            let _ = self.switch_tx.as_ref().unwrap().try_send(ContinuityCmd::SwitchToReceiving(side));
+                        } else {
+                            info!("[continuity] rejecting switch (not in Sharing, currently {:?})", self.data.sharing_mode);
+                            connection.send_message(protocol::Message::SwitchConfirm { side });
+                        }
+                    }
+                    protocol::Message::SwitchConfirm { side } => {
+                        if self.data.sharing_mode == SharingMode::PendingSwitch {
+                            info!("[continuity] switch confirmed, starting sharing via {:?}", side);
+                            self.data.sharing_mode = SharingMode::Sharing;
+                            self.entry_side = Some(side);
+                            self.data.receiving_entry_side = None;
+                            if let Err(e) = capture.start(input_tx.clone()) {
+                                error!("[continuity] failed to start input capture after switch: {e}");
+                                self.data.sharing_mode = SharingMode::Idle;
+                                self.entry_side = None;
+                                connection.send_message(protocol::Message::TransitionCancel);
+                            }
+                            self.push();
+                        }
                     }
                     protocol::Message::Connected => {
                         info!("[continuity] connection established");

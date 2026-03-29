@@ -7,38 +7,21 @@ use crate::app_context::AppContext;
 use crate::services::continuity::{ContinuityCmd, SharingMode, Side};
 use log::info;
 
-/*
- * NOTE: This implementation uses a fullscreen transparent overlay to capture input
- * because Wayland does not allow global input hooking for security reasons.
- *
- * TODO: Switch to ext-virtual-input-v1 or a specialized Niri IPC protocol 
- * once they are mature and supported by our target environments to avoid 
- * the "invisible window hack".
- */
-
 pub struct ContinuityCaptureController {
     ctx: AppContext,
     edge_window: RefCell<Option<gtk4::Window>>,
     overlay: RefCell<Option<gtk4::Window>>,
-    pressure: RefCell<f64>,
     last_trigger: RefCell<Instant>,
 }
 
 impl ContinuityCaptureController {
-    const PRESSURE_THRESHOLD: f64 = 50.0; 
-
     pub fn new(app: &libadwaita::Application, ctx: AppContext) -> Rc<Self> {
         let controller = Rc::new(Self {
             ctx: ctx.clone(),
             edge_window: RefCell::new(None),
             overlay: RefCell::new(None),
-            pressure: RefCell::new(0.0),
             last_trigger: RefCell::new(Instant::now()),
         });
-
-        // Screen size is detected by the continuity service from Niri outputs.
-        // The capture controller does NOT re-query to avoid picking a different
-        // monitor on multi-monitor setups (e.g. 2560x1440 vs 1920x1080).
 
         let ctrl_c = controller.clone();
         let app_c = app.clone();
@@ -46,20 +29,29 @@ impl ContinuityCaptureController {
             let mut edge = ctrl_c.edge_window.borrow_mut();
             let mut overlay = ctrl_c.overlay.borrow_mut();
 
-            // Edge windows are active when connected and idle
-            let show_edges = data.enabled && data.active_connection.is_some() && data.sharing_mode == SharingMode::Idle;
-            
-            if show_edges {
+            let show_edge = data.enabled
+                && data.active_connection.is_some()
+                && (data.sharing_mode == SharingMode::Idle
+                    || data.sharing_mode == SharingMode::Receiving);
+
+            if show_edge {
                 if edge.is_none() {
-                    let side = match data.preferred_edge {
+                    let (side, is_receiving) = if data.sharing_mode == SharingMode::Receiving {
+                        (data.receiving_entry_side.unwrap_or(data.preferred_edge), true)
+                    } else {
+                        (data.preferred_edge, false)
+                    };
+
+                    let edge_side = match side {
                         Side::Left => Edge::Left,
                         Side::Right => Edge::Right,
                         Side::Top => Edge::Top,
                         Side::Bottom => Edge::Bottom,
                     };
-                    let w = ctrl_c.create_edge_window(&app_c, side, data.screen_width, data.screen_height);
+
+                    let w = ctrl_c.create_edge_window(&app_c, edge_side, data.screen_width, data.screen_height, side, is_receiving);
                     w.present();
-                    info!("[continuity:edge] presenting edge window for {:?}, screen={}x{}", side, data.screen_width, data.screen_height);
+                    info!("[continuity:edge] presenting edge window for {:?}, screen={}x{}, mode={:?}", edge_side, data.screen_width, data.screen_height, data.sharing_mode);
                     *edge = Some(w);
                 }
             } else {
@@ -67,10 +59,8 @@ impl ContinuityCaptureController {
                     info!("[continuity:edge] closing edge window");
                     w.close();
                 }
-                *ctrl_c.pressure.borrow_mut() = 0.0;
             }
 
-            // Overlay is active when sharing
             let show_overlay = data.enabled && data.sharing_mode == SharingMode::Sharing;
             if show_overlay {
                 if overlay.is_none() {
@@ -86,10 +76,18 @@ impl ContinuityCaptureController {
         controller
     }
 
-    fn create_edge_window(self: &Rc<Self>, app: &libadwaita::Application, side: Edge, screen_w: i32, screen_h: i32) -> gtk4::Window {
+    fn create_edge_window(
+        self: &Rc<Self>,
+        app: &libadwaita::Application,
+        edge: Edge,
+        screen_w: i32,
+        screen_h: i32,
+        side: Side,
+        is_receiving: bool,
+    ) -> gtk4::Window {
         let window = gtk4::Window::builder()
             .application(app)
-            .title(format!("Continuity Edge {:?}", side))
+            .title(format!("Continuity Edge {:?}", edge))
             .can_focus(false)
             .resizable(false)
             .decorated(false)
@@ -98,8 +96,7 @@ impl ContinuityCaptureController {
         window.init_layer_shell();
         window.set_layer(Layer::Top);
 
-        // Anchor 3 edges: target + perpendicular edges.
-        match side {
+        match edge {
             Edge::Left => {
                 window.set_anchor(Edge::Left, true);
                 window.set_anchor(Edge::Top, true);
@@ -123,10 +120,8 @@ impl ContinuityCaptureController {
             _ => {}
         }
 
-        // DrawingArea as child — layer-shell respects its content size in the
-        // unconstrained direction. Unlike Box, DrawingArea has a concrete natural size.
         let edge_widget = gtk4::DrawingArea::new();
-        if side == Edge::Left || side == Edge::Right {
+        if edge == Edge::Left || edge == Edge::Right {
             edge_widget.set_content_width(2);
             edge_widget.set_content_height(screen_h);
         } else {
@@ -135,7 +130,6 @@ impl ContinuityCaptureController {
         }
         edge_widget.add_css_class("continuity-edge-debug");
         edge_widget.set_draw_func(|_, cr, w, h| {
-            // Fill with debug red
             cr.set_source_rgba(1.0, 0.0, 0.0, 0.3);
             cr.rectangle(0.0, 0.0, w as f64, h as f64);
             let _ = cr.fill();
@@ -143,51 +137,30 @@ impl ContinuityCaptureController {
         window.set_child(Some(&edge_widget));
 
         let motion = gtk4::EventControllerMotion::new();
-        let ctrl_c = self.clone();
         motion.connect_enter(move |_, x, y| {
-            info!("[continuity:edge] cursor ENTERED edge {:?} at x={:.0} y={:.0}", side, x, y);
-        });
-        let ctrl_c2 = self.clone();
-        motion.connect_motion(move |_ctrl, _x, _y| {
-            // Cursor coordinates are window-relative (0..2px strip).
-            // No at_edge check needed — the pressure mechanism already
-            // filters accidental bumps (needs 10 movements to trigger).
-            ctrl_c2.check_transition(side, 5.0);
+            info!("[continuity:edge] cursor ENTERED edge {:?} at x={:.0} y={:.0}", edge, x, y);
         });
 
-        let ctrl_leave = self.clone();
-        motion.connect_leave(move |_| {
-            *ctrl_leave.pressure.borrow_mut() = 0.0;
+        let ctrl_c2 = self.clone();
+        motion.connect_motion(move |_ctrl, _x, _y| {
+            let mut last = ctrl_c2.last_trigger.borrow_mut();
+            if last.elapsed() < std::time::Duration::from_millis(500) {
+                return;
+            }
+            *last = Instant::now();
+            drop(last);
+
+            let cmd = if is_receiving {
+                ContinuityCmd::StopSharing
+            } else {
+                ContinuityCmd::StartSharing(side)
+            };
+            info!("[continuity:edge] transition triggered via {:?}", edge);
+            let _ = ctrl_c2.ctx.continuity.tx.try_send(cmd);
         });
 
         edge_widget.add_controller(motion);
         window
-    }
-
-    fn check_transition(&self, side: Edge, increment: f64) {
-        let mut p = self.pressure.borrow_mut();
-        *p += increment;
-        
-        if *p >= Self::PRESSURE_THRESHOLD {
-            let mut last = self.last_trigger.borrow_mut();
-            if last.elapsed() < std::time::Duration::from_secs(1) {
-                return;
-            }
-            *last = std::time::Instant::now();
-
-            info!("[continuity] transition triggered via {:?}", side);
-            *p = 0.0;
-            
-            let cmd_side = match side {
-                Edge::Left => Side::Left,
-                Edge::Right => Side::Right,
-                Edge::Top => Side::Top,
-                Edge::Bottom => Side::Bottom,
-                _ => Side::Left,
-            };
-            
-            let _ = self.ctx.continuity.tx.try_send(ContinuityCmd::StartSharing(cmd_side));
-        }
     }
 
     fn create_capture_overlay(self: &Rc<Self>, app: &libadwaita::Application) -> gtk4::Window {
@@ -209,9 +182,6 @@ impl ContinuityCaptureController {
         window.set_default_size(100, 100);
         window.set_cursor_from_name(Some("none"));
         window.add_css_class("continuity-overlay");
-        
-        // We no longer need EventControllers here as evdev takes over.
-        // We only need the window to hide the cursor and signal intent to Niri.
         
         window
     }

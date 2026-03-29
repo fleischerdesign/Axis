@@ -31,6 +31,12 @@ pub enum Message {
         accepted: bool,
     },
     TransitionCancel,
+    SwitchTransition {
+        side: Side,
+    },
+    SwitchConfirm {
+        side: Side,
+    },
 
     // Input (forwarded when Driving)
     CursorMove {
