@@ -148,21 +148,11 @@ impl ContinuityCaptureController {
             info!("[continuity:edge] cursor ENTERED edge {:?} at x={:.0} y={:.0}", side, x, y);
         });
         let ctrl_c2 = self.clone();
-        motion.connect_motion(move |_ctrl, x, y| {
-            let width = screen_w as f64;
-            let height = screen_h as f64;
-
-            let at_edge = match side {
-                Edge::Left => x <= 2.0,
-                Edge::Right => x >= width - 2.0,
-                Edge::Top => y <= 2.0,
-                Edge::Bottom => y >= height - 2.0,
-                _ => false,
-            };
-
-            if at_edge {
-                ctrl_c2.check_transition(side, 5.0);
-            }
+        motion.connect_motion(move |_ctrl, _x, _y| {
+            // Cursor coordinates are window-relative (0..2px strip).
+            // No at_edge check needed — the pressure mechanism already
+            // filters accidental bumps (needs 10 movements to trigger).
+            ctrl_c2.check_transition(side, 5.0);
         });
 
         let ctrl_leave = self.clone();
