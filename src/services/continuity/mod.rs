@@ -65,6 +65,8 @@ pub struct ContinuityData {
     pub sharing_mode: SharingMode,
     pub pending_pin: Option<PendingPin>,
     pub preferred_edge: Side,
+    pub screen_width: i32,
+    pub screen_height: i32,
 }
 
 impl Default for ContinuityData {
@@ -78,6 +80,8 @@ impl Default for ContinuityData {
             sharing_mode: SharingMode::Idle,
             pending_pin: None,
             preferred_edge: Side::Right,
+            screen_width: 1920,
+            screen_height: 1080,
         }
     }
 }
@@ -129,6 +133,8 @@ struct ContinuityInner {
     last_message_at: Option<Instant>,
     is_initiating: bool,
     pending_peer: Option<(String, String)>,
+    virtual_pos: (f64, f64),
+    entry_side: Option<Side>,
 }
 
 impl ContinuityInner {
@@ -139,6 +145,8 @@ impl ContinuityInner {
             last_message_at: None,
             is_initiating: false,
             pending_peer: None,
+            virtual_pos: (0.0, 0.0),
+            entry_side: None,
         }
     }
 
@@ -153,13 +161,13 @@ impl ContinuityInner {
         let (discovery_tx, discovery_rx) = bounded::<DiscoveryEvent>(32);
         let (conn_tx, conn_rx) = bounded::<ConnectionEvent>(64);
         let (clipboard_tx, clipboard_rx) = bounded::<clipboard::ClipboardEvent>(32);
-        let (input_tx, _input_rx) = bounded::<input::InputEvent>(64);
+        let (input_tx, input_rx) = bounded::<input::InputEvent>(128);
 
         let mut discovery = discovery::AvahiDiscovery::new();
         let mut connection = connection::TcpConnectionProvider::new();
         let mut clipboard = clipboard::WaylandClipboard::new();
         let mut injection = input::WaylandInjection::new();
-        let mut capture = input::StubCapture::new();
+        let mut capture = input::EvdevCapture::new();
         let mut heartbeat = interval(Duration::from_secs(HEARTBEAT_INTERVAL_SECS));
 
         info!("[continuity] service started, device: {}", self.data.device_name);
@@ -180,6 +188,9 @@ impl ContinuityInner {
                 Ok(event) = clipboard_rx.recv() => {
                     self.handle_clipboard_event(event, &connection).await;
                 }
+                Ok(event) = input_rx.recv() => {
+                    self.handle_input_capture_event(event, &connection).await;
+                }
                 _ = heartbeat.tick(), if is_connected => {
                     self.handle_heartbeat(&mut connection);
                 }
@@ -194,7 +205,7 @@ impl ContinuityInner {
         connection: &mut connection::TcpConnectionProvider,
         clipboard: &mut clipboard::WaylandClipboard,
         injection: &mut input::WaylandInjection,
-        capture: &mut input::StubCapture,
+        capture: &mut input::EvdevCapture,
         discovery_tx: &Sender<DiscoveryEvent>,
         conn_tx: &Sender<ConnectionEvent>,
         clipboard_tx: &Sender<clipboard::ClipboardEvent>,
@@ -275,7 +286,6 @@ impl ContinuityInner {
                         }
                         
                         // Start injection
-                        use input::InputInjection;
                         if let Err(e) = injection.start() {
                             error!("[continuity] failed to start input injection: {e}");
                         }
@@ -312,6 +322,7 @@ impl ContinuityInner {
                 if self.data.sharing_mode == SharingMode::Sharing {
                     info!("[continuity] forcing cursor back to local");
                     self.data.sharing_mode = SharingMode::Idle;
+                    capture.stop();
                     connection.send_message(protocol::Message::TransitionCancel);
                     self.push();
                 }
@@ -320,6 +331,19 @@ impl ContinuityInner {
                 if self.data.active_connection.is_some() && self.data.sharing_mode == SharingMode::Idle {
                     info!("[continuity] starting sharing via {:?}", side);
                     self.data.sharing_mode = SharingMode::Sharing;
+                    self.entry_side = Some(side);
+                    
+                    // Start cursor at the edge we just crossed
+                    self.virtual_pos = match side {
+                        Side::Left => (self.data.screen_width as f64 - 10.0, self.data.screen_height as f64 / 2.0),
+                        Side::Right => (10.0, self.data.screen_height as f64 / 2.0),
+                        Side::Top => (self.data.screen_width as f64 / 2.0, self.data.screen_height as f64 - 10.0),
+                        Side::Bottom => (self.data.screen_width as f64 / 2.0, 10.0),
+                    };
+
+                    if let Err(e) = capture.start(input_tx.clone()) {
+                        error!("[continuity] failed to start input capture: {e}");
+                    }
                     connection.send_message(protocol::Message::EdgeTransition { side });
                     self.push();
                 }
@@ -328,6 +352,7 @@ impl ContinuityInner {
                 if self.data.sharing_mode == SharingMode::Sharing {
                     info!("[continuity] stopping sharing");
                     self.data.sharing_mode = SharingMode::Idle;
+                    capture.stop();
                     connection.send_message(protocol::Message::TransitionCancel);
                     self.push();
                 }
@@ -560,6 +585,60 @@ impl ContinuityInner {
                     });
                 }
             }
+        }
+    }
+
+    async fn handle_input_capture_event(
+        &mut self,
+        event: input::InputEvent,
+        connection: &connection::TcpConnectionProvider,
+    ) {
+        if self.data.sharing_mode == SharingMode::Sharing {
+            match event {
+                input::InputEvent::CursorMove { dx, dy } => {
+                    // Update virtual position
+                    self.virtual_pos.0 += dx;
+                    self.virtual_pos.1 += dy;
+
+                    // Clamping
+                    self.virtual_pos.0 = self.virtual_pos.0.clamp(-100.0, self.data.screen_width as f64 + 100.0);
+                    self.virtual_pos.1 = self.virtual_pos.1.clamp(-100.0, self.data.screen_height as f64 + 100.0);
+
+                    // Check for return transition
+                    if let Some(entry) = self.entry_side {
+                        let should_return = match entry {
+                            Side::Left if self.virtual_pos.0 > self.data.screen_width as f64 => true,
+                            Side::Right if self.virtual_pos.0 < 0.0 => true,
+                            Side::Top if self.virtual_pos.1 > self.data.screen_height as f64 => true,
+                            Side::Bottom if self.virtual_pos.1 < 0.0 => true,
+                            _ => false,
+                        };
+
+                        if should_return {
+                            info!("[continuity] return transition triggered via movement");
+                            self.data.sharing_mode = SharingMode::Idle;
+                            // Note: capture.stop() will be handled by the subscriber or next cmd
+                            connection.send_message(protocol::Message::TransitionCancel);
+                            self.push();
+                            return;
+                        }
+                    }
+
+                    connection.send_message(protocol::Message::CursorMove { dx, dy });
+                }
+                input::InputEvent::KeyPress { key, state } => {
+                    connection.send_message(protocol::Message::KeyPress { key, state });
+                }
+                input::InputEvent::KeyRelease { key } => {
+                    connection.send_message(protocol::Message::KeyRelease { key });
+                }
+                input::InputEvent::PointerButton { button, state } => {
+                    connection.send_message(protocol::Message::PointerButton { button, state });
+                }
+                input::InputEvent::PointerAxis { dx, dy } => {
+                    connection.send_message(protocol::Message::PointerAxis { dx, dy });
+                }
+            };
         }
     }
 }

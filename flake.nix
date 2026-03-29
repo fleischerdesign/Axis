@@ -92,6 +92,7 @@
           environment.systemPackages = [ pkgs.wl-clipboard ];
           services.udev.extraRules = ''
             KERNEL=="uinput", GROUP="uinput", MODE="0660", OPTIONS+="static_node=uinput"
+            KERNEL=="event*", NAME="input/%k", MODE="0660", GROUP="input"
           '';
           services.avahi = {
             enable = true;

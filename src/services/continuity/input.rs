@@ -1,8 +1,10 @@
 use async_channel::Sender;
-use log::{info, warn};
+use log::{error, info, warn};
 use evdev::uinput::VirtualDeviceBuilder;
 use evdev::uinput::VirtualDevice;
-use evdev::{AttributeSet, Key, InputEvent as EvEvent, EventType, RelativeAxisType};
+use evdev::{AttributeSet, Key, InputEvent as EvEvent, EventType, RelativeAxisType, Device};
+use std::sync::Arc;
+use tokio::task::JoinHandle;
 
 use super::protocol::Message;
 
@@ -15,7 +17,6 @@ pub enum InputEvent {
     KeyRelease { key: u32 },
     PointerButton { button: u32, state: u8 },
     PointerAxis { dx: f64, dy: f64 },
-    EdgeHit { side: super::protocol::Side },
 }
 
 // ── Input Provider Trait ───────────────────────────────────────────────
@@ -32,7 +33,7 @@ pub trait InputInjection: Send {
     fn stop(&mut self);
 }
 
-// ── evdev Implementation ───────────────────────────────────────────────
+// ── evdev Injection Implementation ──────────────────────────────────────
 
 pub struct WaylandInjection {
     device: Option<VirtualDevice>,
@@ -48,13 +49,11 @@ impl InputInjection for WaylandInjection {
     fn start(&mut self) -> Result<(), String> {
         info!("[continuity:input] creating virtual uinput device");
         
-        // Setup keys (full keyboard support)
         let mut keys = AttributeSet::<Key>::new();
         for i in 0..512 {
             keys.insert(Key::new(i));
         }
 
-        // Setup relative axes (mouse movement)
         let mut rel_axes = AttributeSet::<RelativeAxisType>::new();
         rel_axes.insert(RelativeAxisType::REL_X);
         rel_axes.insert(RelativeAxisType::REL_Y);
@@ -69,7 +68,7 @@ impl InputInjection for WaylandInjection {
             .with_relative_axes(&rel_axes)
             .map_err(|e| e.to_string())?
             .build()
-            .map_err(|e| format!("failed to build virtual device (check /dev/uinput permissions): {e}"))?;
+            .map_err(|e| format!("failed to build virtual device: {e}"))?;
 
         self.device = Some(device);
         Ok(())
@@ -120,30 +119,101 @@ impl InputInjection for WaylandInjection {
     }
 }
 
-// ── Stub Capture ──────────────────────────────────────────────────────
+// ── evdev Capture Implementation ───────────────────────────────────────
 
-pub struct StubCapture {
-    active: bool,
+pub struct EvdevCapture {
+    tasks: Vec<JoinHandle<()>>,
 }
 
-impl StubCapture {
+impl EvdevCapture {
     pub fn new() -> Self {
-        Self { active: false }
+        Self { tasks: Vec::new() }
     }
 }
 
-impl InputCapture for StubCapture {
-    fn start(&mut self, _tx: Sender<InputEvent>) -> Result<(), String> {
-        warn!("[continuity:input] stub capture — not yet implemented");
-        self.active = true;
+impl InputCapture for EvdevCapture {
+    fn start(&mut self, tx: Sender<InputEvent>) -> Result<(), String> {
+        self.stop();
+        info!("[continuity:input] starting evdev capture (EVIOCGRAB)");
+
+        let devices = evdev::enumerate();
+        for (path, mut device) in devices {
+            // Skip our own virtual device
+            if let Some(name) = device.name() {
+                if name.contains("Axis Continuity") { continue; }
+            }
+
+            // We only want keyboards and mice/pointing devices
+            let is_keyboard = device.supported_keys().map(|k| k.contains(Key::KEY_ENTER)).unwrap_or(false);
+            let is_mouse = device.supported_relative_axes().map(|a| a.contains(RelativeAxisType::REL_X)).unwrap_or(false);
+
+            if !is_keyboard && !is_mouse { continue; }
+
+            info!("[continuity:input] grabbing device: {:?} ({})", device.name(), path.display());
+
+            if let Err(e) = device.grab() {
+                warn!("[continuity:input] failed to grab {:?}: {}", path, e);
+                continue;
+            }
+
+            let tx_c = tx.clone();
+            let task = tokio::task::spawn_blocking(move || {
+                loop {
+                    match device.fetch_events() {
+                        Ok(events) => {
+                            for ev in events {
+                                match ev.event_type() {
+                                    EventType::RELATIVE => {
+                                        let axis = RelativeAxisType(ev.code());
+                                        if axis == RelativeAxisType::REL_X {
+                                            let _ = tx_c.send_blocking(InputEvent::CursorMove { dx: ev.value() as f64, dy: 0.0 });
+                                        } else if axis == RelativeAxisType::REL_Y {
+                                            let _ = tx_c.send_blocking(InputEvent::CursorMove { dx: 0.0, dy: ev.value() as f64 });
+                                        }
+                                    }
+                                    EventType::KEY => {
+                                        let key = ev.code() as u32;
+                                        let is_mouse_button = key >= 272 && key <= 276; // BTN_MOUSE, BTN_RIGHT, BTN_MIDDLE, etc.
+                                        
+                                        if is_mouse_button {
+                                            if ev.value() == 1 {
+                                                let _ = tx_c.send_blocking(InputEvent::PointerButton { button: key, state: 1 });
+                                            } else if ev.value() == 0 {
+                                                let _ = tx_c.send_blocking(InputEvent::PointerButton { button: key, state: 0 });
+                                            }
+                                        } else {
+                                            if ev.value() == 1 || ev.value() == 2 { // Pressed or Repeat
+                                                let _ = tx_c.send_blocking(InputEvent::KeyPress { key, state: 1 });
+                                            } else if ev.value() == 0 { // Released
+                                                let _ = tx_c.send_blocking(InputEvent::KeyRelease { key });
+                                            }
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            warn!("[continuity:input] device disconnected or error: {}", e);
+                            break;
+                        }
+                    }
+                }
+            });
+            self.tasks.push(task);
+        }
+
         Ok(())
     }
 
     fn stop(&mut self) {
-        self.active = false;
+        for task in self.tasks.drain(..) {
+            task.abort();
+        }
+        // Note: Grabs are automatically released by the kernel when the file descriptor is closed (on drop)
     }
 
     fn is_capturing(&self) -> bool {
-        self.active
+        !self.tasks.is_empty()
     }
 }
