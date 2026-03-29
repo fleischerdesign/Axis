@@ -29,6 +29,13 @@ pub enum Message {
         height: i32,
     },
 
+    // Configuration sync (arrangement, settings, versioning)
+    ConfigSync {
+        arrangement: Side,
+        offset: i32,
+        version: u64,
+    },
+
     // Cursor Transition
     EdgeTransition {
         side: Side,

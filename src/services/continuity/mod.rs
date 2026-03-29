@@ -65,7 +65,7 @@ pub struct PendingPin {
 ///
 /// For Left/Right sides, `offset` is vertical (positive = peer is shifted down).
 /// For Top/Bottom sides, `offset` is horizontal (positive = peer is shifted right).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct PeerArrangement {
     pub side: Side,
     pub offset: i32,
@@ -115,6 +115,21 @@ impl Default for PeerArrangement {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct PeerConfig {
+    pub arrangement: PeerArrangement,
+    pub version: u64,
+}
+
+impl Default for PeerConfig {
+    fn default() -> Self {
+        Self {
+            arrangement: PeerArrangement::default(),
+            version: 0,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ContinuityData {
     pub device_id: String,
@@ -124,11 +139,20 @@ pub struct ContinuityData {
     pub active_connection: Option<ActiveConnectionInfo>,
     pub sharing_mode: SharingMode,
     pub pending_pin: Option<PendingPin>,
-    pub peer_arrangement: PeerArrangement,
-    pub receiving_entry_side: Option<Side>,
+    pub peer_configs: std::collections::HashMap<String, PeerConfig>,
     pub screen_width: i32,
     pub screen_height: i32,
     pub remote_screen: Option<(i32, i32)>,
+}
+
+impl ContinuityData {
+    pub fn active_peer_config(&self) -> PeerConfig {
+        if let Some(conn) = &self.active_connection {
+            self.peer_configs.get(&conn.peer_id).cloned().unwrap_or_default()
+        } else {
+            PeerConfig::default()
+        }
+    }
 }
 
 impl Default for ContinuityData {
@@ -141,8 +165,7 @@ impl Default for ContinuityData {
             active_connection: None,
             sharing_mode: SharingMode::Idle,
             pending_pin: None,
-            peer_arrangement: PeerArrangement::default(),
-            receiving_entry_side: None,
+            peer_configs: std::collections::HashMap::new(),
             screen_width: 1920,
             screen_height: 1080,
             remote_screen: None,
@@ -357,7 +380,6 @@ impl ContinuityInner {
                     self.data.active_connection = None;
                     self.data.sharing_mode = SharingMode::Idle;
                     self.data.pending_pin = None;
-                    self.data.receiving_entry_side = None;
                     self.entry_side = None;
                     self.last_message_at = None;
                 }
@@ -458,7 +480,6 @@ impl ContinuityInner {
                 {
                     info!("[continuity] forcing cursor back to local");
                     self.data.sharing_mode = SharingMode::Idle;
-                    self.data.receiving_entry_side = None;
                     self.pending_transition_side = None;
                     capture.stop();
                     connection.send_message(protocol::Message::TransitionCancel);
@@ -473,7 +494,8 @@ impl ContinuityInner {
                     }
 
                     // Map local edge position to remote screen coordinates
-                    let remote_edge_pos = self.data.peer_arrangement.local_to_remote_edge(local_edge_pos);
+                    let arrangement = self.data.active_peer_config().arrangement;
+                    let remote_edge_pos = arrangement.local_to_remote_edge(local_edge_pos);
                     info!("[continuity] initiating sharing via {:?}, local_pos={:.0} remote_pos={:.0}", side, local_edge_pos, remote_edge_pos);
                     self.data.sharing_mode = SharingMode::Pending;
                     self.pending_transition_side = Some(side);
@@ -488,18 +510,16 @@ impl ContinuityInner {
                 if self.data.sharing_mode == SharingMode::Sharing || self.data.sharing_mode == SharingMode::Pending {
                     info!("[continuity] stopping sharing");
                     self.data.sharing_mode = SharingMode::Idle;
-                    self.data.receiving_entry_side = None;
                     self.pending_transition_side = None;
                     capture.stop();
                     connection.send_message(protocol::Message::TransitionCancel);
                     self.push();
                 } else if self.data.sharing_mode == SharingMode::Receiving {
                     // User wants to take over cursor from Receiving mode.
-                    // The edge is on our peer_arrangement.side (where the peer is).
-                    let side = self.data.peer_arrangement.side;
+                    // The edge is on our active_peer_config side (where the peer is).
+                    let side = self.data.active_peer_config().arrangement.side;
                     info!("[continuity] requesting switch back to sharing via {:?}, edge_pos={:.0}", side, edge_pos);
                     self.data.sharing_mode = SharingMode::PendingSwitch;
-                    self.data.receiving_entry_side = None;
                     connection.send_message(protocol::Message::SwitchTransition { side, edge_pos });
                     self.push();
                 }
@@ -510,7 +530,22 @@ impl ContinuityInner {
                 }
             }
             ContinuityCmd::SetPeerArrangement(arrangement) => {
-                self.data.peer_arrangement = arrangement;
+                if let Some(conn) = &self.data.active_connection {
+                    let peer_id = conn.peer_id.clone();
+                    let config = self.data.peer_configs.entry(peer_id).or_default();
+                    config.arrangement = arrangement;
+                    config.version += 1;
+                    let version = config.version;
+                    
+                    info!("[continuity] updated config for peer {}: {:?} (v{})", conn.peer_name, arrangement, version);
+                    
+                    // Send sync message to peer
+                    connection.send_message(protocol::Message::ConfigSync {
+                        arrangement: arrangement.side,
+                        offset: arrangement.offset,
+                        version,
+                    });
+                }
                 self.push();
             }
             ContinuityCmd::SetScreenSize(w, h) => {
@@ -533,7 +568,6 @@ impl ContinuityInner {
                     capture.stop();
 
                     self.data.sharing_mode = SharingMode::Receiving;
-                    self.data.receiving_entry_side = Some(side);
                     self.entry_side = None;
                     self.pending_transition_side = None;
 
@@ -544,8 +578,6 @@ impl ContinuityInner {
                     }
 
                     // Warp the local physical cursor to where it "re-enters" our screen.
-                    // When we switch to receiving, the peer is on 'side'.
-                    // So we re-enter from 'side'.
                     if let Err(e) = injection.warp(side, edge_pos, self.data.screen_width, self.data.screen_height) {
                         error!("[continuity] failed to warp cursor for switch: {e}");
                     }
@@ -610,7 +642,6 @@ impl ContinuityInner {
                     info!("[continuity] active peer lost");
                     self.data.active_connection = None;
                     self.data.sharing_mode = SharingMode::Idle;
-                    self.data.receiving_entry_side = None;
                     self.entry_side = None;
                     self.last_message_at = None;
                 }
@@ -652,7 +683,6 @@ impl ContinuityInner {
                 self.data.active_connection = None;
                 self.data.sharing_mode = SharingMode::Idle;
                 self.data.pending_pin = None;
-                self.data.receiving_entry_side = None;
                 self.data.remote_screen = None;
                 self.pending_peer = None;
                 self.entry_side = None;
@@ -751,19 +781,50 @@ impl ContinuityInner {
                     protocol::Message::ScreenInfo { width, height } => {
                         info!("[continuity] peer screen: {}x{}", width, height);
                         self.data.remote_screen = Some((width, height));
+                        
+                        // After exchanging screen info, also exchange current config
+                        let config = self.data.active_peer_config();
+                        connection.send_message(protocol::Message::ConfigSync {
+                            arrangement: config.arrangement.side,
+                            offset: config.arrangement.offset,
+                            version: config.version,
+                        });
+                        
                         self.push();
+                    }
+                    protocol::Message::ConfigSync { arrangement, offset, version } => {
+                        if let Some(conn) = &self.data.active_connection {
+                            let peer_id = conn.peer_id.clone();
+                            let config = self.data.peer_configs.entry(peer_id).or_default();
+                            
+                            if version > config.version {
+                                info!("[continuity] adopting newer config from peer (v{} > v{}): {:?} offset {}", 
+                                    version, config.version, arrangement, offset);
+                                
+                                // The peer says "you are to my <arrangement>".
+                                // So the peer is to our <opposite>.
+                                config.arrangement = PeerArrangement {
+                                    side: arrangement.opposite(),
+                                    offset, // Offset is symmetric
+                                };
+                                config.version = version;
+                                self.push();
+                            } else {
+                                info!("[continuity] ignoring older/same config from peer (v{} <= v{})", version, config.version);
+                            }
+                        }
                     }
                     protocol::Message::EdgeTransition { side, edge_pos } => {
                         if self.data.sharing_mode == SharingMode::Idle {
+                            let arrangement = self.data.active_peer_config().arrangement;
                             // Map the peer's exit position to our local entry position
-                            let mapped_pos = self.data.peer_arrangement.remote_to_local_edge(edge_pos);
+                            let mapped_pos = arrangement.remote_to_local_edge(edge_pos);
                             let local_side = side.opposite();
 
                             info!("[continuity] accepting sharing from peer: peer_exit={:?}@{} -> local_entry={:?}@{}", 
                                 side, edge_pos, local_side, mapped_pos);
 
                             self.data.sharing_mode = SharingMode::Receiving;
-                            self.data.receiving_entry_side = Some(local_side);
 
                             // Physical cursor positioning
                             if let Err(e) = injection.warp(local_side, mapped_pos, self.data.screen_width, self.data.screen_height) {
@@ -806,9 +867,8 @@ impl ContinuityInner {
                         }
                     }
                     protocol::Message::TransitionCancel => {
-                        info!("[continuity] peer cancelled sharing");
+                        info!("[continuity] forcing cursor back to local");
                         self.data.sharing_mode = SharingMode::Idle;
-                        self.data.receiving_entry_side = None;
                         self.pending_transition_side = None;
                         self.push();
                     }
@@ -832,11 +892,11 @@ impl ContinuityInner {
 
                             self.data.sharing_mode = SharingMode::Sharing;
                             self.entry_side = Some(side);
-                            self.data.receiving_entry_side = None;
 
                             // The old sharer sent us their virtual_pos along the edge (in remote coords).
                             // Map it to our coordinate system for init.
-                            let mapped_pos = self.data.peer_arrangement.local_to_remote_edge(edge_pos);
+                            let arrangement = self.data.active_peer_config().arrangement;
+                            let mapped_pos = arrangement.local_to_remote_edge(edge_pos);
                             self.init_virtual_pos(side, mapped_pos);
                             info!("[continuity] virtual_pos initialized to ({:.0}, {:.0})", self.virtual_pos.0, self.virtual_pos.1);
 

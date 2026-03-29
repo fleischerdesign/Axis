@@ -177,8 +177,9 @@ impl ContinuityPage {
             }
 
             // Update edge buttons
+            let config = data.active_peer_config();
             for (btn, side) in &edge_buttons {
-                btn.set_active(data.peer_arrangement.side == *side);
+                btn.set_active(config.arrangement.side == *side);
             }
 
             // PIN confirmation

@@ -39,7 +39,8 @@ impl ContinuityCaptureController {
                     // In both Idle and Receiving mode, the edge window goes on the
                     // side where the peer is (per our arrangement). In Idle it starts
                     // sharing; in Receiving it triggers a switch back.
-                    let side = data.peer_arrangement.side;
+                    let config = data.active_peer_config();
+                    let side = config.arrangement.side;
                     let is_receiving = data.sharing_mode == SharingMode::Receiving;
 
                     let w = ctrl_c.create_edge_window(
@@ -49,7 +50,7 @@ impl ContinuityCaptureController {
                         data.screen_width,
                         data.screen_height,
                         data.remote_screen,
-                        &data.peer_arrangement,
+                        &config.arrangement,
                     );
                     w.present();
                     info!("[continuity:edge] presenting edge window for {:?}, screen={}x{}, remote={:?}, mode={:?}",
