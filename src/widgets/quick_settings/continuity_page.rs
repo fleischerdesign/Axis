@@ -1,5 +1,5 @@
 use crate::app_context::AppContext;
-use crate::services::continuity::{ContinuityCmd, SharingMode, Side};
+use crate::services::continuity::{ContinuityCmd, PeerArrangement, SharingMode, Side};
 use crate::widgets::components::scrolled_list::ScrolledList;
 use crate::widgets::components::subpage_header::SubPageHeader;
 use gtk4::prelude::*;
@@ -72,7 +72,7 @@ impl ContinuityPage {
             let tx = ctx.continuity.tx.clone();
             btn.connect_toggled(move |b| {
                 if b.is_active() {
-                    let _ = tx.try_send(ContinuityCmd::SetPreferredEdge(side));
+                    let _ = tx.try_send(ContinuityCmd::SetPeerArrangement(PeerArrangement { side, offset: 0 }));
                 }
             });
             edge_actions.append(&btn);
@@ -178,7 +178,7 @@ impl ContinuityPage {
 
             // Update edge buttons
             for (btn, side) in &edge_buttons {
-                btn.set_active(data.preferred_edge == *side);
+                btn.set_active(data.peer_arrangement.side == *side);
             }
 
             // PIN confirmation

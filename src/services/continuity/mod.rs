@@ -58,6 +58,63 @@ pub struct PendingPin {
     pub is_incoming: bool,
 }
 
+/// Describes where the peer screen is positioned relative to this screen.
+///
+/// Think of it like GNOME/Windows display settings: you can arrange monitors
+/// next to each other with an optional offset along the shared edge.
+///
+/// For Left/Right sides, `offset` is vertical (positive = peer is shifted down).
+/// For Top/Bottom sides, `offset` is horizontal (positive = peer is shifted right).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PeerArrangement {
+    pub side: Side,
+    pub offset: i32,
+}
+
+impl PeerArrangement {
+    /// Returns the (start, end) pixel range on our edge where the peer overlaps.
+    /// For Left/Right this is a Y range, for Top/Bottom an X range.
+    /// Returns None if there is no overlap (screens don't touch).
+    pub fn overlap_on_local(&self, local_len: i32, remote_len: i32) -> Option<(i32, i32)> {
+        let start = self.offset.max(0);
+        let end = (self.offset + remote_len).min(local_len);
+        if start < end { Some((start, end)) } else { None }
+    }
+
+    /// Returns the (start, end) pixel range on the remote's entry edge
+    /// that overlaps with our screen.
+    pub fn overlap_on_remote(&self, local_len: i32, remote_len: i32) -> Option<(i32, i32)> {
+        let start = (-self.offset).max(0);
+        let end = (local_len - self.offset).min(remote_len);
+        if start < end { Some((start, end)) } else { None }
+    }
+
+    /// Maps a position along our local edge to the corresponding position
+    /// on the remote screen. Returns the position in remote screen coords.
+    pub fn local_to_remote_edge(&self, local_pos: f64) -> f64 {
+        local_pos - self.offset as f64
+    }
+
+    /// Maps a position on the remote screen edge back to our local edge.
+    pub fn remote_to_local_edge(&self, remote_pos: f64) -> f64 {
+        remote_pos + self.offset as f64
+    }
+
+    /// Returns the perpendicular length of the local screen for this arrangement side.
+    pub fn local_edge_length(&self, screen_w: i32, screen_h: i32) -> i32 {
+        match self.side {
+            Side::Left | Side::Right => screen_h,
+            Side::Top | Side::Bottom => screen_w,
+        }
+    }
+}
+
+impl Default for PeerArrangement {
+    fn default() -> Self {
+        Self { side: Side::Right, offset: 0 }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ContinuityData {
     pub device_id: String,
@@ -67,10 +124,11 @@ pub struct ContinuityData {
     pub active_connection: Option<ActiveConnectionInfo>,
     pub sharing_mode: SharingMode,
     pub pending_pin: Option<PendingPin>,
-    pub preferred_edge: Side,
+    pub peer_arrangement: PeerArrangement,
     pub receiving_entry_side: Option<Side>,
     pub screen_width: i32,
     pub screen_height: i32,
+    pub remote_screen: Option<(i32, i32)>,
 }
 
 impl Default for ContinuityData {
@@ -83,10 +141,11 @@ impl Default for ContinuityData {
             active_connection: None,
             sharing_mode: SharingMode::Idle,
             pending_pin: None,
-            preferred_edge: Side::Right,
+            peer_arrangement: PeerArrangement::default(),
             receiving_entry_side: None,
             screen_width: 1920,
             screen_height: 1080,
+            remote_screen: None,
         }
     }
 }
@@ -102,10 +161,12 @@ pub enum ContinuityCmd {
     ForceLocal,
     StartDiscovery,
     StopDiscovery,
-    StartSharing(Side),
+    /// Start sharing cursor to peer. `edge_pos` is the position along the
+    /// local edge (absolute screen coords) where the cursor crossed.
+    StartSharing(Side, f64),
     StopSharing,
     SendInput(protocol::Message),
-    SetPreferredEdge(Side),
+    SetPeerArrangement(PeerArrangement),
     SetScreenSize(i32, i32),
     SwitchToReceiving(Side),
 }
@@ -142,9 +203,13 @@ struct ContinuityInner {
     last_message_at: Option<Instant>,
     is_initiating: bool,
     pending_peer: Option<(String, String)>,
+    /// Virtual cursor position in **remote screen** coordinates.
+    /// Used to detect when the cursor should return to the local machine.
     virtual_pos: (f64, f64),
     entry_side: Option<Side>,
     pending_transition_side: Option<Side>,
+    /// The edge position (in remote screen coords) for a pending transition.
+    pending_edge_pos: f64,
     last_transition_at: Instant,
     switch_tx: Option<Sender<ContinuityCmd>>,
 }
@@ -160,9 +225,32 @@ impl ContinuityInner {
             virtual_pos: (0.0, 0.0),
             entry_side: None,
             pending_transition_side: None,
+            pending_edge_pos: 0.0,
             last_transition_at: Instant::now() - Duration::from_secs(10),
             switch_tx: None,
         }
+    }
+
+    /// Returns the remote screen dimensions, falling back to local dims if unknown.
+    fn remote_screen(&self) -> (i32, i32) {
+        self.data.remote_screen.unwrap_or((self.data.screen_width, self.data.screen_height))
+    }
+
+    /// Initialize virtual_pos for sharing mode. The cursor enters the remote screen
+    /// at `entry_side` with `edge_pos` along the entry edge (in remote coords).
+    fn init_virtual_pos(&mut self, entry_side: Side, edge_pos: f64) {
+        let (rw, rh) = self.remote_screen();
+        let buffer = 10.0;
+        self.virtual_pos = match entry_side {
+            // Entered remote from the left edge → cursor starts near x=0
+            Side::Right => (buffer, edge_pos.clamp(0.0, rh as f64)),
+            // Entered remote from the right edge → cursor starts near x=remote_w
+            Side::Left => (rw as f64 - buffer, edge_pos.clamp(0.0, rh as f64)),
+            // Entered remote from the top edge → cursor starts near y=0
+            Side::Bottom => (edge_pos.clamp(0.0, rw as f64), buffer),
+            // Entered remote from the bottom edge → cursor starts near y=remote_h
+            Side::Top => (edge_pos.clamp(0.0, rw as f64), rh as f64 - buffer),
+        };
     }
 
     fn push(&self) {
@@ -318,6 +406,12 @@ impl ContinuityInner {
                         });
                         self.last_message_at = Some(Instant::now());
 
+                        // Exchange screen info
+                        connection.send_message(protocol::Message::ScreenInfo {
+                            width: self.data.screen_width,
+                            height: self.data.screen_height,
+                        });
+
                         // Start clipboard sync
                         if let Err(e) = clipboard.start_monitoring(clipboard_tx.clone()) {
                             error!("[continuity] failed to start clipboard monitoring: {e}");
@@ -371,19 +465,22 @@ impl ContinuityInner {
                     self.push();
                 }
             }
-            ContinuityCmd::StartSharing(side) => {
+            ContinuityCmd::StartSharing(side, local_edge_pos) => {
                 if self.data.active_connection.is_some() && self.data.sharing_mode == SharingMode::Idle {
                     // 2 second cooldown to prevent jitter
                     if self.last_transition_at.elapsed() < Duration::from_secs(2) {
                         return;
                     }
 
-                    info!("[continuity] initiating sharing via {:?}, waiting for ack", side);
+                    // Map local edge position to remote screen coordinates
+                    let remote_edge_pos = self.data.peer_arrangement.local_to_remote_edge(local_edge_pos);
+                    info!("[continuity] initiating sharing via {:?}, local_pos={:.0} remote_pos={:.0}", side, local_edge_pos, remote_edge_pos);
                     self.data.sharing_mode = SharingMode::Pending;
                     self.pending_transition_side = Some(side);
+                    self.pending_edge_pos = remote_edge_pos;
                     self.last_transition_at = Instant::now();
 
-                    connection.send_message(protocol::Message::EdgeTransition { side });
+                    connection.send_message(protocol::Message::EdgeTransition { side, edge_pos: remote_edge_pos });
                     self.push();
                 }
             }
@@ -397,12 +494,19 @@ impl ContinuityInner {
                     connection.send_message(protocol::Message::TransitionCancel);
                     self.push();
                 } else if self.data.sharing_mode == SharingMode::Receiving {
-                    // User wants to take over cursor from Receiving mode
-                    let side = self.data.receiving_entry_side.unwrap_or(self.data.preferred_edge);
+                    // User wants to take over cursor from Receiving mode.
+                    // The edge is on our peer_arrangement.side (where the peer is).
+                    // We don't know the exact cursor position (we're the receiver),
+                    // so we send a best-guess edge_pos (screen center along the edge).
+                    let side = self.data.peer_arrangement.side;
+                    let edge_len = self.data.peer_arrangement.local_edge_length(
+                        self.data.screen_width, self.data.screen_height,
+                    );
+                    let edge_pos = edge_len as f64 / 2.0;
                     info!("[continuity] requesting switch to Sharing via {:?}", side);
                     self.data.sharing_mode = SharingMode::PendingSwitch;
                     self.data.receiving_entry_side = None;
-                    connection.send_message(protocol::Message::SwitchTransition { side });
+                    connection.send_message(protocol::Message::SwitchTransition { side, edge_pos });
                     self.push();
                 }
             }
@@ -411,8 +515,8 @@ impl ContinuityInner {
                     connection.send_message(msg);
                 }
             }
-            ContinuityCmd::SetPreferredEdge(side) => {
-                self.data.preferred_edge = side;
+            ContinuityCmd::SetPeerArrangement(arrangement) => {
+                self.data.peer_arrangement = arrangement;
                 self.push();
             }
             ContinuityCmd::SetScreenSize(w, h) => {
@@ -422,9 +526,16 @@ impl ContinuityInner {
                 self.push();
             }
             ContinuityCmd::SwitchToReceiving(side) => {
-                // Internal: called from SwitchTransition message handler via switch channel
+                // Internal: called from SwitchTransition message handler via switch channel.
+                // We (the old sharer) know our virtual_pos which approximates the cursor
+                // position on the remote screen. Send it so the new sharer can init correctly.
                 if self.data.sharing_mode == SharingMode::Sharing || self.data.sharing_mode == SharingMode::PendingSwitch {
-                    info!("[continuity] switching to Receiving via {:?}", side);
+                    // Extract the edge-parallel component of virtual_pos (in remote coords)
+                    let edge_pos = match side {
+                        Side::Left | Side::Right => self.virtual_pos.1,
+                        Side::Top | Side::Bottom => self.virtual_pos.0,
+                    };
+                    info!("[continuity] switching to Receiving via {:?}, edge_pos={:.0}", side, edge_pos);
                     capture.stop();
                     self.data.sharing_mode = SharingMode::Receiving;
                     self.data.receiving_entry_side = Some(side);
@@ -435,7 +546,7 @@ impl ContinuityInner {
                     if let Err(e) = injection.start() {
                         error!("[continuity] failed to start injection for switch: {e}");
                     }
-                    connection.send_message(protocol::Message::SwitchConfirm { side });
+                    connection.send_message(protocol::Message::SwitchConfirm { side, edge_pos });
                     self.push();
                 }
             }
@@ -538,6 +649,7 @@ impl ContinuityInner {
                 self.data.sharing_mode = SharingMode::Idle;
                 self.data.pending_pin = None;
                 self.data.receiving_entry_side = None;
+                self.data.remote_screen = None;
                 self.pending_peer = None;
                 self.entry_side = None;
                 self.last_message_at = None;
@@ -597,6 +709,12 @@ impl ContinuityInner {
                                 self.data.pending_pin = None;
                                 self.push();
 
+                                // Exchange screen info
+                                connection.send_message(protocol::Message::ScreenInfo {
+                                    width: self.data.screen_width,
+                                    height: self.data.screen_height,
+                                });
+
                                 // Start clipboard sync
                                 if let Err(e) = clipboard.start_monitoring(clipboard_tx.clone()) {
                                     error!("[continuity] failed to start clipboard monitoring: {e}");
@@ -626,10 +744,17 @@ impl ContinuityInner {
                         use input::InputInjection;
                         let _ = injection.inject(&msg);
                     }
-                    protocol::Message::EdgeTransition { side } => {
+                    protocol::Message::ScreenInfo { width, height } => {
+                        info!("[continuity] peer screen: {}x{}", width, height);
+                        self.data.remote_screen = Some((width, height));
+                        self.push();
+                    }
+                    protocol::Message::EdgeTransition { side, edge_pos } => {
                         if self.data.sharing_mode == SharingMode::Idle {
-                            info!("[continuity] accepting sharing from peer via {:?}", side);
+                            info!("[continuity] accepting sharing from peer via {:?}, edge_pos={:.0}", side, edge_pos);
                             self.data.sharing_mode = SharingMode::Receiving;
+                            // The peer's side tells us which edge they exited from.
+                            // We store it so the edge window appears on the correct side.
                             self.data.receiving_entry_side = Some(side);
                             connection.send_message(protocol::Message::TransitionAck { accepted: true });
                             self.push();
@@ -642,19 +767,15 @@ impl ContinuityInner {
                         if self.data.sharing_mode == SharingMode::Pending {
                             if accepted {
                                 let side = self.pending_transition_side.unwrap_or(Side::Right);
-                                info!("[continuity] transition accepted, starting sharing via {:?}", side);
+                                let edge_pos = self.pending_edge_pos;
+                                info!("[continuity] transition accepted, sharing via {:?}, edge_pos={:.0}", side, edge_pos);
                                 self.data.sharing_mode = SharingMode::Sharing;
                                 self.entry_side = Some(side);
                                 self.pending_transition_side = None;
 
-                                // Start cursor at the edge we just crossed, with a buffer
-                                let buffer = 10.0;
-                                self.virtual_pos = match side {
-                                    Side::Left => (self.data.screen_width as f64 - buffer, self.data.screen_height as f64 / 2.0),
-                                    Side::Right => (buffer, self.data.screen_height as f64 / 2.0),
-                                    Side::Top => (self.data.screen_width as f64 / 2.0, self.data.screen_height as f64 - buffer),
-                                    Side::Bottom => (self.data.screen_width as f64 / 2.0, buffer),
-                                };
+                                // Initialize virtual_pos in remote screen coordinates
+                                self.init_virtual_pos(side, edge_pos);
+                                info!("[continuity] virtual_pos initialized to ({:.0}, {:.0})", self.virtual_pos.0, self.virtual_pos.1);
 
                                 if let Err(e) = capture.start(input_tx.clone()) {
                                     error!("[continuity] failed to start input capture: {e}");
@@ -677,7 +798,7 @@ impl ContinuityInner {
                         self.pending_transition_side = None;
                         self.push();
                     }
-                    protocol::Message::SwitchTransition { side } => {
+                    protocol::Message::SwitchTransition { side, edge_pos: _ } => {
                         // Peer wants to take over (switch from Sharing → Receiving on our side)
                         if self.data.sharing_mode == SharingMode::Sharing {
                             info!("[continuity] peer requesting switch via {:?}", side);
@@ -687,15 +808,23 @@ impl ContinuityInner {
                             let _ = self.switch_tx.as_ref().unwrap().try_send(ContinuityCmd::SwitchToReceiving(side));
                         } else {
                             info!("[continuity] rejecting switch (not in Sharing, currently {:?})", self.data.sharing_mode);
-                            connection.send_message(protocol::Message::SwitchConfirm { side });
+                            // Send a dummy SwitchConfirm to unblock the peer
+                            connection.send_message(protocol::Message::SwitchConfirm { side, edge_pos: 0.0 });
                         }
                     }
-                    protocol::Message::SwitchConfirm { side } => {
+                    protocol::Message::SwitchConfirm { side, edge_pos } => {
                         if self.data.sharing_mode == SharingMode::PendingSwitch {
-                            info!("[continuity] switch confirmed, starting sharing via {:?}", side);
+                            info!("[continuity] switch confirmed, sharing via {:?}, edge_pos={:.0}", side, edge_pos);
                             self.data.sharing_mode = SharingMode::Sharing;
                             self.entry_side = Some(side);
                             self.data.receiving_entry_side = None;
+
+                            // The old sharer sent us their virtual_pos along the edge (in remote coords).
+                            // Map it to our coordinate system for init.
+                            let mapped_pos = self.data.peer_arrangement.local_to_remote_edge(edge_pos);
+                            self.init_virtual_pos(side, mapped_pos);
+                            info!("[continuity] virtual_pos initialized to ({:.0}, {:.0})", self.virtual_pos.0, self.virtual_pos.1);
+
                             if let Err(e) = capture.start(input_tx.clone()) {
                                 error!("[continuity] failed to start input capture after switch: {e}");
                                 self.data.sharing_mode = SharingMode::Idle;
@@ -756,29 +885,32 @@ impl ContinuityInner {
         if self.data.sharing_mode == SharingMode::Sharing {
             match event {
                 input::InputEvent::CursorMove { dx, dy } => {
-                    // Update virtual position
+                    let (rw, rh) = self.remote_screen();
+                    let rw = rw as f64;
+                    let rh = rh as f64;
+
+                    // Update virtual position (tracked in remote screen coordinates)
                     self.virtual_pos.0 += dx;
                     self.virtual_pos.1 += dy;
 
-                    // Clamping
-                    self.virtual_pos.0 = self.virtual_pos.0.clamp(-100.0, self.data.screen_width as f64 + 100.0);
-                    self.virtual_pos.1 = self.virtual_pos.1.clamp(-100.0, self.data.screen_height as f64 + 100.0);
+                    // Clamp with 100px overflow buffer for edge detection
+                    self.virtual_pos.0 = self.virtual_pos.0.clamp(-100.0, rw + 100.0);
+                    self.virtual_pos.1 = self.virtual_pos.1.clamp(-100.0, rh + 100.0);
 
-                    // Check for return transition
+                    // Check for return transition: cursor moved back past the entry edge
                     if let Some(entry) = self.entry_side {
                         let should_return = match entry {
-                            Side::Left if self.virtual_pos.0 > self.data.screen_width as f64 => true,
+                            Side::Left if self.virtual_pos.0 > rw => true,
                             Side::Right if self.virtual_pos.0 < 0.0 => true,
-                            Side::Top if self.virtual_pos.1 > self.data.screen_height as f64 => true,
+                            Side::Top if self.virtual_pos.1 > rh => true,
                             Side::Bottom if self.virtual_pos.1 < 0.0 => true,
                             _ => false,
                         };
 
                         if should_return {
-                            info!("[continuity] return transition triggered via movement");
+                            info!("[continuity] return transition at vpos=({:.0},{:.0})", self.virtual_pos.0, self.virtual_pos.1);
                             self.data.sharing_mode = SharingMode::Idle;
                             self.entry_side = None;
-                            // Reset cooldown timer to prevent immediate re-transition
                             self.last_transition_at = Instant::now();
                             capture.stop();
                             connection.send_message(protocol::Message::TransitionCancel);

@@ -4,7 +4,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::time::Instant;
 use crate::app_context::AppContext;
-use crate::services::continuity::{ContinuityCmd, SharingMode, Side};
+use crate::services::continuity::{ContinuityCmd, PeerArrangement, SharingMode, Side};
 use log::info;
 
 pub struct ContinuityCaptureController {
@@ -36,22 +36,24 @@ impl ContinuityCaptureController {
 
             if show_edge {
                 if edge.is_none() {
-                    let (side, is_receiving) = if data.sharing_mode == SharingMode::Receiving {
-                        (data.receiving_entry_side.unwrap_or(data.preferred_edge), true)
-                    } else {
-                        (data.preferred_edge, false)
-                    };
+                    // In both Idle and Receiving mode, the edge window goes on the
+                    // side where the peer is (per our arrangement). In Idle it starts
+                    // sharing; in Receiving it triggers a switch back.
+                    let side = data.peer_arrangement.side;
+                    let is_receiving = data.sharing_mode == SharingMode::Receiving;
 
-                    let edge_side = match side {
-                        Side::Left => Edge::Left,
-                        Side::Right => Edge::Right,
-                        Side::Top => Edge::Top,
-                        Side::Bottom => Edge::Bottom,
-                    };
-
-                    let w = ctrl_c.create_edge_window(&app_c, edge_side, data.screen_width, data.screen_height, side, is_receiving);
+                    let w = ctrl_c.create_edge_window(
+                        &app_c,
+                        side,
+                        is_receiving,
+                        data.screen_width,
+                        data.screen_height,
+                        data.remote_screen,
+                        &data.peer_arrangement,
+                    );
                     w.present();
-                    info!("[continuity:edge] presenting edge window for {:?}, screen={}x{}, mode={:?}", edge_side, data.screen_width, data.screen_height, data.sharing_mode);
+                    info!("[continuity:edge] presenting edge window for {:?}, screen={}x{}, remote={:?}, mode={:?}",
+                        side, data.screen_width, data.screen_height, data.remote_screen, data.sharing_mode);
                     *edge = Some(w);
                 }
             } else {
@@ -79,15 +81,37 @@ impl ContinuityCaptureController {
     fn create_edge_window(
         self: &Rc<Self>,
         app: &libadwaita::Application,
-        edge: Edge,
-        screen_w: i32,
-        screen_h: i32,
         side: Side,
         is_receiving: bool,
+        screen_w: i32,
+        screen_h: i32,
+        remote_screen: Option<(i32, i32)>,
+        arrangement: &PeerArrangement,
     ) -> gtk4::Window {
+        let gtk_edge = match side {
+            Side::Left => Edge::Left,
+            Side::Right => Edge::Right,
+            Side::Top => Edge::Top,
+            Side::Bottom => Edge::Bottom,
+        };
+
+        // Calculate overlap area: where should the edge window be?
+        let is_horizontal = matches!(side, Side::Left | Side::Right);
+        let local_len = if is_horizontal { screen_h } else { screen_w };
+        let remote_len = remote_screen
+            .map(|(rw, rh)| if is_horizontal { rh } else { rw })
+            .unwrap_or(local_len);
+
+        let (overlap_start, overlap_end) = arrangement
+            .overlap_on_local(local_len, remote_len)
+            .unwrap_or((0, local_len));
+        let overlap_len = overlap_end - overlap_start;
+
+        info!("[continuity:edge] overlap: {}..{} (len={}) on {:?} edge", overlap_start, overlap_end, overlap_len, side);
+
         let window = gtk4::Window::builder()
             .application(app)
-            .title(format!("Continuity Edge {:?}", edge))
+            .title(format!("Continuity Edge {:?}", side))
             .can_focus(false)
             .resizable(false)
             .decorated(false)
@@ -96,36 +120,38 @@ impl ContinuityCaptureController {
         window.init_layer_shell();
         window.set_layer(Layer::Top);
 
-        match edge {
-            Edge::Left => {
+        // Anchor to the target edge + one perpendicular edge, then use margin to position.
+        // For Left/Right: anchor to the edge + Top, use margin_top for offset.
+        // For Top/Bottom: anchor to the edge + Left, use margin_left for offset.
+        match side {
+            Side::Left => {
                 window.set_anchor(Edge::Left, true);
                 window.set_anchor(Edge::Top, true);
-                window.set_anchor(Edge::Bottom, true);
+                window.set_margin(Edge::Top, overlap_start);
             }
-            Edge::Right => {
+            Side::Right => {
                 window.set_anchor(Edge::Right, true);
                 window.set_anchor(Edge::Top, true);
-                window.set_anchor(Edge::Bottom, true);
+                window.set_margin(Edge::Top, overlap_start);
             }
-            Edge::Top => {
+            Side::Top => {
                 window.set_anchor(Edge::Top, true);
                 window.set_anchor(Edge::Left, true);
-                window.set_anchor(Edge::Right, true);
+                window.set_margin(Edge::Left, overlap_start);
             }
-            Edge::Bottom => {
+            Side::Bottom => {
                 window.set_anchor(Edge::Bottom, true);
                 window.set_anchor(Edge::Left, true);
-                window.set_anchor(Edge::Right, true);
+                window.set_margin(Edge::Left, overlap_start);
             }
-            _ => {}
         }
 
         let edge_widget = gtk4::DrawingArea::new();
-        if edge == Edge::Left || edge == Edge::Right {
+        if is_horizontal {
             edge_widget.set_content_width(2);
-            edge_widget.set_content_height(screen_h);
+            edge_widget.set_content_height(overlap_len);
         } else {
-            edge_widget.set_content_width(screen_w);
+            edge_widget.set_content_width(overlap_len);
             edge_widget.set_content_height(2);
         }
         edge_widget.add_css_class("continuity-edge-debug");
@@ -138,11 +164,12 @@ impl ContinuityCaptureController {
 
         let motion = gtk4::EventControllerMotion::new();
         motion.connect_enter(move |_, x, y| {
-            info!("[continuity:edge] cursor ENTERED edge {:?} at x={:.0} y={:.0}", edge, x, y);
+            info!("[continuity:edge] cursor ENTERED edge {:?} at x={:.0} y={:.0}", gtk_edge, x, y);
         });
 
         let ctrl_c2 = self.clone();
-        motion.connect_motion(move |_ctrl, _x, _y| {
+        let overlap_start_f = overlap_start as f64;
+        motion.connect_motion(move |_ctrl, x, y| {
             let mut last = ctrl_c2.last_trigger.borrow_mut();
             if last.elapsed() < std::time::Duration::from_millis(500) {
                 return;
@@ -150,12 +177,20 @@ impl ContinuityCaptureController {
             *last = Instant::now();
             drop(last);
 
+            // The widget-local position within the edge window.
+            // Convert to absolute screen position along the edge.
+            let edge_pos = if is_horizontal {
+                overlap_start_f + y
+            } else {
+                overlap_start_f + x
+            };
+
             let cmd = if is_receiving {
                 ContinuityCmd::StopSharing
             } else {
-                ContinuityCmd::StartSharing(side)
+                ContinuityCmd::StartSharing(side, edge_pos)
             };
-            info!("[continuity:edge] transition triggered via {:?}", edge);
+            info!("[continuity:edge] transition triggered via {:?}, edge_pos={:.0}", side, edge_pos);
             let _ = ctrl_c2.ctx.continuity.tx.try_send(cmd);
         });
 

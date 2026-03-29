@@ -23,9 +23,18 @@ pub enum Message {
     },
     Connected,
 
+    // Screen info (exchanged after handshake)
+    ScreenInfo {
+        width: i32,
+        height: i32,
+    },
+
     // Cursor Transition
     EdgeTransition {
         side: Side,
+        /// Position along the shared edge in the remote peer's screen coordinates.
+        /// For Left/Right edges this is a Y coordinate, for Top/Bottom it's X.
+        edge_pos: f64,
     },
     TransitionAck {
         accepted: bool,
@@ -33,9 +42,14 @@ pub enum Message {
     TransitionCancel,
     SwitchTransition {
         side: Side,
+        /// Position along the shared edge in the sender's local coordinates.
+        edge_pos: f64,
     },
     SwitchConfirm {
         side: Side,
+        /// The old sharer's virtual_pos along the edge (in remote screen coords,
+        /// i.e. the SwitchConfirm-sender's own screen coordinates).
+        edge_pos: f64,
     },
 
     // Input (forwarded when Driving)
