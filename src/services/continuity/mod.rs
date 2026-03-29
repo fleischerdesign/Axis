@@ -663,6 +663,12 @@ impl ContinuityInner {
                 input::InputEvent::PointerAxis { dx, dy } => {
                     connection.send_message(protocol::Message::PointerAxis { dx, dy });
                 }
+                input::InputEvent::EmergencyExit => {
+                    info!("[continuity] kernel emergency exit requested");
+                    self.data.sharing_mode = SharingMode::Idle;
+                    connection.send_message(protocol::Message::TransitionCancel);
+                    self.push();
+                }
             };
         }
     }
