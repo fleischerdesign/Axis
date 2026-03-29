@@ -240,7 +240,7 @@ impl ContinuityInner {
     /// at `entry_side` with `edge_pos` along the entry edge (in remote coords).
     fn init_virtual_pos(&mut self, entry_side: Side, edge_pos: f64) {
         let (rw, rh) = self.remote_screen();
-        let buffer = 10.0;
+        let buffer = 40.0;
         self.virtual_pos = match entry_side {
             // Entered remote from the left edge → cursor starts near x=0
             Side::Right => (buffer, edge_pos.clamp(0.0, rh as f64)),
