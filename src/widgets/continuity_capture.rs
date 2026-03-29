@@ -89,18 +89,49 @@ impl ContinuityCaptureController {
     fn create_edge_window(self: &Rc<Self>, app: &libadwaita::Application, side: Edge, screen_w: i32, screen_h: i32) -> gtk4::Window {
         let window = gtk4::Window::builder()
             .application(app)
-            .title("Continuity Edge")
+            .title(format!("Continuity Edge {:?}", side))
             .can_focus(false)
-            .resizable(true)
+            .resizable(false)
             .decorated(false)
             .build();
 
-        window.fullscreen();
-        window.set_opacity(0.01);
-        window.set_cursor_from_name(Some("none"));
+        window.init_layer_shell();
+        window.set_layer(Layer::Top);
 
-        let container = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-        window.set_child(Some(&container));
+        // Anchor 3 edges: target + perpendicular edges.
+        match side {
+            Edge::Left => {
+                window.set_anchor(Edge::Left, true);
+                window.set_anchor(Edge::Top, true);
+                window.set_anchor(Edge::Bottom, true);
+            }
+            Edge::Right => {
+                window.set_anchor(Edge::Right, true);
+                window.set_anchor(Edge::Top, true);
+                window.set_anchor(Edge::Bottom, true);
+            }
+            Edge::Top => {
+                window.set_anchor(Edge::Top, true);
+                window.set_anchor(Edge::Left, true);
+                window.set_anchor(Edge::Right, true);
+            }
+            Edge::Bottom => {
+                window.set_anchor(Edge::Bottom, true);
+                window.set_anchor(Edge::Left, true);
+                window.set_anchor(Edge::Right, true);
+            }
+            _ => {}
+        }
+
+        // Box as child — red debug strip, 2px wide
+        let edge_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+        if side == Edge::Left || side == Edge::Right {
+            edge_box.set_size_request(2, -1);
+        } else {
+            edge_box.set_size_request(-1, 2);
+        }
+        edge_box.add_css_class("continuity-edge-debug");
+        window.set_child(Some(&edge_box));
 
         let motion = gtk4::EventControllerMotion::new();
         let ctrl_c = self.clone();
@@ -126,7 +157,7 @@ impl ContinuityCaptureController {
             *ctrl_leave.pressure.borrow_mut() = 0.0;
         });
 
-        container.add_controller(motion);
+        edge_box.add_controller(motion);
         window
     }
 
