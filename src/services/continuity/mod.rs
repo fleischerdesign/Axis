@@ -64,6 +64,7 @@ pub struct ContinuityData {
     pub active_connection: Option<ActiveConnectionInfo>,
     pub sharing_mode: SharingMode,
     pub pending_pin: Option<PendingPin>,
+    pub preferred_edge: Side,
 }
 
 impl Default for ContinuityData {
@@ -76,6 +77,7 @@ impl Default for ContinuityData {
             active_connection: None,
             sharing_mode: SharingMode::Idle,
             pending_pin: None,
+            preferred_edge: Side::Right,
         }
     }
 }
@@ -94,6 +96,7 @@ pub enum ContinuityCmd {
     StartSharing(Side),
     StopSharing,
     SendInput(protocol::Message),
+    SetPreferredEdge(Side),
 }
 
 // ── Service ────────────────────────────────────────────────────────────
@@ -333,6 +336,10 @@ impl ContinuityInner {
                 if self.data.sharing_mode == SharingMode::Sharing {
                     connection.send_message(msg);
                 }
+            }
+            ContinuityCmd::SetPreferredEdge(side) => {
+                self.data.preferred_edge = side;
+                self.push();
             }
         }
     }

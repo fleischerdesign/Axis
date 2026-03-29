@@ -17,8 +17,7 @@ use log::info;
 
 pub struct ContinuityCaptureController {
     ctx: AppContext,
-    left_edge: RefCell<Option<gtk4::Window>>,
-    right_edge: RefCell<Option<gtk4::Window>>,
+    edge_window: RefCell<Option<gtk4::Window>>,
     overlay: RefCell<Option<gtk4::Window>>,
     pressure: RefCell<f64>,
     last_pos: RefCell<Option<(f64, f64)>>,
@@ -34,8 +33,7 @@ impl ContinuityCaptureController {
     pub fn new(app: &libadwaita::Application, ctx: AppContext) -> Rc<Self> {
         let controller = Rc::new(Self {
             ctx: ctx.clone(),
-            left_edge: RefCell::new(None),
-            right_edge: RefCell::new(None),
+            edge_window: RefCell::new(None),
             overlay: RefCell::new(None),
             pressure: RefCell::new(0.0),
             last_pos: RefCell::new(None),
@@ -46,27 +44,26 @@ impl ContinuityCaptureController {
         let ctrl_c = controller.clone();
         let app_c = app.clone();
         ctx.continuity.store.subscribe(move |data| {
-            let mut left = ctrl_c.left_edge.borrow_mut();
-            let mut right = ctrl_c.right_edge.borrow_mut();
+            let mut edge = ctrl_c.edge_window.borrow_mut();
             let mut overlay = ctrl_c.overlay.borrow_mut();
 
             // Edge windows are active when connected and idle
             let show_edges = data.enabled && data.active_connection.is_some() && data.sharing_mode == SharingMode::Idle;
             
             if show_edges {
-                if left.is_none() {
-                    let w = ctrl_c.create_edge_window(&app_c, Edge::Left);
+                if edge.is_none() {
+                    let side = match data.preferred_edge {
+                        Side::Left => Edge::Left,
+                        Side::Right => Edge::Right,
+                        Side::Top => Edge::Top,
+                        Side::Bottom => Edge::Bottom,
+                    };
+                    let w = ctrl_c.create_edge_window(&app_c, side);
                     w.present();
-                    *left = Some(w);
-                }
-                if right.is_none() {
-                    let w = ctrl_c.create_edge_window(&app_c, Edge::Right);
-                    w.present();
-                    *right = Some(w);
+                    *edge = Some(w);
                 }
             } else {
-                if let Some(w) = left.take() { w.close(); }
-                if let Some(w) = right.take() { w.close(); }
+                if let Some(w) = edge.take() { w.close(); }
                 *ctrl_c.pressure.borrow_mut() = 0.0;
             }
 
@@ -99,18 +96,34 @@ impl ContinuityCaptureController {
 
         window.init_layer_shell();
         window.set_layer(Layer::Top);
+        
+        // Match the anchor to the side
         window.set_anchor(Edge::Top, true);
         window.set_anchor(Edge::Bottom, true);
-        window.set_anchor(side, true);
+        window.set_anchor(Edge::Left, true);
+        window.set_anchor(Edge::Right, true);
         
-        // Give GTK some initial dimensions to avoid size.height > 0 crashes
-        window.set_default_size(2, 500);
-        window.set_width_request(2);
+        // De-anchor opposite sides based on target side
+        match side {
+            Edge::Left => window.set_anchor(Edge::Right, false),
+            Edge::Right => window.set_anchor(Edge::Left, false),
+            Edge::Top => window.set_anchor(Edge::Bottom, false),
+            Edge::Bottom => window.set_anchor(Edge::Top, false),
+            _ => {}
+        }
+        
+        // Give GTK some initial dimensions
+        if side == Edge::Left || side == Edge::Right {
+            window.set_default_size(2, 500);
+            window.set_width_request(2);
+        } else {
+            window.set_default_size(500, 2);
+            window.set_height_request(2);
+        }
 
         window.add_css_class("continuity-edge-debug");
         
         let motion = gtk4::EventControllerMotion::new();
-        
         let ctrl_enter = self.clone();
         motion.connect_enter(move |_, _x, _y| {
             ctrl_enter.check_transition(side, 20.0);
@@ -167,9 +180,7 @@ impl ContinuityCaptureController {
         window.set_exclusive_zone(-1); 
         window.set_keyboard_mode(KeyboardMode::Exclusive);
 
-        // Explicit size for overlay too
         window.set_default_size(100, 100);
-
         window.set_cursor_from_name(Some("none"));
         window.add_css_class("continuity-overlay");
         
@@ -185,6 +196,31 @@ impl ContinuityCaptureController {
                 if dx.abs() > 0.1 || dy.abs() > 0.1 {
                     let msg = protocol::Message::CursorMove { dx, dy };
                     let _ = ctrl_m.ctx.continuity.tx.try_send(ContinuityCmd::SendInput(msg));
+                }
+
+                // Return transition: if user pushes back against the entry edge
+                if let Some(entry) = *ctrl_m.entry_side.borrow() {
+                    let win = _ctrl.widget().expect("widget should exist").downcast::<gtk4::Window>().unwrap();
+                    let width = win.width() as f64;
+                    let height = win.height() as f64;
+
+                    let should_return = match entry {
+                        Side::Right if x < 2.0 => true,
+                        Side::Left if x > (width - 2.0) => true,
+                        Side::Bottom if y < 2.0 => true,
+                        Side::Top if y > (height - 2.0) => true,
+                        _ => false,
+                    };
+
+                    if should_return {
+                        let mut p = ctrl_m.pressure.borrow_mut();
+                        *p += 5.0;
+                        if *p >= Self::PRESSURE_THRESHOLD {
+                            let _ = ctrl_m.ctx.continuity.tx.try_send(ContinuityCmd::StopSharing);
+                        }
+                    } else {
+                        *ctrl_m.pressure.borrow_mut() = 0.0;
+                    }
                 }
             }
             

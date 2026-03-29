@@ -1,5 +1,5 @@
 use crate::app_context::AppContext;
-use crate::services::continuity::{ContinuityCmd, SharingMode};
+use crate::services::continuity::{ContinuityCmd, SharingMode, Side};
 use crate::widgets::components::scrolled_list::ScrolledList;
 use crate::widgets::components::subpage_header::SubPageHeader;
 use gtk4::prelude::*;
@@ -42,6 +42,44 @@ impl ContinuityPage {
         status_box.append(&role_label);
 
         container.append(&status_box);
+
+        // Edge selection section
+        let edge_box = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
+        edge_box.set_margin_start(12);
+        edge_box.set_margin_end(12);
+        
+        let edge_label = gtk4::Label::builder()
+            .label("Übergangskante wählen")
+            .halign(gtk4::Align::Start)
+            .css_classes(vec!["list-sublabel".to_string()])
+            .build();
+        edge_box.append(&edge_label);
+
+        let edge_actions = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
+        edge_actions.set_homogeneous(true);
+
+        let sides = [
+            ("Links", Side::Left),
+            ("Oben", Side::Top),
+            ("Unten", Side::Bottom),
+            ("Rechts", Side::Right),
+        ];
+
+        let mut edge_buttons = Vec::new();
+
+        for (label, side) in sides {
+            let btn = gtk4::ToggleButton::with_label(label);
+            let tx = ctx.continuity.tx.clone();
+            btn.connect_toggled(move |b| {
+                if b.is_active() {
+                    let _ = tx.try_send(ContinuityCmd::SetPreferredEdge(side));
+                }
+            });
+            edge_actions.append(&btn);
+            edge_buttons.push((btn, side));
+        }
+        edge_box.append(&edge_actions);
+        container.append(&edge_box);
 
         // PIN confirmation section (hidden by default)
         let pin_box = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
@@ -133,6 +171,11 @@ impl ContinuityPage {
             } else {
                 status_label_c.set_label("Status: Bereit");
                 role_label_c.set_label("");
+            }
+
+            // Update edge buttons
+            for (btn, side) in &edge_buttons {
+                btn.set_active(data.preferred_edge == *side);
             }
 
             // PIN confirmation
