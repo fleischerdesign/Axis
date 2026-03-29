@@ -94,24 +94,42 @@ impl ContinuityCaptureController {
         window.init_layer_shell();
         window.set_layer(Layer::Top);
 
-        // Anchor only the target edge — unconstrained directions follow the widget size.
-        // For right/left: widget height → full screen height (unanchored).
-        // For top/bottom: widget width → full screen width (unanchored).
-        window.set_anchor(side, true);
-
-        // Box at the edge — size_request controls the unconstrained dimensions.
-        let edge_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-        if side == Edge::Left || side == Edge::Right {
-            edge_box.set_size_request(2, 0); // 2px wide, 0 height min (stretches via anchor)
-        } else {
-            edge_box.set_size_request(0, 2); // 0 width min, 2px tall
+        // Anchor 3 edges: target + perpendicular edges.
+        // The opposite edge is unanchored, so the unconstrained dimension
+        // follows the widget's size.
+        match side {
+            Edge::Left => {
+                window.set_anchor(Edge::Left, true);
+                window.set_anchor(Edge::Top, true);
+                window.set_anchor(Edge::Bottom, true);
+            }
+            Edge::Right => {
+                window.set_anchor(Edge::Right, true);
+                window.set_anchor(Edge::Top, true);
+                window.set_anchor(Edge::Bottom, true);
+            }
+            Edge::Top => {
+                window.set_anchor(Edge::Top, true);
+                window.set_anchor(Edge::Left, true);
+                window.set_anchor(Edge::Right, true);
+            }
+            Edge::Bottom => {
+                window.set_anchor(Edge::Bottom, true);
+                window.set_anchor(Edge::Left, true);
+                window.set_anchor(Edge::Right, true);
+            }
+            _ => {}
         }
+
+        // Default size hints — layer-shell respects this for the unconstrained direction.
+        if side == Edge::Left || side == Edge::Right {
+            window.set_default_size(2, 1);
+        } else {
+            window.set_default_size(1, 2);
+        }
+
+        let edge_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
         edge_box.add_css_class("continuity-edge-debug");
-
-        // Explicitly set the box to expand so it fills the unconstrained direction.
-        edge_box.set_hexpand(true);
-        edge_box.set_vexpand(true);
-
         window.set_child(Some(&edge_box));
 
         let motion = gtk4::EventControllerMotion::new();
