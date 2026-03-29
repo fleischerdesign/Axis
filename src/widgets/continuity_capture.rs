@@ -94,43 +94,32 @@ impl ContinuityCaptureController {
         window.init_layer_shell();
         window.set_layer(Layer::Top);
 
-        // Anchor only the target edge + perpendicular edges (NOT the opposite edge).
-        // This makes the window extend from the anchored edge by the widget's natural size
-        // in the unconstrained direction, instead of stretching the full screen.
-        match side {
-            Edge::Left => {
-                window.set_anchor(Edge::Left, true);
-                window.set_anchor(Edge::Top, true);
-                window.set_anchor(Edge::Bottom, true);
-            }
-            Edge::Right => {
-                window.set_anchor(Edge::Right, true);
-                window.set_anchor(Edge::Top, true);
-                window.set_anchor(Edge::Bottom, true);
-            }
-            Edge::Top => {
-                window.set_anchor(Edge::Top, true);
-                window.set_anchor(Edge::Left, true);
-                window.set_anchor(Edge::Right, true);
-            }
-            Edge::Bottom => {
-                window.set_anchor(Edge::Bottom, true);
-                window.set_anchor(Edge::Left, true);
-                window.set_anchor(Edge::Right, true);
-            }
-            _ => {}
-        }
+        // Anchor all 4 edges → fullscreen layer surface.
+        window.set_anchor(Edge::Top, true);
+        window.set_anchor(Edge::Bottom, true);
+        window.set_anchor(Edge::Left, true);
+        window.set_anchor(Edge::Right, true);
 
-        // Use a child box with explicit size request — layer-shell respects widget size
-        // in the unconstrained direction (width for left/right edges, height for top/bottom).
+        // Use GtkFixed to position a thin strip at the target edge.
+        let fixed = gtk4::Fixed::new();
         let edge_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-        if side == Edge::Left || side == Edge::Right {
-            edge_box.set_size_request(2, -1);
-        } else {
-            edge_box.set_size_request(-1, 2);
-        }
+        edge_box.set_size_request(2, 2);
         edge_box.add_css_class("continuity-edge-debug");
-        window.set_child(Some(&edge_box));
+
+        // Position will be updated by a resize callback once the surface size is known.
+        fixed.put(&edge_box, 0.0, 0.0);
+        window.set_child(Some(&fixed));
+
+        // When the surface is realized, reposition the strip to the correct edge.
+        let edge_box_c = edge_box.clone();
+        window.connect_default_height_notify(move |w| {
+            Self::reposition_edge_box(&edge_box_c, w, side);
+        });
+        // Also reposition on map (covers initial show).
+        let edge_box_c2 = edge_box.clone();
+        window.connect_map(move |w| {
+            Self::reposition_edge_box(&edge_box_c2, w, side);
+        });
 
         let motion = gtk4::EventControllerMotion::new();
         let ctrl_enter = self.clone();
@@ -150,6 +139,29 @@ impl ContinuityCaptureController {
 
         window.add_controller(motion);
         window
+    }
+
+    fn reposition_edge_box(edge_box: &gtk4::Box, window: &gtk4::Window, side: Edge) {
+        let width = window.default_width();
+        let height = window.default_height();
+
+        if width <= 0 || height <= 0 {
+            return;
+        }
+
+        let (x, y, w, h) = match side {
+            Edge::Left => (0, 0, 2, height),
+            Edge::Right => (width - 2, 0, 2, height),
+            Edge::Top => (0, 0, width, 2),
+            Edge::Bottom => (0, height - 2, width, 2),
+            _ => (0, 0, 2, height),
+        };
+
+        let fixed = window.child().and_downcast::<gtk4::Fixed>();
+        if let Some(fixed) = fixed {
+            fixed.move_(edge_box, x as f64, y as f64);
+        }
+        edge_box.set_size_request(w, h);
     }
 
     fn check_transition(&self, side: Edge, increment: f64) {
