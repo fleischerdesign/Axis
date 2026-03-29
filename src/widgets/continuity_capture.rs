@@ -107,30 +107,45 @@ impl ContinuityCaptureController {
 
         window.init_layer_shell();
         window.set_layer(Layer::Top);
-        
-        window.set_anchor(Edge::Top, true);
-        window.set_anchor(Edge::Bottom, true);
-        window.set_anchor(Edge::Left, true);
-        window.set_anchor(Edge::Right, true);
-        
+
+        // Anchor only the target edge + perpendicular edges (NOT the opposite edge).
+        // This makes the window extend from the anchored edge by the widget's natural size
+        // in the unconstrained direction, instead of stretching the full screen.
         match side {
-            Edge::Left => window.set_anchor(Edge::Right, false),
-            Edge::Right => window.set_anchor(Edge::Left, false),
-            Edge::Top => window.set_anchor(Edge::Bottom, false),
-            Edge::Bottom => window.set_anchor(Edge::Top, false),
+            Edge::Left => {
+                window.set_anchor(Edge::Left, true);
+                window.set_anchor(Edge::Top, true);
+                window.set_anchor(Edge::Bottom, true);
+            }
+            Edge::Right => {
+                window.set_anchor(Edge::Right, true);
+                window.set_anchor(Edge::Top, true);
+                window.set_anchor(Edge::Bottom, true);
+            }
+            Edge::Top => {
+                window.set_anchor(Edge::Top, true);
+                window.set_anchor(Edge::Left, true);
+                window.set_anchor(Edge::Right, true);
+            }
+            Edge::Bottom => {
+                window.set_anchor(Edge::Bottom, true);
+                window.set_anchor(Edge::Left, true);
+                window.set_anchor(Edge::Right, true);
+            }
             _ => {}
         }
-        
-        if side == Edge::Left || side == Edge::Right {
-            window.set_default_size(2, 500);
-            window.set_width_request(2);
-        } else {
-            window.set_default_size(500, 2);
-            window.set_height_request(2);
-        }
 
-        window.add_css_class("continuity-edge-debug");
-        
+        // Use a child box with explicit size request — layer-shell respects widget size
+        // in the unconstrained direction (width for left/right edges, height for top/bottom).
+        let edge_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+        if side == Edge::Left || side == Edge::Right {
+            edge_box.set_size_request(2, -1);
+        } else {
+            edge_box.set_size_request(-1, 2);
+        }
+        edge_box.add_css_class("continuity-edge-debug");
+        window.set_child(Some(&edge_box));
+
         let motion = gtk4::EventControllerMotion::new();
         let ctrl_enter = self.clone();
         motion.connect_enter(move |_, _x, _y| {
@@ -141,7 +156,7 @@ impl ContinuityCaptureController {
         motion.connect_motion(move |_ctrl, _x, _y| {
             ctrl_motion.check_transition(side, 5.0);
         });
-        
+
         let ctrl_leave = self.clone();
         motion.connect_leave(move |_| {
             *ctrl_leave.pressure.borrow_mut() = 0.0;

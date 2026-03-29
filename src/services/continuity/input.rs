@@ -1,11 +1,10 @@
 use async_channel::Sender;
 use log::{info, warn};
-use evdev::uinput::VirtualDeviceBuilder;
 use evdev::uinput::VirtualDevice;
-use evdev::{AttributeSet, Key, InputEvent as EvEvent, EventType, RelativeAxisType};
+use evdev::{AttributeSet, KeyCode, RelativeAxisCode, EventSummary, KeyEvent, RelativeAxisEvent};
 use tokio::task::JoinHandle;
 use std::time::{Instant, Duration};
-use futures_util::StreamExt;
+use tokio::io::unix::AsyncFd;
 
 use super::protocol::Message;
 
@@ -50,19 +49,19 @@ impl WaylandInjection {
 impl InputInjection for WaylandInjection {
     fn start(&mut self) -> Result<(), String> {
         info!("[continuity:input] creating virtual uinput device");
-        
-        let mut keys = AttributeSet::<Key>::new();
-        for i in 0..512 {
-            keys.insert(Key::new(i));
+
+        let mut keys = AttributeSet::<KeyCode>::new();
+        for i in 0..512u16 {
+            keys.insert(KeyCode::new(i));
         }
 
-        let mut rel_axes = AttributeSet::<RelativeAxisType>::new();
-        rel_axes.insert(RelativeAxisType::REL_X);
-        rel_axes.insert(RelativeAxisType::REL_Y);
-        rel_axes.insert(RelativeAxisType::REL_WHEEL);
-        rel_axes.insert(RelativeAxisType::REL_HWHEEL);
+        let mut rel_axes = AttributeSet::<RelativeAxisCode>::new();
+        rel_axes.insert(RelativeAxisCode::REL_X);
+        rel_axes.insert(RelativeAxisCode::REL_Y);
+        rel_axes.insert(RelativeAxisCode::REL_WHEEL);
+        rel_axes.insert(RelativeAxisCode::REL_HWHEEL);
 
-        let device = VirtualDeviceBuilder::new()
+        let device = VirtualDevice::builder()
             .map_err(|e| e.to_string())?
             .name("Axis Continuity Virtual Input")
             .with_keys(&keys)
@@ -81,35 +80,36 @@ impl InputInjection for WaylandInjection {
     }
 
     fn inject(&mut self, msg: &Message) -> Result<(), String> {
+        use evdev::InputEvent;
         let dev = self.device.as_mut().ok_or("injection not started")?;
 
         match msg {
             Message::CursorMove { dx, dy } => {
                 let events = [
-                    EvEvent::new(EventType::RELATIVE, RelativeAxisType::REL_X.0, *dx as i32),
-                    EvEvent::new(EventType::RELATIVE, RelativeAxisType::REL_Y.0, *dy as i32),
+                    InputEvent::from(RelativeAxisEvent::new(RelativeAxisCode::REL_X, *dx as i32)),
+                    InputEvent::from(RelativeAxisEvent::new(RelativeAxisCode::REL_Y, *dy as i32)),
                 ];
                 dev.emit(&events).map_err(|e| e.to_string())?;
             }
             Message::KeyPress { key, state } => {
-                let ev = EvEvent::new(EventType::KEY, *key as u16, *state as i32);
+                let ev = InputEvent::from(KeyEvent::new(KeyCode::new(*key as u16), *state as i32));
                 dev.emit(&[ev]).map_err(|e| e.to_string())?;
             }
             Message::KeyRelease { key } => {
-                let ev = EvEvent::new(EventType::KEY, *key as u16, 0);
+                let ev = InputEvent::from(KeyEvent::new(KeyCode::new(*key as u16), 0));
                 dev.emit(&[ev]).map_err(|e| e.to_string())?;
             }
             Message::PointerButton { button, state } => {
-                let ev = EvEvent::new(EventType::KEY, *button as u16, *state as i32);
+                let ev = InputEvent::from(KeyEvent::new(KeyCode::new(*button as u16), *state as i32));
                 dev.emit(&[ev]).map_err(|e| e.to_string())?;
             }
             Message::PointerAxis { dx, dy } => {
                 let mut events = Vec::new();
                 if *dx != 0.0 {
-                    events.push(EvEvent::new(EventType::RELATIVE, RelativeAxisType::REL_HWHEEL.0, *dx as i32));
+                    events.push(InputEvent::from(RelativeAxisEvent::new(RelativeAxisCode::REL_HWHEEL, *dx as i32)));
                 }
                 if *dy != 0.0 {
-                    events.push(EvEvent::new(EventType::RELATIVE, RelativeAxisType::REL_WHEEL.0, *dy as i32));
+                    events.push(InputEvent::from(RelativeAxisEvent::new(RelativeAxisCode::REL_WHEEL, *dy as i32)));
                 }
                 if !events.is_empty() {
                     dev.emit(&events).map_err(|e| e.to_string())?;
@@ -144,14 +144,14 @@ impl InputCapture for EvdevCapture {
         for (path, mut device) in devices {
             let name = device.name().unwrap_or("Unknown").to_string();
             let name_lower = name.to_lowercase();
-            
-            if name_lower.contains("axis continuity") || name_lower.contains("passthrough") || name_lower.contains("virtual") { 
-                continue; 
+
+            if name_lower.contains("axis continuity") || name_lower.contains("passthrough") || name_lower.contains("virtual") {
+                continue;
             }
 
-            let has_rel_x = device.supported_relative_axes().map(|a| a.contains(RelativeAxisType::REL_X)).unwrap_or(false);
-            let has_enter = device.supported_keys().map(|k| k.contains(Key::KEY_ENTER)).unwrap_or(false);
-            let has_mouse_btn = device.supported_keys().map(|k| k.contains(Key::BTN_LEFT)).unwrap_or(false);
+            let has_rel_x = device.supported_relative_axes().map(|a| a.contains(RelativeAxisCode::REL_X)).unwrap_or(false);
+            let has_enter = device.supported_keys().map(|k| k.contains(KeyCode::KEY_ENTER)).unwrap_or(false);
+            let has_mouse_btn = device.supported_keys().map(|k| k.contains(KeyCode::BTN_LEFT)).unwrap_or(false);
 
             if !has_rel_x && !has_enter && !has_mouse_btn {
                 continue;
@@ -164,69 +164,99 @@ impl InputCapture for EvdevCapture {
                 continue;
             }
 
+            if let Err(e) = device.set_nonblocking(true) {
+                warn!("[continuity:input] could not set nonblocking for {}: {}", name, e);
+                let _ = device.ungrab();
+                continue;
+            }
+
+            let mut async_fd = match AsyncFd::new(device) {
+                Ok(fd) => fd,
+                Err(e) => {
+                    warn!("[continuity:input] could not create AsyncFd for {}: {}", name, e);
+                    continue;
+                }
+            };
+
             grabbed_any = true;
             let tx_c = tx.clone();
             let name_c = name.clone();
-            
-            let mut stream = device.into_event_stream()
-                .map_err(|e| format!("failed to create event stream: {e}"))?;
 
             let task = tokio::spawn(async move {
                 let mut esc_count = 0;
                 let mut last_esc = Instant::now();
 
-                while let Some(Ok(ev)) = stream.next().await {
-                    match ev.event_type() {
-                        EventType::RELATIVE => {
-                            let axis = RelativeAxisType(ev.code());
-                            if axis == RelativeAxisType::REL_X {
-                                let _ = tx_c.send(InputEvent::CursorMove { dx: ev.value() as f64, dy: 0.0 }).await;
-                            } else if axis == RelativeAxisType::REL_Y {
-                                let _ = tx_c.send(InputEvent::CursorMove { dx: 0.0, dy: ev.value() as f64 }).await;
-                            } else if axis == RelativeAxisType::REL_WHEEL {
-                                let _ = tx_c.send(InputEvent::PointerAxis { dx: 0.0, dy: ev.value() as f64 }).await;
-                            } else if axis == RelativeAxisType::REL_HWHEEL {
-                                let _ = tx_c.send(InputEvent::PointerAxis { dx: ev.value() as f64, dy: 0.0 }).await;
+                loop {
+                    let mut guard = match async_fd.readable_mut().await {
+                        Ok(g) => g,
+                        Err(_) => break,
+                    };
+
+                    let result = guard.try_io(|fd| {
+                        fd.get_mut().fetch_events().map(|events| events.collect::<Vec<_>>())
+                    });
+
+                    match result {
+                        Ok(Ok(events)) => {
+                            for ev in events {
+                                match ev.destructure() {
+                                    EventSummary::RelativeAxis(_, axis, val) => {
+                                        if axis == RelativeAxisCode::REL_X {
+                                            let _ = tx_c.send(InputEvent::CursorMove { dx: val as f64, dy: 0.0 }).await;
+                                        } else if axis == RelativeAxisCode::REL_Y {
+                                            let _ = tx_c.send(InputEvent::CursorMove { dx: 0.0, dy: val as f64 }).await;
+                                        } else if axis == RelativeAxisCode::REL_WHEEL {
+                                            let _ = tx_c.send(InputEvent::PointerAxis { dx: 0.0, dy: val as f64 }).await;
+                                        } else if axis == RelativeAxisCode::REL_HWHEEL {
+                                            let _ = tx_c.send(InputEvent::PointerAxis { dx: val as f64, dy: 0.0 }).await;
+                                        }
+                                    }
+                                    EventSummary::Key(_, code, val) => {
+                                        let code_u32 = code.code() as u32;
+
+                                        if code == KeyCode::KEY_ESC && val == 1 {
+                                            let now = Instant::now();
+                                            if now.duration_since(last_esc) < Duration::from_millis(1000) {
+                                                esc_count += 1;
+                                            } else {
+                                                esc_count = 1;
+                                            }
+                                            last_esc = now;
+
+                                            if esc_count >= 4 {
+                                                info!("[continuity:input] KERNEL EMERGENCY EXIT triggered for {}", name_c);
+                                                let _ = tx_c.send(InputEvent::EmergencyExit).await;
+                                                return;
+                                            }
+                                        }
+
+                                        let is_mouse = code_u32 >= 272 && code_u32 <= 276;
+                                        if is_mouse {
+                                            if val == 1 {
+                                                let _ = tx_c.send(InputEvent::PointerButton { button: code_u32, state: 1 }).await;
+                                            } else if val == 0 {
+                                                let _ = tx_c.send(InputEvent::PointerButton { button: code_u32, state: 0 }).await;
+                                            }
+                                        } else {
+                                            if val == 1 || val == 2 {
+                                                let _ = tx_c.send(InputEvent::KeyPress { key: code_u32, state: 1 }).await;
+                                            } else if val == 0 {
+                                                let _ = tx_c.send(InputEvent::KeyRelease { key: code_u32 }).await;
+                                            }
+                                        }
+                                    }
+                                    _ => {}
+                                }
                             }
                         }
-                        EventType::KEY => {
-                            let code = ev.code() as u32;
-                            let val = ev.value();
-                            
-                            if code == Key::KEY_ESC.0 as u32 && val == 1 {
-                                let now = Instant::now();
-                                if now.duration_since(last_esc) < Duration::from_millis(1000) {
-                                    esc_count += 1;
-                                } else {
-                                    esc_count = 1;
-                                }
-                                last_esc = now;
-
-                                if esc_count >= 4 {
-                                    info!("[continuity:input] KERNEL EMERGENCY EXIT triggered for {}", name_c);
-                                    let _ = tx_c.send(InputEvent::EmergencyExit).await;
-                                    break;
-                                }
-                            }
-
-                            let is_mouse = code >= 272 && code <= 276;
-                            if is_mouse {
-                                if val == 1 {
-                                    let _ = tx_c.send(InputEvent::PointerButton { button: code, state: 1 }).await;
-                                } else if val == 0 {
-                                    let _ = tx_c.send(InputEvent::PointerButton { button: code, state: 0 }).await;
-                                }
-                            } else {
-                                if val == 1 || val == 2 {
-                                    let _ = tx_c.send(InputEvent::KeyPress { key: code, state: 1 }).await;
-                                } else if val == 0 {
-                                    let _ = tx_c.send(InputEvent::KeyRelease { key: code }).await;
-                                }
-                            }
+                        Ok(Err(e)) => {
+                            warn!("[continuity:input] read error for {}: {}", name_c, e);
+                            break;
                         }
-                        _ => {}
+                        Err(_would_block) => continue,
                     }
                 }
+                // async_fd (and the Device inside) is dropped here → fd closed → grab released
                 info!("[continuity:input] reader thread finished for {}", name_c);
             });
             self.tasks.push(task);
