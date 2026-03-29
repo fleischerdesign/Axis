@@ -1,7 +1,7 @@
 use async_channel::Sender;
 use log::{info, warn};
 use evdev::uinput::VirtualDevice;
-use evdev::{AttributeSet, KeyCode, RelativeAxisCode, EventSummary, KeyEvent, RelativeAxisEvent};
+use evdev::{AttributeSet, KeyCode, RelativeAxisCode, PropType, EventSummary, KeyEvent, RelativeAxisEvent};
 use tokio::task::JoinHandle;
 use std::time::{Instant, Duration};
 use tokio::io::unix::AsyncFd;
@@ -37,23 +37,44 @@ pub trait InputInjection: Send {
 // ── evdev Injection Implementation ──────────────────────────────────────
 
 pub struct WaylandInjection {
-    device: Option<VirtualDevice>,
+    keyboard: Option<VirtualDevice>,
+    pointer: Option<VirtualDevice>,
 }
 
 impl WaylandInjection {
     pub fn new() -> Self {
-        Self { device: None }
+        Self { keyboard: None, pointer: None }
     }
 }
 
 impl InputInjection for WaylandInjection {
     fn start(&mut self) -> Result<(), String> {
-        info!("[continuity:input] creating virtual uinput device");
+        info!("[continuity:input] creating virtual uinput devices");
 
-        let mut keys = AttributeSet::<KeyCode>::new();
+        // Device 1: Virtual Keyboard — all key codes
+        let mut kb_keys = AttributeSet::<KeyCode>::new();
         for i in 0..512u16 {
-            keys.insert(KeyCode::new(i));
+            kb_keys.insert(KeyCode::new(i));
         }
+
+        let keyboard = VirtualDevice::builder()
+            .map_err(|e| e.to_string())?
+            .name("Axis Continuity Virtual Keyboard")
+            .with_keys(&kb_keys)
+            .map_err(|e| e.to_string())?
+            .build()
+            .map_err(|e| format!("failed to build keyboard device: {e}"))?;
+
+        // Device 2: Virtual Pointer — mouse buttons + relative axes + POINTER property
+        // BTN_LEFT+REL_X+REL_Y is the canonical mouse signature libinput uses to classify
+        // a device as a pointer. Without these, libinput may classify it as keyboard
+        // and drop REL events (the 512 key codes confuse the classifier).
+        let mut ptr_keys = AttributeSet::<KeyCode>::new();
+        ptr_keys.insert(KeyCode::BTN_LEFT);
+        ptr_keys.insert(KeyCode::BTN_RIGHT);
+        ptr_keys.insert(KeyCode::BTN_MIDDLE);
+        ptr_keys.insert(KeyCode::BTN_SIDE);
+        ptr_keys.insert(KeyCode::BTN_EXTRA);
 
         let mut rel_axes = AttributeSet::<RelativeAxisCode>::new();
         rel_axes.insert(RelativeAxisCode::REL_X);
@@ -61,49 +82,60 @@ impl InputInjection for WaylandInjection {
         rel_axes.insert(RelativeAxisCode::REL_WHEEL);
         rel_axes.insert(RelativeAxisCode::REL_HWHEEL);
 
-        let device = VirtualDevice::builder()
+        let mut props = AttributeSet::<PropType>::new();
+        props.insert(PropType::POINTER);
+
+        let pointer = VirtualDevice::builder()
             .map_err(|e| e.to_string())?
-            .name("Axis Continuity Virtual Input")
-            .with_keys(&keys)
+            .name("Axis Continuity Virtual Pointer")
+            .with_keys(&ptr_keys)
             .map_err(|e| e.to_string())?
             .with_relative_axes(&rel_axes)
             .map_err(|e| e.to_string())?
+            .with_properties(&props)
+            .map_err(|e| e.to_string())?
             .build()
-            .map_err(|e| format!("failed to build virtual device: {e}"))?;
+            .map_err(|e| format!("failed to build pointer device: {e}"))?;
 
-        self.device = Some(device);
+        self.keyboard = Some(keyboard);
+        self.pointer = Some(pointer);
         Ok(())
     }
 
     fn stop(&mut self) {
-        self.device = None;
+        self.keyboard = None;
+        self.pointer = None;
     }
 
     fn inject(&mut self, msg: &Message) -> Result<(), String> {
         use evdev::InputEvent;
-        let dev = self.device.as_mut().ok_or("injection not started")?;
 
         match msg {
             Message::CursorMove { dx, dy } => {
+                let ptr = self.pointer.as_mut().ok_or("pointer device not started")?;
                 let events = [
                     InputEvent::from(RelativeAxisEvent::new(RelativeAxisCode::REL_X, *dx as i32)),
                     InputEvent::from(RelativeAxisEvent::new(RelativeAxisCode::REL_Y, *dy as i32)),
                 ];
-                dev.emit(&events).map_err(|e| e.to_string())?;
+                ptr.emit(&events).map_err(|e| e.to_string())?;
             }
             Message::KeyPress { key, state } => {
+                let kb = self.keyboard.as_mut().ok_or("keyboard device not started")?;
                 let ev = InputEvent::from(KeyEvent::new(KeyCode::new(*key as u16), *state as i32));
-                dev.emit(&[ev]).map_err(|e| e.to_string())?;
+                kb.emit(&[ev]).map_err(|e| e.to_string())?;
             }
             Message::KeyRelease { key } => {
+                let kb = self.keyboard.as_mut().ok_or("keyboard device not started")?;
                 let ev = InputEvent::from(KeyEvent::new(KeyCode::new(*key as u16), 0));
-                dev.emit(&[ev]).map_err(|e| e.to_string())?;
+                kb.emit(&[ev]).map_err(|e| e.to_string())?;
             }
             Message::PointerButton { button, state } => {
+                let ptr = self.pointer.as_mut().ok_or("pointer device not started")?;
                 let ev = InputEvent::from(KeyEvent::new(KeyCode::new(*button as u16), *state as i32));
-                dev.emit(&[ev]).map_err(|e| e.to_string())?;
+                ptr.emit(&[ev]).map_err(|e| e.to_string())?;
             }
             Message::PointerAxis { dx, dy } => {
+                let ptr = self.pointer.as_mut().ok_or("pointer device not started")?;
                 let mut events = Vec::new();
                 if *dx != 0.0 {
                     events.push(InputEvent::from(RelativeAxisEvent::new(RelativeAxisCode::REL_HWHEEL, *dx as i32)));
@@ -112,7 +144,7 @@ impl InputInjection for WaylandInjection {
                     events.push(InputEvent::from(RelativeAxisEvent::new(RelativeAxisCode::REL_WHEEL, *dy as i32)));
                 }
                 if !events.is_empty() {
-                    dev.emit(&events).map_err(|e| e.to_string())?;
+                    ptr.emit(&events).map_err(|e| e.to_string())?;
                 }
             }
             _ => {}
