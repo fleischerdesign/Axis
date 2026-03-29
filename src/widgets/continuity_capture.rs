@@ -27,7 +27,7 @@ pub struct ContinuityCaptureController {
 }
 
 impl ContinuityCaptureController {
-    const PRESSURE_THRESHOLD: f64 = 100.0; // "Pixels" to push before transition
+    const PRESSURE_THRESHOLD: f64 = 50.0; // Reduced threshold for testing
     const ESCAPE_EXIT_COUNT: u32 = 4;
     const ESCAPE_EXIT_WINDOW: std::time::Duration = std::time::Duration::from_millis(1000);
 
@@ -93,6 +93,8 @@ impl ContinuityCaptureController {
             .application(app)
             .title(format!("Continuity Edge {:?}", side))
             .can_focus(false)
+            .resizable(false)
+            .decorated(false)
             .build();
 
         window.init_layer_shell();
@@ -100,31 +102,23 @@ impl ContinuityCaptureController {
         window.set_anchor(Edge::Top, true);
         window.set_anchor(Edge::Bottom, true);
         window.set_anchor(side, true);
-        window.set_width_request(1);
+        
+        // Give GTK some initial dimensions to avoid size.height > 0 crashes
+        window.set_default_size(2, 500);
+        window.set_width_request(2);
 
-        window.add_css_class("continuity-edge");
+        window.add_css_class("continuity-edge-debug");
         
         let motion = gtk4::EventControllerMotion::new();
-        let ctrl = self.clone();
+        
+        let ctrl_enter = self.clone();
+        motion.connect_enter(move |_, _x, _y| {
+            ctrl_enter.check_transition(side, 20.0);
+        });
+
+        let ctrl_motion = self.clone();
         motion.connect_motion(move |_ctrl, _x, _y| {
-            let mut p = ctrl.pressure.borrow_mut();
-            *p += 10.0; 
-            
-            if *p >= Self::PRESSURE_THRESHOLD {
-                info!("[continuity] transition triggered via {:?}", side);
-                *p = 0.0;
-                
-                let cmd_side = match side {
-                    Edge::Left => Side::Left,
-                    Edge::Right => Side::Right,
-                    Edge::Top => Side::Top,
-                    Edge::Bottom => Side::Bottom,
-                    _ => Side::Left,
-                };
-                
-                *ctrl.entry_side.borrow_mut() = Some(cmd_side);
-                let _ = ctrl.ctx.continuity.tx.try_send(ContinuityCmd::StartSharing(cmd_side));
-            }
+            ctrl_motion.check_transition(side, 5.0);
         });
         
         let ctrl_leave = self.clone();
@@ -134,6 +128,27 @@ impl ContinuityCaptureController {
 
         window.add_controller(motion);
         window
+    }
+
+    fn check_transition(&self, side: Edge, increment: f64) {
+        let mut p = self.pressure.borrow_mut();
+        *p += increment;
+        
+        if *p >= Self::PRESSURE_THRESHOLD {
+            info!("[continuity] transition triggered via {:?}", side);
+            *p = 0.0;
+            
+            let cmd_side = match side {
+                Edge::Left => Side::Left,
+                Edge::Right => Side::Right,
+                Edge::Top => Side::Top,
+                Edge::Bottom => Side::Bottom,
+                _ => Side::Left,
+            };
+            
+            *self.entry_side.borrow_mut() = Some(cmd_side);
+            let _ = self.ctx.continuity.tx.try_send(ContinuityCmd::StartSharing(cmd_side));
+        }
     }
 
     fn create_capture_overlay(self: &Rc<Self>, app: &libadwaita::Application) -> gtk4::Window {
@@ -152,11 +167,12 @@ impl ContinuityCaptureController {
         window.set_exclusive_zone(-1); 
         window.set_keyboard_mode(KeyboardMode::Exclusive);
 
-        // Make cursor invisible
+        // Explicit size for overlay too
+        window.set_default_size(100, 100);
+
         window.set_cursor_from_name(Some("none"));
         window.add_css_class("continuity-overlay");
         
-        // Motion controller for relative mouse movement
         let motion = gtk4::EventControllerMotion::new();
         let ctrl_m = self.clone();
         motion.connect_motion(move |_ctrl, x, y| {
@@ -166,24 +182,9 @@ impl ContinuityCaptureController {
                 let dx = x - lx;
                 let dy = y - ly;
                 
-                // Only send if there is actual movement
                 if dx.abs() > 0.1 || dy.abs() > 0.1 {
                     let msg = protocol::Message::CursorMove { dx, dy };
                     let _ = ctrl_m.ctx.continuity.tx.try_send(ContinuityCmd::SendInput(msg));
-                }
-
-                // Check for exit condition: moving back across the entry edge
-                if let Some(side) = *ctrl_m.entry_side.borrow() {
-                    let window_width = 1920.0; // TODO: get actual window width
-                    match side {
-                        Side::Right if x < 5.0 => {
-                            let _ = ctrl_m.ctx.continuity.tx.try_send(ContinuityCmd::StopSharing);
-                        }
-                        Side::Left if x > (window_width - 5.0) => {
-                            let _ = ctrl_m.ctx.continuity.tx.try_send(ContinuityCmd::StopSharing);
-                        }
-                        _ => {}
-                    }
                 }
             }
             
@@ -191,7 +192,6 @@ impl ContinuityCaptureController {
         });
         window.add_controller(motion);
 
-        // Click / Button controller
         let click = gtk4::GestureClick::new();
         let ctrl_cp = self.clone();
         click.connect_pressed(move |_ctrl, _n, _x, _y| {
@@ -221,11 +221,9 @@ impl ContinuityCaptureController {
         });
         window.add_controller(click);
 
-        // Keyboard controller
         let key = gtk4::EventControllerKey::new();
         let ctrl_k = self.clone();
         key.connect_key_pressed(move |_ctrl, keyval, keycode, _state| {
-            // Emergency exit: 4x Escape
             if keyval == gtk4::gdk::Key::Escape {
                 let mut esc = ctrl_k.escape_counter.borrow_mut();
                 let now = std::time::Instant::now();
@@ -243,10 +241,8 @@ impl ContinuityCaptureController {
                 }
             }
 
-            // Map to protocol::Message::KeyPress
             let msg = protocol::Message::KeyPress { key: keycode - 8, state: 1 };
             let _ = ctrl_k.ctx.continuity.tx.try_send(ContinuityCmd::SendInput(msg));
-            
             gtk4::glib::Propagation::Stop
         });
         

@@ -1054,3 +1054,12 @@ levelbar.osd-level-bar block.empty {
     background: alpha(@card_bg_color, 0.5);
     border-radius: 8px;
 }
+
+/* Continuity */
+.continuity-edge-debug {
+    background-color: rgba(255, 0, 0, 0.3); /* Visible red for debugging */
+}
+
+.continuity-overlay {
+    background-color: rgba(0, 0, 0, 0.01); /* Almost invisible but can intercept events */
+}
