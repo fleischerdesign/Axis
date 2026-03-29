@@ -199,6 +199,9 @@ fn build_ui(app: &libadwaita::Application, start_locked: bool, wallpaper_path: O
     let bar = Bar::new(app, ctx.clone());
     let bar_popup_state = bar.popup_open.clone();
 
+    // Continuity Capture Controller
+    let _continuity_ctrl = crate::widgets::continuity_capture::ContinuityCaptureController::new(app, ctx.clone());
+
     // Wallpaper
     let lockscreen_texture = wallpaper_path
         .as_ref()

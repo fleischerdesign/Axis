@@ -2,6 +2,7 @@ pub mod animations;
 pub mod bar;
 pub mod base;
 pub mod components;
+pub mod continuity_capture;
 pub mod icons;
 mod island;
 pub mod launcher;

@@ -12,6 +12,7 @@ use crate::store::ServiceStore;
 use clipboard::ClipboardSync;
 use input::{InputCapture, InputInjection};
 use connection::{ConnectionEvent, ConnectionProvider};
+pub use protocol::Side;
 use discovery::{DiscoveryEvent, DiscoveryProvider};
 use log::{error, info, warn};
 
@@ -90,6 +91,9 @@ pub enum ContinuityCmd {
     ForceLocal,
     StartDiscovery,
     StopDiscovery,
+    StartSharing(Side),
+    StopSharing,
+    SendInput(protocol::Message),
 }
 
 // ── Service ────────────────────────────────────────────────────────────
@@ -305,8 +309,29 @@ impl ContinuityInner {
                 if self.data.sharing_mode == SharingMode::Sharing {
                     info!("[continuity] forcing cursor back to local");
                     self.data.sharing_mode = SharingMode::Idle;
-                    // TODO: send TransitionCancel message
+                    connection.send_message(protocol::Message::TransitionCancel);
                     self.push();
+                }
+            }
+            ContinuityCmd::StartSharing(side) => {
+                if self.data.active_connection.is_some() && self.data.sharing_mode == SharingMode::Idle {
+                    info!("[continuity] starting sharing via {:?}", side);
+                    self.data.sharing_mode = SharingMode::Sharing;
+                    connection.send_message(protocol::Message::EdgeTransition { side });
+                    self.push();
+                }
+            }
+            ContinuityCmd::StopSharing => {
+                if self.data.sharing_mode == SharingMode::Sharing {
+                    info!("[continuity] stopping sharing");
+                    self.data.sharing_mode = SharingMode::Idle;
+                    connection.send_message(protocol::Message::TransitionCancel);
+                    self.push();
+                }
+            }
+            ContinuityCmd::SendInput(msg) => {
+                if self.data.sharing_mode == SharingMode::Sharing {
+                    connection.send_message(msg);
                 }
             }
         }
@@ -476,6 +501,16 @@ impl ContinuityInner {
                     | protocol::Message::PointerAxis { .. } => {
                         use input::InputInjection;
                         let _ = injection.inject(&msg);
+                    }
+                    protocol::Message::EdgeTransition { side } => {
+                        info!("[continuity] peer started sharing (we are receiving) via {:?}", side);
+                        self.data.sharing_mode = SharingMode::Receiving;
+                        self.push();
+                    }
+                    protocol::Message::TransitionCancel => {
+                        info!("[continuity] peer cancelled sharing");
+                        self.data.sharing_mode = SharingMode::Idle;
+                        self.push();
                     }
                     protocol::Message::Connected => {
                         info!("[continuity] connection established");
