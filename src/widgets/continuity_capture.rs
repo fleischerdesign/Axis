@@ -57,9 +57,9 @@ impl ContinuityCaptureController {
                         Side::Top => Edge::Top,
                         Side::Bottom => Edge::Bottom,
                     };
-                    let w = ctrl_c.create_edge_window(&app_c, side);
+                    let w = ctrl_c.create_edge_window(&app_c, side, data.screen_width, data.screen_height);
                     w.present();
-                    info!("[continuity:edge] presenting edge window for {:?}", side);
+                    info!("[continuity:edge] presenting edge window for {:?}, screen={}x{}", side, data.screen_width, data.screen_height);
                     *edge = Some(w);
                 }
             } else {
@@ -86,7 +86,7 @@ impl ContinuityCaptureController {
         controller
     }
 
-    fn create_edge_window(self: &Rc<Self>, app: &libadwaita::Application, side: Edge) -> gtk4::Window {
+    fn create_edge_window(self: &Rc<Self>, app: &libadwaita::Application, side: Edge, screen_w: i32, screen_h: i32) -> gtk4::Window {
         let window = gtk4::Window::builder()
             .application(app)
             .title("Continuity Edge")
@@ -102,33 +102,19 @@ impl ContinuityCaptureController {
         let container = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
         window.set_child(Some(&container));
 
-        // Log window dimensions once realized
-        let side_dbg = side;
-        window.connect_map(move |w| {
-            info!("[continuity:edge] window mapped, side={:?}, allocated={}x{}", side_dbg, w.allocated_width(), w.allocated_height());
-        });
-
         let motion = gtk4::EventControllerMotion::new();
         let ctrl_c = self.clone();
-        motion.connect_motion(move |ctrl, x, y| {
-            let (width, height) = if let Some(w) = ctrl.widget().and_downcast::<gtk4::Window>() {
-                (w.allocated_width() as f64, w.allocated_height() as f64)
-            } else {
-                (0.0, 0.0)
-            };
+        motion.connect_motion(move |_ctrl, x, y| {
+            let width = screen_w as f64;
+            let height = screen_h as f64;
 
             let at_edge = match side {
                 Edge::Left => x <= 2.0,
-                Edge::Right => width > 0.0 && x >= width - 2.0,
+                Edge::Right => x >= width - 2.0,
                 Edge::Top => y <= 2.0,
-                Edge::Bottom => height > 0.0 && y >= height - 2.0,
+                Edge::Bottom => y >= height - 2.0,
                 _ => false,
             };
-
-            // Log every 50th motion event to avoid spam
-            if (x as i64) % 200 < 5 {
-                info!("[continuity:edge] motion {:?}: x={:.0} y={:.0} size={}x{} at_edge={} pressure={:.0}", side, x, y, width, height, at_edge, *ctrl_c.pressure.borrow());
-            }
 
             if at_edge {
                 ctrl_c.check_transition(side, 5.0);
@@ -137,7 +123,6 @@ impl ContinuityCaptureController {
 
         let ctrl_leave = self.clone();
         motion.connect_leave(move |_| {
-            info!("[continuity:edge] cursor left edge window {:?}", side);
             *ctrl_leave.pressure.borrow_mut() = 0.0;
         });
 
