@@ -113,9 +113,12 @@ impl InputInjection for WaylandInjection {
         match msg {
             Message::CursorMove { dx, dy } => {
                 let ptr = self.pointer.as_mut().ok_or("pointer device not started")?;
+                let dx_i = *dx as i32;
+                let dy_i = *dy as i32;
+                info!("[continuity:inject] CursorMove dx={} dy={} (i32: dx={} dy={})", dx, dy, dx_i, dy_i);
                 let events = [
-                    InputEvent::from(RelativeAxisEvent::new(RelativeAxisCode::REL_X, *dx as i32)),
-                    InputEvent::from(RelativeAxisEvent::new(RelativeAxisCode::REL_Y, *dy as i32)),
+                    InputEvent::from(RelativeAxisEvent::new(RelativeAxisCode::REL_X, dx_i)),
+                    InputEvent::from(RelativeAxisEvent::new(RelativeAxisCode::REL_Y, dy_i)),
                 ];
                 ptr.emit(&events).map_err(|e| e.to_string())?;
             }
@@ -189,7 +192,9 @@ impl InputCapture for EvdevCapture {
                 continue;
             }
 
-            info!("[continuity:input] grabbing device: {} ({})", name, path.display());
+            let has_abs = device.supported_absolute_axes().map(|a| !a.iter().next().is_none()).unwrap_or(false);
+            info!("[continuity:input] grabbing device: {} ({}) [rel_x={} enter={} btn_left={} has_abs={}]",
+                name, path.display(), has_rel_x, has_enter, has_mouse_btn, has_abs);
 
             if let Err(e) = device.grab() {
                 warn!("[continuity:input] could not grab {}: {}", name, e);
@@ -233,6 +238,7 @@ impl InputCapture for EvdevCapture {
                             for ev in events {
                                 match ev.destructure() {
                                     EventSummary::RelativeAxis(_, axis, val) => {
+                                        info!("[continuity:capture] {} REL event: axis={:?} val={}", name_c, axis, val);
                                         if axis == RelativeAxisCode::REL_X {
                                             let _ = tx_c.send(InputEvent::CursorMove { dx: val as f64, dy: 0.0 }).await;
                                         } else if axis == RelativeAxisCode::REL_Y {
@@ -242,6 +248,9 @@ impl InputCapture for EvdevCapture {
                                         } else if axis == RelativeAxisCode::REL_HWHEEL {
                                             let _ = tx_c.send(InputEvent::PointerAxis { dx: val as f64, dy: 0.0 }).await;
                                         }
+                                    }
+                                    EventSummary::AbsoluteAxis(_, axis, val) => {
+                                        info!("[continuity:capture] {} ABS event: axis={:?} val={}", name_c, axis, val);
                                     }
                                     EventSummary::Key(_, code, val) => {
                                         let code_u32 = code.code() as u32;
