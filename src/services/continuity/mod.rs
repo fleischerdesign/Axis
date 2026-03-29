@@ -164,7 +164,7 @@ pub enum ContinuityCmd {
     /// Start sharing cursor to peer. `edge_pos` is the position along the
     /// local edge (absolute screen coords) where the cursor crossed.
     StartSharing(Side, f64),
-    StopSharing,
+    StopSharing(f64),
     SendInput(protocol::Message),
     SetPeerArrangement(PeerArrangement),
     SetScreenSize(i32, i32),
@@ -484,7 +484,7 @@ impl ContinuityInner {
                     self.push();
                 }
             }
-            ContinuityCmd::StopSharing => {
+            ContinuityCmd::StopSharing(edge_pos) => {
                 if self.data.sharing_mode == SharingMode::Sharing || self.data.sharing_mode == SharingMode::Pending {
                     info!("[continuity] stopping sharing");
                     self.data.sharing_mode = SharingMode::Idle;
@@ -496,14 +496,8 @@ impl ContinuityInner {
                 } else if self.data.sharing_mode == SharingMode::Receiving {
                     // User wants to take over cursor from Receiving mode.
                     // The edge is on our peer_arrangement.side (where the peer is).
-                    // We don't know the exact cursor position (we're the receiver),
-                    // so we send a best-guess edge_pos (screen center along the edge).
                     let side = self.data.peer_arrangement.side;
-                    let edge_len = self.data.peer_arrangement.local_edge_length(
-                        self.data.screen_width, self.data.screen_height,
-                    );
-                    let edge_pos = edge_len as f64 / 2.0;
-                    info!("[continuity] requesting switch to Sharing via {:?}", side);
+                    info!("[continuity] requesting switch back to sharing via {:?}, edge_pos={:.0}", side, edge_pos);
                     self.data.sharing_mode = SharingMode::PendingSwitch;
                     self.data.receiving_entry_side = None;
                     connection.send_message(protocol::Message::SwitchTransition { side, edge_pos });

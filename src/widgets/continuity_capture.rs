@@ -16,6 +16,16 @@ pub struct ContinuityCaptureController {
 
 impl ContinuityCaptureController {
     pub fn new(app: &libadwaita::Application, ctx: AppContext) -> Rc<Self> {
+        // Report actual screen size to the service
+        if let Some(display) = gtk4::gdk::Display::default() {
+            let monitors = display.monitors();
+            if let Some(monitor) = monitors.item(0).and_then(|m| m.downcast::<gtk4::gdk::Monitor>().ok()) {
+                let geometry = monitor.geometry();
+                info!("[continuity:edge] detected monitor size: {}x{}", geometry.width(), geometry.height());
+                let _ = ctx.continuity.tx.try_send(ContinuityCmd::SetScreenSize(geometry.width(), geometry.height()));
+            }
+        }
+
         let controller = Rc::new(Self {
             ctx: ctx.clone(),
             edge_window: RefCell::new(None),
@@ -186,7 +196,7 @@ impl ContinuityCaptureController {
             };
 
             let cmd = if is_receiving {
-                ContinuityCmd::StopSharing
+                ContinuityCmd::StopSharing(edge_pos)
             } else {
                 ContinuityCmd::StartSharing(side, edge_pos)
             };
