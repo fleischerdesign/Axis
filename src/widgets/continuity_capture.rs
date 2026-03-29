@@ -123,18 +123,31 @@ impl ContinuityCaptureController {
             _ => {}
         }
 
-        // Box as child — red debug strip, 2px wide
-        let edge_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+        // DrawingArea as child — layer-shell respects its content size in the
+        // unconstrained direction. Unlike Box, DrawingArea has a concrete natural size.
+        let edge_widget = gtk4::DrawingArea::new();
         if side == Edge::Left || side == Edge::Right {
-            edge_box.set_size_request(2, -1);
+            edge_widget.set_content_width(2);
+            edge_widget.set_content_height(screen_h);
         } else {
-            edge_box.set_size_request(-1, 2);
+            edge_widget.set_content_width(screen_w);
+            edge_widget.set_content_height(2);
         }
-        edge_box.add_css_class("continuity-edge-debug");
-        window.set_child(Some(&edge_box));
+        edge_widget.add_css_class("continuity-edge-debug");
+        edge_widget.set_draw_func(|_, cr, w, h| {
+            // Fill with debug red
+            cr.set_source_rgba(1.0, 0.0, 0.0, 0.3);
+            cr.rectangle(0.0, 0.0, w as f64, h as f64);
+            let _ = cr.fill();
+        });
+        window.set_child(Some(&edge_widget));
 
         let motion = gtk4::EventControllerMotion::new();
         let ctrl_c = self.clone();
+        motion.connect_enter(move |_, x, y| {
+            info!("[continuity:edge] cursor ENTERED edge {:?} at x={:.0} y={:.0}", side, x, y);
+        });
+        let ctrl_c2 = self.clone();
         motion.connect_motion(move |_ctrl, x, y| {
             let width = screen_w as f64;
             let height = screen_h as f64;
@@ -148,7 +161,7 @@ impl ContinuityCaptureController {
             };
 
             if at_edge {
-                ctrl_c.check_transition(side, 5.0);
+                ctrl_c2.check_transition(side, 5.0);
             }
         });
 
@@ -157,7 +170,7 @@ impl ContinuityCaptureController {
             *ctrl_leave.pressure.borrow_mut() = 0.0;
         });
 
-        edge_box.add_controller(motion);
+        edge_widget.add_controller(motion);
         window
     }
 
