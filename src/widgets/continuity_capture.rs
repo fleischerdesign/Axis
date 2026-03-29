@@ -36,26 +36,12 @@ impl ContinuityCaptureController {
             last_trigger: RefCell::new(Instant::now()),
         });
 
-        // Detect screen size from Niri output mode (physical pixels)
+        // Screen size is detected by the continuity service from Niri outputs.
+        // The capture controller does NOT re-query to avoid picking a different
+        // monitor on multi-monitor setups (e.g. 2560x1440 vs 1920x1080).
+
         let ctrl_c = controller.clone();
         let app_c = app.clone();
-        if let Ok(mut sock) = niri_ipc::socket::Socket::connect() {
-            if let Ok(Ok(niri_ipc::Response::Outputs(outputs))) = sock.send(niri_ipc::Request::Outputs) {
-                for output in outputs.values() {
-                    if let Some(mode_idx) = output.current_mode {
-                        if let Some(mode) = output.modes.get(mode_idx) {
-                            let w = mode.width as i32;
-                            let h = mode.height as i32;
-                            if w > 0 && h > 0 {
-                                let _ = ctrl_c.ctx.continuity.tx.try_send(ContinuityCmd::SetScreenSize(w, h));
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
         ctx.continuity.store.subscribe(move |data| {
             let mut edge = ctrl_c.edge_window.borrow_mut();
             let mut overlay = ctrl_c.overlay.borrow_mut();

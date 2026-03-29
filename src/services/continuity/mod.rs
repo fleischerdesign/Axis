@@ -700,7 +700,7 @@ impl ContinuityInner {
                             self.entry_side = None;
                             // Reset cooldown timer to prevent immediate re-transition
                             self.last_transition_at = Instant::now();
-                            
+                            capture.stop();
                             connection.send_message(protocol::Message::TransitionCancel);
                             self.push();
                             return;
