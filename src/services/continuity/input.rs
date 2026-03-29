@@ -1,9 +1,8 @@
 use async_channel::Sender;
-use log::{error, info, warn};
+use log::{info, warn};
 use evdev::uinput::VirtualDeviceBuilder;
 use evdev::uinput::VirtualDevice;
-use evdev::{AttributeSet, Key, InputEvent as EvEvent, EventType, RelativeAxisType, Device};
-use std::sync::Arc;
+use evdev::{AttributeSet, Key, InputEvent as EvEvent, EventType, RelativeAxisType};
 use tokio::task::JoinHandle;
 
 use super::protocol::Message;
@@ -134,30 +133,41 @@ impl EvdevCapture {
 impl InputCapture for EvdevCapture {
     fn start(&mut self, tx: Sender<InputEvent>) -> Result<(), String> {
         self.stop();
-        info!("[continuity:input] starting evdev capture (EVIOCGRAB)");
+        info!("[continuity:input] scanning for input devices to grab...");
 
         let devices = evdev::enumerate();
+        let mut grabbed_any = false;
+
         for (path, mut device) in devices {
+            let name = device.name().unwrap_or("Unknown").to_string();
+            
             // Skip our own virtual device
-            if let Some(name) = device.name() {
-                if name.contains("Axis Continuity") { continue; }
-            }
+            if name.contains("Axis Continuity") { continue; }
 
-            // We only want keyboards and mice/pointing devices
-            let is_keyboard = device.supported_keys().map(|k| k.contains(Key::KEY_ENTER)).unwrap_or(false);
-            let is_mouse = device.supported_relative_axes().map(|a| a.contains(RelativeAxisType::REL_X)).unwrap_or(false);
+            // Refined detection: 
+            // - Keyboards usually have KEY_ENTER
+            // - Mice usually have REL_X and BTN_LEFT (272)
+            let has_rel_x = device.supported_relative_axes().map(|a| a.contains(RelativeAxisType::REL_X)).unwrap_or(false);
+            let has_enter = device.supported_keys().map(|k| k.contains(Key::KEY_ENTER)).unwrap_or(false);
+            let has_mouse_btn = device.supported_keys().map(|k| k.contains(Key::BTN_LEFT)).unwrap_or(false);
 
-            if !is_keyboard && !is_mouse { continue; }
-
-            info!("[continuity:input] grabbing device: {:?} ({})", device.name(), path.display());
-
-            if let Err(e) = device.grab() {
-                warn!("[continuity:input] failed to grab {:?}: {}", path, e);
+            if !has_rel_x && !has_enter && !has_mouse_btn {
                 continue;
             }
 
+            info!("[continuity:input] grabbing device: {} ({})", name, path.display());
+
+            if let Err(e) = device.grab() {
+                warn!("[continuity:input] could not grab {}: {} (check group permissions)", name, e);
+                continue;
+            }
+
+            grabbed_any = true;
             let tx_c = tx.clone();
+            let name_c = name.clone();
+            
             let task = tokio::task::spawn_blocking(move || {
+                info!("[continuity:input] reader thread started for {}", name_c);
                 loop {
                     match device.fetch_events() {
                         Ok(events) => {
@@ -169,23 +179,31 @@ impl InputCapture for EvdevCapture {
                                             let _ = tx_c.send_blocking(InputEvent::CursorMove { dx: ev.value() as f64, dy: 0.0 });
                                         } else if axis == RelativeAxisType::REL_Y {
                                             let _ = tx_c.send_blocking(InputEvent::CursorMove { dx: 0.0, dy: ev.value() as f64 });
+                                        } else if axis == RelativeAxisType::REL_WHEEL {
+                                            let _ = tx_c.send_blocking(InputEvent::PointerAxis { dx: 0.0, dy: ev.value() as f64 });
+                                        } else if axis == RelativeAxisType::REL_HWHEEL {
+                                            let _ = tx_c.send_blocking(InputEvent::PointerAxis { dx: ev.value() as f64, dy: 0.0 });
                                         }
                                     }
                                     EventType::KEY => {
-                                        let key = ev.code() as u32;
-                                        let is_mouse_button = key >= 272 && key <= 276; // BTN_MOUSE, BTN_RIGHT, BTN_MIDDLE, etc.
+                                        let code = ev.code() as u32;
+                                        let val = ev.value();
                                         
-                                        if is_mouse_button {
-                                            if ev.value() == 1 {
-                                                let _ = tx_c.send_blocking(InputEvent::PointerButton { button: key, state: 1 });
-                                            } else if ev.value() == 0 {
-                                                let _ = tx_c.send_blocking(InputEvent::PointerButton { button: key, state: 0 });
+                                        // 272-276 are standard mouse buttons
+                                        let is_mouse = code >= 272 && code <= 276;
+                                        
+                                        if is_mouse {
+                                            if val == 1 {
+                                                let _ = tx_c.send_blocking(InputEvent::PointerButton { button: code, state: 1 });
+                                            } else if val == 0 {
+                                                let _ = tx_c.send_blocking(InputEvent::PointerButton { button: code, state: 0 });
                                             }
                                         } else {
-                                            if ev.value() == 1 || ev.value() == 2 { // Pressed or Repeat
-                                                let _ = tx_c.send_blocking(InputEvent::KeyPress { key, state: 1 });
-                                            } else if ev.value() == 0 { // Released
-                                                let _ = tx_c.send_blocking(InputEvent::KeyRelease { key });
+                                            // Keyboard: 1=pressed, 2=repeat, 0=released
+                                            if val == 1 || val == 2 {
+                                                let _ = tx_c.send_blocking(InputEvent::KeyPress { key: code, state: 1 });
+                                            } else if val == 0 {
+                                                let _ = tx_c.send_blocking(InputEvent::KeyRelease { key: code });
                                             }
                                         }
                                     }
@@ -194,7 +212,7 @@ impl InputCapture for EvdevCapture {
                             }
                         }
                         Err(e) => {
-                            warn!("[continuity:input] device disconnected or error: {}", e);
+                            warn!("[continuity:input] reader error for {}: {}", name_c, e);
                             break;
                         }
                     }
@@ -203,14 +221,20 @@ impl InputCapture for EvdevCapture {
             self.tasks.push(task);
         }
 
+        if !grabbed_any {
+            return Err("no suitable input devices found to grab".into());
+        }
+
         Ok(())
     }
 
     fn stop(&mut self) {
-        for task in self.tasks.drain(..) {
-            task.abort();
+        if !self.tasks.is_empty() {
+            info!("[continuity:input] releasing {} grabbed devices", self.tasks.len());
+            for task in self.tasks.drain(..) {
+                task.abort();
+            }
         }
-        // Note: Grabs are automatically released by the kernel when the file descriptor is closed (on drop)
     }
 
     fn is_capturing(&self) -> bool {

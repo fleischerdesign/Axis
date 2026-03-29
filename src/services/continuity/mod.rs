@@ -183,7 +183,7 @@ impl ContinuityInner {
                     self.handle_discovery_event(event).await;
                 }
                 Ok(event) = conn_rx.recv() => {
-                    self.handle_connection_event(event, &mut connection, &mut clipboard, &mut injection, &clipboard_tx).await;
+                    self.handle_connection_event(event, &mut connection, &mut clipboard, &mut injection, &mut capture, &clipboard_tx).await;
                 }
                 Ok(event) = clipboard_rx.recv() => {
                     self.handle_clipboard_event(event, &connection).await;
@@ -192,7 +192,7 @@ impl ContinuityInner {
                     self.handle_input_capture_event(event, &connection).await;
                 }
                 _ = heartbeat.tick(), if is_connected => {
-                    self.handle_heartbeat(&mut connection);
+                    self.handle_heartbeat(&mut connection, &mut capture);
                 }
             }
         }
@@ -369,11 +369,12 @@ impl ContinuityInner {
         }
     }
 
-    fn handle_heartbeat(&mut self, connection: &mut connection::TcpConnectionProvider) {
+    fn handle_heartbeat(&mut self, connection: &mut connection::TcpConnectionProvider, capture: &mut input::EvdevCapture) {
         if let Some(last) = self.last_message_at {
             if last.elapsed().as_secs() > CONNECTION_TIMEOUT_SECS {
                 warn!("[continuity] peer timed out (no message for {CONNECTION_TIMEOUT_SECS}s)");
                 connection.disconnect_active();
+                capture.stop();
                 self.data.active_connection = None;
                 self.data.sharing_mode = SharingMode::Idle;
                 self.last_message_at = None;
@@ -423,6 +424,7 @@ impl ContinuityInner {
         connection: &mut connection::TcpConnectionProvider,
         clipboard: &mut clipboard::WaylandClipboard,
         injection: &mut input::WaylandInjection,
+        capture: &mut input::EvdevCapture,
         clipboard_tx: &Sender<clipboard::ClipboardEvent>,
     ) {
         match event {
@@ -452,6 +454,7 @@ impl ContinuityInner {
                 self.last_message_at = None;
                 clipboard.stop_monitoring();
                 injection.stop();
+                capture.stop();
                 self.push();
             }
             ConnectionEvent::MessageReceived(msg) => {
@@ -557,6 +560,7 @@ impl ContinuityInner {
                         self.last_message_at = None;
                         clipboard.stop_monitoring();
                         injection.stop();
+                        capture.stop();
                         self.push();
                     }
                     other => {
