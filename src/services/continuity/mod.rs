@@ -172,6 +172,19 @@ impl ContinuityInner {
         let mut capture = input::EvdevCapture::new();
         let mut heartbeat = interval(Duration::from_secs(HEARTBEAT_INTERVAL_SECS));
 
+        // Get initial screen dimensions from Niri
+        if let Ok(mut sock) = niri_ipc::socket::Socket::connect() {
+            if let Ok(Ok(niri_ipc::Response::Outputs(outputs))) = sock.send(niri_ipc::Request::Outputs) {
+                if let Some(output) = outputs.values().next() {
+                    if let Some((w, h)) = output.physical_size {
+                        info!("[continuity] detected primary output: {}x{}", w, h);
+                        self.data.screen_width = w as i32;
+                        self.data.screen_height = h as i32;
+                    }
+                }
+            }
+        }
+
         info!("[continuity] service started, device: {}", self.data.device_name);
 
         loop {
@@ -341,12 +354,14 @@ impl ContinuityInner {
                     self.entry_side = Some(side);
                     self.last_transition_at = Instant::now();
                     
-                    // Start cursor at the edge we just crossed
+                    // Start cursor at the edge we just crossed, but with a buffer
+                    // to prevent immediate return.
+                    let buffer = 100.0;
                     self.virtual_pos = match side {
-                        Side::Left => (self.data.screen_width as f64 - 10.0, self.data.screen_height as f64 / 2.0),
-                        Side::Right => (10.0, self.data.screen_height as f64 / 2.0),
-                        Side::Top => (self.data.screen_width as f64 / 2.0, self.data.screen_height as f64 - 10.0),
-                        Side::Bottom => (self.data.screen_width as f64 / 2.0, 10.0),
+                        Side::Left => (self.data.screen_width as f64 - buffer, self.data.screen_height as f64 / 2.0),
+                        Side::Right => (buffer, self.data.screen_height as f64 / 2.0),
+                        Side::Top => (self.data.screen_width as f64 / 2.0, self.data.screen_height as f64 - buffer),
+                        Side::Bottom => (self.data.screen_width as f64 / 2.0, buffer),
                     };
 
                     if let Err(e) = capture.start(input_tx.clone()) {
@@ -642,7 +657,13 @@ impl ContinuityInner {
                         if should_return {
                             info!("[continuity] return transition triggered via movement");
                             self.data.sharing_mode = SharingMode::Idle;
-                            // Note: capture.stop() will be handled by the subscriber or next cmd
+                            self.last_transition_at = Instant::now();
+                            
+                            // Warp cursor away from edge to prevent re-triggering.
+                            // Since MoveCursorRelative is tricky, we can use 
+                            // a simple Niri action if available or just rely on the cooldown.
+                            // For now, let's use the cooldown and StopSharing logic.
+
                             connection.send_message(protocol::Message::TransitionCancel);
                             self.push();
                             return;
