@@ -1056,8 +1056,32 @@ levelbar.osd-level-bar block.empty {
 }
 
 /* Continuity */
-.continuity-edge-debug {
-    background-color: rgba(255, 0, 0, 0.3); /* Visible red for debugging */
+.edge-strip-left {
+    background-color: rgba(255, 0, 0, 0.3);
+    min-width: 2px;
+    min-height: 100%;
+    margin-right: calc(100% - 2px);
+}
+
+.edge-strip-right {
+    background-color: rgba(255, 0, 0, 0.3);
+    min-width: 2px;
+    min-height: 100%;
+    margin-left: calc(100% - 2px);
+}
+
+.edge-strip-top {
+    background-color: rgba(255, 0, 0, 0.3);
+    min-height: 2px;
+    min-width: 100%;
+    margin-bottom: calc(100% - 2px);
+}
+
+.edge-strip-bottom {
+    background-color: rgba(255, 0, 0, 0.3);
+    min-height: 2px;
+    min-width: 100%;
+    margin-top: calc(100% - 2px);
 }
 
 .continuity-overlay {
