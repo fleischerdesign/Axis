@@ -2,6 +2,7 @@ use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, Layer, LayerShell, KeyboardMode};
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::time::Instant;
 use crate::app_context::AppContext;
 use crate::services::continuity::{ContinuityCmd, SharingMode, Side};
 use log::info;
@@ -20,6 +21,7 @@ pub struct ContinuityCaptureController {
     edge_window: RefCell<Option<gtk4::Window>>,
     overlay: RefCell<Option<gtk4::Window>>,
     pressure: RefCell<f64>,
+    last_trigger: RefCell<Instant>,
 }
 
 impl ContinuityCaptureController {
@@ -31,6 +33,7 @@ impl ContinuityCaptureController {
             edge_window: RefCell::new(None),
             overlay: RefCell::new(None),
             pressure: RefCell::new(0.0),
+            last_trigger: RefCell::new(Instant::now()),
         });
 
         let ctrl_c = controller.clone();
@@ -147,6 +150,12 @@ impl ContinuityCaptureController {
         *p += increment;
         
         if *p >= Self::PRESSURE_THRESHOLD {
+            let mut last = self.last_trigger.borrow_mut();
+            if last.elapsed() < std::time::Duration::from_secs(1) {
+                return;
+            }
+            *last = std::time::Instant::now();
+
             info!("[continuity] transition triggered via {:?}", side);
             *p = 0.0;
             
