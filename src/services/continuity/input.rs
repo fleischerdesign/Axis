@@ -1,7 +1,7 @@
 use async_channel::Sender;
 use log::{info, warn};
 use evdev::uinput::VirtualDevice;
-use evdev::{AttributeSet, KeyCode, RelativeAxisCode, PropType, EventSummary, KeyEvent, RelativeAxisEvent};
+use evdev::{AttributeSet, KeyCode, RelativeAxisCode, EventSummary, KeyEvent, RelativeAxisEvent};
 use tokio::task::JoinHandle;
 use std::time::{Instant, Duration};
 use tokio::io::unix::AsyncFd;
@@ -61,17 +61,12 @@ impl InputInjection for WaylandInjection {
         rel_axes.insert(RelativeAxisCode::REL_WHEEL);
         rel_axes.insert(RelativeAxisCode::REL_HWHEEL);
 
-        let mut props = AttributeSet::<PropType>::new();
-        props.insert(PropType::POINTER);
-
         let device = VirtualDevice::builder()
             .map_err(|e| e.to_string())?
             .name("Axis Continuity Virtual Input")
             .with_keys(&keys)
             .map_err(|e| e.to_string())?
             .with_relative_axes(&rel_axes)
-            .map_err(|e| e.to_string())?
-            .with_properties(&props)
             .map_err(|e| e.to_string())?
             .build()
             .map_err(|e| format!("failed to build virtual device: {e}"))?;
