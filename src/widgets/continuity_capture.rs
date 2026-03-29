@@ -39,6 +39,18 @@ impl ContinuityCaptureController {
             let mut edge = ctrl_c.edge_window.borrow_mut();
             let mut overlay = ctrl_c.overlay.borrow_mut();
 
+            // Detect screen size from actual window/monitor if possible
+            if let Some(w) = edge.as_ref().or(overlay.as_ref()) {
+                if let Some(surface) = w.surface() {
+                    if let Some(monitor) = gtk4::prelude::WidgetExt::display(w).monitor_at_surface(&surface) {
+                        let geom: gtk4::gdk::Rectangle = monitor.geometry();
+                        if geom.width() != data.screen_width || geom.height() != data.screen_height {
+                            let _ = ctrl_c.ctx.continuity.tx.try_send(ContinuityCmd::SetScreenSize(geom.width(), geom.height()));
+                        }
+                    }
+                }
+            }
+
             // Edge windows are active when connected and idle
             let show_edges = data.enabled && data.active_connection.is_some() && data.sharing_mode == SharingMode::Idle;
             

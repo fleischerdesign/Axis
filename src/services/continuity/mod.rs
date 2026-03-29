@@ -101,6 +101,7 @@ pub enum ContinuityCmd {
     StopSharing,
     SendInput(protocol::Message),
     SetPreferredEdge(Side),
+    SetScreenSize(i32, i32),
 }
 
 // ── Service ────────────────────────────────────────────────────────────
@@ -171,19 +172,6 @@ impl ContinuityInner {
         let mut injection = input::WaylandInjection::new();
         let mut capture = input::EvdevCapture::new();
         let mut heartbeat = interval(Duration::from_secs(HEARTBEAT_INTERVAL_SECS));
-
-        // Get initial screen dimensions from Niri
-        if let Ok(mut sock) = niri_ipc::socket::Socket::connect() {
-            if let Ok(Ok(niri_ipc::Response::Outputs(outputs))) = sock.send(niri_ipc::Request::Outputs) {
-                if let Some(output) = outputs.values().next() {
-                    if let Some((w, h)) = output.physical_size {
-                        info!("[continuity] detected primary output: {}x{}", w, h);
-                        self.data.screen_width = w as i32;
-                        self.data.screen_height = h as i32;
-                    }
-                }
-            }
-        }
 
         info!("[continuity] service started, device: {}", self.data.device_name);
 
@@ -392,6 +380,12 @@ impl ContinuityInner {
             }
             ContinuityCmd::SetPreferredEdge(side) => {
                 self.data.preferred_edge = side;
+                self.push();
+            }
+            ContinuityCmd::SetScreenSize(w, h) => {
+                info!("[continuity] screen size set to {}x{}", w, h);
+                self.data.screen_width = w;
+                self.data.screen_height = h;
                 self.push();
             }
         }
@@ -657,13 +651,9 @@ impl ContinuityInner {
                         if should_return {
                             info!("[continuity] return transition triggered via movement");
                             self.data.sharing_mode = SharingMode::Idle;
-                            self.last_transition_at = Instant::now();
+                            // 3 second cooldown specifically for returning, to give time to move mouse away
+                            self.last_transition_at = Instant::now() + Duration::from_secs(1); 
                             
-                            // Warp cursor away from edge to prevent re-triggering.
-                            // Since MoveCursorRelative is tricky, we can use 
-                            // a simple Niri action if available or just rely on the cooldown.
-                            // For now, let's use the cooldown and StopSharing logic.
-
                             connection.send_message(protocol::Message::TransitionCancel);
                             self.push();
                             return;
