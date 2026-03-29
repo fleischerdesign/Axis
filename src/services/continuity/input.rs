@@ -79,9 +79,16 @@ impl InputInjection for WaylandInjection {
         rel_axes.insert(RelativeAxisCode::REL_WHEEL);
         rel_axes.insert(RelativeAxisCode::REL_HWHEEL);
 
-        use evdev::uinput::AbsSetup;
-        let x_setup = AbsSetup::new(AbsoluteAxisCode::ABS_X, 0, 32767, 0, 0, 0);
-        let y_setup = AbsSetup::new(AbsoluteAxisCode::ABS_Y, 0, 32767, 0, 0, 0);
+        use evdev::{UinputAbsSetup, AbsInfo};
+        
+        let x_setup = UinputAbsSetup::new(
+            AbsoluteAxisCode::ABS_X,
+            AbsInfo::new(0, 0, 32767, 0, 0, 0)
+        );
+        let y_setup = UinputAbsSetup::new(
+            AbsoluteAxisCode::ABS_Y,
+            AbsInfo::new(0, 0, 32767, 0, 0, 0)
+        );
 
         let mut props = AttributeSet::<PropType>::new();
         props.insert(PropType::POINTER);
