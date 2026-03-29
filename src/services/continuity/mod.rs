@@ -5,7 +5,7 @@ pub mod input;
 pub mod protocol;
 
 use async_channel::{bounded, Sender};
-use std::time::Instant;
+use std::time::{Instant, Duration};
 
 use super::Service;
 use crate::store::ServiceStore;
@@ -135,6 +135,7 @@ struct ContinuityInner {
     pending_peer: Option<(String, String)>,
     virtual_pos: (f64, f64),
     entry_side: Option<Side>,
+    last_transition_at: Instant,
 }
 
 impl ContinuityInner {
@@ -147,6 +148,7 @@ impl ContinuityInner {
             pending_peer: None,
             virtual_pos: (0.0, 0.0),
             entry_side: None,
+            last_transition_at: Instant::now() - Duration::from_secs(10),
         }
     }
 
@@ -329,9 +331,15 @@ impl ContinuityInner {
             }
             ContinuityCmd::StartSharing(side) => {
                 if self.data.active_connection.is_some() && self.data.sharing_mode == SharingMode::Idle {
+                    // 2 second cooldown to prevent jitter
+                    if self.last_transition_at.elapsed() < Duration::from_secs(2) {
+                        return;
+                    }
+
                     info!("[continuity] starting sharing via {:?}", side);
                     self.data.sharing_mode = SharingMode::Sharing;
                     self.entry_side = Some(side);
+                    self.last_transition_at = Instant::now();
                     
                     // Start cursor at the edge we just crossed
                     self.virtual_pos = match side {
@@ -376,8 +384,16 @@ impl ContinuityInner {
 
     fn handle_heartbeat(&mut self, connection: &mut connection::TcpConnectionProvider, capture: &mut input::EvdevCapture) {
         if let Some(last) = self.last_message_at {
-            if last.elapsed().as_secs() > CONNECTION_TIMEOUT_SECS {
-                warn!("[continuity] peer timed out (no message for {CONNECTION_TIMEOUT_SECS}s)");
+            // Use much shorter timeout if we are currently being controlled (Receiving),
+            // so the user isn't "trapped" if the other side crashes.
+            let timeout = if self.data.sharing_mode == SharingMode::Receiving {
+                Duration::from_secs(5)
+            } else {
+                Duration::from_secs(CONNECTION_TIMEOUT_SECS)
+            };
+
+            if last.elapsed() > timeout {
+                warn!("[continuity] peer timed out (no message for {:?})", timeout);
                 connection.disconnect_active();
                 capture.stop();
                 self.data.active_connection = None;

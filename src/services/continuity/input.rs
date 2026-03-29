@@ -142,9 +142,10 @@ impl InputCapture for EvdevCapture {
         for (path, mut device) in devices {
             found_count += 1;
             let name = device.name().unwrap_or("Unknown").to_string();
+            let name_lower = name.to_lowercase();
             
-            if name.contains("Axis Continuity") { 
-                debug!("[continuity:input] skipping own virtual device: {}", name);
+            if name_lower.contains("axis continuity") || name_lower.contains("passthrough") || name_lower.contains("virtual") { 
+                debug!("[continuity:input] skipping virtual/passthrough device: {}", name);
                 continue; 
             }
 
