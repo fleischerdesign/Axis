@@ -531,15 +531,25 @@ impl ContinuityInner {
                     };
                     info!("[continuity] switching to Receiving via {:?}, edge_pos={:.0}", side, edge_pos);
                     capture.stop();
+
                     self.data.sharing_mode = SharingMode::Receiving;
                     self.data.receiving_entry_side = Some(side);
                     self.entry_side = None;
                     self.pending_transition_side = None;
+
                     // Start injection for receiving input from peer
                     use input::InputInjection;
                     if let Err(e) = injection.start() {
                         error!("[continuity] failed to start injection for switch: {e}");
                     }
+
+                    // Warp the local physical cursor to where it "re-enters" our screen.
+                    // When we switch to receiving, the peer is on 'side'.
+                    // So we re-enter from 'side'.
+                    if let Err(e) = injection.warp(side, edge_pos) {
+                        error!("[continuity] failed to warp cursor for switch: {e}");
+                    }
+
                     connection.send_message(protocol::Message::SwitchConfirm { side, edge_pos });
                     self.push();
                 }
@@ -818,22 +828,24 @@ impl ContinuityInner {
                     }
                     protocol::Message::SwitchConfirm { side, edge_pos } => {
                         if self.data.sharing_mode == SharingMode::PendingSwitch {
-                            info!("[continuity] switch confirmed, sharing via {:?}, edge_pos={:.0}", side, edge_pos);
+                            info!("[continuity] switch confirmed, taking over as Sharer via {:?}, edge_pos={:.0}", side, edge_pos);
 
-                            // In a switch, we were the Sharer and now the Peer takes over.
-                            // We (the former Sharer) become the Receiver.
-                            let local_side = side.opposite();
-                            let mapped_pos = self.data.peer_arrangement.remote_to_local_edge(edge_pos);
+                            self.data.sharing_mode = SharingMode::Sharing;
+                            self.entry_side = Some(side);
+                            self.data.receiving_entry_side = None;
 
-                            self.data.sharing_mode = SharingMode::Receiving;
-                            self.data.receiving_entry_side = Some(local_side);
-                            self.entry_side = None;
+                            // The old sharer sent us their virtual_pos along the edge (in remote coords).
+                            // Map it to our coordinate system for init.
+                            let mapped_pos = self.data.peer_arrangement.local_to_remote_edge(edge_pos);
+                            self.init_virtual_pos(side, mapped_pos);
+                            info!("[continuity] virtual_pos initialized to ({:.0}, {:.0})", self.virtual_pos.0, self.virtual_pos.1);
 
-                            // Warping the physical cursor on our screen
-                            if let Err(e) = injection.warp(local_side, mapped_pos) {
-                                error!("[continuity] failed to warp cursor after switch: {e}");
+                            if let Err(e) = capture.start(input_tx.clone()) {
+                                error!("[continuity] failed to start input capture after switch: {e}");
+                                self.data.sharing_mode = SharingMode::Idle;
+                                self.entry_side = None;
+                                connection.send_message(protocol::Message::TransitionCancel);
                             }
-
                             self.push();
                         }
                     }

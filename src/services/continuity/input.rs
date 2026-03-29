@@ -6,7 +6,7 @@ use tokio::task::JoinHandle;
 use std::time::{Instant, Duration};
 use tokio::io::unix::AsyncFd;
 
-use super::protocol::Message;
+use super::protocol::{Message, Side};
 
 // ── Input Events ───────────────────────────────────────────────────────
 
