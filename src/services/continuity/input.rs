@@ -1,7 +1,7 @@
 use async_channel::Sender;
 use log::{info, warn};
 use evdev::uinput::VirtualDevice;
-use evdev::{AttributeSet, KeyCode, RelativeAxisCode, PropType, EventSummary, KeyEvent, RelativeAxisEvent};
+use evdev::{AttributeSet, AbsoluteAxisCode, KeyCode, RelativeAxisCode, PropType, EventSummary, KeyEvent, RelativeAxisEvent};
 use tokio::task::JoinHandle;
 use std::time::{Instant, Duration};
 use tokio::io::unix::AsyncFd;
@@ -115,11 +115,16 @@ impl InputInjection for WaylandInjection {
                 let ptr = self.pointer.as_mut().ok_or("pointer device not started")?;
                 let dx_i = *dx as i32;
                 let dy_i = *dy as i32;
-                info!("[continuity:inject] CursorMove dx={} dy={} (i32: dx={} dy={})", dx, dy, dx_i, dy_i);
-                let events = [
-                    InputEvent::from(RelativeAxisEvent::new(RelativeAxisCode::REL_X, dx_i)),
-                    InputEvent::from(RelativeAxisEvent::new(RelativeAxisCode::REL_Y, dy_i)),
-                ];
+                if dx_i == 0 && dy_i == 0 {
+                    return Ok(());
+                }
+                let mut events = Vec::with_capacity(2);
+                if dx_i != 0 {
+                    events.push(InputEvent::from(RelativeAxisEvent::new(RelativeAxisCode::REL_X, dx_i)));
+                }
+                if dy_i != 0 {
+                    events.push(InputEvent::from(RelativeAxisEvent::new(RelativeAxisCode::REL_Y, dy_i)));
+                }
                 ptr.emit(&events).map_err(|e| e.to_string())?;
             }
             Message::KeyPress { key, state } => {
@@ -156,6 +161,42 @@ impl InputInjection for WaylandInjection {
     }
 }
 
+// ── Touchpad ABS→REL Tracker ──────────────────────────────────────────
+
+/// Converts absolute multitouch events (ABS_MT_POSITION_X/Y) from touchpads
+/// into relative deltas, since the kernel delivers raw ABS coordinates from
+/// touchpads while mice deliver REL. libinput normally does this conversion,
+/// but we bypass it by grabbing the device directly.
+struct TouchpadTracker {
+    last_x: Option<i32>,
+    last_y: Option<i32>,
+}
+
+impl TouchpadTracker {
+    fn new() -> Self {
+        Self { last_x: None, last_y: None }
+    }
+
+    /// Update position for one axis, return the delta if we had a previous position.
+    fn update_x(&mut self, val: i32) -> Option<i32> {
+        let delta = self.last_x.map(|prev| val - prev);
+        self.last_x = Some(val);
+        delta
+    }
+
+    fn update_y(&mut self, val: i32) -> Option<i32> {
+        let delta = self.last_y.map(|prev| val - prev);
+        self.last_y = Some(val);
+        delta
+    }
+
+    /// Finger lifted — reset tracker so next touch starts fresh.
+    fn reset(&mut self) {
+        self.last_x = None;
+        self.last_y = None;
+    }
+}
+
 // ── evdev Capture Implementation ───────────────────────────────────────
 
 pub struct EvdevCapture {
@@ -168,6 +209,13 @@ impl EvdevCapture {
     }
 }
 
+/// Sensitivity multiplier for converting raw touchpad ABS deltas to pointer deltas.
+/// Raw touchpad coordinates span a large range (e.g. 0–4700) so deltas of 1–5 units
+/// are common. This factor scales them to feel like normal mouse movement.
+/// A typical touchpad width of ~3500 units mapped to ~1920px means ~0.55px per unit,
+/// but we want some acceleration so we use a higher factor.
+const TOUCHPAD_SENSITIVITY: f64 = 0.75;
+
 impl InputCapture for EvdevCapture {
     fn start(&mut self, tx: Sender<InputEvent>) -> Result<(), String> {
         self.stop();
@@ -175,6 +223,24 @@ impl InputCapture for EvdevCapture {
 
         let devices = evdev::enumerate();
         let mut grabbed_any = false;
+        // Track touchpad base names so we can skip their legacy "Mouse" companion devices
+        let mut touchpad_bases: Vec<String> = Vec::new();
+
+        // First pass: identify touchpads
+        let devices: Vec<_> = devices.collect();
+        for (_path, device) in &devices {
+            let name = device.name().unwrap_or("Unknown").to_string();
+            let has_mt = device.supported_absolute_axes()
+                .map(|a| a.contains(AbsoluteAxisCode::ABS_MT_POSITION_X))
+                .unwrap_or(false);
+            if has_mt {
+                // Extract the base name (e.g. "ELAN06FA:00 04F3:31BE" from "ELAN06FA:00 04F3:31BE Touchpad")
+                // The legacy Mouse device is typically named "ELAN06FA:00 04F3:31BE Mouse"
+                if let Some(base) = name.strip_suffix(" Touchpad").or_else(|| name.strip_suffix(" Keyboard")) {
+                    touchpad_bases.push(base.to_string());
+                }
+            }
+        }
 
         for (path, mut device) in devices {
             let name = device.name().unwrap_or("Unknown").to_string();
@@ -184,17 +250,32 @@ impl InputCapture for EvdevCapture {
                 continue;
             }
 
+            // Skip the legacy "Mouse" companion device for touchpads — grabbing the touchpad
+            // itself stops it from producing events, so this device is useless and grabbing
+            // it just wastes a reader task.
+            if name.ends_with(" Mouse") {
+                let base = name.strip_suffix(" Mouse").unwrap_or("");
+                if touchpad_bases.iter().any(|tb| tb == base) {
+                    info!("[continuity:input] skipping legacy touchpad mouse: {} ({})", name, path.display());
+                    continue;
+                }
+            }
+
             let has_rel_x = device.supported_relative_axes().map(|a| a.contains(RelativeAxisCode::REL_X)).unwrap_or(false);
             let has_enter = device.supported_keys().map(|k| k.contains(KeyCode::KEY_ENTER)).unwrap_or(false);
             let has_mouse_btn = device.supported_keys().map(|k| k.contains(KeyCode::BTN_LEFT)).unwrap_or(false);
+            let has_mt = device.supported_absolute_axes()
+                .map(|a| a.contains(AbsoluteAxisCode::ABS_MT_POSITION_X))
+                .unwrap_or(false);
 
             if !has_rel_x && !has_enter && !has_mouse_btn {
                 continue;
             }
 
-            let has_abs = device.supported_absolute_axes().map(|a| !a.iter().next().is_none()).unwrap_or(false);
-            info!("[continuity:input] grabbing device: {} ({}) [rel_x={} enter={} btn_left={} has_abs={}]",
-                name, path.display(), has_rel_x, has_enter, has_mouse_btn, has_abs);
+            let is_touchpad = has_mt && has_mouse_btn;
+
+            info!("[continuity:input] grabbing device: {} ({}) [rel_x={} touchpad={} keyboard={}]",
+                name, path.display(), has_rel_x, is_touchpad, has_enter && !has_mouse_btn);
 
             if let Err(e) = device.grab() {
                 warn!("[continuity:input] could not grab {}: {}", name, e);
@@ -222,6 +303,8 @@ impl InputCapture for EvdevCapture {
             let task = tokio::spawn(async move {
                 let mut esc_count = 0;
                 let mut last_esc = Instant::now();
+                // Touchpad ABS→REL conversion state
+                let mut tp_tracker = if is_touchpad { Some(TouchpadTracker::new()) } else { None };
 
                 loop {
                     let mut guard = match async_fd.readable_mut().await {
@@ -238,7 +321,6 @@ impl InputCapture for EvdevCapture {
                             for ev in events {
                                 match ev.destructure() {
                                     EventSummary::RelativeAxis(_, axis, val) => {
-                                        info!("[continuity:capture] {} REL event: axis={:?} val={}", name_c, axis, val);
                                         if axis == RelativeAxisCode::REL_X {
                                             let _ = tx_c.send(InputEvent::CursorMove { dx: val as f64, dy: 0.0 }).await;
                                         } else if axis == RelativeAxisCode::REL_Y {
@@ -250,7 +332,22 @@ impl InputCapture for EvdevCapture {
                                         }
                                     }
                                     EventSummary::AbsoluteAxis(_, axis, val) => {
-                                        info!("[continuity:capture] {} ABS event: axis={:?} val={}", name_c, axis, val);
+                                        if let Some(tracker) = tp_tracker.as_mut() {
+                                            if axis == AbsoluteAxisCode::ABS_MT_POSITION_X {
+                                                if let Some(dx) = tracker.update_x(val) {
+                                                    let scaled = dx as f64 * TOUCHPAD_SENSITIVITY;
+                                                    let _ = tx_c.send(InputEvent::CursorMove { dx: scaled, dy: 0.0 }).await;
+                                                }
+                                            } else if axis == AbsoluteAxisCode::ABS_MT_POSITION_Y {
+                                                if let Some(dy) = tracker.update_y(val) {
+                                                    let scaled = dy as f64 * TOUCHPAD_SENSITIVITY;
+                                                    let _ = tx_c.send(InputEvent::CursorMove { dx: 0.0, dy: scaled }).await;
+                                                }
+                                            } else if axis == AbsoluteAxisCode::ABS_MT_TRACKING_ID && val == -1 {
+                                                // Finger lifted
+                                                tracker.reset();
+                                            }
+                                        }
                                     }
                                     EventSummary::Key(_, code, val) => {
                                         let code_u32 = code.code() as u32;
