@@ -8,6 +8,7 @@ use crate::services::bluetooth::{BluetoothCmd, BluetoothData};
 use crate::services::calendar::CalendarRegistry;
 use crate::services::continuity::{ContinuityCmd, ContinuityData};
 use crate::services::dnd::{DndCmd, DndData};
+use crate::services::settings::{SettingsCmd, SettingsData};
 use crate::services::kdeconnect::{KdeConnectCmd, KdeConnectData};
 use crate::services::launcher::{LauncherCmd, LauncherData};
 use crate::services::network::{NetworkCmd, NetworkData};
@@ -48,5 +49,6 @@ pub struct AppContext {
     pub clock: ReadOnlyHandle<DateTime<Local>>,
     pub task_registry: Arc<Mutex<TaskRegistry>>,
     pub continuity: ServiceHandle<ContinuityData, ContinuityCmd>,
+    pub settings: ServiceHandle<SettingsData, SettingsCmd>,
     pub calendar_registry: Arc<Mutex<CalendarRegistry>>,
 }

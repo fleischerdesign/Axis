@@ -223,7 +223,7 @@ impl MainPage {
             open_continuity();
         });
         ToggleTile::wire_service(&continuity_tile, &ctx.continuity,
-            |_on| ContinuityCmd::ToggleEnabled,
+            |on| ContinuityCmd::SetEnabled(on),
             |d| d.enabled,
             || {},
             |tile, data| {

@@ -176,7 +176,7 @@ impl Default for ContinuityData {
 // ── Commands ───────────────────────────────────────────────────────────
 
 pub enum ContinuityCmd {
-    ToggleEnabled,
+    SetEnabled(bool),
     ConnectToPeer(String),
     ConfirmPin,
     RejectPin,
@@ -359,9 +359,12 @@ impl ContinuityInner {
         clipboard_tx: &Sender<clipboard::ClipboardEvent>,
     ) {
         match cmd {
-            ContinuityCmd::ToggleEnabled => {
-                self.data.enabled = !self.data.enabled;
-                if self.data.enabled {
+            ContinuityCmd::SetEnabled(on) => {
+                if self.data.enabled == on {
+                    return;
+                }
+                self.data.enabled = on;
+                if on {
                     info!("[continuity] enabled");
                     if let Err(e) = discovery.register(&self.data.device_name, CONTINUITY_PORT) {
                         error!("[continuity] discovery register failed: {e}");

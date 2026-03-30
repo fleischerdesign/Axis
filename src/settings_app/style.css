@@ -1,0 +1,9 @@
+/* Axis Settings App Styles */
+
+.monospace {
+    font-family: monospace;
+}
+
+.navigation-sidebar row {
+    padding: 8px 12px;
+}

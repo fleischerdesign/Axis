@@ -24,6 +24,7 @@ use crate::services::power::PowerService;
 use crate::services::launcher::LauncherService;
 use crate::services::ipc::IpcService;
 use crate::services::notifications::NotificationService;
+use crate::services::settings::SettingsService;
 use crate::store::{ReadOnlyHandle, ServiceHandle};
 use crate::widgets::{Bar, QuickSettingsPopup, WorkspacePopup, LauncherPopup, CalendarPopup, NotificationToastManager, osd::OsdManager};
 use crate::widgets::lock_screen::LockScreen;
@@ -107,6 +108,9 @@ fn build_ui(app: &libadwaita::Application, start_locked: bool, wallpaper_path: O
     libadwaita::StyleManager::default().set_color_scheme(libadwaita::ColorScheme::PreferDark);
 
     let ctx = setup_services();
+
+    // Bidirectional Config ↔ Service sync bridge
+    bridge_settings(&ctx);
 
     // Bluetooth pairing — reactive via store subscription (no polling)
     {
@@ -268,6 +272,65 @@ fn build_ui(app: &libadwaita::Application, start_locked: bool, wallpaper_path: O
         }
     });
 
+    // --- SETTINGS D-BUS SERVER ---
+    {
+        use std::sync::{Arc, Mutex};
+
+        let settings_config = Arc::new(Mutex::new(ctx.settings.store.get().config));
+
+        // Notification channel: GTK store subscriber → D-Bus server (signal emitter)
+        let (notify_tx, notify_rx) = async_channel::unbounded::<()>();
+
+        // Bridge: GTK store updates → shared config cache + notify D-Bus server
+        let cache = settings_config.clone();
+        ctx.settings.store.subscribe(move |data| {
+            *cache.lock().unwrap() = data.config.clone();
+            let _ = notify_tx.send(());
+        });
+
+        let settings_tx = ctx.settings.tx.clone();
+        tokio::spawn(async move {
+            use zbus::connection::Builder;
+            let server = crate::services::settings::dbus::SettingsDbusServer::new(
+                settings_tx,
+                settings_config.clone(),
+            );
+            let conn_res = async {
+                let builder = Builder::session()?;
+                let builder = builder.name("org.axis.Shell")?;
+                let builder = builder.serve_at("/org/axis/Shell/Settings", server)?;
+                builder.build().await
+            }
+            .await;
+
+            match conn_res {
+                Ok(conn) => {
+                    log::info!("[settings] D-Bus Interface 'org.axis.Shell.Settings' registered");
+                    // Listen for config changes and emit D-Bus signal
+                    while let Ok(()) = notify_rx.recv().await {
+                        let json = serde_json::to_string(&*settings_config.lock().unwrap())
+                            .unwrap_or_default();
+                        let iface = conn
+                            .object_server()
+                            .interface::<_, crate::services::settings::dbus::SettingsDbusServer>(
+                                "/org/axis/Shell/Settings",
+                            )
+                            .await;
+                        if let Ok(iface) = iface {
+                            let _ = crate::services::settings::dbus::SettingsDbusServer::settings_changed(
+                                iface.signal_emitter(),
+                                "all",
+                                &json,
+                            )
+                            .await;
+                        }
+                    }
+                }
+                Err(e) => log::error!("[settings] Failed to register D-Bus interface: {:?}", e),
+            }
+        });
+    }
+
     // --- CLICK HANDLER ---
     setup_click_handler(bar.launcher_island(), shell_ctrl.clone(), "launcher");
     setup_click_handler(bar.status_island(), shell_ctrl.clone(), "qs");
@@ -416,8 +479,37 @@ fn setup_services() -> AppContext {
         power:        spawn_readonly::<PowerService>(),
         niri:         spawn_readonly::<NiriService>(),
         continuity:    spawn_service::<ContinuityService>(),
+        settings:      spawn_service::<SettingsService>(),
         clock:        spawn_readonly::<ClockService>(),
         task_registry: Arc::new(Mutex::new(TaskRegistry::new())),
         calendar_registry: Arc::new(Mutex::new(CalendarRegistry::new())),
     }
+}
+
+fn bridge_settings(ctx: &AppContext) {
+    use crate::services::settings::sync;
+
+    sync::wire_dnd_sync(
+        &ctx.settings.store, &ctx.dnd.store,
+        &ctx.settings.tx, &ctx.dnd.tx,
+    );
+
+    sync::wire_airplane_sync(
+        &ctx.settings.store, &ctx.airplane.store,
+        &ctx.settings.tx, &ctx.airplane.tx,
+    );
+
+    sync::wire_bluetooth_sync(
+        &ctx.settings.store, &ctx.bluetooth.store,
+        &ctx.settings.tx, &ctx.bluetooth.tx,
+    );
+
+    sync::wire_nightlight_config_sync(
+        &ctx.settings.store, &ctx.nightlight.tx,
+    );
+
+    sync::wire_continuity_sync(
+        &ctx.settings.store, &ctx.continuity.store,
+        &ctx.settings.tx, &ctx.continuity.tx,
+    );
 }
