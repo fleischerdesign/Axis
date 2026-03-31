@@ -57,51 +57,16 @@ impl Service for SettingsService {
         let suppress_reload = Arc::new(AtomicBool::new(false));
         let suppress_for_save = suppress_reload.clone();
 
-        // Shared config for D-Bus server and signal emission
-        let settings_config = Arc::new(std::sync::Mutex::new(ConfigManager::load()));
-
-        // cmd_tx is moved into the thread; return a fresh clone from outside
-        let cmd_tx_out = cmd_tx.clone();
-
         thread::spawn(move || {
-            let rt = tokio::runtime::Runtime::new()
-                .expect("Failed to create tokio runtime for SettingsService");
-
             let mut config = ConfigManager::load();
             info!("[settings] Config loaded from {}", ConfigManager::config_path().display());
 
             let initial = SettingsData { config: config.clone() };
             let _ = data_tx.send_blocking(initial);
 
-            // Sync initial config to shared state
-            *settings_config.lock().unwrap() = config.clone();
-
             // Start file watcher (sends Reload on external changes)
             watcher::ConfigWatcher::spawn(watcher_tx, suppress_reload);
 
-            // Spawn D-Bus server on the tokio runtime (runs on worker threads)
-            let dbus_config = settings_config.clone();
-            let dbus_cmd_tx = cmd_tx.clone();
-            rt.spawn(async move {
-                use zbus::connection::Builder;
-                let server = dbus::SettingsDbusServer::new(dbus_cmd_tx, dbus_config);
-                match Builder::session()?
-                    .name("org.axis.Shell")?
-                    .serve_at("/org/axis/Shell/Settings", server)?
-                    .build()
-                    .await
-                {
-                    Ok(_conn) => {
-                        info!("[settings] D-Bus Interface 'org.axis.Shell.Settings' registered");
-                        // Keep connection alive — runs forever
-                        std::future::pending::<()>().await;
-                    }
-                    Err(e) => log::error!("[settings] Failed to register D-Bus interface: {:?}", e),
-                }
-                Ok::<(), zbus::Error>(())
-            });
-
-            // Main service loop: handle commands, save config, emit D-Bus signals
             loop {
                 match cmd_rx.recv_blocking() {
                     Ok(cmd) => {
@@ -109,31 +74,7 @@ impl Service for SettingsService {
                         if changed {
                             suppress_for_save.store(true, Ordering::SeqCst);
                             ConfigManager::save(&config);
-                            *settings_config.lock().unwrap() = config.clone();
                             let _ = data_tx.send_blocking(SettingsData { config: config.clone() });
-
-                            // Emit D-Bus SettingsChanged signal via the runtime
-                            let sc = settings_config.clone();
-                            rt.block_on(async move {
-                                let json = serde_json::to_string(&*sc.lock().unwrap())
-                                    .unwrap_or_default();
-                                // We need a connection to emit — get it from the object server
-                                // Use a temporary proxy to find the registered interface
-                                if let Ok(conn) = zbus::Connection::session().await {
-                                    let iface = conn.object_server()
-                                        .interface::<_, dbus::SettingsDbusServer>(
-                                            "/org/axis/Shell/Settings",
-                                        )
-                                        .await;
-                                    if let Ok(iface) = iface {
-                                        let _ = dbus::SettingsDbusServer::settings_changed(
-                                            iface.signal_emitter(),
-                                            "all",
-                                            &json,
-                                        ).await;
-                                    }
-                                }
-                            });
                         }
                     }
                     Err(_) => break,
@@ -143,7 +84,7 @@ impl Service for SettingsService {
 
         (
             ServiceStore::new(data_rx, SettingsData { config: ConfigManager::load() }),
-            cmd_tx_out,
+            cmd_tx,
         )
     }
 }

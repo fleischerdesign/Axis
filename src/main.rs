@@ -272,6 +272,63 @@ fn build_ui(app: &libadwaita::Application, start_locked: bool, wallpaper_path: O
         }
     });
 
+    // --- SETTINGS D-BUS SERVER ---
+    // Must run on the SAME tokio runtime as IPC (main thread), otherwise the
+    // bus name "org.axis.Shell" can't be shared between connections.
+    {
+        use std::sync::{Arc, Mutex};
+
+        let settings_config = Arc::new(Mutex::new(ctx.settings.store.get().config));
+        let (notify_tx, notify_rx) = async_channel::unbounded::<()>();
+
+        let cache = settings_config.clone();
+        ctx.settings.store.subscribe(move |data| {
+            *cache.lock().unwrap() = data.config.clone();
+            let _ = notify_tx.send(());
+        });
+
+        let settings_tx = ctx.settings.tx.clone();
+        tokio::spawn(async move {
+            use zbus::connection::Builder;
+            let server = crate::services::settings::dbus::SettingsDbusServer::new(
+                settings_tx,
+                settings_config.clone(),
+            );
+            let conn_res = async {
+                let builder = Builder::session()?;
+                let builder = builder.name("org.axis.Shell")?;
+                let builder = builder.serve_at("/org/axis/Shell/Settings", server)?;
+                builder.build().await
+            }
+            .await;
+
+            match conn_res {
+                Ok(conn) => {
+                    log::info!("[settings] D-Bus Interface 'org.axis.Shell.Settings' registered");
+                    while let Ok(()) = notify_rx.recv().await {
+                        let json = serde_json::to_string(&*settings_config.lock().unwrap())
+                            .unwrap_or_default();
+                        let iface = conn
+                            .object_server()
+                            .interface::<_, crate::services::settings::dbus::SettingsDbusServer>(
+                                "/org/axis/Shell/Settings",
+                            )
+                            .await;
+                        if let Ok(iface) = iface {
+                            let _ = crate::services::settings::dbus::SettingsDbusServer::settings_changed(
+                                iface.signal_emitter(),
+                                "all",
+                                &json,
+                            )
+                            .await;
+                        }
+                    }
+                }
+                Err(e) => log::error!("[settings] Failed to register D-Bus interface: {:?}", e),
+            }
+        });
+    }
+
     // --- CLICK HANDLER ---
     setup_click_handler(bar.launcher_island(), shell_ctrl.clone(), "launcher");
     setup_click_handler(bar.status_island(), shell_ctrl.clone(), "qs");
