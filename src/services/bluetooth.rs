@@ -417,9 +417,22 @@ impl Service for BluetoothService {
                             }
                             BluetoothCmd::TogglePower(on) => {
                                 info!("[bluetooth] Power toggled: {}", if on { "on" } else { "off" });
-                                if let Err(e) = adapter_proxy.set_powered(on).await {
-                                    error!("[bluetooth] Failed to toggle power: {e}");
+                                for attempt in 0..5 {
+                                    match adapter_proxy.set_powered(on).await {
+                                        Ok(()) => break,
+                                        Err(e) if e.to_string().contains("Busy") => {
+                                            error!("[bluetooth] Power toggle busy (attempt {}/5), retrying", attempt + 1);
+                                            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                                        }
+                                        Err(e) => {
+                                            error!("[bluetooth] Failed to toggle power: {e}");
+                                            break;
+                                        }
+                                    }
                                 }
+                                // Do NOT re-fetch and push data here — BlueZ will emit
+                                // PropertiesChanged which the adapter watcher already handles.
+                                // Manually pushing would trigger the sync bridge feedback loop.
                                 if !on { is_discovering = false; }
                             }
                             BluetoothCmd::Scan => {

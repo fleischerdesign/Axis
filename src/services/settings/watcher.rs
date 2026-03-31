@@ -35,6 +35,7 @@ impl ConfigWatcher {
 
                         // Suppress if SettingsService just wrote the file
                         if suppress_reload.swap(false, Ordering::SeqCst) {
+                            log::debug!("[config-watcher] Suppressed reload (axis own save)");
                             return;
                         }
 
