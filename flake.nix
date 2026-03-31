@@ -22,6 +22,9 @@
         craneLib = crane.mkLib pkgs;
 
         commonArgs = {
+          pname = "axis";
+          version = "0.1.0";
+
           src = lib.cleanSourceWith {
             src = ./.;
             filter =
