@@ -1,5 +1,5 @@
 use crate::constants::REVEALER_TRANSITION_MS;
-use crate::store::ReactiveBool;
+use crate::store::Store;
 use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 use std::time::Duration;
@@ -8,13 +8,13 @@ use std::time::Duration;
 pub struct PopupBase {
     pub window: gtk4::Window,
     pub revealer: gtk4::Revealer,
-    pub is_open: ReactiveBool,
+    pub is_open: Store<bool>,
 }
 
 impl PopupBase {
     /// General constructor. `anchor_right` for right-anchored popups.
     pub fn new(app: &libadwaita::Application, title: &str, anchor_right: bool) -> Self {
-        let is_open = ReactiveBool::new(false);
+        let is_open = Store::new(false);
 
         let window = gtk4::Window::builder()
             .application(app)
@@ -54,7 +54,7 @@ impl PopupBase {
 
     /// Centered popup (no left/right anchor).
     pub fn new_centered(app: &libadwaita::Application, title: &str) -> Self {
-        let is_open = ReactiveBool::new(false);
+        let is_open = Store::new(false);
 
         let window = gtk4::Window::builder()
             .application(app)

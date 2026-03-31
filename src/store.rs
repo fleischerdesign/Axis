@@ -164,46 +164,10 @@ impl<T: Clone + PartialEq + 'static> Clone for Store<T> {
     }
 }
 
-/// A lightweight reactive boolean that notifies listeners on change.
-/// Replaces scattered `Rc<RefCell<bool>>` patterns with a unified API.
-#[derive(Clone, Default)]
-pub struct ReactiveBool {
-    inner: Rc<RefCell<bool>>,
-    listeners: Rc<RefCell<Vec<Box<dyn Fn(bool)>>>>,
-}
-
-impl ReactiveBool {
-    pub fn new(initial: bool) -> Self {
-        Self {
-            inner: Rc::new(RefCell::new(initial)),
-            listeners: Rc::new(RefCell::new(Vec::new())),
-        }
-    }
-
-    pub fn get(&self) -> bool {
-        *self.inner.borrow()
-    }
-
-    pub fn set(&self, val: bool) {
-        let mut data = self.inner.borrow_mut();
-        if *data != val {
-            *data = val;
-            drop(data);
-            let listeners = std::mem::take(&mut *self.listeners.borrow_mut());
-            for listener in &listeners {
-                listener(val);
-            }
-            *self.listeners.borrow_mut() = listeners;
-        }
-    }
-
+impl Store<bool> {
     pub fn toggle(&self) {
         let current = self.get();
         self.set(!current);
     }
-
-    pub fn subscribe(&self, f: impl Fn(bool) + 'static) {
-        f(self.get());
-        self.listeners.borrow_mut().push(Box::new(f));
-    }
 }
+

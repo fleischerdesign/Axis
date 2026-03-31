@@ -1,4 +1,4 @@
-use crate::store::ReactiveBool;
+use crate::store::Store;
 use crate::widgets::base::PopupBase;
 use gtk4::prelude::*;
 use log::debug;
@@ -41,12 +41,12 @@ pub trait PopupExt {
 
 pub struct ShellController {
     popups: RefCell<Vec<Rc<dyn PopupExt>>>,
-    bar_popup_state: ReactiveBool,
+    bar_popup_state: Store<bool>,
     on_change: Rc<dyn Fn()>,
 }
 
 impl ShellController {
-    pub fn new(bar_popup_state: ReactiveBool, on_change: impl Fn() + 'static) -> Self {
+    pub fn new(bar_popup_state: Store<bool>, on_change: impl Fn() + 'static) -> Self {
         Self {
             popups: RefCell::new(Vec::new()),
             bar_popup_state,

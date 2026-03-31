@@ -23,7 +23,11 @@ impl SettingsPage for ShortcutsPage {
             .description("Configure global keyboard shortcuts")
             .build();
 
-        for (label, default_val, field) in [
+        // Collect widget references for on_change reactivity
+        let mut shortcut_labels: Vec<gtk4::Label> = Vec::new();
+        let mut shortcut_entries: Vec<gtk4::Entry> = Vec::new();
+
+        for (label, _default_val, field) in [
             ("Open Launcher", "<Super>space", "launcher"),
             ("Open Quick Settings", "<Super>s", "quick_settings"),
             ("Open Workspaces", "<Super>w", "workspaces"),
@@ -34,7 +38,7 @@ impl SettingsPage for ShortcutsPage {
                 "quick_settings" => &config.shortcuts.quick_settings,
                 "workspaces" => &config.shortcuts.workspaces,
                 "lock" => &config.shortcuts.lock,
-                _ => default_val,
+                _ => _default_val,
             };
 
             let row = libadwaita::ActionRow::builder()
@@ -77,7 +81,6 @@ impl SettingsPage for ShortcutsPage {
             let proxy_c = proxy.clone();
             let updating_c = updating.clone();
             let shortcut_label_c = shortcut_label.clone();
-            let _entry_c = entry.clone();
             let field = field.to_string();
             entry.connect_activate(move |e| {
                 if updating_c.get() { return; }
@@ -115,6 +118,9 @@ impl SettingsPage for ShortcutsPage {
             });
             entry.add_controller(key_controller);
 
+            shortcut_labels.push(shortcut_label);
+            shortcut_entries.push(entry);
+
             group.add(&row);
         }
 
@@ -138,6 +144,35 @@ impl SettingsPage for ShortcutsPage {
 
         let page = libadwaita::PreferencesPage::new();
         page.add(&group);
+
+        // Reactive: update widgets on external config changes
+        let updating_c = updating.clone();
+        let proxy_c = proxy.clone();
+        proxy.on_change(move || {
+            let cfg = proxy_c.config();
+            updating_c.set(true);
+
+            let values = [
+                cfg.shortcuts.launcher.as_str(),
+                cfg.shortcuts.quick_settings.as_str(),
+                cfg.shortcuts.workspaces.as_str(),
+                cfg.shortcuts.lock.as_str(),
+            ];
+
+            for (i, val) in values.iter().enumerate() {
+                if let Some(label) = shortcut_labels.get(i) {
+                    label.set_text(val);
+                    label.set_visible(true);
+                }
+                if let Some(entry) = shortcut_entries.get(i) {
+                    entry.set_text(val);
+                    entry.set_visible(false);
+                }
+            }
+
+            updating_c.set(false);
+        });
+
         page.into()
     }
 }

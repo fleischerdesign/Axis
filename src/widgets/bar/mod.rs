@@ -5,7 +5,7 @@ pub mod tray;
 
 use crate::app_context::AppContext;
 use crate::constants::{BAR_HEIGHT, BAR_HIDE_DELAY_MS, BAR_PEEK_PX};
-use crate::store::ReactiveBool;
+use crate::store::Store;
 use crate::widgets::animations::SlideAnimator;
 use center::BarCenter;
 use launcher::BarLauncher;
@@ -22,25 +22,25 @@ use std::time::Duration;
 #[derive(Clone)]
 pub struct Bar {
     pub window: gtk4::ApplicationWindow,
-    pub popup_open: ReactiveBool,
+    pub popup_open: Store<bool>,
     launcher: gtk4::Box,
     status: gtk4::Box,
     ws: gtk4::Box,
     clock: gtk4::Box,
     vol_icon: gtk4::Image,
-    is_visible: ReactiveBool,
+    is_visible: Store<bool>,
     hide_timeout: Rc<RefCell<Option<glib::SourceId>>>,
     anim_source: Rc<RefCell<Option<glib::SourceId>>>,
-    is_hovered: ReactiveBool,
+    is_hovered: Store<bool>,
 }
 
 impl Bar {
     pub fn new(app: &libadwaita::Application, ctx: AppContext) -> Self {
-        let is_visible = ReactiveBool::new(false);
+        let is_visible = Store::new(false);
         let hide_timeout = Rc::new(RefCell::new(None));
         let anim_source = Rc::new(RefCell::new(None));
-        let popup_open = ReactiveBool::new(false);
-        let is_hovered = ReactiveBool::new(false);
+        let popup_open = Store::new(false);
+        let is_hovered = Store::new(false);
 
         let window = gtk4::ApplicationWindow::builder()
             .application(app)

@@ -128,6 +128,8 @@ impl SettingsPage for BarPage {
             .description("Toggle visibility of bar sections")
             .build();
 
+        let mut island_rows: Vec<(String, libadwaita::SwitchRow)> = Vec::new();
+
         for (label, field) in [
             ("Launcher", "launcher"),
             ("Clock", "clock"),
@@ -147,6 +149,7 @@ impl SettingsPage for BarPage {
             let proxy_c = proxy.clone();
             let updating_c = updating.clone();
             let field = field.to_string();
+            let field_for_vec = field.clone();
             row.connect_active_notify(move |r| {
                 if updating_c.get() { return; }
                 let mut cfg = proxy_c.config().bar;
@@ -163,6 +166,7 @@ impl SettingsPage for BarPage {
                     p.update_cache_bar(cfg);
                 });
             });
+            island_rows.push((field_for_vec, row.clone()));
             islands_group.add(&row);
         }
 
@@ -171,13 +175,43 @@ impl SettingsPage for BarPage {
         page.add(&islands_group);
 
         // Reactive: update widgets on external config changes
+        let pos_bottom_c = pos_bottom.clone();
+        let pos_top_c = pos_top.clone();
         let autohide_row_c = autohide_row.clone();
+        let layer_row_c = layer_row.clone();
         let updating_c = updating.clone();
         let proxy_c = proxy.clone();
         proxy.on_change(move || {
             let cfg = proxy_c.config();
             updating_c.set(true);
+
+            // Position radios
+            pos_bottom_c.set_active(cfg.bar.position == BarPosition::Bottom);
+            pos_top_c.set_active(cfg.bar.position == BarPosition::Top);
+
+            // Autohide
             autohide_row_c.set_active(cfg.bar.autohide);
+
+            // Layer
+            let layer_idx = match cfg.bar.layer {
+                BarLayer::Top => 0,
+                BarLayer::Bottom => 1,
+                BarLayer::Overlay => 2,
+            };
+            layer_row_c.set_selected(layer_idx);
+
+            // Islands
+            for (field, row) in &island_rows {
+                let active = match field.as_str() {
+                    "launcher" => cfg.bar.islands.launcher,
+                    "clock" => cfg.bar.islands.clock,
+                    "status" => cfg.bar.islands.status,
+                    "workspace" => cfg.bar.islands.workspace,
+                    _ => true,
+                };
+                row.set_active(active);
+            }
+
             updating_c.set(false);
         });
 
