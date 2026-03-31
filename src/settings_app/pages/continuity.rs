@@ -42,6 +42,17 @@ impl SettingsPage for ContinuityPage {
         });
         main_group.add(&enable_row);
 
+        // Reactive: update enable switch on external config changes
+        let enable_row_c = enable_row.clone();
+        let updating_c = updating.clone();
+        let proxy_c = proxy.clone();
+        proxy.on_change(move || {
+            let cfg = proxy_c.config();
+            updating_c.set(true);
+            enable_row_c.set_active(cfg.continuity.enabled);
+            updating_c.set(false);
+        });
+
         // ── Peers List ──────────────────────────────────────────────────
         let peers_group = libadwaita::PreferencesGroup::builder()
             .title("Known Peers")

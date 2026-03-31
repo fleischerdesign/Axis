@@ -169,6 +169,18 @@ impl SettingsPage for BarPage {
         let page = libadwaita::PreferencesPage::new();
         page.add(&pos_group);
         page.add(&islands_group);
+
+        // Reactive: update widgets on external config changes
+        let autohide_row_c = autohide_row.clone();
+        let updating_c = updating.clone();
+        let proxy_c = proxy.clone();
+        proxy.on_change(move || {
+            let cfg = proxy_c.config();
+            updating_c.set(true);
+            autohide_row_c.set_active(cfg.bar.autohide);
+            updating_c.set(false);
+        });
+
         page.into()
     }
 }

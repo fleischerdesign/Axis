@@ -1,4 +1,4 @@
-use super::Service;
+use super::{Service, ServiceConfig};
 use crate::store::ServiceStore;
 use async_channel::{bounded, Sender};
 use log::info;
@@ -39,4 +39,9 @@ impl Service for DndService {
 
         (ServiceStore::new(data_rx, DndData::default()), cmd_tx)
     }
+}
+
+impl ServiceConfig for DndService {
+    fn get_enabled(data: &DndData) -> bool { data.enabled }
+    fn cmd_set_enabled(on: bool) -> DndCmd { DndCmd::Toggle(on) }
 }

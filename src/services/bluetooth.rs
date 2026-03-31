@@ -4,7 +4,7 @@ use async_channel::{Sender, bounded, Receiver};
 use tokio::sync::oneshot;
 use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
-use super::Service;
+use super::{Service, ServiceConfig};
 use crate::store::ServiceStore;
 use log::{error, info};
 
@@ -529,6 +529,11 @@ impl Service for BluetoothService {
 
         (ServiceStore::new(data_rx, Default::default()), cmd_tx)
     }
+}
+
+impl ServiceConfig for BluetoothService {
+    fn get_enabled(data: &BluetoothData) -> bool { data.is_powered }
+    fn cmd_set_enabled(on: bool) -> BluetoothCmd { BluetoothCmd::TogglePower(on) }
 }
 
 impl BluetoothService {

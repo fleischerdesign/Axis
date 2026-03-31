@@ -129,6 +129,20 @@ impl SettingsPage for AppearancePage {
         let page = libadwaita::PreferencesPage::new();
         page.add(&theme_group);
         page.add(&style_group);
+
+        // Reactive: update sliders on external config changes
+        let opacity_slider_c = opacity_slider.clone();
+        let radius_slider_c = radius_slider.clone();
+        let updating_c = updating.clone();
+        let proxy_c = proxy.clone();
+        proxy.on_change(move || {
+            let cfg = proxy_c.config();
+            updating_c.set(true);
+            opacity_slider_c.set_value(cfg.appearance.bar_opacity);
+            radius_slider_c.set_value(cfg.appearance.corner_radius as f64);
+            updating_c.set(false);
+        });
+
         page.into()
     }
 }

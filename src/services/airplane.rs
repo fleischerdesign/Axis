@@ -1,4 +1,4 @@
-use super::Service;
+use super::{Service, ServiceConfig};
 use crate::store::ServiceStore;
 use async_channel::{bounded, Sender};
 use log::{error, info, warn};
@@ -106,6 +106,11 @@ impl Service for AirplaneService {
 
         (ServiceStore::new(data_rx, AirplaneData::default()), cmd_tx)
     }
+}
+
+impl ServiceConfig for AirplaneService {
+    fn get_enabled(data: &AirplaneData) -> bool { data.enabled }
+    fn cmd_set_enabled(on: bool) -> AirplaneCmd { AirplaneCmd::Toggle(on) }
 }
 
 // ── rfkill Kernel Interface ───────────────────────────────────────────

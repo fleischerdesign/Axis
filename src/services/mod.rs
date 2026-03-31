@@ -10,6 +10,13 @@ pub trait Service: 'static {
     fn spawn() -> (ServiceStore<Self::Data>, Sender<Self::Cmd>);
 }
 
+/// Services that have an on/off toggle implement this trait.
+/// Enables generic bidirectional sync with the settings system.
+pub trait ServiceConfig: Service {
+    fn get_enabled(data: &Self::Data) -> bool;
+    fn cmd_set_enabled(on: bool) -> Self::Cmd;
+}
+
 pub mod niri;
 pub mod audio;
 pub mod network;

@@ -1,4 +1,4 @@
-use super::Service;
+use super::{Service, ServiceConfig};
 use crate::store::ServiceStore;
 use async_channel::{bounded, Sender};
 use log::{error, info, warn};
@@ -89,6 +89,11 @@ impl Service for NightlightService {
             cmd_tx,
         )
     }
+}
+
+impl ServiceConfig for NightlightService {
+    fn get_enabled(data: &NightlightData) -> bool { data.enabled }
+    fn cmd_set_enabled(on: bool) -> NightlightCmd { NightlightCmd::Toggle(on) }
 }
 
 impl NightlightService {

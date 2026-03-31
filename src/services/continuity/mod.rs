@@ -7,7 +7,7 @@ pub mod protocol;
 use async_channel::{bounded, Sender};
 use std::time::{Instant, Duration};
 
-use super::Service;
+use super::{Service, ServiceConfig};
 use crate::store::ServiceStore;
 use clipboard::ClipboardSync;
 use input::{InputCapture, InputInjection};
@@ -216,6 +216,11 @@ impl Service for ContinuityService {
         let store = ServiceStore::new(data_rx, ContinuityData::default());
         (store, cmd_tx)
     }
+}
+
+impl ServiceConfig for ContinuityService {
+    fn get_enabled(data: &ContinuityData) -> bool { data.enabled }
+    fn cmd_set_enabled(on: bool) -> ContinuityCmd { ContinuityCmd::SetEnabled(on) }
 }
 
 // ── Internal State ─────────────────────────────────────────────────────

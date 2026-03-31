@@ -488,28 +488,34 @@ fn setup_services() -> AppContext {
 
 fn bridge_settings(ctx: &AppContext) {
     use crate::services::settings::sync;
+    use crate::services::dnd::DndService;
+    use crate::services::airplane::AirplaneService;
+    use crate::services::bluetooth::BluetoothService;
+    use crate::services::continuity::ContinuityService;
 
-    sync::wire_dnd_sync(
-        &ctx.settings.store, &ctx.dnd.store,
-        &ctx.settings.tx, &ctx.dnd.tx,
+    // Generic bidirectional sync for all ServiceConfig services
+    sync::wire_service_config_full::<DndService>(
+        &ctx.settings.store, &ctx.dnd.store, &ctx.dnd.tx, &ctx.settings.tx,
+        |c| c.services.dnd_enabled, |c, v| c.services.dnd_enabled = v,
     );
 
-    sync::wire_airplane_sync(
-        &ctx.settings.store, &ctx.airplane.store,
-        &ctx.settings.tx, &ctx.airplane.tx,
+    sync::wire_service_config_full::<AirplaneService>(
+        &ctx.settings.store, &ctx.airplane.store, &ctx.airplane.tx, &ctx.settings.tx,
+        |c| c.services.airplane_enabled, |c, v| c.services.airplane_enabled = v,
     );
 
-    sync::wire_bluetooth_sync(
-        &ctx.settings.store, &ctx.bluetooth.store,
-        &ctx.settings.tx, &ctx.bluetooth.tx,
+    sync::wire_service_config_full::<BluetoothService>(
+        &ctx.settings.store, &ctx.bluetooth.store, &ctx.bluetooth.tx, &ctx.settings.tx,
+        |c| c.services.bluetooth_enabled, |c, v| c.services.bluetooth_enabled = v,
     );
 
+    sync::wire_service_config_full::<ContinuityService>(
+        &ctx.settings.store, &ctx.continuity.store, &ctx.continuity.tx, &ctx.settings.tx,
+        |c| c.continuity.enabled, |c, v| c.continuity.enabled = v,
+    );
+
+    // Nightlight: custom sync (config has multiple fields, not just enabled)
     sync::wire_nightlight_config_sync(
         &ctx.settings.store, &ctx.nightlight.tx,
-    );
-
-    sync::wire_continuity_sync(
-        &ctx.settings.store, &ctx.continuity.store,
-        &ctx.settings.tx, &ctx.continuity.tx,
     );
 }

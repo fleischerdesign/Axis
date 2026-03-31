@@ -35,10 +35,9 @@ pub enum SettingsCmd {
     UpdateAppearance(AppearanceConfig),
     UpdateNightlight(NightlightConfig),
     UpdateContinuity(ContinuityConfig),
-    UpdateContinuityPartial(Box<dyn FnOnce(&mut ContinuityConfig) + Send>),
     UpdateServices(ServicesConfig),
-    UpdateServicesPartial(Box<dyn FnOnce(&mut ServicesConfig) + Send>),
     UpdateShortcuts(ShortcutsConfig),
+    UpdatePartial(Box<dyn FnOnce(&mut AxisConfig) + Send>),
     Reload,
 }
 
@@ -127,11 +126,6 @@ impl SettingsService {
                     false
                 }
             }
-            SettingsCmd::UpdateContinuityPartial(apply_fn) => {
-                let old = config.continuity.clone();
-                apply_fn(&mut config.continuity);
-                config.continuity != old
-            }
             SettingsCmd::UpdateServices(c) => {
                 if config.services != c {
                     config.services = c;
@@ -140,10 +134,10 @@ impl SettingsService {
                     false
                 }
             }
-            SettingsCmd::UpdateServicesPartial(apply_fn) => {
-                let old = config.services.clone();
-                apply_fn(&mut config.services);
-                config.services != old
+            SettingsCmd::UpdatePartial(apply_fn) => {
+                let old = config.clone();
+                apply_fn(config);
+                *config != old
             }
             SettingsCmd::UpdateShortcuts(c) => {
                 if config.shortcuts != c {

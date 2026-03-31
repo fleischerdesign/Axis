@@ -50,6 +50,7 @@ impl SettingsPage for NightlightPage {
         // Day Temperature
         let day_row = libadwaita::ActionRow::builder().title("Day Temperature").build();
         let day_label = gtk4::Label::new(Some(&format!("{} K", config.nightlight.temp_day)));
+        let day_label_for_onchange = day_label.clone();
         day_label.add_css_class("dim-label");
         let day_slider = gtk4::Scale::with_range(gtk4::Orientation::Horizontal, 2500.0, 6500.0, 100.0);
         day_slider.set_value(config.nightlight.temp_day as f64);
@@ -83,6 +84,7 @@ impl SettingsPage for NightlightPage {
         // Night Temperature
         let night_row = libadwaita::ActionRow::builder().title("Night Temperature").build();
         let night_label = gtk4::Label::new(Some(&format!("{} K", config.nightlight.temp_night)));
+        let night_label_for_onchange = night_label.clone();
         night_label.add_css_class("dim-label");
         let night_slider = gtk4::Scale::with_range(gtk4::Orientation::Horizontal, 2500.0, 6500.0, 100.0);
         night_slider.set_value(config.nightlight.temp_night as f64);
@@ -169,6 +171,30 @@ impl SettingsPage for NightlightPage {
         page.add(&toggle_group);
         page.add(&temp_group);
         page.add(&schedule_group);
+
+        // Reactive: update widgets on external config changes
+        let enable_row_c = enable_row.clone();
+        let day_slider_c = day_slider.clone();
+        let night_slider_c = night_slider.clone();
+        let day_label_c = day_label_for_onchange.clone();
+            let night_label_c = night_label_for_onchange.clone();
+        let sunrise_row_c = sunrise_row.clone();
+        let sunset_row_c = sunset_row.clone();
+        let updating_c = updating.clone();
+        let proxy_c = proxy.clone();
+        proxy.on_change(move || {
+            let cfg = proxy_c.config();
+            updating_c.set(true);
+            enable_row_c.set_active(cfg.nightlight.enabled);
+            day_slider_c.set_value(cfg.nightlight.temp_day as f64);
+            day_label_c.set_text(&format!("{} K", cfg.nightlight.temp_day));
+            night_slider_c.set_value(cfg.nightlight.temp_night as f64);
+            night_label_c.set_text(&format!("{} K", cfg.nightlight.temp_night));
+            sunrise_row_c.set_text(&cfg.nightlight.sunrise);
+            sunset_row_c.set_text(&cfg.nightlight.sunset);
+            updating_c.set(false);
+        });
+
         page.into()
     }
 }
