@@ -1,3 +1,4 @@
+pub mod dbus;
 use crate::store::Store;
 use crate::widgets::base::PopupBase;
 use gtk4::prelude::*;

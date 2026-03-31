@@ -6,7 +6,6 @@ mod widgets;
 mod shell;
 
 use crate::app_context::AppContext;
-use crate::services::Service;
 use crate::services::audio::AudioService;
 use crate::services::airplane::AirplaneService;
 use crate::services::backlight::BacklightService;
@@ -25,7 +24,6 @@ use crate::services::launcher::LauncherService;
 use crate::services::ipc::IpcService;
 use crate::services::notifications::NotificationService;
 use crate::services::settings::SettingsService;
-use crate::store::{ReadOnlyHandle, ServiceHandle};
 use crate::widgets::{Bar, QuickSettingsPopup, WorkspacePopup, LauncherPopup, CalendarPopup, NotificationToastManager, osd::OsdManager};
 use crate::widgets::lock_screen::LockScreen;
 use crate::shell::ShellController;
@@ -255,88 +253,8 @@ fn build_ui(app: &libadwaita::Application, start_locked: bool, wallpaper_path: O
     let cal = Rc::new(CalendarPopup::new(app, ctx.clone()));
     shell_ctrl.register(&cal);
 
-    // --- IPC SERVICE STARTEN ---
-    let ipc_rx = IpcService::spawn();
-    let shell_ipc = shell_ctrl.clone();
-    let ipc_lock = lock_screen.clone();
-    glib::spawn_future_local(async move {
-        while let Ok(cmd) = ipc_rx.recv().await {
-            use crate::services::ipc::server::ShellIpcCmd;
-            match cmd {
-                ShellIpcCmd::ToggleLauncher => shell_ipc.toggle("launcher"),
-                ShellIpcCmd::ToggleQuickSettings => shell_ipc.toggle("qs"),
-                ShellIpcCmd::ToggleWorkspaces => shell_ipc.toggle("ws"),
-                ShellIpcCmd::CloseAll => shell_ipc.close_all(),
-                ShellIpcCmd::Lock => ipc_lock.lock_session(),
-            }
-        }
-    });
-
-    // --- SETTINGS D-BUS SERVER ---
-    // Must run on the SAME tokio runtime as IPC (main thread), otherwise the
-    // bus name "org.axis.Shell" can't be shared between connections.
-    {
-        use std::sync::{Arc, Mutex};
-
-        let settings_config = Arc::new(Mutex::new(ctx.settings.store.get().config));
-        let (notify_tx, notify_rx) = async_channel::unbounded::<()>();
-
-        let cache = settings_config.clone();
-        ctx.settings.store.subscribe(move |data| {
-            *cache.lock().unwrap() = data.config.clone();
-            log::info!("[settings-dbus] notify_tx fired, bt={} dnd={}", data.config.services.bluetooth_enabled, data.config.services.dnd_enabled);
-            let _ = notify_tx.try_send(());
-        });
-
-        let settings_tx = ctx.settings.tx.clone();
-        tokio::spawn(async move {
-            use zbus::connection::Builder;
-            let server = crate::services::settings::dbus::SettingsDbusServer::new(
-                settings_tx,
-                settings_config.clone(),
-            );
-            let conn_res = async {
-                let builder = Builder::session()?;
-                let builder = builder.name("org.axis.Shell")?;
-                let builder = builder.serve_at("/org/axis/Shell/Settings", server)?;
-                builder.build().await
-            }
-            .await;
-
-            match conn_res {
-                Ok(conn) => {
-                    log::info!("[settings] D-Bus Interface 'org.axis.Shell.Settings' registered");
-                    while let Ok(()) = notify_rx.recv().await {
-                        let json = serde_json::to_string(&*settings_config.lock().unwrap())
-                            .unwrap_or_default();
-                        log::info!("[settings-dbus] emitting SettingsChanged signal");
-                        let iface = conn
-                            .object_server()
-                            .interface::<_, crate::services::settings::dbus::SettingsDbusServer>(
-                                "/org/axis/Shell/Settings",
-                            )
-                            .await;
-                        match &iface {
-                            Ok(_) => {}
-                            Err(e) => log::warn!("[settings-dbus] interface handle failed: {e}"),
-                        }
-                        if let Ok(iface) = iface {
-                            let res = crate::services::settings::dbus::SettingsDbusServer::settings_changed(
-                                iface.signal_emitter(),
-                                "all",
-                                &json,
-                            )
-                            .await;
-                            if let Err(e) = res {
-                                log::warn!("[settings-dbus] SettingsChanged emit failed: {e}");
-                            }
-                        }
-                    }
-                }
-                Err(e) => log::error!("[settings] Failed to register D-Bus interface: {:?}", e),
-            }
-        });
-    }
+    // --- D-BUS HOST (IPC & SETTINGS) ---
+    crate::shell::dbus::spawn_dbus_host(&ctx, shell_ctrl.clone(), lock_screen.clone());
 
     // --- CLICK HANDLER ---
     setup_click_handler(bar.launcher_island(), shell_ctrl.clone(), "launcher");
