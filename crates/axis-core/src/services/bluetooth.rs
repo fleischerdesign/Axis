@@ -115,7 +115,7 @@ pub enum BluetoothCmd {
 
 // ─── Properties Changed Forwarding ───────────────────────────────────────────
 
-pub enum FwdCmd {
+pub enum BluetoothFwdCmd {
     Add(String),
     Remove(String),
 }
@@ -130,7 +130,7 @@ pub struct PropertyChange {
 /// On `Remove`, the device task is cancelled — no shared state, no clear-all.
 fn spawn_device_property_forwarder(
     conn: zbus::Connection,
-    cmd_rx: Receiver<FwdCmd>,
+    cmd_rx: Receiver<BluetoothFwdCmd>,
 ) -> Receiver<PropertyChange> {
     let (prop_tx, prop_rx) = bounded::<PropertyChange>(10);
 
@@ -139,12 +139,12 @@ fn spawn_device_property_forwarder(
 
         while let Ok(cmd) = cmd_rx.recv().await {
             match cmd {
-                FwdCmd::Remove(path) => {
+                BluetoothFwdCmd::Remove(path) => {
                     if let Some(tx) = cancel_txs.remove(&path) {
                         let _ = tx.send(());
                     }
                 }
-                FwdCmd::Add(path) => {
+                BluetoothFwdCmd::Add(path) => {
                     if let Some(tx) = cancel_txs.remove(&path) {
                         let _ = tx.send(());
                     }
@@ -374,7 +374,7 @@ impl Service for BluetoothService {
                 tokio::time::sleep(Duration::from_secs(2)).await;
             }
 
-            let (fwd_tx, fwd_rx) = bounded::<FwdCmd>(10);
+            let (fwd_tx, fwd_rx) = bounded::<BluetoothFwdCmd>(10);
             let prop_rx = spawn_device_property_forwarder(connection.clone(), fwd_rx);
 
             // --- Event streams ---
@@ -513,14 +513,14 @@ impl Service for BluetoothService {
                     Some(args) = interfaces_added.next() => {
                         if let Ok(a) = args.args() {
                             if a.interfaces_and_properties.contains_key("org.bluez.Device1") {
-                                let _ = fwd_tx.try_send(FwdCmd::Add(a.object_path.to_string()));
+                                let _ = fwd_tx.try_send(BluetoothFwdCmd::Add(a.object_path.to_string()));
                             }
                         }
                     }
                     Some(args) = interfaces_removed.next() => {
                         if let Ok(a) = args.args() {
                             if a.interfaces.iter().any(|i| i == "org.bluez.Device1") {
-                                let _ = fwd_tx.try_send(FwdCmd::Remove(a.object_path.to_string()));
+                                let _ = fwd_tx.try_send(BluetoothFwdCmd::Remove(a.object_path.to_string()));
                             }
                         }
                     }

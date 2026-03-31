@@ -19,7 +19,7 @@ pub struct TaskList {
 #[derive(Clone, Debug)]
 pub enum AuthStatus {
     Authenticated,
-    NeedsAuth { url: String, code: String },
+    NeedsAuth { url: String, code: Option<String> },
     Failed(String),
 }
 

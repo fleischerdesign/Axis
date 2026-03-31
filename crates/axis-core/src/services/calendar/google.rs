@@ -39,7 +39,7 @@ impl CalendarProvider for GoogleCalendarProvider {
     fn auth_status(&mut self) -> AuthStatus {
         match GoogleAuthRegistry::load() {
             Ok(reg) if reg.is_authenticated() => AuthStatus::Authenticated,
-            _ => AuthStatus::NeedsAuth { url: String::new() },
+            _ => AuthStatus::NeedsAuth { url: String::new(), code: None },
         }
     }
 

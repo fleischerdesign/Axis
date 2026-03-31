@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+pub use crate::services::tasks::AuthStatus;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CalendarEvent {
@@ -23,13 +24,6 @@ impl CalendarEvent {
             "Ganztägig".to_string()
         }
     }
-}
-
-#[derive(Clone, Debug)]
-pub enum AuthStatus {
-    Authenticated,
-    NeedsAuth { url: String },
-    Failed(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

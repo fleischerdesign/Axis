@@ -178,14 +178,14 @@ pub struct ContinuityConfig {
     #[serde(default)]
     pub enabled: bool,
     #[serde(default)]
-    pub peer_configs: Vec<PeerConfig>,
+    pub peer_configs: Vec<PeerPersistedConfig>,
 }
 impl ConfigSection for ContinuityConfig {
     const SECTION_KEY: &'static str = "Continuity";
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-pub struct PeerConfig {
+pub struct PeerPersistedConfig {
     pub device_id: String,
     pub device_name: String,
     #[serde(default = "default_true")]

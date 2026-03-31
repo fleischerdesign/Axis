@@ -2,11 +2,11 @@ use super::base::BaseIcon;
 use crate::app_context::AppContext;
 
 #[derive(Clone)]
-pub struct BtIcon {
+pub struct BluetoothIcon {
     pub icon: BaseIcon,
 }
 
-impl BtIcon {
+impl BluetoothIcon {
     pub fn new(ctx: &AppContext) -> Self {
         let icon = BaseIcon::new("bluetooth-symbolic");
         let icon_c = icon.clone();

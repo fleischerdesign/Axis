@@ -40,7 +40,7 @@ impl TaskProvider for GoogleTasksProvider {
     fn auth_status(&mut self) -> AuthStatus {
         match GoogleAuthRegistry::load() {
             Ok(reg) if reg.is_authenticated() => AuthStatus::Authenticated,
-            _ => AuthStatus::NeedsAuth { url: String::new(), code: String::new() },
+            _ => AuthStatus::NeedsAuth { url: String::new(), code: None },
         }
     }
 

@@ -9,7 +9,7 @@ use axis_core::services::network::NetworkCmd;
 use axis_core::services::nightlight::NightlightCmd;
 use crate::widgets::components::debounced_slider::DebouncedSlider;
 use crate::widgets::components::icon_slider::IconSlider;
-use crate::widgets::icons::bt::BtIcon;
+use crate::widgets::icons::bluetooth::BluetoothIcon;
 use crate::widgets::icons::wifi::WifiIcon;
 use crate::widgets::quick_settings::components::battery_button::BatteryButton;
 use crate::widgets::quick_settings::components::power_actions::PowerActionStack;
@@ -22,7 +22,7 @@ pub struct MainPage {
     pub container: gtk4::Box,
     pub wifi_tile: Rc<ToggleTile>,
     pub eth_tile: Rc<ToggleTile>,
-    pub bt_tile: Rc<ToggleTile>,
+    pub bluetooth_tile: Rc<ToggleTile>,
     pub nl_tile: Rc<ToggleTile>,
     pub airplane_tile: Rc<ToggleTile>,
     pub dnd_tile: Rc<ToggleTile>,
@@ -55,7 +55,7 @@ impl MainPage {
             true,
         ));
         let eth_tile = Rc::new(ToggleTile::new("Ethernet", "network-wired-symbolic", false));
-        let bt_tile = Rc::new(ToggleTile::new(
+        let bluetooth_tile = Rc::new(ToggleTile::new(
             "Bluetooth",
             "bluetooth-active-symbolic",
             true,
@@ -72,7 +72,7 @@ impl MainPage {
 
         grid.attach(&wifi_tile.container, 0, 0, 1, 1);
         grid.attach(&eth_tile.container, 1, 0, 1, 1);
-        grid.attach(&bt_tile.container, 0, 1, 1, 1);
+        grid.attach(&bluetooth_tile.container, 0, 1, 1, 1);
         grid.attach(&nl_tile.container, 1, 1, 1, 1);
         grid.attach(&airplane_tile.container, 0, 2, 1, 1);
         grid.attach(&dnd_tile.container, 1, 2, 1, 1);
@@ -177,7 +177,7 @@ impl MainPage {
             |_, _| {},
         );
 
-        ToggleTile::wire_service(&bt_tile, &ctx.bluetooth,
+        ToggleTile::wire_service(&bluetooth_tile, &ctx.bluetooth,
             |on| BluetoothCmd::TogglePower(on),
             |d| d.is_powered,
             open_bt,
@@ -237,9 +237,9 @@ impl MainPage {
             wifi_tile_c2.set_icon(name);
         });
 
-        let bt_tile_c2 = bt_tile.clone();
-        BtIcon::on_change(&ctx, move |name, _visible| {
-            bt_tile_c2.set_icon(name);
+        let bluetooth_tile_c2 = bluetooth_tile.clone();
+        BluetoothIcon::on_change(&ctx, move |name, _visible| {
+            bluetooth_tile_c2.set_icon(name);
         });
 
         // Network → eth tile (separate from wifi toggle)
@@ -295,7 +295,7 @@ impl MainPage {
             container,
             wifi_tile,
             eth_tile,
-            bt_tile,
+            bluetooth_tile,
             nl_tile,
             airplane_tile,
             dnd_tile,

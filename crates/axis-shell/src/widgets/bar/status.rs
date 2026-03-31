@@ -1,7 +1,7 @@
 use crate::app_context::AppContext;
 use crate::widgets::icons;
 use crate::widgets::icons::battery::BatteryIcon;
-use crate::widgets::icons::bt::BtIcon;
+use crate::widgets::icons::bluetooth::BluetoothIcon;
 use crate::widgets::icons::wifi::WifiIcon;
 use crate::widgets::Island;
 use gtk4::prelude::*;
@@ -17,7 +17,7 @@ impl BarStatus {
         island.container.set_cursor_from_name(Some("pointer"));
 
         let wifi = WifiIcon::new(&ctx);
-        let bt = BtIcon::new(&ctx);
+        let bluetooth = BluetoothIcon::new(&ctx);
         let battery = BatteryIcon::new(&ctx);
 
         let vol_icon = gtk4::Image::from_icon_name("audio-volume-high-symbolic");
@@ -25,7 +25,7 @@ impl BarStatus {
         notif_icon.set_visible(false);
 
         island.append(&wifi.icon.image);
-        island.append(&bt.icon.image);
+        island.append(&bluetooth.icon.image);
         island.append(&vol_icon);
         island.append(&battery.icon.image);
         island.append(&notif_icon);

@@ -163,7 +163,7 @@ impl QuickSettingsPopup {
             move || {
                 stack_back_bt.set_visible_child_name("main");
             },
-            main_page.bt_tile.clone(),
+            main_page.bluetooth_tile.clone(),
         );
 
         let stack_back_nl = qs_stack.clone();

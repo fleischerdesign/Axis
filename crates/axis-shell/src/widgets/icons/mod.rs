@@ -1,6 +1,6 @@
 pub mod base;
 pub mod wifi;
-pub mod bt;
+pub mod bluetooth;
 pub mod battery;
 
 pub fn wifi_signal_icon(strength: u8) -> &'static str {
