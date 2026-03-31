@@ -6,6 +6,9 @@ members = [
     "crates/axis-settings",
 ]
 
+[workspace.package]
+version = "0.1.0"
+
 [workspace.dependencies]
 axis-core = { path = "crates/axis-core" }
 chrono = "0.4.44"
