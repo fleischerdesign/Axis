@@ -32,7 +32,9 @@
               base == "Cargo.toml"
               || base == "Cargo.lock"
               || (type == "directory" && base == "src")
-              || (lib.hasPrefix (toString ./src) (toString path));
+              || (type == "directory" && base == "crates")
+              || (lib.hasPrefix (toString ./src) (toString path))
+              || (lib.hasPrefix (toString ./crates) (toString path));
           };
           strictDeps = true;
 
