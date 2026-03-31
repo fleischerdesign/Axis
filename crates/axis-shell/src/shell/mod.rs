@@ -39,20 +39,43 @@ impl ShellController {
         let id = popup.id().to_string();
         self.popups.borrow_mut().insert(id.clone(), popup.clone());
 
-        // Wire Visibility notify for focus logic if needed
+        Self::wire_visibility(popup);
+        Self::wire_bar_sync(popup, &self.bar_popup_open, &self.on_change);
+        Self::wire_escape(popup);
+    }
+
+    fn wire_visibility(popup: &Rc<impl PopupExt + 'static>) {
         popup.base().window.connect_visible_notify(move |win| {
             if win.is_visible() {
                 // Focus handling would go here
             }
         });
+    }
 
-        // Sync with Bar's popup_open state
-        let bar_state = self.bar_popup_open.clone();
-        let on_change = self.on_change.clone();
+    fn wire_bar_sync(
+        popup: &Rc<impl PopupExt + 'static>,
+        bar_state: &axis_core::Store<bool>,
+        on_change: &Rc<dyn Fn()>,
+    ) {
+        let bar_state = bar_state.clone();
+        let on_change = on_change.clone();
         popup.base().is_open.subscribe(move |&is_open| {
             bar_state.set(is_open);
             on_change();
         });
+    }
+
+    fn wire_escape(popup: &Rc<impl PopupExt + 'static>) {
+        let popup_ref = popup.clone();
+        let key = gtk4::EventControllerKey::new();
+        key.connect_key_pressed(move |_, key, _, _| {
+            if key == gtk4::gdk::Key::Escape {
+                popup_ref.handle_escape();
+                return gtk4::glib::Propagation::Stop;
+            }
+            gtk4::glib::Propagation::Proceed
+        });
+        popup.base().window.add_controller(key);
     }
 
     pub fn toggle(&self, id: &str) {

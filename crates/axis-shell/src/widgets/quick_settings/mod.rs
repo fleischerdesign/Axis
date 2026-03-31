@@ -222,28 +222,6 @@ impl QuickSettingsPopup {
         outer.append(&qs_container);
         base.set_content(&outer);
 
-        // Custom escape handler for stack navigation (register() wires Escape to handle_escape())
-        let stack_kb = qs_stack.clone();
-        let main_page_kb = main_page.clone();
-        let key_controller = gtk4::EventControllerKey::new();
-        key_controller.connect_key_pressed(move |_, key, _, _| {
-            if key == gtk4::gdk::Key::Escape {
-                // Handle at entry level before window-level handler
-                let current = stack_kb.visible_child_name();
-                if current.as_deref() == Some("main") {
-                    if main_page_kb.is_power_expanded() {
-                        main_page_kb.collapse_power_menu();
-                        return gtk4::glib::Propagation::Stop;
-                    }
-                } else {
-                    stack_kb.set_visible_child_name("main");
-                    return gtk4::glib::Propagation::Stop;
-                }
-            }
-            gtk4::glib::Propagation::Proceed
-        });
-        qs_container.add_controller(key_controller);
-
         Self {
             base,
             container: qs_container,
