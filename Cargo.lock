@@ -170,11 +170,51 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
-name = "axis"
+name = "axis-core"
 version = "0.1.0"
 dependencies = [
  "async-channel",
  "brightness",
+ "chrono",
+ "evdev",
+ "futures-util",
+ "gtk4",
+ "inotify 0.11.1",
+ "libpulse-binding",
+ "log",
+ "niri-ipc",
+ "notify",
+ "oauth2",
+ "open",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "uuid",
+ "zbus",
+]
+
+[[package]]
+name = "axis-settings"
+version = "0.1.0"
+dependencies = [
+ "axis-core",
+ "futures-util",
+ "gtk4",
+ "libadwaita",
+ "log",
+ "serde",
+ "serde_json",
+ "tokio",
+ "zbus",
+]
+
+[[package]]
+name = "axis-shell"
+version = "0.1.0"
+dependencies = [
+ "async-channel",
+ "axis-core",
  "chrono",
  "evdev",
  "fern",
@@ -182,20 +222,14 @@ dependencies = [
  "gtk4",
  "gtk4-layer-shell",
  "gtk4-session-lock",
- "inotify 0.11.1",
  "libadwaita",
- "libpulse-binding",
  "log",
  "niri-ipc",
- "notify",
- "oauth2",
  "open",
  "pam",
- "reqwest",
  "serde",
  "serde_json",
  "tokio",
- "uuid",
  "zbus",
 ]
 

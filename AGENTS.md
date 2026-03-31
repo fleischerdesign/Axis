@@ -7,12 +7,32 @@ Architecture: reactive store + async services + modular popup system.
 
 ---
 
-## Core Principles
+## Core Principles & Engineering Standards
 
-**DRY** — No duplicated logic. Extract helpers, use shared traits/utilities.
-**SOLID** — Single responsibility per struct/module, open for extension via traits, proper abstraction layers.
-**Clean Code** — Descriptive names, small functions, no magic numbers, meaningful abstractions.
-**Modular** — Adding a new feature means creating new files, not modifying existing ones (Open/Closed Principle).
+To maintain a high-quality, maintainable, and robust codebase, all contributions must adhere to these fundamental engineering standards.
+
+### 1. Consistency
+**Consistency is paramount.** Always follow existing patterns, naming conventions, and architectural structures. If a feature is implemented a certain way in one service, a similar feature in another service should follow the same pattern. This reduces cognitive load and makes the codebase predictable.
+
+### 2. Modular & Extensible
+The architecture is designed to be **Modular**. Adding a new feature should ideally mean creating new files or modules rather than modifying existing logic (**Open/Closed Principle**). Use traits and abstraction layers to ensure the system is **easily extensible** without breaking existing functionality.
+
+### 3. DRY (Don't Repeat Yourself)
+Avoid logic duplication at all costs. If you find yourself copying code, extract it into a shared utility, a helper function, or a common trait. 
+
+### 4. SOLID Principles
+- **S**ingle Responsibility: Each struct, module, and function should have one clear purpose.
+- **O**pen/Closed: Design for extension, but protect existing code from modification.
+- **L**iskov Substitution: Traits and implementations must be interchangeable where expected.
+- **I**nterface Segregation: Prefer small, focused traits over "god" traits.
+- **D**ependency Inversion: Depend on abstractions (traits), not concrete implementations.
+
+### 5. Clean Code
+- **Descriptive Naming:** Variables, functions, and types should describe their intent clearly.
+- **Small Functions:** Keep functions focused and concise.
+- **Meaningful Abstractions:** Don't over-engineer, but create abstractions that simplify the mental model of the system.
+- **No Magic Numbers:** Use constants with descriptive names.
+- **Comments:** Code should be self-documenting; use comments to explain *why* something is done, not *what* is being done.
 
 ---
 

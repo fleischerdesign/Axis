@@ -1,0 +1,25 @@
+[package]
+name = "axis-core"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+chrono.workspace = true
+futures-util.workspace = true
+gtk4.workspace = true
+libpulse-binding.workspace = true
+tokio.workspace = true
+zbus.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+async-channel.workspace = true
+brightness.workspace = true
+inotify.workspace = true
+log.workspace = true
+notify.workspace = true
+reqwest.workspace = true
+oauth2.workspace = true
+uuid.workspace = true
+open.workspace = true
+evdev.workspace = true
+niri-ipc.workspace = true

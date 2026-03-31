@@ -1,0 +1,28 @@
+[package]
+name = "axis-shell"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+axis-core.workspace = true
+gtk4.workspace = true
+gtk4-layer-shell.workspace = true
+libadwaita.workspace = true
+gtk4-session-lock.workspace = true
+tokio.workspace = true
+async-channel.workspace = true
+log.workspace = true
+fern.workspace = true
+niri-ipc.workspace = true
+pam.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+futures-util.workspace = true
+zbus.workspace = true
+open.workspace = true
+evdev.workspace = true
+
+[[bin]]
+name = "axis"
+path = "src/main.rs"
