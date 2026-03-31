@@ -284,7 +284,8 @@ fn build_ui(app: &libadwaita::Application, start_locked: bool, wallpaper_path: O
         let cache = settings_config.clone();
         ctx.settings.store.subscribe(move |data| {
             *cache.lock().unwrap() = data.config.clone();
-            let _ = notify_tx.send(());
+            log::info!("[settings-dbus] notify_tx fired, bt={} dnd={}", data.config.services.bluetooth_enabled, data.config.services.dnd_enabled);
+            let _ = notify_tx.try_send(());
         });
 
         let settings_tx = ctx.settings.tx.clone();
@@ -308,19 +309,27 @@ fn build_ui(app: &libadwaita::Application, start_locked: bool, wallpaper_path: O
                     while let Ok(()) = notify_rx.recv().await {
                         let json = serde_json::to_string(&*settings_config.lock().unwrap())
                             .unwrap_or_default();
+                        log::info!("[settings-dbus] emitting SettingsChanged signal");
                         let iface = conn
                             .object_server()
                             .interface::<_, crate::services::settings::dbus::SettingsDbusServer>(
                                 "/org/axis/Shell/Settings",
                             )
                             .await;
+                        match &iface {
+                            Ok(_) => {}
+                            Err(e) => log::warn!("[settings-dbus] interface handle failed: {e}"),
+                        }
                         if let Ok(iface) = iface {
-                            let _ = crate::services::settings::dbus::SettingsDbusServer::settings_changed(
+                            let res = crate::services::settings::dbus::SettingsDbusServer::settings_changed(
                                 iface.signal_emitter(),
                                 "all",
                                 &json,
                             )
                             .await;
+                            if let Err(e) = res {
+                                log::warn!("[settings-dbus] SettingsChanged emit failed: {e}");
+                            }
                         }
                     }
                 }

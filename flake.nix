@@ -66,6 +66,20 @@
           commonArgs
           // {
             inherit cargoArtifacts;
+            postInstall = ''
+              mkdir -p $out/share/applications
+              cat > $out/share/applications/axis-settings.desktop << 'DESKTOP'
+              [Desktop Entry]
+              Type=Application
+              Name=Axis Settings
+              Icon=preferences-system-symbolic
+              Exec=axis-settings
+              Terminal=false
+              Categories=Settings;GTK
+              Keywords=settings;axis;shell;panel
+              Version=1.5
+              DESKTOP
+            '';
           }
         );
 

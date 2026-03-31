@@ -8,9 +8,10 @@ use super::config::AxisConfig;
 
 /// Generic bidirectional sync between a ServiceConfig service and settings.
 ///
-/// - Config → Service: when SettingsData changes, the service's enabled state is set.
-/// - Service → Config: when service data changes, the config is updated — but ONLY
-///   if the enabled value actually changed (last_enabled guard prevents feedback loops).
+/// - Config → Service: when SettingsData changes, send a command only if the
+///   desired enabled state differs from the service's current state.
+/// - Service → Config: when service data changes, write config only if the
+///   enabled value actually changed (last_enabled guard).
 pub fn wire_service_config_full<S: ServiceConfig>(
     settings_store: &ServiceStore<super::SettingsData>,
     service_store: &ServiceStore<S::Data>,
@@ -19,11 +20,18 @@ pub fn wire_service_config_full<S: ServiceConfig>(
     config_get: fn(&AxisConfig) -> bool,
     config_set: fn(&mut AxisConfig, bool),
 ) {
-    // Config → Service: apply enabled state from config when settings change
+    // Config → Service: only send a command when the desired state differs
+    // from the service's current state. Without this guard, every SettingsData
+    // update (e.g. from UpdatePartial written by Service→Config) would re-send
+    // the command even if the service is already in the correct state.
     let stx = service_tx.clone();
+    let svc_store_c = service_store.clone();
     settings_store.subscribe(move |data| {
-        let enabled = config_get(&data.config);
-        let _ = stx.try_send(S::cmd_set_enabled(enabled));
+        let desired = config_get(&data.config);
+        let current = S::get_enabled(&svc_store_c.get());
+        if desired != current {
+            let _ = stx.try_send(S::cmd_set_enabled(desired));
+        }
     });
 
     // Service → Config: only write config when the enabled value actually changes.
@@ -35,8 +43,10 @@ pub fn wire_service_config_full<S: ServiceConfig>(
     service_store.subscribe(move |data| {
         let enabled = S::get_enabled(data);
         if *last_enabled.borrow() == Some(enabled) {
+            log::info!("[sync] service→config SKIPPED (no change, enabled={})", enabled);
             return; // no change — skip to prevent feedback loop
         }
+        log::info!("[sync] service→config SENDING UpdatePartial enabled={}", enabled);
         *last_enabled.borrow_mut() = Some(enabled);
         let _ = settings_stx.try_send(SettingsCmd::UpdatePartial(
             Box::new(move |cfg| config_set(cfg, enabled))

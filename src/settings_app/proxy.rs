@@ -71,10 +71,13 @@ impl SettingsProxy {
 
             while let Some(signal) = stream.next().await {
                 // SettingsChanged(section: &str, json: &str)
+                log::warn!("[settings-proxy] SettingsChanged signal received");
                 let body = signal.body();
                 match body.deserialize::<(String, String)>() {
                     Ok((_section, json)) => {
+                        log::debug!("[settings-proxy] parsed section={_section}, json len={}", json.len());
                         if let Ok(config) = serde_json::from_str::<AxisConfig>(&json) {
+                            log::debug!("[settings-proxy] bt={}", config.services.bluetooth_enabled);
                             *cached.borrow_mut() = config;
                             let taken = std::mem::take(&mut *listeners.borrow_mut());
                             for listener in &taken {

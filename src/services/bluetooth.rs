@@ -392,6 +392,10 @@ impl Service for BluetoothService {
             let mut prop_rx = Box::pin(prop_rx);
             let mut pair_resolve: Option<oneshot::Sender<AgentResponse>> = None;
             let mut pair_timeout = Box::pin(tokio::time::sleep(Duration::MAX));
+            // When we send TogglePower, skip the next fetch_data until BlueZ confirms
+            // via powered_changed. Otherwise fetch_data races and reads stale state,
+            // publishing incorrect is_powered which triggers the sync bridge loop.
+            let mut skip_fetch_after_toggle = false;
 
             loop {
                 tokio::select! {
@@ -416,24 +420,31 @@ impl Service for BluetoothService {
                                 let _ = data_tx.send(current_data.clone()).await;
                             }
                             BluetoothCmd::TogglePower(on) => {
-                                info!("[bluetooth] Power toggled: {}", if on { "on" } else { "off" });
-                                for attempt in 0..5 {
-                                    match adapter_proxy.set_powered(on).await {
-                                        Ok(()) => break,
-                                        Err(e) if e.to_string().contains("Busy") => {
-                                            error!("[bluetooth] Power toggle busy (attempt {}/5), retrying", attempt + 1);
-                                            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                                        }
-                                        Err(e) => {
-                                            error!("[bluetooth] Failed to toggle power: {e}");
-                                            break;
+                                // Guard: skip if already in the desired state
+                                if current_data.is_powered == on {
+                                    log::debug!("[bluetooth] TogglePower({on}) ignored — already in that state");
+                                } else {
+                                    info!("[bluetooth] Power toggled: {}", if on { "on" } else { "off" });
+                                    for attempt in 0..5 {
+                                        match adapter_proxy.set_powered(on).await {
+                                            Ok(()) => break,
+                                            Err(e) if e.to_string().contains("Busy") => {
+                                                error!("[bluetooth] Power toggle busy (attempt {}/5), retrying", attempt + 1);
+                                                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                                            }
+                                            Err(e) => {
+                                                error!("[bluetooth] Failed to toggle power: {e}");
+                                                break;
+                                            }
                                         }
                                     }
+                                    // Skip fetch_data this iteration — BlueZ will emit
+                                    // powered_changed which clears this flag and triggers a
+                                    // fresh fetch. Skipping prevents reading stale state that
+                                    // would kick off the sync bridge feedback loop.
+                                    skip_fetch_after_toggle = true;
+                                    if !on { is_discovering = false; }
                                 }
-                                // Do NOT re-fetch and push data here — BlueZ will emit
-                                // PropertiesChanged which the adapter watcher already handles.
-                                // Manually pushing would trigger the sync bridge feedback loop.
-                                if !on { is_discovering = false; }
                             }
                             BluetoothCmd::Scan => {
                                 info!("[bluetooth] Discovery started");
@@ -495,7 +506,10 @@ impl Service for BluetoothService {
                     }
                     // Other events
                     _ = interval.tick() => {}
-                    Some(_) = powered_changed.next() => {}
+                    Some(_) = powered_changed.next() => {
+                        // BlueZ confirmed the power change — allow fetch_data to run
+                        skip_fetch_after_toggle = false;
+                    }
                     Some(args) = interfaces_added.next() => {
                         if let Ok(a) = args.args() {
                             if a.interfaces_and_properties.contains_key("org.bluez.Device1") {
@@ -527,15 +541,20 @@ impl Service for BluetoothService {
                 }
                 was_discovering = is_discovering;
 
-                let next_data = Self::fetch_data(
-                    &adapter_proxy, &obj_manager,
-                    is_discovering, &current_data,
-                    &mut known_devices, is_new_scan,
-                ).await;
+                // Skip fetch while a TogglePower is in-flight. BlueZ's
+                // powered_changed event will clear this flag so the next
+                // iteration picks up the confirmed state.
+                if !skip_fetch_after_toggle {
+                    let next_data = Self::fetch_data(
+                        &adapter_proxy, &obj_manager,
+                        is_discovering, &current_data,
+                        &mut known_devices, is_new_scan,
+                    ).await;
 
-                if next_data != current_data {
-                    current_data = next_data;
-                    let _ = data_tx.send(current_data.clone()).await;
+                    if next_data != current_data {
+                        current_data = next_data;
+                        let _ = data_tx.send(current_data.clone()).await;
+                    }
                 }
             }
         });

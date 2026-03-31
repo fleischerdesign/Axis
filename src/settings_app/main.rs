@@ -12,11 +12,16 @@ use page::SettingsPage;
 use proxy::SettingsProxy;
 
 fn main() {
+    // Tokio runtime must live as long as the app — zbus uses it for its
+    // internal I/O reactor (feature "tokio"). If it's dropped, signal
+    // streams silently stop receiving data.
+    let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+
     let application = libadwaita::Application::builder()
         .application_id("com.github.axis.settings")
         .build();
 
-    application.connect_activate(|app| {
+    application.connect_activate(move |app| {
         // Load CSS
         let provider = gtk4::CssProvider::new();
         provider.load_from_string(include_str!("style.css"));
@@ -29,7 +34,6 @@ fn main() {
         }
 
         // Load config via D-Bus (blocking)
-        let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
         let proxy = match rt.block_on(SettingsProxy::new()) {
             Ok(p) => Rc::new(p),
             Err(e) => {
