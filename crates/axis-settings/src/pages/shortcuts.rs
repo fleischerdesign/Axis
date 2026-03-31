@@ -48,7 +48,6 @@ impl SettingsPage for ShortcutsPage {
             // Current shortcut display
             let shortcut_label = gtk4::Label::new(Some(current));
             shortcut_label.add_css_class("dim-label");
-            shortcut_label.add_css_class("monospace");
             row.add_suffix(&shortcut_label);
 
             // Entry for editing (hidden by default, shown on click)

@@ -7,9 +7,7 @@ use gtk4::prelude::*;
 use libadwaita::prelude::*;
 use std::rc::Rc;
 
-use page::SettingsPage;
 use proxy::SettingsProxy;
-use axis_core::services::settings::config::AxisConfig;
 
 fn main() {
     // Tokio runtime must live as long as the app — zbus uses it for its
@@ -22,16 +20,7 @@ fn main() {
         .build();
 
     application.connect_activate(move |app| {
-        // Load CSS
-        let provider = gtk4::CssProvider::new();
-        provider.load_from_string(include_str!("style.css"));
-        if let Some(display) = gtk4::gdk::Display::default() {
-            gtk4::style_context_add_provider_for_display(
-                &display,
-                &provider,
-                gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
-            );
-        }
+        libadwaita::init().expect("Failed to init libadwaita");
 
         // Load config via D-Bus (blocking)
         let proxy = match rt.block_on(SettingsProxy::new()) {
@@ -52,6 +41,8 @@ fn main() {
 }
 
 fn build_window(app: &libadwaita::Application, proxy: &Rc<SettingsProxy>) {
+    use std::collections::HashMap;
+
     let window = libadwaita::ApplicationWindow::builder()
         .application(app)
         .title("Axis Settings")
@@ -59,28 +50,32 @@ fn build_window(app: &libadwaita::Application, proxy: &Rc<SettingsProxy>) {
         .default_height(650)
         .build();
 
-    // ── Navigation Split View ───────────────────────────────────────────
-
-    let stack = gtk4::Stack::builder()
-        .transition_type(gtk4::StackTransitionType::Crossfade)
-        .transition_duration(200)
-        .hexpand(true)
-        .vexpand(true)
-        .build();
+    // ── Navigation ───────────────────────────────────────────────────────
 
     let sidebar_list = gtk4::ListBox::builder()
-        .css_classes(vec!["navigation-sidebar".to_string()])
         .selection_mode(gtk4::SelectionMode::Single)
         .build();
 
+    let nav_view = libadwaita::NavigationView::new();
+
     let all_pages = pages::all_pages();
 
+    // Build pages and store references for navigation
+    let mut page_map: HashMap<String, libadwaita::NavigationPage> = HashMap::new();
+    let mut first = true;
     for page in &all_pages {
-        // Add page to stack
         let widget = page.build(proxy);
-        stack.add_named(&widget, Some(page.id()));
+        let nav_page = libadwaita::NavigationPage::with_tag(
+            &widget, page.title(), page.id(),
+        );
 
-        // Add sidebar row
+        if first {
+            nav_view.push(&nav_page);
+            first = false;
+        }
+
+        page_map.insert(page.id().to_string(), nav_page);
+
         let row = pages::create_sidebar_row(page.title(), page.icon(), page.id());
         sidebar_list.append(&row);
     }
@@ -90,13 +85,23 @@ fn build_window(app: &libadwaita::Application, proxy: &Rc<SettingsProxy>) {
         sidebar_list.select_row(Some(&first_row));
     }
 
-    // Sidebar selection → stack page
-    let stack_c = stack.clone();
+    // Sidebar selection → pop current, push new page
+    let nav_view_c = nav_view.clone();
+    let page_map = Rc::new(page_map);
     sidebar_list.connect_row_selected(move |_, row| {
         if let Some(row) = row {
             let id = row.widget_name();
             if !id.is_empty() {
-                stack_c.set_visible_child_name(id.as_str());
+                // Don't navigate if already on this page
+                let current_tag = nav_view_c.visible_page()
+                    .and_then(|p| p.tag().map(|t| t.to_string()));
+                if current_tag.as_deref() == Some(id.as_str()) {
+                    return;
+                }
+                nav_view_c.pop();
+                if let Some(nav_page) = page_map.get(id.as_str()) {
+                    nav_view_c.push(nav_page);
+                }
             }
         }
     });
@@ -110,21 +115,19 @@ fn build_window(app: &libadwaita::Application, proxy: &Rc<SettingsProxy>) {
         .child(&sidebar_list)
         .build();
 
-    let split = gtk4::Paned::builder()
-        .orientation(gtk4::Orientation::Horizontal)
-        .position(220)
-        .wide_handle(true)
+    let sidebar_page = libadwaita::NavigationPage::new(&sidebar_scrolled, "Settings");
+
+    let split_view = libadwaita::NavigationSplitView::builder()
+        .sidebar(&sidebar_page)
+        .content(&libadwaita::NavigationPage::new(&nav_view, "Settings"))
+        .sidebar_width_fraction(0.3)
         .build();
-    split.set_start_child(Some(&sidebar_scrolled));
-    split.set_end_child(Some(&stack));
 
-    // Header bar
-    let header = libadwaita::HeaderBar::new();
+    let toolbar = libadwaita::ToolbarView::builder()
+        .content(&split_view)
+        .build();
+    toolbar.add_top_bar(&libadwaita::HeaderBar::new());
 
-    let content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-    content.append(&header);
-    content.append(&split);
-
-    window.set_content(Some(&content));
+    window.set_content(Some(&toolbar));
     window.present();
 }
