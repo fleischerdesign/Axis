@@ -118,20 +118,11 @@ fn build_ui(app: &libadwaita::Application, start_locked: bool, wallpaper_path: O
     // Bidirectional Config ↔ Service sync bridge
     bridge_settings(&ctx);
 
-    // ── Appearance: apply initial theme from config ──────────────────────
+    // ── Appearance: apply initial accent/font from config ──────────────────
     {
         let config = ctx.settings.store.get();
         let appearance = &config.config.appearance;
 
-        // Theme
-        let scheme = match appearance.theme {
-            axis_core::services::settings::config::Theme::Light => libadwaita::ColorScheme::ForceLight,
-            axis_core::services::settings::config::Theme::Dark => libadwaita::ColorScheme::ForceDark,
-            axis_core::services::settings::config::Theme::System => libadwaita::ColorScheme::PreferDark,
-        };
-        libadwaita::StyleManager::default().set_color_scheme(scheme);
-
-        // Accent
         let accent = match &appearance.accent_color {
             AccentColor::Auto => appearance.wallpaper.as_ref()
                 .and_then(|p| crate::widgets::wallpaper::extract_accent_color(p))
@@ -140,6 +131,14 @@ fn build_ui(app: &libadwaita::Application, start_locked: bool, wallpaper_path: O
         };
         update_theme_css(&theme_provider, &accent, &appearance.font);
     }
+
+    // ── Theme: follow GSettings via libadwaita StyleManager ────────────────
+    // Theme is controlled by other apps (e.g. axis-settings) through
+    // libadwaita's StyleManager, which writes to org.gnome.desktop.interface.
+    // The shell just observes the dark property.
+    libadwaita::StyleManager::default().connect_notify_local(Some("dark"), |mgr, _| {
+        log::info!("[theme] changed: dark={}", mgr.is_dark());
+    });
 
     // Bluetooth pairing — reactive via store subscription (no polling)
     {
@@ -256,14 +255,6 @@ fn build_ui(app: &libadwaita::Application, start_locked: bool, wallpaper_path: O
         let last_wallpaper: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
         ctx.settings.store.subscribe(move |data| {
             let app_cfg = &data.config.appearance;
-
-            // Theme
-            let scheme = match app_cfg.theme {
-                axis_core::services::settings::config::Theme::Light => libadwaita::ColorScheme::ForceLight,
-                axis_core::services::settings::config::Theme::Dark => libadwaita::ColorScheme::ForceDark,
-                axis_core::services::settings::config::Theme::System => libadwaita::ColorScheme::PreferDark,
-            };
-            libadwaita::StyleManager::default().set_color_scheme(scheme);
 
             // Wallpaper (reactive)
             let resolved_wp = app_cfg.wallpaper.as_ref()

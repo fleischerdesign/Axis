@@ -101,8 +101,6 @@ impl Default for IslandVisibility {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AppearanceConfig {
     #[serde(default)]
-    pub theme: Theme,
-    #[serde(default)]
     pub wallpaper: Option<String>,
     #[serde(default)]
     pub accent_color: AccentColor,
@@ -113,7 +111,6 @@ pub struct AppearanceConfig {
 impl Default for AppearanceConfig {
     fn default() -> Self {
         Self {
-            theme: Theme::default(),
             wallpaper: None,
             accent_color: AccentColor::default(),
             font: None,
@@ -122,14 +119,6 @@ impl Default for AppearanceConfig {
 }
 impl ConfigSection for AppearanceConfig {
     const SECTION_KEY: &'static str = "Appearance";
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-pub enum Theme {
-    Light,
-    Dark,
-    #[default]
-    System,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]

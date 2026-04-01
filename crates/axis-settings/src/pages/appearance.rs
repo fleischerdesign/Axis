@@ -19,46 +19,49 @@ impl SettingsPage for AppearancePage {
         let config = proxy.config();
         let updating = Rc::new(Cell::new(false));
 
-        // ── Theme ───────────────────────────────────────────────────────
+        // ── Theme (GSettings via libadwaita) ──────────────────────────────
         let theme_group = libadwaita::PreferencesGroup::builder()
             .title("Theme")
             .build();
 
         let theme_light = gtk4::CheckButton::with_label("Light");
         let theme_dark = gtk4::CheckButton::with_label("Dark");
-        let theme_system = gtk4::CheckButton::with_label("System");
         theme_dark.set_group(Some(&theme_light));
-        theme_system.set_group(Some(&theme_light));
 
-        match config.appearance.theme {
-            Theme::Light => theme_light.set_active(true),
-            Theme::Dark => theme_dark.set_active(true),
-            Theme::System => theme_system.set_active(true),
+        // Read initial state from GSettings via StyleManager
+        if libadwaita::StyleManager::default().is_dark() {
+            theme_dark.set_active(true);
+        } else {
+            theme_light.set_active(true);
         }
 
-        let make_theme_handler = |theme: Theme, proxy: Rc<SettingsProxy>, updating: Rc<Cell<bool>>| {
-            move |btn: &gtk4::CheckButton| {
-                if !btn.is_active() || updating.get() { return; }
-                let mut cfg = proxy.config().appearance;
-                cfg.theme = theme.clone();
-                let p = proxy.clone();
-                gtk4::glib::spawn_future_local(async move {
-                    let _ = p.set_appearance(&cfg).await;
-                    p.update_cache_appearance(cfg);
-                });
-            }
-        };
+        theme_light.connect_toggled(|btn| {
+            if !btn.is_active() { return; }
+            libadwaita::StyleManager::default()
+                .set_color_scheme(libadwaita::ColorScheme::ForceLight);
+        });
+        theme_dark.connect_toggled(|btn| {
+            if !btn.is_active() { return; }
+            libadwaita::StyleManager::default()
+                .set_color_scheme(libadwaita::ColorScheme::ForceDark);
+        });
 
-        theme_light.connect_toggled(make_theme_handler(Theme::Light, proxy.clone(), updating.clone()));
-        theme_dark.connect_toggled(make_theme_handler(Theme::Dark, proxy.clone(), updating.clone()));
-        theme_system.connect_toggled(make_theme_handler(Theme::System, proxy.clone(), updating.clone()));
+        // React to external theme changes (e.g. another app changes GSettings)
+        let theme_light_c = theme_light.clone();
+        let theme_dark_c = theme_dark.clone();
+        libadwaita::StyleManager::default().connect_notify_local(Some("dark"), move |mgr, _| {
+            if mgr.is_dark() {
+                theme_dark_c.set_active(true);
+            } else {
+                theme_light_c.set_active(true);
+            }
+        });
 
         let theme_row = libadwaita::ActionRow::builder().title("Color Scheme").build();
         let btn_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
         btn_box.set_valign(gtk4::Align::Center);
         btn_box.append(&theme_light);
         btn_box.append(&theme_dark);
-        btn_box.append(&theme_system);
         theme_row.add_suffix(&btn_box);
         theme_group.add(&theme_row);
 
