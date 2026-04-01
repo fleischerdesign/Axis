@@ -45,7 +45,7 @@ impl SharedState {
 
 pub struct LockScreen {
     state: Rc<SharedState>,
-    wallpaper: Option<gtk4::gdk::Texture>,
+    wallpaper: RefCell<Option<gtk4::gdk::Texture>>,
     power: ReadOnlyHandle<PowerData>,
 }
 
@@ -61,9 +61,14 @@ impl LockScreen {
                 lock_content: RefCell::new(None),
                 clock_running: Cell::new(false),
             }),
-            wallpaper,
+            wallpaper: RefCell::new(wallpaper),
             power,
         }
+    }
+
+    /// Update the wallpaper texture. Takes effect on next lock.
+    pub fn set_wallpaper(&self, texture: Option<gtk4::gdk::Texture>) {
+        *self.wallpaper.borrow_mut() = texture;
     }
 
     pub fn is_locked(&self) -> bool {
@@ -148,7 +153,7 @@ impl LockScreen {
     fn build_background(&self) -> gtk4::Overlay {
         let overlay = gtk4::Overlay::new();
 
-        if let Some(ref texture) = self.wallpaper {
+        if let Some(ref texture) = *self.wallpaper.borrow() {
             let blurred = BlurredPicture::new(texture);
             blurred.set_hexpand(true);
             blurred.set_vexpand(true);

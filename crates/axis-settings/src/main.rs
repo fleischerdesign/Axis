@@ -22,6 +22,17 @@ fn main() {
     application.connect_activate(move |app| {
         libadwaita::init().expect("Failed to init libadwaita");
 
+        // Load custom CSS
+        let provider = gtk4::CssProvider::new();
+        provider.load_from_string(include_str!("style.css"));
+        if let Some(display) = gtk4::gdk::Display::default() {
+            gtk4::style_context_add_provider_for_display(
+                &display,
+                &provider,
+                gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+            );
+        }
+
         // Load config via D-Bus (blocking)
         let proxy = match rt.block_on(SettingsProxy::new()) {
             Ok(p) => Rc::new(p),

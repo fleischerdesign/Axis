@@ -15,12 +15,7 @@ pub trait ConfigSection:
 fn default_true() -> bool {
     true
 }
-fn default_opacity() -> f64 {
-    1.0
-}
-fn default_corner_radius() -> u32 {
-    10
-}
+
 fn default_temp_day() -> u32 {
     6500
 }
@@ -107,18 +102,21 @@ impl Default for IslandVisibility {
 pub struct AppearanceConfig {
     #[serde(default)]
     pub theme: Theme,
-    #[serde(default = "default_opacity")]
-    pub bar_opacity: f64,
-    #[serde(default = "default_corner_radius")]
-    pub corner_radius: u32,
+    #[serde(default)]
+    pub wallpaper: Option<String>,
+    #[serde(default)]
+    pub accent_color: AccentColor,
+    #[serde(default)]
+    pub font: Option<String>,
 }
 
 impl Default for AppearanceConfig {
     fn default() -> Self {
         Self {
             theme: Theme::default(),
-            bar_opacity: 1.0,
-            corner_radius: 10,
+            wallpaper: None,
+            accent_color: AccentColor::default(),
+            font: None,
         }
     }
 }
@@ -132,6 +130,43 @@ pub enum Theme {
     Dark,
     #[default]
     System,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub enum AccentColor {
+    #[default]
+    Blue,
+    Teal,
+    Green,
+    Yellow,
+    Orange,
+    Red,
+    Pink,
+    Purple,
+    Auto,
+}
+
+impl AccentColor {
+    pub fn hex_value(&self) -> &'static str {
+        match self {
+            Self::Blue   => "#3584e4",
+            Self::Teal   => "#33b5a0",
+            Self::Green  => "#3ec35a",
+            Self::Yellow => "#f5c211",
+            Self::Orange => "#ed5b00",
+            Self::Red    => "#e53935",
+            Self::Pink   => "#e45b9c",
+            Self::Purple => "#9141ac",
+            Self::Auto   => "#3584e4",
+        }
+    }
+
+    pub fn all_presets() -> &'static [AccentColor] {
+        &[
+            Self::Blue, Self::Teal, Self::Green, Self::Yellow,
+            Self::Orange, Self::Red, Self::Pink, Self::Purple, Self::Auto,
+        ]
+    }
 }
 
 // ── Nightlight Config ───────────────────────────────────────────────────────

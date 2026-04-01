@@ -23,6 +23,7 @@ use axis_core::services::power::PowerService;
 use crate::services::launcher::LauncherService;
 use crate::services::notifications::NotificationService;
 use axis_core::services::settings::SettingsService;
+use axis_core::services::settings::config::AccentColor;
 use axis_core::{ReadOnlyHandle, ServiceHandle};
 use crate::widgets::{Bar, QuickSettingsPopup, WorkspacePopup, LauncherPopup, CalendarPopup, NotificationToastManager, osd::OsdManager};
 use crate::widgets::lock_screen::LockScreen;
@@ -95,20 +96,50 @@ fn main() {
 fn build_ui(app: &libadwaita::Application, start_locked: bool, wallpaper_path: Option<String>) {
     let provider = gtk4::CssProvider::new();
     provider.load_from_string(include_str!("style.css"));
+
+    // Dynamic theme provider (accent color, font) — overrides CSS variables
+    let theme_provider = gtk4::CssProvider::new();
+
     if let Some(display) = gtk4::gdk::Display::default() {
         gtk4::style_context_add_provider_for_display(
             &display,
             &provider,
             gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
         );
+        gtk4::style_context_add_provider_for_display(
+            &display,
+            &theme_provider,
+            gtk4::STYLE_PROVIDER_PRIORITY_USER,
+        );
     }
-
-    libadwaita::StyleManager::default().set_color_scheme(libadwaita::ColorScheme::PreferDark);
 
     let ctx = setup_services();
 
     // Bidirectional Config ↔ Service sync bridge
     bridge_settings(&ctx);
+
+    // ── Appearance: apply initial theme from config ──────────────────────
+    {
+        let config = ctx.settings.store.get();
+        let appearance = &config.config.appearance;
+
+        // Theme
+        let scheme = match appearance.theme {
+            axis_core::services::settings::config::Theme::Light => libadwaita::ColorScheme::ForceLight,
+            axis_core::services::settings::config::Theme::Dark => libadwaita::ColorScheme::ForceDark,
+            axis_core::services::settings::config::Theme::System => libadwaita::ColorScheme::PreferDark,
+        };
+        libadwaita::StyleManager::default().set_color_scheme(scheme);
+
+        // Accent
+        let accent = match &appearance.accent_color {
+            AccentColor::Auto => appearance.wallpaper.as_ref()
+                .and_then(|p| crate::widgets::wallpaper::extract_accent_color(p))
+                .unwrap_or_else(|| AccentColor::Blue.hex_value().to_string()),
+            c => c.hex_value().to_string(),
+        };
+        update_theme_css(&theme_provider, &accent, &appearance.font);
+    }
 
     // Bluetooth pairing — reactive via store subscription (no polling)
     {
@@ -204,14 +235,59 @@ fn build_ui(app: &libadwaita::Application, start_locked: bool, wallpaper_path: O
     // Continuity Capture Controller
     let _continuity_ctrl = crate::widgets::continuity_capture::ContinuityCaptureController::new(app, ctx.clone());
 
-    // Wallpaper
-    let lockscreen_texture = wallpaper_path
+    // Wallpaper — stateful service, resolves from config (fallback to --wallpaper CLI arg)
+    let wallpaper_svc = Rc::new(crate::widgets::wallpaper::WallpaperService::new(app));
+    let wallpaper_cfg = ctx.settings.store.get().config.appearance.wallpaper.clone();
+    let wallpaper_resolved = wallpaper_cfg.or(wallpaper_path.clone());
+    let lockscreen_texture = wallpaper_resolved
         .as_ref()
-        .and_then(|p| crate::widgets::wallpaper::WallpaperService::show(app, p));
+        .and_then(|p| wallpaper_svc.show(p));
 
     // Lock Screen
     let lock_screen = Rc::new(LockScreen::new(lockscreen_texture, ctx.power.clone()));
     setup_lock_triggers(&lock_screen);
+
+    // ── Appearance: reactive subscriber (theme, wallpaper, accent, font) ─
+    {
+        let theme_provider_c = theme_provider.clone();
+        let wallpaper_path_c = wallpaper_path.clone();
+        let wallpaper_svc_c = wallpaper_svc.clone();
+        let lock_screen_c = lock_screen.clone();
+        let last_wallpaper: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+        ctx.settings.store.subscribe(move |data| {
+            let app_cfg = &data.config.appearance;
+
+            // Theme
+            let scheme = match app_cfg.theme {
+                axis_core::services::settings::config::Theme::Light => libadwaita::ColorScheme::ForceLight,
+                axis_core::services::settings::config::Theme::Dark => libadwaita::ColorScheme::ForceDark,
+                axis_core::services::settings::config::Theme::System => libadwaita::ColorScheme::PreferDark,
+            };
+            libadwaita::StyleManager::default().set_color_scheme(scheme);
+
+            // Wallpaper (reactive)
+            let resolved_wp = app_cfg.wallpaper.as_ref()
+                .or(wallpaper_path_c.as_ref())
+                .cloned();
+            if *last_wallpaper.borrow() != resolved_wp {
+                *last_wallpaper.borrow_mut() = resolved_wp.clone();
+                let new_texture = wallpaper_svc_c.set_wallpaper(resolved_wp.as_deref());
+                lock_screen_c.set_wallpaper(new_texture);
+            }
+
+            // Accent
+            let accent = match &app_cfg.accent_color {
+                AccentColor::Auto => {
+                    let path = app_cfg.wallpaper.as_ref()
+                        .or(wallpaper_path_c.as_ref());
+                    path.and_then(|p| crate::widgets::wallpaper::extract_accent_color(p))
+                        .unwrap_or_else(|| AccentColor::Blue.hex_value().to_string())
+                }
+                c => c.hex_value().to_string(),
+            };
+            update_theme_css(&theme_provider_c, &accent, &app_cfg.font);
+        });
+    }
 
     // Toasts initialisieren
     NotificationToastManager::init(app, ctx.clone());
@@ -439,4 +515,16 @@ fn bridge_settings(ctx: &AppContext) {
     sync::wire_nightlight_config_sync(
         &ctx.settings.store, &ctx.nightlight.tx,
     );
+}
+
+fn update_theme_css(provider: &gtk4::CssProvider, accent_hex: &str, font: &Option<String>) {
+    let (r, g, b) = crate::widgets::wallpaper::hex_to_rgb(accent_hex);
+    let hover = crate::widgets::wallpaper::lighten_hex(accent_hex, 0.15);
+    let font_rule = font.as_ref()
+        .map(|f| format!("--font-family: \"{f}\";"))
+        .unwrap_or_default();
+    let css = format!(
+        "window {{ --accent: {accent_hex}; --accent-rgb: {r},{g},{b}; --accent-hover: {hover}; {font_rule} }}"
+    );
+    provider.load_from_string(&css);
 }

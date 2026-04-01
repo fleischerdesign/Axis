@@ -22,6 +22,7 @@ futures-util.workspace = true
 zbus.workspace = true
 open.workspace = true
 evdev.workspace = true
+image.workspace = true
 
 [[bin]]
 name = "axis"

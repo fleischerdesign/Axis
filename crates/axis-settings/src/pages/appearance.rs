@@ -1,6 +1,7 @@
 use std::cell::Cell;
 use std::rc::Rc;
 use gtk4::prelude::*;
+use gtk4::gio;
 use libadwaita::prelude::*;
 
 use crate::page::SettingsPage;
@@ -61,88 +62,333 @@ impl SettingsPage for AppearancePage {
         theme_row.add_suffix(&btn_box);
         theme_group.add(&theme_row);
 
-        // ── Style ───────────────────────────────────────────────────────
-        let style_group = libadwaita::PreferencesGroup::builder()
-            .title("Style")
+        // ── Wallpaper ───────────────────────────────────────────────────
+        let wallpaper_group = libadwaita::PreferencesGroup::builder()
+            .title("Wallpaper")
+            .description("Used as desktop background and lock screen backdrop")
             .build();
 
-        // Opacity
-        let opacity_row = libadwaita::ActionRow::builder().title("Bar Opacity").build();
-        let opacity_slider = gtk4::Scale::with_range(gtk4::Orientation::Horizontal, 0.0, 1.0, 0.05);
-        opacity_slider.set_value(config.appearance.bar_opacity);
-        opacity_slider.set_size_request(200, -1);
-        opacity_slider.set_draw_value(true);
-        opacity_slider.set_value_pos(gtk4::PositionType::Right);
-        opacity_row.add_suffix(&opacity_slider);
-        style_group.add(&opacity_row);
+        let wallpaper_preview = gtk4::Image::builder()
+            .pixel_size(48)
+            .css_classes(["wallpaper-preview"])
+            .build();
+        update_wallpaper_preview(&wallpaper_preview, &config.appearance.wallpaper);
 
-        let proxy_c = proxy.clone();
-        let updating_c = updating.clone();
-        let debounce: Rc<std::cell::RefCell<Option<gtk4::glib::SourceId>>> = Rc::new(std::cell::RefCell::new(None));
-        opacity_slider.connect_value_changed(move |s| {
-            if updating_c.get() { return; }
-            if let Some(id) = debounce.borrow_mut().take() { id.remove(); }
-            let val = s.value();
-            let p = proxy_c.clone();
-            let src = gtk4::glib::timeout_add_local_once(std::time::Duration::from_millis(150), move || {
-                let mut cfg = p.config().appearance;
-                cfg.bar_opacity = val;
-                let pp = p.clone();
-                gtk4::glib::spawn_future_local(async move {
-                    let _ = pp.set_appearance(&cfg).await;
-                    pp.update_cache_appearance(cfg);
+        let wallpaper_label = gtk4::Label::builder()
+            .label(config.appearance.wallpaper.as_deref().unwrap_or("No wallpaper"))
+            .ellipsize(gtk4::pango::EllipsizeMode::Middle)
+            .hexpand(true)
+            .css_classes(["dim-label"])
+            .build();
+
+        let wallpaper_choose_btn = gtk4::Button::builder()
+            .label("Choose…")
+            .css_classes(["flat"])
+            .build();
+
+        let wallpaper_clear_btn = gtk4::Button::builder()
+            .icon_name("edit-clear-symbolic")
+            .css_classes(["flat"])
+            .tooltip_text("Clear wallpaper")
+            .sensitive(config.appearance.wallpaper.is_some())
+            .build();
+
+        let wallpaper_row = libadwaita::ActionRow::builder().title("Background Image").build();
+        let wallpaper_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+        wallpaper_box.set_valign(gtk4::Align::Center);
+        wallpaper_box.append(&wallpaper_preview);
+        wallpaper_box.append(&wallpaper_label);
+        wallpaper_box.append(&wallpaper_choose_btn);
+        wallpaper_box.append(&wallpaper_clear_btn);
+        wallpaper_row.add_suffix(&wallpaper_box);
+        wallpaper_group.add(&wallpaper_row);
+
+        // File dialog
+        {
+            let proxy_c = proxy.clone();
+            let preview_c = wallpaper_preview.clone();
+            let label_c = wallpaper_label.clone();
+            let clear_c = wallpaper_clear_btn.clone();
+            wallpaper_choose_btn.connect_clicked(move |btn| {
+                let dialog = gtk4::FileDialog::builder()
+                    .title("Choose Wallpaper")
+                    .modal(true)
+                    .build();
+
+                let filter = gtk4::FileFilter::new();
+                filter.set_name(Some("Images"));
+                filter.add_mime_type("image/png");
+                filter.add_mime_type("image/jpeg");
+                filter.add_mime_type("image/webp");
+                filter.add_mime_type("image/bmp");
+                dialog.set_default_filter(Some(&filter));
+
+                let p = proxy_c.clone();
+                let preview_c = preview_c.clone();
+                let label_c = label_c.clone();
+                let clear_c = clear_c.clone();
+                dialog.open(Some(btn.root().unwrap().downcast_ref::<gtk4::Window>().unwrap()), gio::Cancellable::NONE, move |result| {
+                    if let Ok(file) = result {
+                        if let Some(path) = file.path() {
+                            let path_str = path.to_string_lossy().to_string();
+                            let mut cfg = p.config().appearance;
+                            cfg.wallpaper = Some(path_str.clone());
+                            let pp = p.clone();
+                            gtk4::glib::spawn_future_local(async move {
+                                let _ = pp.set_appearance(&cfg).await;
+                                pp.update_cache_appearance(cfg);
+                            });
+                            update_wallpaper_preview(&preview_c, &Some(path_str.clone()));
+                            label_c.set_label(&path_str);
+                            clear_c.set_sensitive(true);
+                        }
+                    }
                 });
             });
-            *debounce.borrow_mut() = Some(src);
-        });
+        }
 
-        // Corner Radius
-        let radius_row = libadwaita::ActionRow::builder().title("Corner Radius").build();
-        let radius_slider = gtk4::Scale::with_range(gtk4::Orientation::Horizontal, 0.0, 20.0, 1.0);
-        radius_slider.set_value(config.appearance.corner_radius as f64);
-        radius_slider.set_size_request(200, -1);
-        radius_slider.set_draw_value(true);
-        radius_slider.set_value_pos(gtk4::PositionType::Right);
-        radius_row.add_suffix(&radius_slider);
-        style_group.add(&radius_row);
-
-        let proxy_c = proxy.clone();
-        let updating_c = updating.clone();
-        let debounce: Rc<std::cell::RefCell<Option<gtk4::glib::SourceId>>> = Rc::new(std::cell::RefCell::new(None));
-        radius_slider.connect_value_changed(move |s| {
-            if updating_c.get() { return; }
-            if let Some(id) = debounce.borrow_mut().take() { id.remove(); }
-            let val = s.value() as u32;
-            let p = proxy_c.clone();
-            let src = gtk4::glib::timeout_add_local_once(std::time::Duration::from_millis(150), move || {
-                let mut cfg = p.config().appearance;
-                cfg.corner_radius = val;
-                let pp = p.clone();
+        // Clear button
+        {
+            let proxy_c = proxy.clone();
+            let preview_c = wallpaper_preview.clone();
+            let label_c = wallpaper_label.clone();
+            let clear_c = wallpaper_clear_btn.clone();
+            wallpaper_clear_btn.connect_clicked(move |_| {
+                let mut cfg = proxy_c.config().appearance;
+                cfg.wallpaper = None;
+                let p = proxy_c.clone();
                 gtk4::glib::spawn_future_local(async move {
-                    let _ = pp.set_appearance(&cfg).await;
-                    pp.update_cache_appearance(cfg);
+                    let _ = p.set_appearance(&cfg).await;
+                    p.update_cache_appearance(cfg);
+                });
+                update_wallpaper_preview(&preview_c, &None);
+                label_c.set_label("No wallpaper");
+                clear_c.set_sensitive(false);
+            });
+        }
+
+        // ── Accent Color ────────────────────────────────────────────────
+        let accent_group = libadwaita::PreferencesGroup::builder()
+            .title("Accent Color")
+            .build();
+
+        let accent_grid = gtk4::FlowBox::builder()
+            .selection_mode(gtk4::SelectionMode::Single)
+            .homogeneous(true)
+            .column_spacing(8)
+            .row_spacing(8)
+            .max_children_per_line(5)
+            .min_children_per_line(5)
+            .css_classes(["accent-grid"])
+            .build();
+
+        let active_accent = Rc::new(Cell::new(config.appearance.accent_color.clone()));
+
+        for color in AccentColor::all_presets() {
+            let btn = create_accent_button(color, active_accent.get() == *color);
+            accent_grid.append(&btn);
+        }
+
+        // Select the active one
+        let current_idx = AccentColor::all_presets()
+            .iter()
+            .position(|c| *c == config.appearance.accent_color)
+            .unwrap_or(0);
+        accent_grid.select_child(&accent_grid.child_at_index(current_idx as i32).unwrap());
+
+        {
+            let proxy_c = proxy.clone();
+            let active_c = active_accent.clone();
+            let updating_c = updating.clone();
+            accent_grid.connect_selected_children_changed(move |fb| {
+                if updating_c.get() { return; }
+                if let Some(selected) = fb.selected_children().first() {
+                    let idx = selected.index();
+                    if let Some(color) = AccentColor::all_presets().get(idx as usize) {
+                        if *color == active_c.get() { return; }
+                        active_c.set(color.clone());
+                        let mut cfg = proxy_c.config().appearance;
+                        cfg.accent_color = color.clone();
+                        let p = proxy_c.clone();
+                        gtk4::glib::spawn_future_local(async move {
+                            let _ = p.set_appearance(&cfg).await;
+                            p.update_cache_appearance(cfg);
+                        });
+                    }
+                }
+            });
+        }
+
+        accent_group.add(&accent_grid);
+
+        // ── Font ────────────────────────────────────────────────────────
+        let font_group = libadwaita::PreferencesGroup::builder()
+            .title("Font")
+            .build();
+
+        let font_dialog = gtk4::FontDialog::builder()
+            .title("Select Font")
+            .build();
+
+        let font_btn = gtk4::FontDialogButton::builder()
+            .dialog(&font_dialog)
+            .build();
+
+        if let Some(ref font) = config.appearance.font {
+            font_btn.set_font_desc(&gtk4::pango::FontDescription::from_string(font));
+        }
+
+        let font_reset_btn = gtk4::Button::builder()
+            .icon_name("edit-undo-symbolic")
+            .css_classes(["flat"])
+            .tooltip_text("Reset to system default")
+            .sensitive(config.appearance.font.is_some())
+            .build();
+
+        let font_row = libadwaita::ActionRow::builder()
+            .title("Typeface")
+            .subtitle("Override the system font for the shell")
+            .build();
+        let font_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+        font_box.set_valign(gtk4::Align::Center);
+        font_box.append(&font_btn);
+        font_box.append(&font_reset_btn);
+        font_row.add_suffix(&font_box);
+        font_group.add(&font_row);
+
+        {
+            let proxy_c = proxy.clone();
+            let reset_c = font_reset_btn.clone();
+            font_btn.connect_font_desc_notify(move |btn| {
+                let desc = btn.font_desc();
+                let font_str = desc.map(|d| d.to_string()).filter(|s| !s.is_empty());
+                let mut cfg = proxy_c.config().appearance;
+                cfg.font = font_str;
+                reset_c.set_sensitive(cfg.font.is_some());
+                let p = proxy_c.clone();
+                gtk4::glib::spawn_future_local(async move {
+                    let _ = p.set_appearance(&cfg).await;
+                    p.update_cache_appearance(cfg);
                 });
             });
-            *debounce.borrow_mut() = Some(src);
-        });
+        }
 
+        {
+            let proxy_c = proxy.clone();
+            let font_btn_c = font_btn.clone();
+            let reset_c = font_reset_btn.clone();
+            font_reset_btn.connect_clicked(move |_| {
+                let mut cfg = proxy_c.config().appearance;
+                cfg.font = None;
+                font_btn_c.set_font_desc(&gtk4::pango::FontDescription::new());
+                reset_c.set_sensitive(false);
+                let p = proxy_c.clone();
+                gtk4::glib::spawn_future_local(async move {
+                    let _ = p.set_appearance(&cfg).await;
+                    p.update_cache_appearance(cfg);
+                });
+            });
+        }
+
+        // ── Page Assembly ───────────────────────────────────────────────
         let page = libadwaita::PreferencesPage::new();
         page.add(&theme_group);
-        page.add(&style_group);
+        page.add(&wallpaper_group);
+        page.add(&accent_group);
+        page.add(&font_group);
 
-        // Reactive: update sliders on external config changes
-        let opacity_slider_c = opacity_slider.clone();
-        let radius_slider_c = radius_slider.clone();
+        // Reactive: update UI on external config changes
+        let wallpaper_preview_c = wallpaper_preview.clone();
+        let wallpaper_label_c = wallpaper_label.clone();
+        let wallpaper_clear_c = wallpaper_clear_btn.clone();
+        let accent_grid_c = accent_grid.clone();
+        let active_accent_c = active_accent.clone();
+        let font_btn_c = font_btn.clone();
+        let font_reset_c = font_reset_btn.clone();
         let updating_c = updating.clone();
         let proxy_c = proxy.clone();
         proxy.on_change(move || {
             let cfg = proxy_c.config();
             updating_c.set(true);
-            opacity_slider_c.set_value(cfg.appearance.bar_opacity);
-            radius_slider_c.set_value(cfg.appearance.corner_radius as f64);
+
+            update_wallpaper_preview(&wallpaper_preview_c, &cfg.appearance.wallpaper);
+            wallpaper_label_c.set_label(cfg.appearance.wallpaper.as_deref().unwrap_or("No wallpaper"));
+            wallpaper_clear_c.set_sensitive(cfg.appearance.wallpaper.is_some());
+
+            if cfg.appearance.accent_color != active_accent_c.get() {
+                active_accent_c.set(cfg.appearance.accent_color.clone());
+                let idx = AccentColor::all_presets()
+                    .iter()
+                    .position(|c| *c == cfg.appearance.accent_color)
+                    .unwrap_or(0);
+                if let Some(child) = accent_grid_c.child_at_index(idx as i32) {
+                    accent_grid_c.select_child(&child);
+                }
+            }
+
+            if let Some(ref font) = cfg.appearance.font {
+                font_btn_c.set_font_desc(&gtk4::pango::FontDescription::from_string(font));
+            } else {
+                font_btn_c.set_font_desc(&gtk4::pango::FontDescription::new());
+            }
+            font_reset_c.set_sensitive(cfg.appearance.font.is_some());
+
             updating_c.set(false);
         });
 
         page.into()
     }
+}
+
+fn create_accent_button(color: &AccentColor, active: bool) -> gtk4::Button {
+    let css_class = match color {
+        AccentColor::Blue   => "accent-blue",
+        AccentColor::Teal   => "accent-teal",
+        AccentColor::Green  => "accent-green",
+        AccentColor::Yellow => "accent-yellow",
+        AccentColor::Orange => "accent-orange",
+        AccentColor::Red    => "accent-red",
+        AccentColor::Pink   => "accent-pink",
+        AccentColor::Purple => "accent-purple",
+        AccentColor::Auto   => "accent-auto",
+    };
+
+    let mut classes = vec!["accent-swatch", css_class];
+    if active {
+        classes.push("active");
+    }
+
+    let icon = if *color == AccentColor::Auto {
+        Some("palette-symbolic")
+    } else {
+        None
+    };
+
+    let btn = gtk4::Button::builder()
+        .css_classes(classes.iter().copied().collect::<Vec<&str>>().as_slice())
+        .width_request(36)
+        .height_request(36)
+        .valign(gtk4::Align::Center)
+        .tooltip_text(match color {
+            AccentColor::Auto => "Extract from wallpaper",
+            _ => color.hex_value(),
+        })
+        .build();
+
+    if let Some(icon_name) = icon {
+        btn.set_icon_name(icon_name);
+    }
+
+    btn
+}
+
+fn update_wallpaper_preview(image: &gtk4::Image, path: &Option<String>) {
+    if let Some(p) = path {
+        if let Ok(pixbuf) = gtk4::gdk_pixbuf::Pixbuf::from_file_at_scale(p, 48, 48, true) {
+            let texture = gtk4::gdk::Texture::for_pixbuf(&pixbuf);
+            image.set_paintable(Some(&texture));
+            return;
+        }
+    }
+    image.set_icon_name(Some("image-x-generic-symbolic"));
 }
