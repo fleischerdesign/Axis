@@ -41,3 +41,11 @@ flowboxchild:selected .accent-swatch {
 .wallpaper-preview {
     border-radius: 8px;
 }
+
+/* Arrangement Grid (Continuity) */
+.arrangement-grid {
+    border-radius: 12px;
+    background-color: alpha(@theme_bg_color, 0.5);
+    border: 1px solid alpha(@borders, 0.3);
+    min-height: 300px;
+}

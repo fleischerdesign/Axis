@@ -12,15 +12,17 @@ pub use services::ServicesPage;
 pub use shortcuts::ShortcutsPage;
 pub use continuity::ContinuityPage;
 
+use std::rc::Rc;
 use crate::page::SettingsPage;
+use crate::continuity_proxy::ContinuityProxy;
 
-pub fn all_pages() -> Vec<Box<dyn SettingsPage>> {
+pub fn all_pages(continuity: Option<&Rc<ContinuityProxy>>) -> Vec<Box<dyn SettingsPage>> {
     vec![
         Box::new(BarPage),
         Box::new(AppearancePage),
         Box::new(NightlightPage),
         Box::new(ServicesPage),
-        Box::new(ContinuityPage),
+        Box::new(ContinuityPage::new(continuity)),
         Box::new(ShortcutsPage),
     ]
 }

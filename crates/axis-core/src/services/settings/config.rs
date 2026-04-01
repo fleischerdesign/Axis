@@ -208,6 +208,17 @@ impl ConfigSection for ContinuityConfig {
     const SECTION_KEY: &'static str = "Continuity";
 }
 
+/// Which edge of the local screen a peer is positioned at.
+/// Mirrors `axis_core::services::continuity::protocol::Side` for config persistence.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub enum ArrangementSide {
+    Left,
+    #[default]
+    Right,
+    Top,
+    Bottom,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct PeerPersistedConfig {
     pub device_id: String,
@@ -222,6 +233,8 @@ pub struct PeerPersistedConfig {
     pub arrangement_x: i32,
     #[serde(default)]
     pub arrangement_y: i32,
+    #[serde(default)]
+    pub arrangement_side: ArrangementSide,
 }
 
 // ── Services Config ─────────────────────────────────────────────────────────
