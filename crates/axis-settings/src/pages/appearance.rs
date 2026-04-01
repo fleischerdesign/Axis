@@ -189,6 +189,26 @@ impl SettingsPage for AppearancePage {
             accent_grid.append(&btn);
         }
 
+        // Wire click handlers after appending (parent FlowBoxChild must exist)
+        {
+            let accent_grid_c = accent_grid.clone();
+            for (idx, color) in AccentColor::all_presets().iter().enumerate() {
+                if let Some(child) = accent_grid_c.child_at_index(idx as i32) {
+                    if let Some(box_widget) = child.child() {
+                        if let Some(btn) = box_widget.downcast_ref::<gtk4::Button>() {
+                            let grid_cc = accent_grid_c.clone();
+                            let child_c = child.clone();
+                            let gesture = gtk4::GestureClick::new();
+                            gesture.connect_pressed(move |_, _, _, _| {
+                                grid_cc.select_child(&child_c);
+                            });
+                            btn.add_controller(gesture);
+                        }
+                    }
+                }
+            }
+        }
+
         // Select the active one
         let current_idx = AccentColor::all_presets()
             .iter()
