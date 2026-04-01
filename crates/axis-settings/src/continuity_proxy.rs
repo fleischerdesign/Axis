@@ -1,0 +1,240 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+use gtk4::glib;
+use zbus::Connection;
+
+use axis_core::services::continuity::dbus::ContinuityStateSnapshot;
+use axis_core::services::continuity::PeerArrangement;
+
+/// Typed D-Bus client for org.axis.Shell.Continuity.
+/// Subscribes to StateChanged signal and notifies listeners.
+pub struct ContinuityProxy {
+    conn: Connection,
+    cached: Rc<RefCell<ContinuityStateSnapshot>>,
+    listeners: Rc<RefCell<Vec<Box<dyn Fn()>>>>,
+}
+
+impl ContinuityProxy {
+    pub async fn new() -> Result<Self, Box<dyn std::error::Error>> {
+        let conn = Connection::session().await?;
+
+        // Verify the Continuity D-Bus interface is available
+        let _ = Self::call_get_state(&conn).await?;
+
+        let proxy = Self {
+            conn,
+            cached: Rc::new(RefCell::new(ContinuityStateSnapshot::default())),
+            listeners: Rc::new(RefCell::new(Vec::new())),
+        };
+
+        // 1. Start signal listener FIRST — catches any changes from now on
+        proxy.start_signal_listener();
+
+        // 2. Then load current state — fills the gap
+        if let Ok(state) = Self::call_get_state(&proxy.conn).await {
+            *proxy.cached.borrow_mut() = state;
+            Self::notify_listeners(&proxy.listeners);
+        }
+
+        Ok(proxy)
+    }
+
+    pub fn state(&self) -> ContinuityStateSnapshot {
+        self.cached.borrow().clone()
+    }
+
+    pub fn on_change(&self, f: impl Fn() + 'static) {
+        f();
+        self.listeners.borrow_mut().push(Box::new(f));
+    }
+
+    /// Re-fetch state from D-Bus and notify listeners.
+    /// Use this when the page becomes visible to ensure fresh data.
+    pub fn reload(&self) {
+        let cached = self.cached.clone();
+        let listeners = self.listeners.clone();
+        let conn = self.conn.clone();
+
+        glib::spawn_future_local(async move {
+            if let Ok(state) = Self::call_get_state(&conn).await {
+                let changed = *cached.borrow() != state;
+                *cached.borrow_mut() = state;
+                if changed {
+                    Self::notify_listeners(&listeners);
+                }
+            }
+        });
+    }
+
+    // ── Signal Listener ─────────────────────────────────────────────────
+
+    fn start_signal_listener(&self) {
+        use futures_util::StreamExt;
+        let conn = self.conn.clone();
+        let cached = self.cached.clone();
+        let listeners = self.listeners.clone();
+
+        let _handle = glib::spawn_future_local(async move {
+            let proxy = match zbus::Proxy::new(
+                &conn,
+                "org.axis.Shell",
+                "/org/axis/Shell/Continuity",
+                "org.axis.Shell.Continuity",
+            )
+            .await
+            {
+                Ok(p) => p,
+                Err(e) => {
+                    log::warn!("[continuity-proxy] Failed to create signal proxy: {e}");
+                    return;
+                }
+            };
+
+            let mut stream = match proxy.receive_signal("StateChanged").await {
+                Ok(s) => s,
+                Err(e) => {
+                    log::warn!("[continuity-proxy] Failed to subscribe to StateChanged: {e}");
+                    return;
+                }
+            };
+
+            while let Some(signal) = stream.next().await {
+                let body = signal.body();
+                match body.deserialize::<(String,)>() {
+                    Ok((json,)) => {
+                        if let Ok(state) = serde_json::from_str::<ContinuityStateSnapshot>(&json) {
+                            *cached.borrow_mut() = state;
+                            Self::notify_listeners(&listeners);
+                        }
+                    }
+                    Err(e) => {
+                        log::warn!("[continuity-proxy] Failed to parse signal: {e}");
+                    }
+                }
+            }
+        });
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────
+
+    fn notify_listeners(listeners: &Rc<RefCell<Vec<Box<dyn Fn()>>>>) {
+        let taken = std::mem::take(&mut *listeners.borrow_mut());
+        for listener in &taken {
+            listener();
+        }
+        *listeners.borrow_mut() = taken;
+    }
+
+    async fn call_get_state(
+        conn: &Connection,
+    ) -> Result<ContinuityStateSnapshot, Box<dyn std::error::Error>> {
+        let json: String = conn
+            .call_method(
+                Some("org.axis.Shell"),
+                "/org/axis/Shell/Continuity",
+                Some("org.axis.Shell.Continuity"),
+                "GetState",
+                &(),
+            )
+            .await?
+            .body()
+            .deserialize()?;
+        Ok(serde_json::from_str(&json)?)
+    }
+
+    // ── Commands ────────────────────────────────────────────────────────
+
+    pub async fn connect_to_peer(&self, peer_id: &str) -> Result<bool, Box<dyn std::error::Error>> {
+        let result: bool = self.conn
+            .call_method(
+                Some("org.axis.Shell"),
+                "/org/axis/Shell/Continuity",
+                Some("org.axis.Shell.Continuity"),
+                "ConnectToPeer",
+                &(peer_id,),
+            )
+            .await?
+            .body()
+            .deserialize()?;
+        Ok(result)
+    }
+
+    pub async fn confirm_pin(&self) -> Result<bool, Box<dyn std::error::Error>> {
+        let result: bool = self.conn
+            .call_method(
+                Some("org.axis.Shell"),
+                "/org/axis/Shell/Continuity",
+                Some("org.axis.Shell.Continuity"),
+                "ConfirmPin",
+                &(),
+            )
+            .await?
+            .body()
+            .deserialize()?;
+        Ok(result)
+    }
+
+    pub async fn reject_pin(&self) -> Result<bool, Box<dyn std::error::Error>> {
+        let result: bool = self.conn
+            .call_method(
+                Some("org.axis.Shell"),
+                "/org/axis/Shell/Continuity",
+                Some("org.axis.Shell.Continuity"),
+                "RejectPin",
+                &(),
+            )
+            .await?
+            .body()
+            .deserialize()?;
+        Ok(result)
+    }
+
+    pub async fn disconnect(&self) -> Result<bool, Box<dyn std::error::Error>> {
+        let result: bool = self.conn
+            .call_method(
+                Some("org.axis.Shell"),
+                "/org/axis/Shell/Continuity",
+                Some("org.axis.Shell.Continuity"),
+                "Disconnect",
+                &(),
+            )
+            .await?
+            .body()
+            .deserialize()?;
+        Ok(result)
+    }
+
+    pub async fn set_peer_arrangement(
+        &self,
+        arrangement: &PeerArrangement,
+    ) -> Result<bool, Box<dyn std::error::Error>> {
+        let json = serde_json::to_string(arrangement)?;
+        let result: bool = self.conn
+            .call_method(
+                Some("org.axis.Shell"),
+                "/org/axis/Shell/Continuity",
+                Some("org.axis.Shell.Continuity"),
+                "SetPeerArrangement",
+                &(&json,),
+            )
+            .await?
+            .body()
+            .deserialize()?;
+        Ok(result)
+    }
+
+    pub async fn set_enabled(&self, enabled: bool) -> Result<bool, Box<dyn std::error::Error>> {
+        let result: bool = self.conn
+            .call_method(
+                Some("org.axis.Shell"),
+                "/org/axis/Shell/Continuity",
+                Some("org.axis.Shell.Continuity"),
+                "SetEnabled",
+                &(enabled,),
+            )
+            .await?
+            .body()
+            .deserialize()?;
+        Ok(result)
+    }
+}

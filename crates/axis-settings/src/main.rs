@@ -1,13 +1,16 @@
 mod bindings;
+mod continuity_proxy;
 mod page;
 mod pages;
 mod proxy;
+mod widgets;
 
 use gtk4::prelude::*;
 use libadwaita::prelude::*;
 use std::rc::Rc;
 
 use proxy::SettingsProxy;
+use continuity_proxy::ContinuityProxy;
 
 fn main() {
     // Tokio runtime must live as long as the app — zbus uses it for its
@@ -43,7 +46,19 @@ fn main() {
             }
         };
 
-        build_window(app, &proxy);
+        // Load continuity state via D-Bus (optional — shell may not expose it yet)
+        let continuity_proxy = match rt.block_on(ContinuityProxy::new()) {
+            Ok(p) => {
+                log::info!("[settings] Connected to Continuity D-Bus service");
+                Some(Rc::new(p))
+            }
+            Err(e) => {
+                log::warn!("[settings] Continuity D-Bus unavailable: {e}");
+                None
+            }
+        };
+
+        build_window(app, &proxy, continuity_proxy.as_ref());
     });
 
     let args: Vec<String> = std::env::args().collect();
@@ -51,7 +66,11 @@ fn main() {
     application.run_with_args(&args_ref);
 }
 
-fn build_window(app: &libadwaita::Application, proxy: &Rc<SettingsProxy>) {
+fn build_window(
+    app: &libadwaita::Application,
+    proxy: &Rc<SettingsProxy>,
+    continuity: Option<&Rc<ContinuityProxy>>,
+) {
     use std::collections::HashMap;
 
     let window = libadwaita::ApplicationWindow::builder()
@@ -69,7 +88,7 @@ fn build_window(app: &libadwaita::Application, proxy: &Rc<SettingsProxy>) {
 
     let nav_view = libadwaita::NavigationView::new();
 
-    let all_pages = pages::all_pages();
+    let all_pages = pages::all_pages(continuity);
 
     // Build pages and store references for navigation
     let mut page_map: HashMap<String, libadwaita::NavigationPage> = HashMap::new();

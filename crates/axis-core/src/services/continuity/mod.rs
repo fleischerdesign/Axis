@@ -1,5 +1,6 @@
 pub mod clipboard;
 pub mod connection;
+pub mod dbus;
 pub mod discovery;
 pub mod input;
 pub mod protocol;
@@ -25,7 +26,7 @@ pub const PIN_LENGTH: usize = 6;
 
 // ── Data Types ─────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum SharingMode {
     Idle,
     Pending,
@@ -373,6 +374,9 @@ impl ContinuityInner {
                     info!("[continuity] enabled");
                     if let Err(e) = discovery.register(&self.data.device_name, CONTINUITY_PORT) {
                         error!("[continuity] discovery register failed: {e}");
+                    }
+                    if let Err(e) = discovery.browse(discovery_tx.clone()) {
+                        error!("[continuity] discovery browse failed: {e}");
                     }
                     if let Err(e) = connection.listen(CONTINUITY_PORT, conn_tx.clone()) {
                         error!("[continuity] listen failed: {e}");
