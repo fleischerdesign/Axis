@@ -185,28 +185,8 @@ impl SettingsPage for AppearancePage {
         let active_accent = Rc::new(Cell::new(config.appearance.accent_color.clone()));
 
         for color in AccentColor::all_presets() {
-            let btn = create_accent_button(color);
-            accent_grid.append(&btn);
-        }
-
-        // Wire click handlers after appending (parent FlowBoxChild must exist)
-        {
-            let accent_grid_c = accent_grid.clone();
-            for (idx, color) in AccentColor::all_presets().iter().enumerate() {
-                if let Some(child) = accent_grid_c.child_at_index(idx as i32) {
-                    if let Some(box_widget) = child.child() {
-                        if let Some(btn) = box_widget.downcast_ref::<gtk4::Button>() {
-                            let grid_cc = accent_grid_c.clone();
-                            let child_c = child.clone();
-                            let gesture = gtk4::GestureClick::new();
-                            gesture.connect_pressed(move |_, _, _, _| {
-                                grid_cc.select_child(&child_c);
-                            });
-                            btn.add_controller(gesture);
-                        }
-                    }
-                }
-            }
+            let swatch = create_accent_widget(color);
+            accent_grid.append(&swatch);
         }
 
         // Select the active one
@@ -360,7 +340,7 @@ impl SettingsPage for AppearancePage {
     }
 }
 
-fn create_accent_button(color: &AccentColor) -> gtk4::Button {
+fn create_accent_widget(color: &AccentColor) -> gtk4::Box {
     let css_class = match color {
         AccentColor::Blue   => "accent-blue",
         AccentColor::Teal   => "accent-teal",
@@ -373,28 +353,21 @@ fn create_accent_button(color: &AccentColor) -> gtk4::Button {
         AccentColor::Auto   => "accent-auto",
     };
 
-    let icon = if *color == AccentColor::Auto {
-        Some("palette-symbolic")
-    } else {
-        None
-    };
-
-    let btn = gtk4::Button::builder()
-        .css_classes(["accent-swatch", css_class].as_slice())
+    let widget = gtk4::Box::builder()
+        .css_classes(["accent-swatch", css_class])
         .width_request(36)
         .height_request(36)
+        .halign(gtk4::Align::Center)
         .valign(gtk4::Align::Center)
-        .tooltip_text(match color {
-            AccentColor::Auto => "Extract from wallpaper",
-            _ => color.hex_value(),
-        })
         .build();
 
-    if let Some(icon_name) = icon {
-        btn.set_icon_name(icon_name);
+    if *color == AccentColor::Auto {
+        let icon = gtk4::Image::from_icon_name("palette-symbolic");
+        icon.set_css_classes(["accent-auto-icon"].as_slice());
+        widget.append(&icon);
     }
 
-    btn
+    widget
 }
 
 fn update_wallpaper_preview(image: &gtk4::Image, path: &Option<String>) {
