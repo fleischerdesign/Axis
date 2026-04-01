@@ -185,7 +185,7 @@ impl SettingsPage for AppearancePage {
         let active_accent = Rc::new(Cell::new(config.appearance.accent_color.clone()));
 
         for color in AccentColor::all_presets() {
-            let btn = create_accent_button(color, active_accent.get() == *color);
+            let btn = create_accent_button(color);
             accent_grid.append(&btn);
         }
 
@@ -360,7 +360,7 @@ impl SettingsPage for AppearancePage {
     }
 }
 
-fn create_accent_button(color: &AccentColor, active: bool) -> gtk4::Button {
+fn create_accent_button(color: &AccentColor) -> gtk4::Button {
     let css_class = match color {
         AccentColor::Blue   => "accent-blue",
         AccentColor::Teal   => "accent-teal",
@@ -373,11 +373,6 @@ fn create_accent_button(color: &AccentColor, active: bool) -> gtk4::Button {
         AccentColor::Auto   => "accent-auto",
     };
 
-    let mut classes = vec!["accent-swatch", css_class];
-    if active {
-        classes.push("active");
-    }
-
     let icon = if *color == AccentColor::Auto {
         Some("palette-symbolic")
     } else {
@@ -385,7 +380,7 @@ fn create_accent_button(color: &AccentColor, active: bool) -> gtk4::Button {
     };
 
     let btn = gtk4::Button::builder()
-        .css_classes(classes.iter().copied().collect::<Vec<&str>>().as_slice())
+        .css_classes(["accent-swatch", css_class].as_slice())
         .width_request(36)
         .height_request(36)
         .valign(gtk4::Align::Center)

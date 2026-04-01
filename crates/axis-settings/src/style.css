@@ -12,7 +12,8 @@
     opacity: 0.85;
 }
 
-.accent-swatch.active {
+.accent-swatch.active,
+flowboxchild:selected .accent-swatch {
     border-color: @theme_selected_fg_color;
     box-shadow: 0 0 0 2px @theme_selected_bg_color;
 }
