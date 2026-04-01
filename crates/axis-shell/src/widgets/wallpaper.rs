@@ -131,7 +131,7 @@ pub fn lighten_hex(hex: &str, amount: f64) -> String {
     format!("#{:02x}{:02x}{:02x}", r, g, b)
 }
 
-pub fn hex_to_rgb(hex: &str) -> (u8, u8, u8) {
+fn hex_to_rgb(hex: &str) -> (u8, u8, u8) {
     let hex = hex.trim_start_matches('#');
     if hex.len() == 6 {
         let r = u8::from_str_radix(&hex[0..2], 16).unwrap_or(0);

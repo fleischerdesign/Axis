@@ -519,13 +519,15 @@ fn bridge_settings(ctx: &AppContext) {
 }
 
 fn update_theme_css(provider: &gtk4::CssProvider, accent_hex: &str, font: &Option<String>) {
-    let (r, g, b) = crate::widgets::wallpaper::hex_to_rgb(accent_hex);
     let hover = crate::widgets::wallpaper::lighten_hex(accent_hex, 0.15);
     let font_rule = font.as_ref()
-        .map(|f| format!("--font-family: \"{f}\";"))
+        .map(|f| format!("window {{ --font-family: \"{f}\"; }}"))
         .unwrap_or_default();
     let css = format!(
-        "window {{ --accent: {accent_hex}; --accent-rgb: {r},{g},{b}; --accent-hover: {hover}; {font_rule} }}"
+        "@define-color accent_bg_color {accent_hex};\n\
+         @define-color accent_fg_color #ffffff;\n\
+         @define-color accent_hover_color {hover};\n\
+         {font_rule}"
     );
     provider.load_from_string(&css);
 }
