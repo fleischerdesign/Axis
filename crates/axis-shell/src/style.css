@@ -3,7 +3,7 @@ window {
     background: transparent;
     --accent: #3584e4;
     --accent-rgb: 53, 132, 228;
-    --accent-hover: var(--accent-hover);
+    --accent-hover: #3584e4;
     --font-family: system-ui;
 }
 

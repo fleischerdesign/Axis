@@ -130,12 +130,15 @@ fn build_ui(app: &libadwaita::Application, start_locked: bool, wallpaper_path: O
             c => c.hex_value().to_string(),
         };
         update_theme_css(&theme_provider, &accent, &appearance.font);
+        write_accent_css(&accent);
     }
 
-    // ── Theme: follow GSettings via libadwaita StyleManager ────────────────
-    // Theme is controlled by other apps (e.g. axis-settings) through
-    // libadwaita's StyleManager, which writes to org.gnome.desktop.interface.
-    // The shell just observes the dark property.
+    // ── Theme: force dark mode for the shell panel ─────────────────────────
+    // The shell is always dark (transparent panel on dark wallpaper).
+    // Force dark mode so libadwaita's CSS variables resolve correctly
+    // (e.g. checkbox borders use white instead of black).
+    // axis-settings can still override the system-wide theme via GSettings.
+    libadwaita::StyleManager::default().set_color_scheme(libadwaita::ColorScheme::ForceDark);
     libadwaita::StyleManager::default().connect_notify_local(Some("dark"), |mgr, _| {
         log::info!("[theme] changed: dark={}", mgr.is_dark());
     });
@@ -253,6 +256,7 @@ fn build_ui(app: &libadwaita::Application, start_locked: bool, wallpaper_path: O
         let wallpaper_svc_c = wallpaper_svc.clone();
         let lock_screen_c = lock_screen.clone();
         let last_wallpaper: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+        let last_accent_for_css: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
         ctx.settings.store.subscribe(move |data| {
             let app_cfg = &data.config.appearance;
 
@@ -277,6 +281,12 @@ fn build_ui(app: &libadwaita::Application, start_locked: bool, wallpaper_path: O
                 c => c.hex_value().to_string(),
             };
             update_theme_css(&theme_provider_c, &accent, &app_cfg.font);
+
+            // Sync accent color to GTK config for other libadwaita apps
+            if last_accent_for_css.borrow().as_deref() != Some(accent.as_str()) {
+                *last_accent_for_css.borrow_mut() = Some(accent.clone());
+                write_accent_css(&accent);
+            }
         });
     }
 
@@ -518,4 +528,27 @@ fn update_theme_css(provider: &gtk4::CssProvider, accent_hex: &str, font: &Optio
         "window {{ --accent: {accent_hex}; --accent-rgb: {r},{g},{b}; --accent-hover: {hover}; {font_rule} }}"
     );
     provider.load_from_string(&css);
+}
+
+/// Writes `@define-color accent_*` to `~/.config/gtk-4.0/gtk.css`
+/// so all libadwaita apps pick up Axis's accent color.
+fn write_accent_css(accent_hex: &str) {
+    let config_dir = std::env::var("XDG_CONFIG_HOME")
+        .unwrap_or_else(|_| {
+            let home = std::env::var("HOME").unwrap_or_default();
+            format!("{home}/.config")
+        });
+
+    let css = format!(
+        "@define-color accent_bg_color {accent_hex};\n\
+         @define-color accent_color {accent_hex};\n\
+         @define-color accent_fg_color #ffffff;\n"
+    );
+
+    for gtk_ver in &["gtk-4.0", "gtk-3.0"] {
+        let dir = format!("{config_dir}/{gtk_ver}");
+        if std::fs::create_dir_all(&dir).is_ok() {
+            let _ = std::fs::write(format!("{dir}/gtk.css"), &css);
+        }
+    }
 }
