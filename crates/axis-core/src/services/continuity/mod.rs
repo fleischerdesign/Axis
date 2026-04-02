@@ -921,10 +921,9 @@ impl ContinuityInner {
                             self.data.sharing_mode = SharingMode::Sharing;
                             self.entry_side = Some(side);
 
-                            // The old sharer sent us their virtual_pos along the edge (in remote coords).
-                            // Map it to our coordinate system for init.
-                            let arrangement = self.data.active_peer_config().arrangement;
-                            let mapped_pos = arrangement.local_to_remote_edge(edge_pos);
+                            // The old sharer sent us their virtual_pos along the edge
+                            // (already in our coordinate space as the new sharer).
+                            let mapped_pos = edge_pos.max(0.0);
                             self.init_virtual_pos(side, mapped_pos);
                             info!("[continuity] virtual_pos initialized to ({:.0}, {:.0})", self.virtual_pos.0, self.virtual_pos.1);
 
