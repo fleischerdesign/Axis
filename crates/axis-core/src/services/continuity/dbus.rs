@@ -62,6 +62,7 @@ pub struct ContinuityStateSnapshot {
     pub peer_configs: HashMap<String, PeerConfig>,
     pub screen_width: i32,
     pub screen_height: i32,
+    pub remote_screen: Option<(i32, i32)>,
 }
 
 impl Default for ContinuityStateSnapshot {
@@ -76,6 +77,7 @@ impl Default for ContinuityStateSnapshot {
             peer_configs: HashMap::new(),
             screen_width: 1920,
             screen_height: 1080,
+            remote_screen: None,
         }
     }
 }
@@ -100,6 +102,7 @@ pub fn build_snapshot(data: &ContinuityData) -> ContinuityStateSnapshot {
         peer_configs: data.peer_configs.clone(),
         screen_width: data.screen_width,
         screen_height: data.screen_height,
+        remote_screen: data.remote_screen,
     }
 }
 
