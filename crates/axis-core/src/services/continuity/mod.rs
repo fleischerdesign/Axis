@@ -793,6 +793,7 @@ impl ContinuityInner {
                     protocol::Message::ScreenInfo { width, height } => {
                         info!("[continuity] peer screen: {}x{}", width, height);
                         self.data.remote_screen = Some((width, height));
+                        self.push();
                         
                         // After exchanging screen info, also exchange current config
                         let config = self.data.active_peer_config();

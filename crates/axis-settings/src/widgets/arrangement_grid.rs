@@ -53,6 +53,8 @@ struct ArrangementState {
     local_rect: CanvasRect,
     peer_rect: CanvasRect,
     scale: f64,
+    local_screen: (i32, i32),
+    peer_screen: (i32, i32),
     dragging: bool,
     drag_offset_x: f64,
     drag_offset_y: f64,
@@ -299,9 +301,11 @@ impl ArrangementGrid {
 
         // Default layout — will be replaced once the continuity service reports
         // the real screen dimensions.
+        let default_screen: (i32, i32) = (1920, 1080);
         let (local_rect, scale, peer_rect) = compute_layout(
             CANVAS_VIRTUAL_WIDTH, CANVAS_VIRTUAL_HEIGHT,
-            1920, 1080, 1920, 1080,
+            default_screen.0, default_screen.1,
+            default_screen.0, default_screen.1,
         );
 
         let state = Rc::new(RefCell::new(ArrangementState {
@@ -309,6 +313,8 @@ impl ArrangementGrid {
             local_rect,
             peer_rect,
             scale,
+            local_screen: default_screen,
+            peer_screen: default_screen,
             dragging: false,
             drag_offset_x: 0.0,
             drag_offset_y: 0.0,
@@ -326,14 +332,32 @@ impl ArrangementGrid {
             let cp_c = cp.clone();
             cp.on_change(move || {
                 let cont_state = cp_c.state();
-                let s = state_c.borrow();
+                let mut s = state_c.borrow_mut();
+
+                // Update layout if screen dimensions changed (and not mid-drag)
+                let new_local = (cont_state.screen_width, cont_state.screen_height);
+                let new_peer = cont_state.remote_screen.unwrap_or(new_local);
+                let dims_changed = new_local != s.local_screen || new_peer != s.peer_screen;
+
+                if dims_changed && !s.dragging {
+                    let (local_rect, scale, peer_rect) = compute_layout(
+                        CANVAS_VIRTUAL_WIDTH, CANVAS_VIRTUAL_HEIGHT,
+                        new_local.0, new_local.1,
+                        new_peer.0, new_peer.1,
+                    );
+                    s.local_rect = local_rect;
+                    s.peer_rect = peer_rect;
+                    s.scale = scale;
+                    s.local_screen = new_local;
+                    s.peer_screen = new_peer;
+                }
+
                 let local = s.local_rect;
                 let scale = s.scale;
                 let pw = s.peer_rect.w;
                 let ph = s.peer_rect.h;
-                drop(s);
 
-                let remote = if let Some(ref conn) = cont_state.active_connection {
+                s.remote = if let Some(ref conn) = cont_state.active_connection {
                     let pc = cont_state.peer_configs.get(&conn.peer_id);
                     let arrangement = pc.map(|p| p.arrangement).unwrap_or_default();
                     let side = side_to_arrangement(arrangement.side);
@@ -350,10 +374,7 @@ impl ArrangementGrid {
                     None
                 };
 
-                let mut s = state_c.borrow_mut();
-                s.remote = remote;
                 drop(s);
-
                 da_c.queue_draw();
             });
         }
