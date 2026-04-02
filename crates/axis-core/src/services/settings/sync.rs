@@ -43,7 +43,7 @@ pub fn wire_service_config_full<S: ServiceConfig>(
     service_store.subscribe(move |data| {
         let enabled = S::get_enabled(data);
         if *last_enabled.borrow() == Some(enabled) {
-            log::info!("[sync] service→config SKIPPED (no change, enabled={})", enabled);
+            log::debug!("[sync] service→config SKIPPED (no change, enabled={})", enabled);
             return; // no change — skip to prevent feedback loop
         }
         log::info!("[sync] service→config SENDING UpdatePartial enabled={}", enabled);
@@ -51,6 +51,141 @@ pub fn wire_service_config_full<S: ServiceConfig>(
         let _ = settings_stx.try_send(SettingsCmd::UpdatePartial(
             Box::new(move |cfg| config_set(cfg, enabled))
         ));
+    });
+}
+
+/// Specialized sync for Continuity: handles both the global 'enabled' flag
+/// and the 'peer_configs' map (arrangements).
+pub fn wire_continuity_sync(
+    settings_store: &ServiceStore<super::SettingsData>,
+    cont_store: &ServiceStore<crate::services::continuity::ContinuityData>,
+    cont_tx: &Sender<crate::services::continuity::ContinuityCmd>,
+    settings_tx: &Sender<SettingsCmd>,
+) {
+    use crate::services::continuity::{ContinuityCmd, PeerArrangement, Side, PeerConfig};
+    use super::config::{ArrangementSide, PeerPersistedConfig};
+    use std::collections::HashMap;
+
+    // ── Config → Service ──────────────────────────────────────────────────
+    let ctx = cont_tx.clone();
+    let c_store = cont_store.clone();
+    settings_store.subscribe(move |data| {
+        let cfg = &data.config.continuity;
+        let current = c_store.get();
+
+        // 1. Enabled state
+        if cfg.enabled != current.enabled {
+            let _ = ctx.try_send(ContinuityCmd::SetEnabled(cfg.enabled));
+        }
+
+        // 2. Peer Configs (Arrangements)
+        let mut service_update = HashMap::new();
+        for p_cfg in &cfg.peer_configs {
+            let side = match p_cfg.arrangement_side {
+                ArrangementSide::Left => Side::Left,
+                ArrangementSide::Right => Side::Right,
+                ArrangementSide::Top => Side::Top,
+                ArrangementSide::Bottom => Side::Bottom,
+            };
+            let offset = match side {
+                Side::Left | Side::Right => p_cfg.arrangement_y,
+                Side::Top | Side::Bottom => p_cfg.arrangement_x,
+            };
+
+            service_update.insert(p_cfg.device_id.clone(), PeerConfig {
+                arrangement: PeerArrangement { side, offset },
+                clipboard: p_cfg.clipboard,
+                audio: p_cfg.audio,
+                drag_drop: p_cfg.drag_drop,
+                version: p_cfg.version,
+            });
+        }
+
+        // Only send update if different from what service has
+        if service_update != current.peer_configs {
+            let _ = ctx.try_send(ContinuityCmd::UpdatePeerConfigs(service_update));
+        }
+    });
+
+    // ── Service → Config ──────────────────────────────────────────────────
+    let s_tx = settings_tx.clone();
+    let last_state: Rc<RefCell<Option<(bool, Vec<(String, Side, i32, bool, bool, bool, u64)>)>>> = Rc::new(RefCell::new(None));
+    
+    cont_store.subscribe(move |data| {
+        let mut current_peers: Vec<(String, Side, i32, bool, bool, bool, u64)> = data.peer_configs.iter()
+            .map(|(id, cfg)| (
+                id.clone(), 
+                cfg.arrangement.side, 
+                cfg.arrangement.offset,
+                cfg.clipboard,
+                cfg.audio,
+                cfg.drag_drop,
+                cfg.version
+            ))
+            .collect();
+        // Sort for stable comparison
+        current_peers.sort_by(|a, b| a.0.cmp(&b.0));
+
+        let state = (data.enabled, current_peers.clone());
+        if last_state.borrow().as_ref() == Some(&state) {
+            return;
+        }
+        *last_state.borrow_mut() = Some(state);
+
+        log::debug!("[sync] continuity→config: diff detected (enabled={}, peers={})", data.enabled, current_peers.len());
+        
+        let enabled = data.enabled;
+        let peer_updates = current_peers;
+
+        let _ = s_tx.try_send(SettingsCmd::UpdatePartial(Box::new(move |cfg| {
+            cfg.continuity.enabled = enabled;
+            
+            for (id, side, offset, clipboard, audio, drag_drop, version) in peer_updates {
+                let a_side = match side {
+                    Side::Left => ArrangementSide::Left,
+                    Side::Right => ArrangementSide::Right,
+                    Side::Top => ArrangementSide::Top,
+                    Side::Bottom => ArrangementSide::Bottom,
+                };
+                let (ax, ay) = match side {
+                    Side::Left | Side::Right => (0, offset),
+                    Side::Top | Side::Bottom => (offset, 0),
+                };
+
+                if let Some(p) = cfg.continuity.peer_configs.iter_mut().find(|p| p.device_id == id) {
+                    // Update only if changed
+                    if p.arrangement_side != a_side 
+                        || p.arrangement_x != ax 
+                        || p.arrangement_y != ay 
+                        || p.clipboard != clipboard
+                        || p.audio != audio
+                        || p.drag_drop != drag_drop
+                        || p.version != version 
+                    {
+                        p.arrangement_side = a_side;
+                        p.arrangement_x = ax;
+                        p.arrangement_y = ay;
+                        p.clipboard = clipboard;
+                        p.audio = audio;
+                        p.drag_drop = drag_drop;
+                        p.version = version;
+                    }
+                } else {
+                    // New peer discovered via protocol
+                    cfg.continuity.peer_configs.push(PeerPersistedConfig {
+                        device_id: id,
+                        device_name: "New Peer".to_string(), // Name will be updated on next connect
+                        arrangement_side: a_side,
+                        arrangement_x: ax,
+                        arrangement_y: ay,
+                        clipboard,
+                        audio,
+                        drag_drop,
+                        version,
+                    });
+                }
+            }
+        })));
     });
 }
 

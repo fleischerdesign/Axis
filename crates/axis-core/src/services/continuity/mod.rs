@@ -118,6 +118,9 @@ impl Default for PeerArrangement {
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct PeerConfig {
     pub arrangement: PeerArrangement,
+    pub clipboard: bool,
+    pub audio: bool,
+    pub drag_drop: bool,
     pub version: u64,
 }
 
@@ -125,6 +128,9 @@ impl Default for PeerConfig {
     fn default() -> Self {
         Self {
             arrangement: PeerArrangement::default(),
+            clipboard: true,
+            audio: false,
+            drag_drop: false,
             version: 0,
         }
     }
@@ -190,6 +196,7 @@ pub enum ContinuityCmd {
     StopSharing(f64),
     SendInput(protocol::Message),
     SetPeerArrangement(PeerArrangement),
+    UpdatePeerConfigs(std::collections::HashMap<String, PeerConfig>),
     SetScreenSize(i32, i32),
     SwitchToReceiving(Side),
 }
@@ -569,10 +576,26 @@ impl ContinuityInner {
                     connection.send_message(protocol::Message::ConfigSync {
                         arrangement: arrangement.side,
                         offset: arrangement.offset,
+                        clipboard: config.clipboard,
+                        audio: config.audio,
+                        drag_drop: config.drag_drop,
                         version,
                     });
                 }
                 self.push();
+            }
+            ContinuityCmd::UpdatePeerConfigs(configs) => {
+                let mut changed = false;
+                for (id, config) in configs {
+                    let entry = self.data.peer_configs.entry(id).or_default();
+                    if entry.version < config.version || (entry.version == config.version && entry.arrangement != config.arrangement) {
+                        *entry = config;
+                        changed = true;
+                    }
+                }
+                if changed {
+                    self.push();
+                }
             }
             ContinuityCmd::SetScreenSize(w, h) => {
                 info!("[continuity] screen size set to {}x{}", w, h);
@@ -818,20 +841,23 @@ impl ContinuityInner {
                         connection.send_message(protocol::Message::ConfigSync {
                             arrangement: config.arrangement.side,
                             offset: config.arrangement.offset,
+                            clipboard: config.clipboard,
+                            audio: config.audio,
+                            drag_drop: config.drag_drop,
                             version: config.version,
                         });
                         
                         self.push();
                         let _ = capture.prepare();
                     }
-                    protocol::Message::ConfigSync { arrangement, offset, version } => {
+                    protocol::Message::ConfigSync { arrangement, offset, clipboard, audio, drag_drop, version } => {
                         if let Some(conn) = &self.data.active_connection {
                             let peer_id = conn.peer_id.clone();
                             let config = self.data.peer_configs.entry(peer_id).or_default();
                             
                             if version > config.version {
-                                info!("[continuity] adopting newer config from peer (v{} > v{}): {:?} offset {}", 
-                                    version, config.version, arrangement, offset);
+                                info!("[continuity] adopting newer config from peer (v{} > v{}): {:?} offset {} clipboard={} audio={} dnd={}", 
+                                    version, config.version, arrangement, offset, clipboard, audio, drag_drop);
                                 
                                 // The peer says "you are to my <arrangement>".
                                 // So the peer is to our <opposite>.
@@ -841,6 +867,9 @@ impl ContinuityInner {
                                     side: arrangement.opposite(),
                                     offset: -offset,
                                 };
+                                config.clipboard = clipboard;
+                                config.audio = audio;
+                                config.drag_drop = drag_drop;
                                 config.version = version;
                                 self.push();
                             } else {

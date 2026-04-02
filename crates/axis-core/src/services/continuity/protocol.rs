@@ -33,6 +33,9 @@ pub enum Message {
     ConfigSync {
         arrangement: Side,
         offset: i32,
+        clipboard: bool,
+        audio: bool,
+        drag_drop: bool,
         version: u64,
     },
 

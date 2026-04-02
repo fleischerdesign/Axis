@@ -235,6 +235,8 @@ pub struct PeerPersistedConfig {
     pub arrangement_y: i32,
     #[serde(default)]
     pub arrangement_side: ArrangementSide,
+    #[serde(default)]
+    pub version: u64,
 }
 
 // ── Services Config ─────────────────────────────────────────────────────────

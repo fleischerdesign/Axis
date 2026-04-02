@@ -489,7 +489,6 @@ fn bridge_settings(ctx: &AppContext) {
     use axis_core::services::dnd::DndService;
     use axis_core::services::airplane::AirplaneService;
     use axis_core::services::bluetooth::BluetoothService;
-    use axis_core::services::continuity::ContinuityService;
 
     // Generic bidirectional sync for all ServiceConfig services
     sync::wire_service_config_full::<DndService>(
@@ -507,9 +506,8 @@ fn bridge_settings(ctx: &AppContext) {
         |c| c.services.bluetooth_enabled, |c, v| c.services.bluetooth_enabled = v,
     );
 
-    sync::wire_service_config_full::<ContinuityService>(
+    sync::wire_continuity_sync(
         &ctx.settings.store, &ctx.continuity.store, &ctx.continuity.tx, &ctx.settings.tx,
-        |c| c.continuity.enabled, |c, v| c.continuity.enabled = v,
     );
 
     // Nightlight: custom sync (config has multiple fields, not just enabled)
