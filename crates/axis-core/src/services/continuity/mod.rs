@@ -829,9 +829,11 @@ impl ContinuityInner {
                                 
                                 // The peer says "you are to my <arrangement>".
                                 // So the peer is to our <opposite>.
+                                // Negate the offset: if the peer is N px below their
+                                // top edge, we are N px above ours.
                                 config.arrangement = PeerArrangement {
                                     side: arrangement.opposite(),
-                                    offset, // Offset is symmetric
+                                    offset: -offset,
                                 };
                                 config.version = version;
                                 self.push();
