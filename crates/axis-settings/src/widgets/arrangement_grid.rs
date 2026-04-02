@@ -60,6 +60,7 @@ struct ArrangementState {
     drag_offset_y: f64,
     drag_pos_x: f64,
     drag_pos_y: f64,
+    skip_arrangement_update: bool,
 }
 
 // ── Layout Computation ──────────────────────────────────────────────────
@@ -192,6 +193,7 @@ fn apply_snap(
 ) {
     let Some(ref remote) = state.remote else { return; };
     let device_id = remote.device_id.clone();
+    let device_name = remote.device_name.clone();
 
     let local = state.local_rect;
     let scale = state.scale;
@@ -239,9 +241,10 @@ fn apply_snap(
         remote.offset = offset;
         remote.rect = snapped;
     }
+    state.skip_arrangement_update = true;
 
     // Persist to settings
-    persist_arrangement(proxy, &device_id, side, offset);
+    persist_arrangement(proxy, &device_id, &device_name, side, offset);
 
     // Notify Continuity Service
     if let Some(cp) = continuity {
@@ -256,6 +259,7 @@ fn apply_snap(
 fn persist_arrangement(
     proxy: &Rc<SettingsProxy>,
     device_id: &str,
+    device_name: &str,
     side: ArrangementSide,
     offset: i32,
 ) {
@@ -270,6 +274,19 @@ fn persist_arrangement(
                 persisted.arrangement_x = offset;
             }
         }
+    } else {
+        let (arrangement_x, arrangement_y) = match side {
+            ArrangementSide::Left | ArrangementSide::Right => (0, offset),
+            ArrangementSide::Top | ArrangementSide::Bottom => (offset, 0),
+        };
+        cfg.peer_configs.push(PeerPersistedConfig {
+            device_id: device_id.to_string(),
+            device_name: device_name.to_string(),
+            arrangement_side: side,
+            arrangement_x,
+            arrangement_y,
+            ..Default::default()
+        });
     }
     let p = proxy.clone();
     gtk4::glib::spawn_future_local(async move {
@@ -320,6 +337,7 @@ impl ArrangementGrid {
             drag_offset_y: 0.0,
             drag_pos_x: 0.0,
             drag_pos_y: 0.0,
+            skip_arrangement_update: false,
         }));
 
         Self::setup_draw_func(&drawing_area, &state);
@@ -350,6 +368,28 @@ impl ArrangementGrid {
                     s.scale = scale;
                     s.local_screen = new_local;
                     s.peer_screen = new_peer;
+                }
+
+                // Skip stale arrangement update after a local drag snap.
+                // When apply_snap sets the flag, a StateChanged signal may
+                // arrive with old peer_configs before the service processes
+                // SetPeerArrangement. We skip overwrites that match our
+                // current (already-snapped) arrangement.
+                if s.skip_arrangement_update {
+                    if let Some(ref conn) = cont_state.active_connection {
+                        let pc = cont_state.peer_configs.get(&conn.peer_id);
+                        let incoming = pc.map(|p| p.arrangement).unwrap_or_default();
+                        if let Some(ref remote) = s.remote {
+                            let cur_side = side_to_continuity(remote.side);
+                            if incoming.side == cur_side && incoming.offset == remote.offset {
+                                // Same arrangement we already have — stale signal, skip
+                                drop(s);
+                                return;
+                            }
+                        }
+                    }
+                    // Arrangement changed (or disconnected) — process normally
+                    s.skip_arrangement_update = false;
                 }
 
                 let local = s.local_rect;

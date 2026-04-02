@@ -43,7 +43,9 @@ impl SettingsPage for ContinuityPage {
 
         if let Some(ref cp) = self.continuity {
             let cp_c = cp.clone();
+            let updating_c = updating.clone();
             enable_row.connect_active_notify(move |row| {
+                if updating_c.get() { return; }
                 let p = cp_c.clone();
                 let enabled = row.is_active();
                 gtk4::glib::spawn_future_local(async move {
@@ -67,6 +69,19 @@ impl SettingsPage for ContinuityPage {
             });
         }
         main_group.add(&enable_row);
+
+        // Reactive: update enable switch on external config changes (fallback path)
+        if self.continuity.is_none() {
+            let enable_row_c = enable_row.clone();
+            let updating_c = updating.clone();
+            let proxy_c = proxy.clone();
+            proxy.on_change(move || {
+                let cfg = proxy_c.config();
+                updating_c.set(true);
+                enable_row_c.set_active(cfg.continuity.enabled);
+                updating_c.set(false);
+            });
+        }
 
         // ── Status Row (single row: status + action) ────────────────────
         let status_group = libadwaita::PreferencesGroup::builder()
@@ -166,8 +181,13 @@ impl SettingsPage for ContinuityPage {
 
             // Main update callback
             let proxy_c = proxy.clone();
+            let enable_row_c = enable_row.clone();
+            let updating_c = updating.clone();
             cp.on_change(move || {
                 let state = cp_c.state();
+                updating_c.set(true);
+                enable_row_c.set_active(state.enabled);
+                updating_c.set(false);
                 update_status(&status_row_c, &disconnect_btn_c, &state);
                 update_pin(&pin_row_c, &state);
                 rebuild_devices_list(&devices_list_c, &state, &cp_c, &proxy_c);
