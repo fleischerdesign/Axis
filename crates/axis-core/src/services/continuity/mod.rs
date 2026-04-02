@@ -850,9 +850,7 @@ impl ContinuityInner {
                     }
                     protocol::Message::EdgeTransition { side, edge_pos } => {
                         if self.data.sharing_mode == SharingMode::Idle {
-                            let arrangement = self.data.active_peer_config().arrangement;
-                            // Map the peer's exit position to our local entry position
-                            let mapped_pos = arrangement.remote_to_local_edge(edge_pos);
+                            let mapped_pos = edge_pos; // Already mapped by sender
                             let local_side = side.opposite();
 
                             info!("[continuity] accepting sharing from peer: peer_exit={:?}@{} -> local_entry={:?}@{}", 
