@@ -239,6 +239,10 @@ async fn run_connection(
     device_id: String,
     device_name: String,
 ) {
+    if let Err(e) = stream.set_nodelay(true) {
+        warn!("[continuity:connection] failed to set TCP_NODELAY: {e}");
+    }
+
     use tokio::io::split;
     let peer = stream.peer_addr().map(|a| a.to_string()).unwrap_or_default();
     let local = stream.local_addr().map(|a| a.to_string()).unwrap_or_default();

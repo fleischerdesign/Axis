@@ -180,12 +180,11 @@ impl ContinuityCaptureController {
         let overlap_start_f = overlap_start as f64;
         motion.connect_motion(move |_ctrl, x, y| {
             let mut last = ctrl_c2.last_trigger.borrow_mut();
-            if last.elapsed() < std::time::Duration::from_millis(500) {
+            if last.elapsed() < std::time::Duration::from_millis(50) {
                 return;
             }
             *last = Instant::now();
             drop(last);
-
             // The widget-local position within the edge window.
             // Convert to absolute screen position along the edge.
             let edge_pos = if is_horizontal {

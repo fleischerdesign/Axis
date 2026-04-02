@@ -512,8 +512,8 @@ impl ContinuityInner {
             }
             ContinuityCmd::StartSharing(side, local_edge_pos) => {
                 if self.data.active_connection.is_some() && self.data.sharing_mode == SharingMode::Idle {
-                    // 2 second cooldown to prevent jitter
-                    if self.last_transition_at.elapsed() < Duration::from_secs(2) {
+                    // 500ms cooldown to prevent jitter
+                    if self.last_transition_at.elapsed() < Duration::from_millis(500) {
                         return;
                     }
 
