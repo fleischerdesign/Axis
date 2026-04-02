@@ -154,19 +154,6 @@ fn compute_scales(canvas_w: f64, canvas_h: f64) -> (f64, f64) {
     (sx.max(0.1), sy.max(0.1))
 }
 
-/// Look up the arrangement for a peer from persisted config.
-fn arrangement_for_peer(configs: &[PeerPersistedConfig], peer_id: &str) -> (ArrangementSide, i32) {
-    if let Some(c) = configs.iter().find(|p| p.device_id == peer_id) {
-        let side = c.arrangement_side;
-        let offset = match side {
-            ArrangementSide::Left | ArrangementSide::Right => c.arrangement_y,
-            ArrangementSide::Top | ArrangementSide::Bottom => c.arrangement_x,
-        };
-        return (side, offset);
-    }
-    (ArrangementSide::Right, 0)
-}
-
 // ── Drag Handling ───────────────────────────────────────────────────────
 
 fn apply_snap(
@@ -328,10 +315,8 @@ impl ArrangementGrid {
             let state_c = state.clone();
             let da_c = drawing_area.clone();
             let cp_c = cp.clone();
-            let proxy_c = proxy.clone();
             cp.on_change(move || {
                 let cont_state = cp_c.state();
-                let config = proxy_c.config();
                 let s = state_c.borrow();
                 let local = s.local_rect;
                 let sx = s.scale_x;
@@ -339,7 +324,27 @@ impl ArrangementGrid {
                 drop(s);
 
                 let remote = if let Some(ref conn) = cont_state.active_connection {
-                    let (side, offset) = arrangement_for_peer(&config.continuity.peer_configs, &conn.peer_id);
+                    // Prefer runtime arrangement from Continuity Service over persisted
+                    // settings — settings may not have been written yet when a drag
+                    // triggers set_peer_arrangement().
+                    let (side, offset) = cont_state
+                        .peer_configs
+                        .get(&conn.peer_id)
+                        .map(|pc| {
+                            let a = &pc.arrangement;
+                            let s = match a.side {
+                                Side::Left => ArrangementSide::Left,
+                                Side::Right => ArrangementSide::Right,
+                                Side::Top => ArrangementSide::Top,
+                                Side::Bottom => ArrangementSide::Bottom,
+                            };
+                            let o = match s {
+                                ArrangementSide::Left | ArrangementSide::Right => a.offset,
+                                ArrangementSide::Top | ArrangementSide::Bottom => a.offset,
+                            };
+                            (s, o)
+                        })
+                        .unwrap_or((ArrangementSide::Right, 0));
                     Some(RemoteDevice {
                         device_id: conn.peer_id.clone(),
                         device_name: conn.peer_name.clone(),
