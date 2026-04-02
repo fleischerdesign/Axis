@@ -467,6 +467,9 @@ impl ContinuityInner {
                         if let Err(e) = injection.start() {
                             error!("[continuity] failed to start input injection: {e}");
                         }
+
+                        // Pre-scan devices for capture
+                        let _ = capture.prepare();
                     }
                 }
                 self.push();
@@ -783,7 +786,10 @@ impl ContinuityInner {
                                 if let Err(e) = injection.start() {
                                     error!("[continuity] failed to start input injection: {e}");
                                 }
-                            } else {
+
+                                // Pre-scan devices for capture
+                                let _ = capture.prepare();
+                                } else {
                                 warn!("[continuity] peer sent incorrect PIN confirmation");
                                 connection.disconnect_active();
                             }
@@ -815,6 +821,7 @@ impl ContinuityInner {
                             version: config.version,
                         });
                         
+                        let _ = capture.prepare();
                         self.push();
                     }
                     protocol::Message::ConfigSync { arrangement, offset, version } => {

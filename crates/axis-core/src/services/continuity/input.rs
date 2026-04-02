@@ -23,6 +23,9 @@ pub enum InputEvent {
 // ── Input Provider Trait ───────────────────────────────────────────────
 
 pub trait InputCapture: Send {
+    /// Prepare devices for capture (e.g. scan /dev/input and open handles).
+    /// This should be called before start() to reduce transition latency.
+    fn prepare(&mut self) -> Result<(), String>;
     fn start(&mut self, tx: Sender<InputEvent>) -> Result<(), String>;
     fn stop(&mut self);
     fn is_capturing(&self) -> bool;
@@ -241,11 +244,15 @@ impl TouchpadTracker {
 
 pub struct EvdevCapture {
     tasks: Vec<JoinHandle<()>>,
+    prepared_devices: Vec<(evdev::Device, bool)>, // (device, is_touchpad)
 }
 
 impl EvdevCapture {
     pub fn new() -> Self {
-        Self { tasks: Vec::new() }
+        Self {
+            tasks: Vec::new(),
+            prepared_devices: Vec::new(),
+        }
     }
 }
 
@@ -257,32 +264,32 @@ impl EvdevCapture {
 const TOUCHPAD_SENSITIVITY: f64 = 0.75;
 
 impl InputCapture for EvdevCapture {
-    fn start(&mut self, tx: Sender<InputEvent>) -> Result<(), String> {
-        self.stop();
-        info!("[continuity:input] scanning for input devices to grab...");
+    fn prepare(&mut self) -> Result<(), String> {
+        let start_time = Instant::now();
+        self.prepared_devices.clear();
+        info!("[continuity:input] pre-scanning input devices...");
 
         let devices = evdev::enumerate();
-        let mut grabbed_any = false;
-        // Track touchpad base names so we can skip their legacy "Mouse" companion devices
         let mut touchpad_bases: Vec<String> = Vec::new();
 
-        // First pass: identify touchpads
-        let devices: Vec<_> = devices.collect();
-        for (_path, device) in &devices {
+        // Open all devices first — this is where the 300ms+ time likely goes
+        let devices_collected: Vec<_> = devices.collect();
+        let enum_duration = start_time.elapsed();
+        info!("[continuity:input] enumeration took {:?}", enum_duration);
+
+        for (_path, device) in &devices_collected {
             let name = device.name().unwrap_or("Unknown").to_string();
             let has_mt = device.supported_absolute_axes()
                 .map(|a| a.contains(AbsoluteAxisCode::ABS_MT_POSITION_X))
                 .unwrap_or(false);
             if has_mt {
-                // Extract the base name (e.g. "ELAN06FA:00 04F3:31BE" from "ELAN06FA:00 04F3:31BE Touchpad")
-                // The legacy Mouse device is typically named "ELAN06FA:00 04F3:31BE Mouse"
                 if let Some(base) = name.strip_suffix(" Touchpad").or_else(|| name.strip_suffix(" Keyboard")) {
                     touchpad_bases.push(base.to_string());
                 }
             }
         }
 
-        for (path, mut device) in devices {
+        for (path, device) in devices_collected {
             let name = device.name().unwrap_or("Unknown").to_string();
             let name_lower = name.to_lowercase();
 
@@ -290,9 +297,6 @@ impl InputCapture for EvdevCapture {
                 continue;
             }
 
-            // Skip the legacy "Mouse" companion device for touchpads — grabbing the touchpad
-            // itself stops it from producing events, so this device is useless and grabbing
-            // it just wastes a reader task.
             if name.ends_with(" Mouse") {
                 let base = name.strip_suffix(" Mouse").unwrap_or("");
                 if touchpad_bases.iter().any(|tb| tb == base) {
@@ -313,12 +317,36 @@ impl InputCapture for EvdevCapture {
             }
 
             let is_touchpad = has_mt && has_mouse_btn;
+            self.prepared_devices.push((device, is_touchpad));
+        }
 
-            info!("[continuity:input] grabbing device: {} ({}) [rel_x={} touchpad={} keyboard={}]",
-                name, path.display(), has_rel_x, is_touchpad, has_enter && !has_mouse_btn);
+        info!("[continuity:input] prepared {} devices in {:?}", self.prepared_devices.len(), start_time.elapsed());
+        Ok(())
+    }
+
+    fn start(&mut self, tx: Sender<InputEvent>) -> Result<(), String> {
+        let start_time = Instant::now();
+        self.stop();
+
+        // If no devices were prepared, try to prepare them now (last resort)
+        if self.prepared_devices.is_empty() {
+            let _ = self.prepare();
+        }
+
+        if self.prepared_devices.is_empty() {
+            return Err("no suitable input devices found to grab".into());
+        }
+
+        // Take ownership of prepared devices
+        let devices = std::mem::take(&mut self.prepared_devices);
+        let mut grabbed_any = false;
+
+        for (mut device, is_touchpad) in devices {
+            let grab_start = Instant::now();
+            let name = device.name().unwrap_or("Unknown").to_string();
 
             if let Err(e) = device.grab() {
-                warn!("[continuity:input] could not grab {}: {}", name, e);
+                warn!("[continuity:input] could not grab {}: {} (after {:?})", name, e, grab_start.elapsed());
                 continue;
             }
 
@@ -438,8 +466,10 @@ impl InputCapture for EvdevCapture {
                 info!("[continuity:input] reader thread finished for {}", name_c);
             });
             self.tasks.push(task);
+            info!("[continuity:input] grabbed {} in {:?}", name, grab_start.elapsed());
         }
 
+        info!("[continuity:input] total start took {:?}", start_time.elapsed());
         if !grabbed_any {
             return Err("no suitable input devices found to grab".into());
         }
