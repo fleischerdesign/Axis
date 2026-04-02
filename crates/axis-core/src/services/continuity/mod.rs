@@ -93,11 +93,11 @@ impl PeerArrangement {
     /// Maps a position along our local edge to the corresponding position
     /// on the remote screen. Returns the position in remote screen coords.
     pub fn local_to_remote_edge(&self, local_pos: f64) -> f64 {
-        local_pos + self.offset as f64
+        local_pos - self.offset as f64
     }
 
     pub fn remote_to_local_edge(&self, remote_pos: f64) -> f64 {
-        remote_pos - self.offset as f64
+        remote_pos + self.offset as f64
     }
 
     /// Returns the perpendicular length of the local screen for this arrangement side.
