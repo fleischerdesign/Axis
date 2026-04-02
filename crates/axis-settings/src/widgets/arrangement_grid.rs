@@ -4,6 +4,7 @@ use std::rc::Rc;
 use gtk4::prelude::*;
 use libadwaita::prelude::*;
 
+use axis_core::services::continuity::{PeerArrangement, Side};
 use axis_core::services::settings::config::*;
 use crate::continuity_proxy::ContinuityProxy;
 use crate::proxy::SettingsProxy;
@@ -168,7 +169,13 @@ fn arrangement_for_peer(configs: &[PeerPersistedConfig], peer_id: &str) -> (Arra
 
 // ── Drag Handling ───────────────────────────────────────────────────────
 
-fn apply_snap(px: f64, py: f64, state: &mut ArrangementState, proxy: &Rc<SettingsProxy>) {
+fn apply_snap(
+    px: f64,
+    py: f64,
+    state: &mut ArrangementState,
+    proxy: &Rc<SettingsProxy>,
+    continuity: Option<&Rc<ContinuityProxy>>,
+) {
     let Some(ref remote) = state.remote else { return; };
     let device_id = remote.device_id.clone();
 
@@ -260,6 +267,21 @@ fn apply_snap(px: f64, py: f64, state: &mut ArrangementState, proxy: &Rc<Setting
         let _ = p.set_continuity(&c).await;
         p.update_cache_continuity(c);
     });
+
+    // Notify Continuity Service so the edge window repositions immediately
+    if let Some(cp) = continuity {
+        let arr_side = match side {
+            ArrangementSide::Left => Side::Left,
+            ArrangementSide::Right => Side::Right,
+            ArrangementSide::Top => Side::Top,
+            ArrangementSide::Bottom => Side::Bottom,
+        };
+        let arr = PeerArrangement { side: arr_side, offset };
+        let cp = cp.clone();
+        gtk4::glib::spawn_future_local(async move {
+            let _ = cp.set_peer_arrangement(&arr).await;
+        });
+    }
 }
 
 // ── Public Widget ───────────────────────────────────────────────────────
@@ -299,7 +321,7 @@ impl ArrangementGrid {
         }));
 
         Self::setup_draw_func(&drawing_area, &state);
-        Self::setup_drag_handler(&drawing_area, &state, proxy);
+        Self::setup_drag_handler(&drawing_area, &state, proxy, continuity.cloned());
 
         // Subscribe to continuity runtime — only show the connected peer
         if let Some(cp) = continuity {
@@ -482,6 +504,7 @@ impl ArrangementGrid {
         drawing_area: &gtk4::DrawingArea,
         state: &Rc<RefCell<ArrangementState>>,
         proxy: &Rc<SettingsProxy>,
+        continuity: Option<Rc<ContinuityProxy>>,
     ) {
         // ── Click: start drag on press ───────────────────────────────
         let click = gtk4::GestureClick::new();
@@ -511,6 +534,7 @@ impl ArrangementGrid {
         let state_motion = state.clone();
         let da_motion = drawing_area.clone();
         let proxy_motion = proxy.clone();
+        let cont_motion = continuity.clone();
         motion.connect_motion(move |ctrl, px, py| {
             let mut s = state_motion.borrow_mut();
             if s.dragging {
@@ -526,7 +550,7 @@ impl ArrangementGrid {
                     da_motion.queue_draw();
                 } else {
                     // Button released — snap and finish
-                    apply_snap(px, py, &mut s, &proxy_motion);
+                    apply_snap(px, py, &mut s, &proxy_motion, cont_motion.as_ref());
                     s.dragging = false;
                     da_motion.queue_draw();
                 }
@@ -536,12 +560,13 @@ impl ArrangementGrid {
         let state_leave = state.clone();
         let da_leave = drawing_area.clone();
         let proxy_leave = proxy.clone();
+        let cont_leave = continuity;
         motion.connect_leave(move |_ctrl| {
             let mut s = state_leave.borrow_mut();
             if s.dragging {
                 let px = s.drag_pos_x;
                 let py = s.drag_pos_y;
-                apply_snap(px, py, &mut s, &proxy_leave);
+                apply_snap(px, py, &mut s, &proxy_leave, cont_leave.as_ref());
                 s.dragging = false;
                 da_leave.queue_draw();
             }

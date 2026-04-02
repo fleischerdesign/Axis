@@ -12,6 +12,7 @@ pub struct ContinuityCaptureController {
     edge_window: RefCell<Option<gtk4::Window>>,
     overlay: RefCell<Option<gtk4::Window>>,
     last_trigger: RefCell<Instant>,
+    last_arrangement: RefCell<PeerArrangement>,
 }
 
 impl ContinuityCaptureController {
@@ -21,6 +22,7 @@ impl ContinuityCaptureController {
             edge_window: RefCell::new(None),
             overlay: RefCell::new(None),
             last_trigger: RefCell::new(Instant::now()),
+            last_arrangement: RefCell::new(PeerArrangement { side: Side::Right, offset: 0 }),
         });
 
         let ctrl_c = controller.clone();
@@ -35,13 +37,18 @@ impl ContinuityCaptureController {
                     || data.sharing_mode == SharingMode::Receiving);
 
             if show_edge {
-                if edge.is_none() {
-                    // In both Idle and Receiving mode, the edge window goes on the
-                    // side where the peer is (per our arrangement). In Idle it starts
-                    // sharing; in Receiving it triggers a switch back.
-                    let config = data.active_peer_config();
-                    let side = config.arrangement.side;
-                    let is_receiving = data.sharing_mode == SharingMode::Receiving;
+                let config = data.active_peer_config();
+                let side = config.arrangement.side;
+                let is_receiving = data.sharing_mode == SharingMode::Receiving;
+
+                let arrangement_changed = edge.is_some()
+                    && *ctrl_c.last_arrangement.borrow() != config.arrangement;
+
+                if edge.is_none() || arrangement_changed {
+                    if let Some(w) = edge.take() {
+                        info!("[continuity:edge] closing edge window for repositioning");
+                        w.close();
+                    }
 
                     let w = ctrl_c.create_edge_window(
                         &app_c,
@@ -56,6 +63,7 @@ impl ContinuityCaptureController {
                     info!("[continuity:edge] presenting edge window for {:?}, screen={}x{}, remote={:?}, mode={:?}",
                         side, data.screen_width, data.screen_height, data.remote_screen, data.sharing_mode);
                     *edge = Some(w);
+                    *ctrl_c.last_arrangement.borrow_mut() = config.arrangement;
                 }
             } else {
                 if let Some(w) = edge.take() {
