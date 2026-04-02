@@ -467,9 +467,6 @@ impl ContinuityInner {
                         if let Err(e) = injection.start() {
                             error!("[continuity] failed to start input injection: {e}");
                         }
-
-                        // Pre-scan devices for capture
-                        let _ = capture.prepare();
                     }
                 }
                 self.push();
@@ -509,9 +506,9 @@ impl ContinuityInner {
                     self.data.sharing_mode = SharingMode::Idle;
                     self.pending_transition_side = None;
                     capture.stop();
-                    let _ = capture.prepare();
                     connection.send_message(protocol::Message::TransitionCancel);
                     self.push();
+                    let _ = capture.prepare();
                 }
             }
             ContinuityCmd::StartSharing(side, local_edge_pos) => {
@@ -540,9 +537,9 @@ impl ContinuityInner {
                     self.data.sharing_mode = SharingMode::Idle;
                     self.pending_transition_side = None;
                     capture.stop();
-                    let _ = capture.prepare();
                     connection.send_message(protocol::Message::TransitionCancel);
                     self.push();
+                    let _ = capture.prepare();
                 } else if self.data.sharing_mode == SharingMode::Receiving {
                     // User wants to take over cursor from Receiving mode.
                     // The edge is on our active_peer_config side (where the peer is).
@@ -789,9 +786,10 @@ impl ContinuityInner {
                                     error!("[continuity] failed to start input injection: {e}");
                                 }
 
+                                self.push();
                                 // Pre-scan devices for capture
                                 let _ = capture.prepare();
-                                } else {
+                            } else {
                                 warn!("[continuity] peer sent incorrect PIN confirmation");
                                 connection.disconnect_active();
                             }
@@ -823,8 +821,8 @@ impl ContinuityInner {
                             version: config.version,
                         });
                         
-                        let _ = capture.prepare();
                         self.push();
+                        let _ = capture.prepare();
                     }
                     protocol::Message::ConfigSync { arrangement, offset, version } => {
                         if let Some(conn) = &self.data.active_connection {
@@ -1023,9 +1021,10 @@ impl ContinuityInner {
                             self.entry_side = None;
                             self.last_transition_at = Instant::now();
                             capture.stop();
-                            let _ = capture.prepare();
                             connection.send_message(protocol::Message::TransitionCancel);
                             self.push();
+                            // Prepare for next transition in background (well, after push)
+                            let _ = capture.prepare();
                             return;
                         }
                     }
@@ -1048,9 +1047,9 @@ impl ContinuityInner {
                     info!("[continuity] kernel emergency exit requested");
                     self.data.sharing_mode = SharingMode::Idle;
                     capture.stop();
-                    let _ = capture.prepare();
                     connection.send_message(protocol::Message::TransitionCancel);
                     self.push();
+                    let _ = capture.prepare();
                 }
             };
         }
