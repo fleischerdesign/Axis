@@ -509,6 +509,7 @@ impl ContinuityInner {
                     self.data.sharing_mode = SharingMode::Idle;
                     self.pending_transition_side = None;
                     capture.stop();
+                    let _ = capture.prepare();
                     connection.send_message(protocol::Message::TransitionCancel);
                     self.push();
                 }
@@ -539,6 +540,7 @@ impl ContinuityInner {
                     self.data.sharing_mode = SharingMode::Idle;
                     self.pending_transition_side = None;
                     capture.stop();
+                    let _ = capture.prepare();
                     connection.send_message(protocol::Message::TransitionCancel);
                     self.push();
                 } else if self.data.sharing_mode == SharingMode::Receiving {
@@ -1021,6 +1023,7 @@ impl ContinuityInner {
                             self.entry_side = None;
                             self.last_transition_at = Instant::now();
                             capture.stop();
+                            let _ = capture.prepare();
                             connection.send_message(protocol::Message::TransitionCancel);
                             self.push();
                             return;
@@ -1045,6 +1048,7 @@ impl ContinuityInner {
                     info!("[continuity] kernel emergency exit requested");
                     self.data.sharing_mode = SharingMode::Idle;
                     capture.stop();
+                    let _ = capture.prepare();
                     connection.send_message(protocol::Message::TransitionCancel);
                     self.push();
                 }
