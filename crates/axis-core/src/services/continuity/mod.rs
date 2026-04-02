@@ -302,20 +302,24 @@ impl ContinuityInner {
         let mut capture = input::EvdevCapture::new();
         let mut heartbeat = interval(Duration::from_secs(HEARTBEAT_INTERVAL_SECS));
 
-        // Get initial screen dimensions from Niri (physical pixel mode)
+        // Get initial screen dimensions from Niri (logical total of all outputs)
         if let Ok(mut sock) = niri_ipc::socket::Socket::connect() {
             if let Ok(Ok(niri_ipc::Response::Outputs(outputs))) = sock.send(niri_ipc::Request::Outputs) {
-                // Pick the first enabled output with a current mode
-                if let Some(output) = outputs.values().find(|o| o.logical.is_some()) {
-                    if let Some(mode_idx) = output.current_mode {
-                        if let Some(mode) = output.modes.get(mode_idx) {
-                            let w = mode.width as i32;
-                            let h = mode.height as i32;
-                            info!("[continuity] detected physical resolution: {}x{}", w, h);
-                            self.data.screen_width = w;
-                            self.data.screen_height = h;
-                        }
+                // Sum the bounding box of all enabled outputs
+                let mut max_x: i32 = 0;
+                let mut max_y: i32 = 0;
+                for output in outputs.values() {
+                    if let Some(logical) = &output.logical {
+                        let right = logical.x + logical.width as i32;
+                        let bottom = logical.y + logical.height as i32;
+                        max_x = max_x.max(right);
+                        max_y = max_y.max(bottom);
                     }
+                }
+                if max_x > 0 && max_y > 0 {
+                    info!("[continuity] detected logical desktop: {}x{}", max_x, max_y);
+                    self.data.screen_width = max_x;
+                    self.data.screen_height = max_y;
                 }
             }
         }
