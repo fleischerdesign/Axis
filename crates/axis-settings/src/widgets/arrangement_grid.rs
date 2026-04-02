@@ -549,6 +549,20 @@ impl ArrangementGrid {
             }
         });
 
+        // Finish drag on button release (even without further motion)
+        let state_release = state.clone();
+        let proxy_release = proxy.clone();
+        let cont_release = continuity.clone();
+        let da_release = drawing_area.clone();
+        click.connect_released(move |_gesture, _n_press, px, py| {
+            let mut s = state_release.borrow_mut();
+            if s.dragging {
+                apply_snap(px, py, &mut s, &proxy_release, cont_release.as_ref());
+                s.dragging = false;
+                da_release.queue_draw();
+            }
+        });
+
         drawing_area.add_controller(click);
 
         // Track motion, snap on button release
