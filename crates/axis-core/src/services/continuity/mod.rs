@@ -302,24 +302,33 @@ impl ContinuityInner {
         let mut capture = input::EvdevCapture::new();
         let mut heartbeat = interval(Duration::from_secs(HEARTBEAT_INTERVAL_SECS));
 
-        // Get initial screen dimensions from Niri (logical total of all outputs)
+        // Get initial screen dimensions from Niri (logical size of primary output).
+        // The primary output is the one whose logical area contains (0,0) after
+        // accounting for negative positions, or the largest output if none matches.
         if let Ok(mut sock) = niri_ipc::socket::Socket::connect() {
             if let Ok(Ok(niri_ipc::Response::Outputs(outputs))) = sock.send(niri_ipc::Request::Outputs) {
-                // Sum the bounding box of all enabled outputs
-                let mut max_x: i32 = 0;
-                let mut max_y: i32 = 0;
+                let mut best: Option<(i32, i32)> = None;
+                let mut best_area: u64 = 0;
                 for output in outputs.values() {
                     if let Some(logical) = &output.logical {
-                        let right = logical.x + logical.width as i32;
-                        let bottom = logical.y + logical.height as i32;
-                        max_x = max_x.max(right);
-                        max_y = max_y.max(bottom);
+                        let w = logical.width as i32;
+                        let h = logical.height as i32;
+                        // Prefer the output that covers (0,0), else the largest
+                        let covers_origin = logical.x <= 0
+                            && logical.y <= 0
+                            && logical.x + w > 0
+                            && logical.y + h > 0;
+                        let area = (w as u64) * (h as u64);
+                        if covers_origin || area > best_area {
+                            best = Some((w, h));
+                            best_area = area;
+                        }
                     }
                 }
-                if max_x > 0 && max_y > 0 {
-                    info!("[continuity] detected logical desktop: {}x{}", max_x, max_y);
-                    self.data.screen_width = max_x;
-                    self.data.screen_height = max_y;
+                if let Some((w, h)) = best {
+                    info!("[continuity] detected primary output: {}x{} (logical)", w, h);
+                    self.data.screen_width = w;
+                    self.data.screen_height = h;
                 }
             }
         }
