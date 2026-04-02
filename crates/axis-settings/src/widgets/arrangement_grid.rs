@@ -60,6 +60,7 @@ struct ArrangementState {
     drag_offset_y: f64,
     drag_pos_x: f64,
     drag_pos_y: f64,
+    potential_side: Option<ArrangementSide>,
     skip_arrangement_update: bool,
 }
 
@@ -184,23 +185,17 @@ fn side_to_continuity(s: ArrangementSide) -> Side {
 
 // ── Drag Handling ───────────────────────────────────────────────────────
 
-fn apply_snap(
+fn calculate_snap(
     px: f64,
     py: f64,
-    state: &mut ArrangementState,
-    proxy: &Rc<SettingsProxy>,
-    continuity: Option<&Rc<ContinuityProxy>>,
-) {
-    let Some(ref remote) = state.remote else { return; };
-    let device_id = remote.device_id.clone();
-    let device_name = remote.device_name.clone();
-
+    state: &ArrangementState,
+) -> (ArrangementSide, i32, CanvasRect) {
     let local = state.local_rect;
     let scale = state.scale;
-    let pw = remote.rect.w;
-    let ph = remote.rect.h;
+    let pw = state.peer_rect.w;
+    let ph = state.peer_rect.h;
 
-    // Drop position (top-left corner of the peer)
+    // Current position of the dragged peer (top-left)
     let peer_x = px - state.drag_offset_x;
     let peer_y = py - state.drag_offset_y;
     let peer_cx = peer_x + pw / 2.0;
@@ -212,7 +207,9 @@ fn apply_snap(
     let dx = peer_cx - local_cx;
     let dy = peer_cy - local_cy;
 
-    let side = if dx.abs() > dy.abs() {
+    // Determine side by comparing relative distance to center
+    // Normalized by screen size to make the choice more intuitive
+    let side = if (dx / local.w).abs() > (dy / local.h).abs() {
         if dx > 0.0 { ArrangementSide::Right } else { ArrangementSide::Left }
     } else {
         if dy > 0.0 { ArrangementSide::Bottom } else { ArrangementSide::Top }
@@ -235,12 +232,29 @@ fn apply_snap(
         }
     };
 
+    (side, offset, snapped)
+}
+
+fn apply_snap(
+    px: f64,
+    py: f64,
+    state: &mut ArrangementState,
+    proxy: &Rc<SettingsProxy>,
+    continuity: Option<&Rc<ContinuityProxy>>,
+) {
+    let Some(ref remote) = state.remote else { return; };
+    let device_id = remote.device_id.clone();
+    let device_name = remote.device_name.clone();
+
+    let (side, offset, snapped) = calculate_snap(px, py, state);
+
     // Update state
     if let Some(ref mut remote) = state.remote {
         remote.side = side;
         remote.offset = offset;
         remote.rect = snapped;
     }
+    state.potential_side = None;
     state.skip_arrangement_update = true;
 
     // Persist to settings
@@ -337,6 +351,7 @@ impl ArrangementGrid {
             drag_offset_y: 0.0,
             drag_pos_x: 0.0,
             drag_pos_y: 0.0,
+            potential_side: None,
             skip_arrangement_update: false,
         }));
 
@@ -453,6 +468,13 @@ impl ArrangementGrid {
             // Local device
             draw_device_rect(cr, &s.local_rect, CORNER_RADIUS, "This Device");
 
+            // Snap highlight
+            if s.dragging {
+                if let Some(side) = s.potential_side {
+                    draw_snap_highlight(cr, &s.local_rect, side);
+                }
+            }
+
             // Remote device (connected peer)
             if let Some(ref remote) = s.remote {
                 if !s.dragging {
@@ -507,6 +529,38 @@ impl ArrangementGrid {
                 r.y + (r.h - ext.height()) / 2.0 + ext.height(),
             );
             let _ = cr.show_text(label);
+        }
+
+        fn draw_snap_highlight(cr: &gtk4::cairo::Context, r: &CanvasRect, side: ArrangementSide) {
+            let thickness = 4.0;
+            let gap_half = CANVAS_GAP / 2.0;
+            cr.set_source_rgba(0.208, 0.518, 0.894, 0.6); // Slightly more transparent for a "guide" feel
+            cr.set_line_width(thickness);
+            cr.set_line_cap(gtk4::cairo::LineCap::Round);
+
+            match side {
+                ArrangementSide::Left => {
+                    let x = r.x - gap_half;
+                    cr.move_to(x, r.y);
+                    cr.line_to(x, r.y + r.h);
+                }
+                ArrangementSide::Right => {
+                    let x = r.x + r.w + gap_half;
+                    cr.move_to(x, r.y);
+                    cr.line_to(x, r.y + r.h);
+                }
+                ArrangementSide::Top => {
+                    let y = r.y - gap_half;
+                    cr.move_to(r.x, y);
+                    cr.line_to(r.x + r.w, y);
+                }
+                ArrangementSide::Bottom => {
+                    let y = r.y + r.h + gap_half;
+                    cr.move_to(r.x, y);
+                    cr.line_to(r.x + r.w, y);
+                }
+            }
+            let _ = cr.stroke();
         }
 
         fn draw_remote_device(cr: &gtk4::cairo::Context, device: &RemoteDevice, opacity: f64) {
@@ -627,6 +681,10 @@ impl ArrangementGrid {
                 if still_pressed {
                     s.drag_pos_x = px;
                     s.drag_pos_y = py;
+                    
+                    let (side, _, _) = calculate_snap(px, py, &s);
+                    s.potential_side = Some(side);
+                    
                     da_motion.queue_draw();
                 } else {
                     apply_snap(px, py, &mut s, &proxy_motion, cont_motion.as_ref());
