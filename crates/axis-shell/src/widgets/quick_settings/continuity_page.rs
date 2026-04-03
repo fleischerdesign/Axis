@@ -247,13 +247,49 @@ impl ContinuityPage {
 
                 row.append(&info);
 
-                // Connect button
                 let is_connected = data
                     .active_connection
                     .as_ref()
                     .is_some_and(|c| c.peer_id == peer.device_id);
+                
+                let is_trusted = data
+                    .peer_configs
+                    .get(&peer.device_id)
+                    .is_some_and(|c| c.trusted);
 
-                if !is_connected && data.active_connection.is_none() {
+                let actions_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
+                actions_box.set_valign(gtk4::Align::Center);
+
+                if is_trusted {
+                    let unpair_btn = gtk4::Button::from_icon_name("user-trash-symbolic");
+                    unpair_btn.set_tooltip_text(Some("Entkoppeln"));
+                    unpair_btn.add_css_class("flat");
+                    unpair_btn.add_css_class("circular");
+                    unpair_btn.add_css_class("unpair-btn");
+                    let tx_u = tx_connect.clone();
+                    let id = peer.device_id.clone();
+                    unpair_btn.connect_clicked(move |_| {
+                        let _ = tx_u.try_send(ContinuityCmd::Unpair(id.clone()));
+                    });
+                    actions_box.append(&unpair_btn);
+
+                    if is_connected {
+                        let connected_icon = gtk4::Image::from_icon_name("object-select-symbolic");
+                        connected_icon.set_tooltip_text(Some("Verbunden"));
+                        actions_box.append(&connected_icon);
+                    } else {
+                        let connect_btn = gtk4::Button::from_icon_name("network-transmit-receive-symbolic");
+                        connect_btn.set_tooltip_text(Some("Verbinden"));
+                        connect_btn.add_css_class("flat");
+                        connect_btn.add_css_class("circular");
+                        let tx_c = tx_connect.clone();
+                        let id = peer.device_id.clone();
+                        connect_btn.connect_clicked(move |_| {
+                            let _ = tx_c.try_send(ContinuityCmd::ConnectToPeer(id.clone()));
+                        });
+                        actions_box.append(&connect_btn);
+                    }
+                } else if !is_connected && data.active_connection.is_none() {
                     let connect_btn = gtk4::Button::from_icon_name("network-transmit-receive-symbolic");
                     connect_btn.set_tooltip_text(Some("Verbinden"));
                     connect_btn.add_css_class("flat");
@@ -263,12 +299,14 @@ impl ContinuityPage {
                     connect_btn.connect_clicked(move |_| {
                         let _ = tx_c.try_send(ContinuityCmd::ConnectToPeer(id.clone()));
                     });
-                    row.append(&connect_btn);
+                    actions_box.append(&connect_btn);
                 } else if is_connected {
                     let connected_icon = gtk4::Image::from_icon_name("object-select-symbolic");
                     connected_icon.set_tooltip_text(Some("Verbunden"));
-                    row.append(&connected_icon);
+                    actions_box.append(&connected_icon);
                 }
+
+                row.append(&actions_box);
 
                 let frame = gtk4::Frame::new(None);
                 frame.add_css_class("list-row");

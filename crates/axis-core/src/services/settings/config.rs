@@ -223,6 +223,8 @@ pub enum ArrangementSide {
 pub struct PeerPersistedConfig {
     pub device_id: String,
     pub device_name: String,
+    #[serde(default)]
+    pub trusted: bool,
     #[serde(default = "default_true")]
     pub clipboard: bool,
     #[serde(default)]

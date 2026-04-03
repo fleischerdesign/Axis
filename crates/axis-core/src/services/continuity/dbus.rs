@@ -150,6 +150,12 @@ impl ContinuityDbusServer {
         true
     }
 
+    /// Unpair a known peer by device ID.
+    async fn unpair(&self, peer_id: &str) -> bool {
+        let _ = self.cmd_tx.try_send(ContinuityCmd::Unpair(peer_id.to_string()));
+        true
+    }
+
     /// Set peer arrangement (JSON of PeerArrangement).
     async fn set_peer_arrangement(&self, json: &str) -> bool {
         match serde_json::from_str::<super::PeerArrangement>(json) {

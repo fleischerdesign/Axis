@@ -93,6 +93,7 @@ pub fn wire_continuity_sync(
             };
 
             service_update.insert(p_cfg.device_id.clone(), PeerConfig {
+                trusted: p_cfg.trusted,
                 arrangement: PeerArrangement { side, offset },
                 clipboard: p_cfg.clipboard,
                 audio: p_cfg.audio,
@@ -109,10 +110,10 @@ pub fn wire_continuity_sync(
 
     // ── Service → Config ──────────────────────────────────────────────────
     let s_tx = settings_tx.clone();
-    let last_state: Rc<RefCell<Option<(bool, Vec<(String, Side, i32, bool, bool, bool, u64)>)>>> = Rc::new(RefCell::new(None));
+    let last_state: Rc<RefCell<Option<(bool, Vec<(String, Side, i32, bool, bool, bool, u64, bool)>)>>> = Rc::new(RefCell::new(None));
     
     cont_store.subscribe(move |data| {
-        let mut current_peers: Vec<(String, Side, i32, bool, bool, bool, u64)> = data.peer_configs.iter()
+        let mut current_peers: Vec<(String, Side, i32, bool, bool, bool, u64, bool)> = data.peer_configs.iter()
             .map(|(id, cfg)| (
                 id.clone(), 
                 cfg.arrangement.side, 
@@ -120,7 +121,8 @@ pub fn wire_continuity_sync(
                 cfg.clipboard,
                 cfg.audio,
                 cfg.drag_drop,
-                cfg.version
+                cfg.version,
+                cfg.trusted
             ))
             .collect();
         // Sort for stable comparison
@@ -140,7 +142,7 @@ pub fn wire_continuity_sync(
         let _ = s_tx.try_send(SettingsCmd::UpdatePartial(Box::new(move |cfg| {
             cfg.continuity.enabled = enabled;
             
-            for (id, side, offset, clipboard, audio, drag_drop, version) in peer_updates {
+            for (id, side, offset, clipboard, audio, drag_drop, version, trusted) in peer_updates {
                 let a_side = match side {
                     Side::Left => ArrangementSide::Left,
                     Side::Right => ArrangementSide::Right,
@@ -153,14 +155,14 @@ pub fn wire_continuity_sync(
                 };
 
                 if let Some(p) = cfg.continuity.peer_configs.iter_mut().find(|p| p.device_id == id) {
-                    // Update only if changed
                     if p.arrangement_side != a_side 
                         || p.arrangement_x != ax 
                         || p.arrangement_y != ay 
                         || p.clipboard != clipboard
                         || p.audio != audio
                         || p.drag_drop != drag_drop
-                        || p.version != version 
+                        || p.version != version
+                        || p.trusted != trusted
                     {
                         p.arrangement_side = a_side;
                         p.arrangement_x = ax;
@@ -169,12 +171,13 @@ pub fn wire_continuity_sync(
                         p.audio = audio;
                         p.drag_drop = drag_drop;
                         p.version = version;
+                        p.trusted = trusted;
                     }
                 } else {
-                    // New peer discovered via protocol
                     cfg.continuity.peer_configs.push(PeerPersistedConfig {
                         device_id: id,
-                        device_name: "New Peer".to_string(), // Name will be updated on next connect
+                        device_name: "New Peer".to_string(),
+                        trusted,
                         arrangement_side: a_side,
                         arrangement_x: ax,
                         arrangement_y: ay,

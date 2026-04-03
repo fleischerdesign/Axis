@@ -3,6 +3,7 @@ pub mod connection;
 pub mod dbus;
 pub mod discovery;
 pub mod input;
+pub mod known_peers;
 pub mod protocol;
 
 use async_channel::{bounded, Sender};
@@ -117,6 +118,7 @@ impl Default for PeerArrangement {
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct PeerConfig {
+    pub trusted: bool,
     pub arrangement: PeerArrangement,
     pub clipboard: bool,
     pub audio: bool,
@@ -127,6 +129,7 @@ pub struct PeerConfig {
 impl Default for PeerConfig {
     fn default() -> Self {
         Self {
+            trusted: false,
             arrangement: PeerArrangement::default(),
             clipboard: true,
             audio: false,
@@ -184,14 +187,13 @@ impl Default for ContinuityData {
 pub enum ContinuityCmd {
     SetEnabled(bool),
     ConnectToPeer(String),
+    Unpair(String),
     ConfirmPin,
     RejectPin,
     Disconnect,
     ForceLocal,
     StartDiscovery,
     StopDiscovery,
-    /// Start sharing cursor to peer. `edge_pos` is the position along the
-    /// local edge (absolute screen coords) where the cursor crossed.
     StartSharing(Side, f64),
     StopSharing(f64),
     SendInput(protocol::Message),
@@ -238,22 +240,32 @@ struct ContinuityInner {
     last_message_at: Option<Instant>,
     is_initiating: bool,
     pending_peer: Option<(String, String)>,
-    /// Virtual cursor position in **remote screen** coordinates.
-    /// Used to detect when the cursor should return to the local machine.
     virtual_pos: (f64, f64),
     entry_side: Option<Side>,
     pending_transition_side: Option<Side>,
-    /// The edge position (in remote screen coords) for a pending transition.
     pending_edge_pos: f64,
     last_transition_at: Instant,
     switch_tx: Option<Sender<ContinuityCmd>>,
+    known_peers: known_peers::KnownPeersStore,
 }
 
 impl ContinuityInner {
     fn new(data_tx: Sender<ContinuityData>) -> Self {
+        let known_peers = known_peers::load_known_peers();
+        let mut data = ContinuityData::default();
+        
+        for (id, peer) in &known_peers.peers {
+            if peer.trusted {
+                data.peer_configs.insert(id.clone(), PeerConfig {
+                    trusted: true,
+                    ..Default::default()
+                });
+            }
+        }
+        
         Self {
             data_tx,
-            data: ContinuityData::default(),
+            data,
             last_message_at: None,
             is_initiating: false,
             pending_peer: None,
@@ -263,7 +275,42 @@ impl ContinuityInner {
             pending_edge_pos: 0.0,
             last_transition_at: Instant::now() - Duration::from_secs(10),
             switch_tx: None,
+            known_peers,
         }
+    }
+    
+    fn persist_known_peers(&self) {
+        let store = known_peers::KnownPeersStore {
+            peers: self.data.peer_configs.iter()
+                .filter(|(_, c)| c.trusted)
+                .filter_map(|(id, config)| {
+                    self.known_peers.peers.get(id).map(|p| {
+                        (id.clone(), known_peers::KnownPeer {
+                            device_id: p.device_id.clone(),
+                            device_name: p.device_name.clone(),
+                            hostname: p.hostname.clone(),
+                            address: p.address.clone(),
+                            address_v6: p.address_v6.clone(),
+                            trusted: config.trusted,
+                        })
+                    }).or_else(|| {
+                        self.data.peers.iter()
+                            .find(|peer| peer.device_id == *id)
+                            .map(|peer| {
+                                (id.clone(), known_peers::KnownPeer {
+                                    device_id: peer.device_id.clone(),
+                                    device_name: peer.device_name.clone(),
+                                    hostname: peer.hostname.clone(),
+                                    address: peer.address.to_string(),
+                                    address_v6: peer.address_v6.map(|a| a.to_string()),
+                                    trusted: config.trusted,
+                                })
+                            })
+                    })
+                })
+                .collect(),
+        };
+        known_peers::save_known_peers(&store);
     }
 
     /// Returns the remote screen dimensions, falling back to local dims if unknown.
@@ -434,8 +481,15 @@ impl ContinuityInner {
                     let name = peer.device_name.clone();
                     let addr_v4 = peer.address;
                     let addr_v6 = peer.address_v6;
-                    info!("[continuity] connecting to {name}");
+                    let is_trusted = self.data.peer_configs
+                        .get(&peer.device_id)
+                        .map(|c| c.trusted)
+                        .unwrap_or(false);
+                    
+                    info!("[continuity] connecting to {name} (trusted: {is_trusted})");
                     self.is_initiating = true;
+                    self.pending_peer = Some((peer.device_id.clone(), name.clone()));
+                    
                     connection.connect_dual(
                         addr_v4,
                         addr_v6,
@@ -443,14 +497,29 @@ impl ContinuityInner {
                         self.data.device_id.clone(),
                         self.data.device_name.clone(),
                     );
+                    
+                    if is_trusted {
+                        let pin = format!("{:06}", uuid::Uuid::new_v4().as_u128() % 1000000);
+                        self.data.pending_pin = Some(PendingPin {
+                            pin: pin.clone(),
+                            peer_id: peer.device_id.clone(),
+                            peer_name: name,
+                            is_incoming: false,
+                        });
+                        connection.send_message(protocol::Message::PinRequest { pin });
+                        self.push();
+                    }
                 }
             }
             ContinuityCmd::ConfirmPin => {
                 if let Some(pending) = self.data.pending_pin.take() {
                     info!("[continuity] PIN confirmed locally");
-                    connection.send_message(protocol::Message::PinConfirm { pin: pending.pin });
+                    connection.send_message(protocol::Message::PinConfirm { pin: pending.pin.clone() });
+                    
+                    self.data.peer_configs.entry(pending.peer_id.clone()).or_default().trusted = true;
+                    self.persist_known_peers();
+                    
                     if pending.is_incoming {
-                        // We received the pin and accepted it. We can now consider the connection active.
                         info!("[continuity] Connection to {} is now active", pending.peer_name);
                         self.data.active_connection = Some(ActiveConnectionInfo {
                             peer_id: pending.peer_id,
@@ -459,18 +528,15 @@ impl ContinuityInner {
                         });
                         self.last_message_at = Some(Instant::now());
 
-                        // Exchange screen info
                         connection.send_message(protocol::Message::ScreenInfo {
                             width: self.data.screen_width,
                             height: self.data.screen_height,
                         });
 
-                        // Start clipboard sync
                         if let Err(e) = clipboard.start_monitoring(clipboard_tx.clone()) {
                             error!("[continuity] failed to start clipboard monitoring: {e}");
                         }
                         
-                        // Start injection
                         if let Err(e) = injection.start() {
                             error!("[continuity] failed to start input injection: {e}");
                         }
@@ -501,6 +567,22 @@ impl ContinuityInner {
                 self.data.active_connection = None;
                 self.data.sharing_mode = SharingMode::Idle;
                 self.last_message_at = None;
+                self.push();
+            }
+            ContinuityCmd::Unpair(peer_id) => {
+                info!("[continuity] unpairing {peer_id}");
+                self.data.peer_configs.remove(&peer_id);
+                self.persist_known_peers();
+                
+                if self.data.active_connection.as_ref().is_some_and(|c| c.peer_id == peer_id) {
+                    connection.disconnect_active();
+                    clipboard.stop_monitoring();
+                    injection.stop();
+                    capture.stop();
+                    self.data.active_connection = None;
+                    self.data.sharing_mode = SharingMode::Idle;
+                    self.last_message_at = None;
+                }
                 self.push();
             }
             ContinuityCmd::ForceLocal => {

@@ -1074,3 +1074,12 @@ levelbar.osd-level-bar block.empty {
 .continuity-overlay {
     background-color: rgba(0, 0, 0, 0.01); /* Almost invisible but can intercept events */
 }
+
+.unpair-btn {
+    color: @destructive_fg_color;
+}
+
+.unpair-btn:hover {
+    background: @destructive_bg_color;
+    color: @destructive_fg_color;
+}

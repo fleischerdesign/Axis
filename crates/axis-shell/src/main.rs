@@ -225,7 +225,25 @@ fn build_ui(app: &libadwaita::Application, start_locked: bool, wallpaper_path: O
                 }
             } else {
                 *last_notified.borrow_mut() = None;
-                // Optionally close the notification if pairing ends, but for now we just clear the state.
+            }
+            
+            // Auto-connect notification for trusted peers
+            if let Some(conn) = &data.active_connection {
+                if data.peer_configs.get(&conn.peer_id).is_some_and(|c| c.trusted) {
+                    let notification = crate::services::notifications::Notification {
+                        id: 4294967293,
+                        app_name: "Continuity".to_string(),
+                        app_icon: "computer-symbolic".to_string(),
+                        summary: "Verbunden".to_string(),
+                        body: format!("Verbunden mit {}", conn.peer_name),
+                        urgency: 1,
+                        timestamp: chrono::Local::now().timestamp(),
+                        actions: vec![],
+                        on_action: None,
+                        internal_id: 3,
+                    };
+                    let _ = ctx_c.notifications.tx.try_send(crate::services::notifications::server::NotificationCmd::Show(notification));
+                }
             }
         });
     }
