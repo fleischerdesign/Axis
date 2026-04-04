@@ -92,58 +92,16 @@ impl Service for SettingsService {
 impl SettingsService {
     fn apply_cmd(cmd: SettingsCmd, config: &mut AxisConfig) -> bool {
         match cmd {
-            SettingsCmd::UpdateBar(c) => {
-                if config.bar != c {
-                    config.bar = c;
-                    true
-                } else {
-                    false
-                }
-            }
-            SettingsCmd::UpdateAppearance(c) => {
-                if config.appearance != c {
-                    config.appearance = c;
-                    true
-                } else {
-                    false
-                }
-            }
-            SettingsCmd::UpdateNightlight(c) => {
-                if config.nightlight != c {
-                    config.nightlight = c;
-                    true
-                } else {
-                    false
-                }
-            }
-            SettingsCmd::UpdateContinuity(c) => {
-                if config.continuity != c {
-                    config.continuity = c;
-                    true
-                } else {
-                    false
-                }
-            }
-            SettingsCmd::UpdateServices(c) => {
-                if config.services != c {
-                    config.services = c;
-                    true
-                } else {
-                    false
-                }
-            }
+            SettingsCmd::UpdateBar(c) => update_if_changed(&mut config.bar, c),
+            SettingsCmd::UpdateAppearance(c) => update_if_changed(&mut config.appearance, c),
+            SettingsCmd::UpdateNightlight(c) => update_if_changed(&mut config.nightlight, c),
+            SettingsCmd::UpdateContinuity(c) => update_if_changed(&mut config.continuity, c),
+            SettingsCmd::UpdateServices(c) => update_if_changed(&mut config.services, c),
+            SettingsCmd::UpdateShortcuts(c) => update_if_changed(&mut config.shortcuts, c),
             SettingsCmd::UpdatePartial(apply_fn) => {
                 let old = config.clone();
                 apply_fn(config);
                 *config != old
-            }
-            SettingsCmd::UpdateShortcuts(c) => {
-                if config.shortcuts != c {
-                    config.shortcuts = c;
-                    true
-                } else {
-                    false
-                }
             }
             SettingsCmd::Reload => {
                 let new_config = ConfigManager::load();
@@ -155,5 +113,14 @@ impl SettingsService {
                 }
             }
         }
+    }
+}
+
+fn update_if_changed<T: PartialEq>(field: &mut T, new: T) -> bool {
+    if *field != new {
+        *field = new;
+        true
+    } else {
+        false
     }
 }

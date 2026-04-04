@@ -21,8 +21,8 @@ use std::time::Duration;
 
 #[derive(Clone)]
 pub struct Bar {
-    pub window: gtk4::ApplicationWindow,
-    pub popup_open: Store<bool>,
+    window: gtk4::ApplicationWindow,
+    popup_open: Store<bool>,
     launcher: gtk4::Box,
     status: gtk4::Box,
     ws: gtk4::Box,
@@ -168,5 +168,13 @@ impl Bar {
                 });
             *self.hide_timeout.borrow_mut() = Some(src);
         }
+    }
+
+    pub fn window(&self) -> &gtk4::ApplicationWindow {
+        &self.window
+    }
+
+    pub fn popup_state(&self) -> &Store<bool> {
+        &self.popup_open
     }
 }

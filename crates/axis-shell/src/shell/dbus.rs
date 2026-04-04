@@ -10,7 +10,7 @@ use crate::widgets::lock_screen::LockScreen;
 use crate::services::ipc::IpcService;
 use crate::services::ipc::server::ShellIpcCmd;
 use axis_core::services::settings::dbus::SettingsDbusServer;
-use axis_core::services::continuity::dbus::{ContinuityDbusServer, build_snapshot, ContinuityStateSnapshot};
+use axis_core::services::continuity::dbus::{ContinuityDbusServer, build_snapshot};
 
 pub fn spawn_dbus_host(
     ctx: &AppContext,

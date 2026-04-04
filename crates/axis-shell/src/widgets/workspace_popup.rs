@@ -7,6 +7,10 @@ use gtk4_layer_shell::{KeyboardMode, LayerShell};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
+const WORKSPACE_CARD_WIDTH: f64 = 220.0;
+const WORKSPACE_CARD_MARGIN: f64 = 15.0;
+const FALLBACK_SCREEN_SIZE: (f64, f64) = (1920.0, 1080.0);
+
 pub struct WorkspacePopup {
     pub base: PopupBase,
     ctx: AppContext,
@@ -152,10 +156,10 @@ impl WorkspacePopup {
                 .get(ws.output.as_deref().unwrap_or(""))
                 .and_then(|o| o.logical.as_ref())
                 .map(|l| (l.width as f64, l.height as f64))
-                .unwrap_or((1920.0, 1080.0));
+                .unwrap_or(FALLBACK_SCREEN_SIZE);
 
-            let card_w = 220.0;
-            let margin = 15.0;
+            let card_w = WORKSPACE_CARD_WIDTH;
+            let margin = WORKSPACE_CARD_MARGIN;
             let card_h = ((card_w - margin * 2.0) / (m_w / m_h)) + margin * 2.0;
 
             let card = gtk4::Box::builder()

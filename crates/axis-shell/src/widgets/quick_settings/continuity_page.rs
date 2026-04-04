@@ -123,7 +123,7 @@ impl ContinuityPage {
         container.append(&pin_box);
 
         // Peer list
-        let scrolled_list = ScrolledList::new(300);
+        let scrolled_list = ScrolledList::with_default_height();
         scrolled_list.list.add_css_class("qs-list");
         container.append(&scrolled_list.scrolled);
 

@@ -5,7 +5,6 @@ mod shell;
 
 use axis_core::constants;
 use crate::app_context::AppContext;
-use axis_core::services::Service;
 use axis_core::services::audio::AudioService;
 use axis_core::services::airplane::AirplaneService;
 use axis_core::services::backlight::BacklightService;
@@ -24,7 +23,6 @@ use crate::services::launcher::LauncherService;
 use crate::services::notifications::NotificationService;
 use axis_core::services::settings::SettingsService;
 use axis_core::services::settings::config::AccentColor;
-use axis_core::{ReadOnlyHandle, ServiceHandle};
 use crate::widgets::{Bar, QuickSettingsPopup, WorkspacePopup, LauncherPopup, CalendarPopup, NotificationToastManager, osd::OsdManager};
 use crate::widgets::lock_screen::LockScreen;
 use crate::shell::ShellController;
@@ -98,19 +96,14 @@ fn main() {
 // Encapsulates the entire shell initialization as a sequence of explicit
 // phases. Each phase is a focused method with clear inputs/outputs.
 
-struct AppShell {
-    ctx: AppContext,
-    bar: Bar,
-    lock_screen: Rc<LockScreen>,
-    shell_ctrl: Rc<ShellController>,
-}
+struct AppShell;
 
 impl AppShell {
     fn build(
         app: &libadwaita::Application,
         start_locked: bool,
         wallpaper_path: Option<String>,
-    ) -> Self {
+    ) {
         // Phase 1: Theme infrastructure
         let theme_provider = Self::setup_theme();
 
@@ -140,21 +133,16 @@ impl AppShell {
         );
 
         // Phase 7: Shell integration
+        NotificationToastManager::init(app, ctx.clone());
+        let _osd = OsdManager::new(app, ctx.clone());
         let shell_ctrl = Self::setup_shell(&bar, &ctx);
         Self::register_popups(app, &ctx, &shell_ctrl, &lock_screen, &bar);
         Self::spawn_dbus(&ctx, shell_ctrl.clone(), lock_screen.clone());
         Self::wire_click_handlers(&bar, shell_ctrl.clone());
 
         // Phase 8: Boot state
-        bar.window.present();
+        bar.window().present();
         Self::maybe_lock(&lock_screen, start_locked);
-
-        Self {
-            ctx,
-            bar,
-            lock_screen,
-            shell_ctrl,
-        }
     }
 
     // ── Phase 1: Theme ────────────────────────────────────────────────
@@ -403,7 +391,7 @@ impl AppShell {
         let on_change = move || {
             bar_ref.check_auto_hide();
         };
-        Rc::new(ShellController::new(bar.popup_open.clone(), on_change))
+        Rc::new(ShellController::new(bar.popup_state().clone(), on_change))
     }
 
     fn register_popups(
@@ -425,9 +413,10 @@ impl AppShell {
         // Archive overlay
         let notification_archive =
             crate::widgets::notification::archive::NotificationArchiveManager::new(ctx.clone());
-        qs.archive_box.append(&notification_archive.container);
+        use crate::shell::PopupExt;
+        qs.archive_container().append(&notification_archive.container);
         let archive_mgr = notification_archive.clone();
-        qs.base.is_open.subscribe(move |&is_open| {
+        qs.base().is_open.subscribe(move |&is_open| {
             archive_mgr.set_popup_open(is_open);
         });
 

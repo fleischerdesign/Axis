@@ -26,11 +26,13 @@ use gtk4::prelude::*;
 use std::rc::Rc;
 
 pub struct QuickSettingsPopup {
-    pub base: PopupBase,
-    pub container: gtk4::Box,
-    pub archive_box: gtk4::Box,
+    base: PopupBase,
+    container: gtk4::Box,
+    archive_box: gtk4::Box,
     qs_stack: gtk4::Stack,
     main_page: MainPage,
+    bt_tx: async_channel::Sender<BluetoothCmd>,
+    ct_tx: async_channel::Sender<axis_core::services::continuity::ContinuityCmd>,
 }
 
 impl PopupExt for QuickSettingsPopup {
@@ -44,7 +46,8 @@ impl PopupExt for QuickSettingsPopup {
 
     fn on_close(&self) {
         self.qs_stack.set_visible_child_name("main");
-        let _ = self.base.window; // ensure field access compiles
+        let _ = self.bt_tx.try_send(BluetoothCmd::StopScan);
+        let _ = self.ct_tx.try_send(axis_core::services::continuity::ContinuityCmd::StopDiscovery);
     }
 
     fn handle_escape(&self) {
@@ -70,21 +73,8 @@ impl QuickSettingsPopup {
     ) -> Self {
         let base = PopupBase::new(app, "AXIS Quick Settings", true);
 
-        // Stop BT scan on close
-        let tx_bt_stop = ctx.bluetooth.tx.clone();
-        base.window.connect_visible_notify(move |win| {
-            if !win.is_visible() {
-                let _ = tx_bt_stop.try_send(BluetoothCmd::StopScan);
-            }
-        });
-
-        // Stop continuity discovery on close
-        let tx_ct_stop = ctx.continuity.tx.clone();
-        base.window.connect_visible_notify(move |win| {
-            if !win.is_visible() {
-                let _ = tx_ct_stop.try_send(axis_core::services::continuity::ContinuityCmd::StopDiscovery);
-            }
-        });
+        let bt_tx = ctx.bluetooth.tx.clone();
+        let ct_tx = ctx.continuity.tx.clone();
 
         let qs_container = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
         qs_container.add_css_class("qs-panel");
@@ -211,7 +201,7 @@ impl QuickSettingsPopup {
 
         qs_container.append(&qs_stack);
 
-        // Outer wrapper: Archive oben, Popup-Content unten
+        // Outer wrapper: Archive above QS content
         let archive_box = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
         archive_box.set_valign(gtk4::Align::End);
         archive_box.set_halign(gtk4::Align::End);
@@ -229,6 +219,12 @@ impl QuickSettingsPopup {
             archive_box,
             qs_stack,
             main_page,
+            bt_tx,
+            ct_tx,
         }
+    }
+
+    pub fn archive_container(&self) -> &gtk4::Box {
+        &self.archive_box
     }
 }

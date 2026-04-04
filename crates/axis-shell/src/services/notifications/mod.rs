@@ -8,6 +8,8 @@ use zbus::object_server::InterfaceRef;
 use axis_core::ServiceStore;
 pub use axis_core::services::notifications::{Notification, NotificationData, NotificationAction};
 
+const MAX_NOTIFICATION_HISTORY: usize = 20;
+
 pub struct NotificationService;
 
 impl axis_core::Service for NotificationService {
@@ -64,7 +66,7 @@ impl axis_core::Service for NotificationService {
                                 } else {
                                     history.push(n);
                                 }
-                                if history.len() > 20 { history.remove(0); }
+                                if history.len() > MAX_NOTIFICATION_HISTORY { history.remove(0); }
                                 let _ = data_tx.send(NotificationData {
                                     notifications: history.clone(),
                                     last_id: id

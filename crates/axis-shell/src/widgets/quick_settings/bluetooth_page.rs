@@ -27,7 +27,7 @@ impl BluetoothPage {
         let header = SubPageHeader::new("Bluetooth", None::<&gtk4::Widget>);
         container.append(&header.container);
 
-        let scrolled_list = ScrolledList::new(300);
+        let scrolled_list = ScrolledList::with_default_height();
         scrolled_list.list.add_css_class("qs-list");
         container.append(&scrolled_list.scrolled);
 

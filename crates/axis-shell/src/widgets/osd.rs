@@ -6,6 +6,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
+const OSD_AUTO_HIDE_MS: u64 = 300;
+
 struct OsdModule {
     container: gtk4::Revealer,
     level_bar: gtk4::LevelBar,
@@ -144,7 +146,7 @@ impl OsdManager {
             let bright_c = bright.clone();
             let inner_ref_c = inner_ref.clone();
             let inner_src =
-                gtk4::glib::timeout_add_local_once(Duration::from_millis(300), move || {
+                gtk4::glib::timeout_add_local_once(Duration::from_millis(OSD_AUTO_HIDE_MS), move || {
                     *inner_ref_c.borrow_mut() = None;
                     if !vol_c.is_active() && !bright_c.is_active() {
                         win_c.set_visible(false);

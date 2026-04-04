@@ -5,6 +5,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 static SWIPE_ID: AtomicUsize = AtomicUsize::new(0);
 
+const SWIPE_THRESHOLD_PX: f64 = 100.0;
+const SWIPE_COOLDOWN_MS: u64 = 100;
+
 /// Generic swipe-to-dismiss wrapper. Works with mouse drag and trackpad scroll.
 /// Domain-agnostic — can wrap any widget in any context.
 pub struct SwipeDismiss {
@@ -71,11 +74,11 @@ impl SwipeDismiss {
         drag.connect_drag_end(move |_, offset_x, _| {
             is_de.set(false);
 
-            if offset_x.abs() > 100.0 {
+            if offset_x.abs() > SWIPE_THRESHOLD_PX {
                 is_sw.set(true);
                 let ws = is_sw.clone();
                 gtk4::glib::timeout_add_local_once(
-                    std::time::Duration::from_millis(100),
+                    std::time::Duration::from_millis(SWIPE_COOLDOWN_MS),
                     move || ws.set(false),
                 );
                 on_d();

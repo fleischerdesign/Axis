@@ -8,6 +8,8 @@ use crate::app_context::AppContext;
 use crate::shell::PopupExt;
 use crate::widgets::base::PopupBase;
 use chrono::Datelike;
+
+const CALENDAR_REFRESH_INTERVAL_MS: u64 = 300;
 use gtk4::prelude::*;
 use gtk4_layer_shell::{KeyboardMode, LayerShell};
 use std::cell::RefCell;
@@ -86,7 +88,7 @@ impl PopupExt for CalendarPopup {
         let grid = self.calendar_grid.clone();
         let sel = self.selected_date.clone();
         let src = gtk4::glib::timeout_add_local(
-            std::time::Duration::from_millis(300),
+            std::time::Duration::from_millis(CALENDAR_REFRESH_INTERVAL_MS),
             move || {
                 if rx.try_recv().is_ok() && base_is_open.get() {
                     task_section::render_tasks(&tl, &ls, &ctx, &sp, &ab, &tx);
