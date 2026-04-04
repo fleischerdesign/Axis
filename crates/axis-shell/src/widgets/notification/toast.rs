@@ -4,7 +4,7 @@ use crate::widgets::notification::NotificationCard;
 use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 pub struct NotificationToastManager {
@@ -73,12 +73,12 @@ impl NotificationToastManager {
             }
         }
 
-        let mut to_remove = Vec::new();
-        for id in self.active_toasts.borrow().keys() {
-            if !data.notifications.iter().any(|n| n.id == *id) {
-                to_remove.push(*id);
-            }
-        }
+        let active_ids: HashSet<u32> = data.notifications.iter().map(|n| n.id).collect();
+        let to_remove: Vec<u32> = self.active_toasts.borrow()
+            .keys()
+            .filter(|id| !active_ids.contains(id))
+            .copied()
+            .collect();
 
         for id in to_remove {
             self.remove_toast_by_id(id);

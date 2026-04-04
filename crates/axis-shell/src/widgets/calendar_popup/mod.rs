@@ -11,7 +11,7 @@ use chrono::Datelike;
 const CALENDAR_REFRESH_INTERVAL_MS: u64 = 300;
 use gtk4::prelude::*;
 use gtk4_layer_shell::{KeyboardMode, LayerShell};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::mpsc;
 
@@ -31,6 +31,7 @@ pub struct CalendarPopup {
     refresh_tx: mpsc::Sender<()>,
     refresh_rx: Rc<RefCell<Option<mpsc::Receiver<()>>>>,
     refresh_source: Rc<RefCell<Option<gtk4::glib::SourceId>>>,
+    task_list_built: Rc<Cell<bool>>,
 }
 
 impl PopupExt for CalendarPopup {
@@ -50,6 +51,7 @@ impl PopupExt for CalendarPopup {
             &self.spinner,
             &self.auth_box,
             &self.refresh_tx,
+            &self.task_list_built,
         );
 
         calendar_section::render_calendar(
@@ -86,11 +88,12 @@ impl PopupExt for CalendarPopup {
         let cab = self.calendar_auth_box.clone();
         let grid = self.calendar_grid.clone();
         let sel = self.selected_date.clone();
+        let task_list_built = self.task_list_built.clone();
         let src = gtk4::glib::timeout_add_local(
             std::time::Duration::from_millis(CALENDAR_REFRESH_INTERVAL_MS),
             move || {
                 if rx.try_recv().is_ok() && base_is_open.get() {
-                    task_section::render_tasks(&tl, &ls, &ctx, &sp, &ab, &tx);
+                    task_section::render_tasks(&tl, &ls, &ctx, &sp, &ab, &tx, &task_list_built);
                     calendar_section::render_calendar(&cl, &rt, &ctx, &sp, &cab, &tx, &sel);
                     let registry = ctx.calendar_registry.lock().unwrap();
                     let month_evts = registry.month_events().to_vec();
@@ -291,6 +294,7 @@ impl CalendarPopup {
             refresh_tx,
             refresh_rx: Rc::new(RefCell::new(Some(refresh_rx))),
             refresh_source: Rc::new(RefCell::new(None)),
+            task_list_built: Rc::new(Cell::new(false)),
         }
     }
 
@@ -343,6 +347,7 @@ impl CalendarPopup {
         let spinner_c = self.spinner.clone();
         let auth_box_c = self.auth_box.clone();
         let tx_c = self.refresh_tx.clone();
+        let task_list_built_c = self.task_list_built.clone();
 
         self.add_entry.connect_activate(move |entry| {
             let title = entry.text().to_string();
@@ -355,7 +360,7 @@ impl CalendarPopup {
                 let mut registry = ctx_c.task_registry.lock().unwrap();
                 registry.optimistic_add_task(&title);
             }
-            task_section::render_tasks(&task_list_c, &list_selector_c, &ctx_c, &spinner_c, &auth_box_c, &tx_c);
+            task_section::render_tasks(&task_list_c, &list_selector_c, &ctx_c, &spinner_c, &auth_box_c, &tx_c, &task_list_built_c);
         });
     }
 }

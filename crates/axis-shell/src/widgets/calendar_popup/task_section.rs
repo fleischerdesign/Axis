@@ -11,13 +11,8 @@ pub fn render_tasks(
     spinner: &gtk4::Spinner,
     auth_box: &gtk4::Box,
     refresh_tx: &mpsc::Sender<()>,
+    list_selector_built: &std::cell::Cell<bool>,
 ) {
-    while let Some(child) = task_list.first_child() {
-        task_list.remove(&child);
-    }
-    while let Some(child) = list_selector.first_child() {
-        list_selector.remove(&child);
-    }
     auth_box.set_visible(false);
     spinner.set_visible(false);
 
@@ -37,47 +32,60 @@ pub fn render_tasks(
     let current_list_id = registry.last_list_id().unwrap_or("default").to_string();
     drop(registry);
 
-    // ── Render List Selector ──
-    let label = gtk4::Label::builder()
-        .label("Aufgaben")
-        .css_classes(vec!["calendar-tasks-header".to_string()])
-        .halign(gtk4::Align::Start)
-        .hexpand(true)
-        .build();
-    list_selector.append(&label);
-
-    if lists.len() > 1 {
-        let list_names: Vec<&str> = lists.iter().map(|l| l.title.as_str()).collect();
-        let model = gtk4::StringList::new(&list_names);
-        let dropdown = gtk4::DropDown::builder()
-            .model(&model)
-            .css_classes(vec!["calendar-list-dropdown".to_string()])
-            .valign(gtk4::Align::Center)
-            .build();
-
-        if let Some(idx) = lists.iter().position(|l| l.id == current_list_id) {
-            dropdown.set_selected(idx as u32);
+    // ── Render List Selector (only once, it rarely changes) ──
+    if !list_selector_built.get() {
+        while let Some(child) = list_selector.first_child() {
+            list_selector.remove(&child);
         }
 
-        let ctx_c = ctx.clone();
-        let tx_c = refresh_tx.clone();
-        dropdown.connect_selected_notify(move |dd| {
-            let selected = dd.selected();
-            if let Some(list) = lists.get(selected as usize) {
-                let reg = ctx_c.task_registry.clone();
-                let list_id = list.id.clone();
-                let tx = tx_c.clone();
-                std::thread::spawn(move || {
-                    let mut r = reg.lock().unwrap();
-                    let _ = r.switch_list(&list_id);
-                    let _ = tx.send(());
-                });
+        let label = gtk4::Label::builder()
+            .label("Aufgaben")
+            .css_classes(vec!["calendar-tasks-header".to_string()])
+            .halign(gtk4::Align::Start)
+            .hexpand(true)
+            .build();
+        list_selector.append(&label);
+
+        if lists.len() > 1 {
+            let list_names: Vec<&str> = lists.iter().map(|l| l.title.as_str()).collect();
+            let model = gtk4::StringList::new(&list_names);
+            let dropdown = gtk4::DropDown::builder()
+                .model(&model)
+                .css_classes(vec!["calendar-list-dropdown".to_string()])
+                .valign(gtk4::Align::Center)
+                .build();
+
+            if let Some(idx) = lists.iter().position(|l| l.id == current_list_id) {
+                dropdown.set_selected(idx as u32);
             }
-        });
-        list_selector.append(&dropdown);
+
+            let ctx_c = ctx.clone();
+            let tx_c = refresh_tx.clone();
+            let lists_clone = lists.clone();
+            dropdown.connect_selected_notify(move |dd| {
+                let selected = dd.selected();
+                if let Some(list) = lists_clone.get(selected as usize) {
+                    let reg = ctx_c.task_registry.clone();
+                    let list_id = list.id.clone();
+                    let tx = tx_c.clone();
+                    std::thread::spawn(move || {
+                        let mut r = reg.lock().unwrap();
+                        let _ = r.switch_list(&list_id);
+                        let _ = tx.send(());
+                    });
+                }
+            });
+            list_selector.append(&dropdown);
+        }
+
+        list_selector_built.set(true);
     }
 
     // ── Render Tasks ──
+    while let Some(child) = task_list.first_child() {
+        task_list.remove(&child);
+    }
+
     for task in &tasks {
         let row = build_task_row(task, ctx, refresh_tx.clone());
         task_list.append(&row);

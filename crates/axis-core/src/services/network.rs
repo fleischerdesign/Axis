@@ -274,11 +274,12 @@ impl NetworkService {
                             if let Ok(ssid_bytes) = ap_proxy.ssid().await {
                                 let ssid = String::from_utf8_lossy(&ssid_bytes).to_string();
                                 if !ssid.is_empty() {
+                                    let ap_path_str = ap_path.to_string();
                                     aps.push(AccessPointData { 
                                         ssid, 
                                         strength: ap_proxy.strength().await.unwrap_or(0), 
-                                        path: ap_path.to_string(),
-                                        is_active: ap_path.to_string() == active_ap_path,
+                                        path: ap_path_str.clone(),
+                                        is_active: ap_path_str == active_ap_path,
                                         needs_auth: ap_proxy.flags().await.unwrap_or(0) != 0,
                                     });
                                 }

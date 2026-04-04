@@ -3,7 +3,7 @@ use crate::widgets::components::revealer_handle;
 use crate::widgets::notification::NotificationCard;
 use gtk4::prelude::*;
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -78,9 +78,10 @@ impl NotificationArchiveManager {
         let mut active_items = self.active_items.borrow_mut();
 
         // Remove stale items
+        let active_ids: HashSet<u32> = data.notifications.iter().map(|n| n.id).collect();
         let to_remove: Vec<u32> = active_items
             .keys()
-            .filter(|id| !data.notifications.iter().any(|n| n.id == **id))
+            .filter(|id| !active_ids.contains(id))
             .copied()
             .collect();
 

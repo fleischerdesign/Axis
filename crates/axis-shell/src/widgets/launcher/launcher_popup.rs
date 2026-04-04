@@ -4,9 +4,15 @@ use crate::shell::PopupExt;
 use crate::widgets::base::PopupBase;
 use crate::widgets::launcher::launcher_row::LauncherRow;
 use gtk4::prelude::*;
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::Duration;
+
+struct RowEntry {
+    launcher_row: LauncherRow,
+    list_box_row: gtk4::ListBoxRow,
+}
 
 pub struct LauncherPopup {
     pub base: PopupBase,
@@ -158,15 +164,43 @@ impl LauncherPopup {
         let d_desc = detail_desc.clone();
         let d_rev = detail_revealer.clone();
         let win_c = base.window.clone();
+        let rows: Rc<RefCell<HashMap<String, RowEntry>>> = Rc::new(RefCell::new(HashMap::new()));
         ctx.launcher.subscribe(move |data| {
             match data.update_kind {
                 LauncherUpdate::Results => {
-                    while let Some(child) = list_c.first_child() {
-                        list_c.remove(&child);
+                    let mut rows = rows.borrow_mut();
+
+                    let new_ids: std::collections::HashSet<&str> = data.results.iter().map(|r| r.id.as_str()).collect();
+
+                    let stale: Vec<String> = rows
+                        .keys()
+                        .filter(|id| !new_ids.contains(id.as_str()))
+                        .cloned()
+                        .collect();
+                    for id in stale {
+                        if let Some(entry) = rows.remove(&id) {
+                            list_c.remove(&entry.list_box_row);
+                        }
                     }
-                    for item in data.results.iter() {
+
+                    for (idx, item) in data.results.iter().enumerate() {
+                        if let Some(entry) = rows.get(&item.id) {
+                            entry.launcher_row.update(item);
+                            continue;
+                        }
+
                         let launcher_row = LauncherRow::new(item);
-                        list_c.append(&launcher_row.row);
+                        let list_box_row = gtk4::ListBoxRow::builder()
+                            .selectable(false)
+                            .activatable(true)
+                            .child(&launcher_row.row)
+                            .build();
+
+                        rows.insert(
+                            item.id.clone(),
+                            RowEntry { launcher_row, list_box_row: list_box_row.clone() },
+                        );
+                        list_c.insert(&list_box_row, idx as i32);
                     }
                 }
                 LauncherUpdate::SelectionOnly => {}

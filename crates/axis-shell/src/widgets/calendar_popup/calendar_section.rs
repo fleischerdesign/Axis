@@ -15,9 +15,6 @@ pub fn render_calendar(
     refresh_tx: &mpsc::Sender<()>,
     selected_date: &Rc<RefCell<(i32, u32, u32)>>,
 ) {
-    while let Some(child) = calendar_box.first_child() {
-        calendar_box.remove(&child);
-    }
     auth_box.set_visible(false);
     spinner.set_visible(false);
 
@@ -53,6 +50,11 @@ pub fn render_calendar(
     header_row.append(&label);
 
     build_range_buttons(&header_row, ctx, selected_range, refresh_tx.clone());
+
+    // Clear old content and rebuild
+    while let Some(child) = calendar_box.first_child() {
+        calendar_box.remove(&child);
+    }
     calendar_box.append(&header_row);
 
     let filtered = filter_events(&all_events, sel_year, sel_month, sel_day, selected_range);

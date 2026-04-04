@@ -256,9 +256,17 @@ impl KdeConnectService {
             .and_then(|v| <Vec<String>>::try_from(v.clone()).ok())
             .unwrap_or_default();
 
-        let has_battery = supported.iter().any(|p| p == "kdeconnect_battery");
-        let has_ping = supported.iter().any(|p| p == "kdeconnect_ping");
-        let has_findmyphone = supported.iter().any(|p| p == "kdeconnect_findmyphone");
+        let mut has_battery = false;
+        let mut has_ping = false;
+        let mut has_findmyphone = false;
+        for p in &supported {
+            match p.as_str() {
+                "kdeconnect_battery" => has_battery = true,
+                "kdeconnect_ping" => has_ping = true,
+                "kdeconnect_findmyphone" => has_findmyphone = true,
+                _ => {}
+            }
+        }
 
         let (battery_level, battery_charging) = if has_battery {
             let bat_path = format!("{path}/battery");

@@ -4,6 +4,7 @@ use log::info;
 use std::future::Future;
 use std::pin::Pin;
 use std::path::PathBuf;
+use std::collections::HashSet;
 use std::sync::{Arc, RwLock};
 use std::time::SystemTime;
 use std::fs;
@@ -34,14 +35,11 @@ impl Default for AppProvider {
 }
 
 impl AppProvider {
-    fn do_search(apps: Vec<AppEntry>, query: &str) -> Vec<LauncherItem> {
+    fn do_search(apps: &[AppEntry], query: &str) -> Vec<LauncherItem> {
         let query_lower = query.to_lowercase();
         
-        // Bei leerer Suche: Alle Apps alphabetisch sortiert zurückgeben
         if query_lower.is_empty() {
-            let mut sorted_apps = apps;
-            sorted_apps.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-            return sorted_apps.into_iter().map(|app| LauncherItem {
+            return apps.iter().map(|app| LauncherItem {
                 id: format!("app-{}", app.name),
                 title: app.name.clone(),
                 description: app.comment.clone(),
@@ -68,9 +66,9 @@ impl AppProvider {
             }
         }
 
-        // Sortierung nach Score übernehmen wir im LauncherService
         results
     }
+
     fn get_cached_or_scan(&self) -> Vec<AppEntry> {
         {
             let guard = self.cache.read().unwrap();
@@ -81,7 +79,8 @@ impl AppProvider {
             }
         }
 
-        let apps = self.scan_apps();
+        let mut apps = self.scan_apps();
+        apps.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
         info!("[launcher] Found {} apps", apps.len());
         let dir_mtimes = self.get_dir_mtimes();
         *self.cache.write().unwrap() = Some(Cache { apps: apps.clone(), dir_mtimes });
@@ -134,6 +133,7 @@ impl AppProvider {
 
     fn scan_apps(&self) -> Vec<AppEntry> {
         let mut apps = Vec::new();
+        let mut seen_names = HashSet::new();
 
         for path in self.app_dirs() {
             if !path.exists() { continue; }
@@ -142,8 +142,7 @@ impl AppProvider {
                 for entry in entries.flatten() {
                     if entry.path().extension().map_or(false, |ext| ext == "desktop") {
                         if let Some(app) = self.parse_desktop_file(entry.path()) {
-                            // Dubletten vermeiden (z.B. wenn App in User und System Ordner liegt)
-                            if !apps.iter().any(|a: &AppEntry| a.name == app.name) {
+                            if seen_names.insert(app.name.clone()) {
                                 apps.push(app);
                             }
                         }
@@ -217,7 +216,7 @@ impl LauncherProvider for AppProvider {
             std::thread::spawn(move || {
                 let start = std::time::Instant::now();
                 let apps = provider.get_cached_or_scan();
-                let results = Self::do_search(apps, &query);
+                let results = Self::do_search(&apps, &query);
                 info!("[app-provider] Search for '{}' took {:?}", query, start.elapsed());
                 let _ = tx.try_send(results);
             });
