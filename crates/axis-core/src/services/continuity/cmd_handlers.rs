@@ -85,12 +85,8 @@ impl ContinuityInner {
             let name = peer.device_name.clone();
             let addr_v4 = peer.address;
             let addr_v6 = peer.address_v6;
-            let is_trusted = self.data.peer_configs
-                .get(&peer.device_id)
-                .map(|c| c.trusted)
-                .unwrap_or(false);
 
-            info!("[continuity] connecting to {name} (trusted: {is_trusted})");
+            info!("[continuity] connecting to {name}");
             self.is_initiating = true;
             self.pending_peer = Some((peer.device_id.clone(), name.clone()));
 
@@ -101,19 +97,6 @@ impl ContinuityInner {
                 self.data.device_id.clone(),
                 self.data.device_name.clone(),
             );
-
-            if is_trusted {
-                let pin = format!("{:06}", rand::random_range(0..1_000_000));
-                self.data.pending_pin = Some(PendingPin {
-                    pin: pin.clone(),
-                    peer_id: peer.device_id.clone(),
-                    peer_name: name,
-                    is_incoming: false,
-                    created_at: Instant::now(),
-                });
-                connection.send_message(protocol::Message::PinRequest { pin });
-                self.push();
-            }
         }
     }
 
