@@ -43,11 +43,11 @@ pub fn save_json<T: Serialize>(path: &PathBuf, value: &T) {
 
 // ── HTTP Helpers ───────────────────────────────────────────────────────
 
-pub fn build_http_client() -> reqwest::blocking::Client {
+pub fn build_http_client() -> Result<reqwest::blocking::Client, String> {
     reqwest::blocking::ClientBuilder::new()
         .redirect(reqwest::redirect::Policy::none())
         .build()
-        .expect("HTTP client should build")
+        .map_err(|e| format!("Failed to build HTTP client: {e}"))
 }
 
 pub fn api_get<T: DeserializeOwned>(

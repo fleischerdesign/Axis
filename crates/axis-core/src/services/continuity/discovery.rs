@@ -55,9 +55,15 @@ impl DiscoveryProvider for AvahiDiscovery {
         let (tx, rx) = std::sync::mpsc::channel();
 
         std::thread::spawn(move || {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            let result = rt.block_on(register_service(&name, port));
-            let _ = tx.send(result);
+            match tokio::runtime::Runtime::new() {
+                Ok(rt) => {
+                    let result = rt.block_on(register_service(&name, port));
+                    let _ = tx.send(result);
+                }
+                Err(e) => {
+                    let _ = tx.send(Err(format!("failed to create tokio runtime: {e}")));
+                }
+            }
         });
 
         let (group_path, conn) = rx

@@ -593,8 +593,12 @@ fn write_accent_css(accent_hex: &str) {
 
     for gtk_ver in &["gtk-4.0", "gtk-3.0"] {
         let dir = format!("{config_dir}/{gtk_ver}");
-        if std::fs::create_dir_all(&dir).is_ok() {
-            let _ = std::fs::write(format!("{dir}/gtk.css"), &css);
+        if let Err(e) = std::fs::create_dir_all(&dir) {
+            log::warn!("[theme] Failed to create {dir}: {e}");
+            continue;
+        }
+        if let Err(e) = std::fs::write(format!("{dir}/gtk.css"), &css) {
+            log::warn!("[theme] Failed to write {dir}/gtk.css: {e}");
         }
     }
 }

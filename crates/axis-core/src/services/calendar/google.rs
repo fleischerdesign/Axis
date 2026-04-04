@@ -12,7 +12,10 @@ pub struct GoogleCalendarProvider {
 impl GoogleCalendarProvider {
     pub fn new() -> Self {
         Self {
-            http_client: build_http_client(),
+            http_client: build_http_client().unwrap_or_else(|e| {
+                log::warn!("[google-calendar] Failed to build HTTP client: {e}");
+                reqwest::blocking::Client::new()
+            }),
         }
     }
 }

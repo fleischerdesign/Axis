@@ -63,7 +63,7 @@ impl GoogleAuthRegistry {
         Ok(Self {
             credential,
             config_dir,
-            http_client: crate::services::tasks::utils::build_http_client(),
+            http_client: crate::services::tasks::utils::build_http_client()?,
             token,
         })
     }
