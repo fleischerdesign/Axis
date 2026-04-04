@@ -195,7 +195,7 @@ impl CalendarPopup {
         calendar_center.append(&date_label);
 
         let cal_grid = Rc::new(calendar_grid::CalendarGrid::new());
-        calendar_center.append(cal_grid.container());
+        calendar_center.append(&cal_grid.container);
 
         // ── RIGHT: Calendar events section ──
         let events_section = gtk4::Box::builder()

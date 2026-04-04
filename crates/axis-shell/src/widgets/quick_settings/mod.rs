@@ -26,9 +26,9 @@ use gtk4::prelude::*;
 use std::rc::Rc;
 
 pub struct QuickSettingsPopup {
-    base: PopupBase,
-    container: gtk4::Box,
-    archive_box: gtk4::Box,
+    pub base: PopupBase,
+    pub container: gtk4::Box,
+    pub archive_box: gtk4::Box,
     qs_stack: gtk4::Stack,
     main_page: MainPage,
     bt_tx: async_channel::Sender<BluetoothCmd>,
@@ -222,9 +222,5 @@ impl QuickSettingsPopup {
             bt_tx,
             ct_tx,
         }
-    }
-
-    pub fn archive_container(&self) -> &gtk4::Box {
-        &self.archive_box
     }
 }

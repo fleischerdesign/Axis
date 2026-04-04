@@ -141,7 +141,7 @@ impl AppShell {
         Self::wire_click_handlers(&bar, shell_ctrl.clone());
 
         // Phase 8: Boot state
-        bar.window().present();
+        bar.window.present();
         Self::maybe_lock(&lock_screen, start_locked);
     }
 
@@ -391,7 +391,7 @@ impl AppShell {
         let on_change = move || {
             bar_ref.check_auto_hide();
         };
-        Rc::new(ShellController::new(bar.popup_state().clone(), on_change))
+        Rc::new(ShellController::new(bar.popup_open.clone(), on_change))
     }
 
     fn register_popups(
@@ -413,10 +413,9 @@ impl AppShell {
         // Archive overlay
         let notification_archive =
             crate::widgets::notification::archive::NotificationArchiveManager::new(ctx.clone());
-        use crate::shell::PopupExt;
-        qs.archive_container().append(&notification_archive.container);
+        qs.archive_box.append(&notification_archive.container);
         let archive_mgr = notification_archive.clone();
-        qs.base().is_open.subscribe(move |&is_open| {
+        qs.base.is_open.subscribe(move |&is_open| {
             archive_mgr.set_popup_open(is_open);
         });
 

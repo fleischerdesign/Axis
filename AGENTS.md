@@ -222,7 +222,6 @@ src/
 
 - **No global statics** for UI state (use ServiceHandle + Store)
 - **No blocking I/O** on the GTK main thread (use `std::thread::spawn` or async)
-- **No `pub` struct fields** for widget internals (use accessor methods)
 - **No duplicated match blocks** (extract shared logic into functions)
 - **No manual Escape/visibility wiring** in popups (use `shell_ctrl.register()`)
 - **No `is_local()` type flags** on traits (use `is_async()` or trait-based dispatch)

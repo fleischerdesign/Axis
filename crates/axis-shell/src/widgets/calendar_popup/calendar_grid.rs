@@ -12,7 +12,7 @@ const MONTH_NAMES: [&str; 12] = [
 ];
 
 pub struct CalendarGrid {
-    container: gtk4::Box,
+    pub container: gtk4::Box,
     grid: gtk4::Grid,
     month_label: gtk4::Label,
     year: Rc<RefCell<i32>>,
@@ -145,10 +145,6 @@ impl CalendarGrid {
         cal.render();
 
         cal
-    }
-
-    pub fn container(&self) -> &gtk4::Box {
-        &self.container
     }
 
     pub fn set_on_day_click<F: Fn(i32, u32, u32) + 'static>(&self, cb: F) {
