@@ -165,6 +165,7 @@ impl LauncherPopup {
         let d_rev = detail_revealer.clone();
         let win_c = base.window.clone();
         let rows: Rc<RefCell<HashMap<String, RowEntry>>> = Rc::new(RefCell::new(HashMap::new()));
+        let prev_selected: Rc<RefCell<Option<usize>>> = Rc::new(RefCell::new(None));
         ctx.launcher.subscribe(move |data| {
             match data.update_kind {
                 LauncherUpdate::Results => {
@@ -210,9 +211,38 @@ impl LauncherPopup {
                 list_c.unselect_all();
                 d_rev.set_reveal_child(false);
                 win_c.set_width_request(380);
+                if let Some(prev) = prev_selected.borrow_mut().take() {
+                    let rows = rows.borrow();
+                    for entry in rows.values() {
+                        if entry.list_box_row.index() as usize == prev {
+                            entry.launcher_row.row.remove_css_class("launcher-selected");
+                            break;
+                        }
+                    }
+                }
             } else if let Some(idx) = data.selected_index {
+                let mut prev = prev_selected.borrow_mut();
+                if let Some(old_idx) = *prev {
+                    let rows = rows.borrow();
+                    for entry in rows.values() {
+                        if entry.list_box_row.index() as usize == old_idx {
+                            entry.launcher_row.row.remove_css_class("launcher-selected");
+                            break;
+                        }
+                    }
+                }
+
                 if let Some(row) = list_c.row_at_index(idx as i32) {
                     list_c.select_row(Some(&row));
+
+                    let rows = rows.borrow();
+                    for entry in rows.values() {
+                        if entry.list_box_row.index() == row.index() {
+                            entry.launcher_row.row.add_css_class("launcher-selected");
+                            break;
+                        }
+                    }
+                    drop(rows);
 
                     let adj = scrolled_c.vadjustment();
                     if let Some(point) =
@@ -233,6 +263,8 @@ impl LauncherPopup {
                         win_c.set_width_request(380 + 300);
                     }
                 }
+
+                *prev = Some(idx);
             }
         });
 
