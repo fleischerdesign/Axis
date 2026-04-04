@@ -9,7 +9,6 @@ use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
 use std::path::PathBuf;
-use std::thread;
 
 pub const DEFAULT_SCOPES: &[&str] = &[
     "https://www.googleapis.com/auth/userinfo.profile",

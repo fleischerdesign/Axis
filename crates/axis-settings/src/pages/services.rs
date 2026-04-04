@@ -1,6 +1,5 @@
 use std::cell::Cell;
 use std::rc::Rc;
-use gtk4::prelude::*;
 use libadwaita::prelude::*;
 
 use crate::page::SettingsPage;

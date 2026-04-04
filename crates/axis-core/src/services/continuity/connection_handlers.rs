@@ -7,9 +7,9 @@ use super::{
 };
 use super::clipboard::ClipboardSync;
 use super::connection::{ConnectionEvent, ConnectionProvider, TcpConnectionProvider};
-use super::discovery::DiscoveryProvider;
 use super::input::{EvdevCapture, InputCapture, InputInjection, WaylandInjection};
 use super::protocol;
+use super::reconnect::ReconnectSleep;
 
 impl ContinuityInner {
     pub(super) async fn handle_connection_event(
@@ -21,20 +21,23 @@ impl ContinuityInner {
         capture: &mut EvdevCapture,
         clipboard_tx: &Sender<super::clipboard::ClipboardEvent>,
         input_tx: &Sender<super::input::InputEvent>,
-    ) {
+    ) -> Option<ReconnectSleep> {
         match event {
             ConnectionEvent::IncomingConnection { addr, write_tx } => {
                 self.handle_incoming_connection(addr, write_tx, connection).await;
+                None
             }
-            ConnectionEvent::HandshakeComplete { .. } => {}
+            ConnectionEvent::HandshakeComplete { .. } => None,
             ConnectionEvent::Disconnected { reason } => {
-                self.handle_disconnected(reason, connection, clipboard, injection, capture).await;
+                self.handle_disconnected(reason, connection, clipboard, injection, capture).await
             }
             ConnectionEvent::MessageReceived(msg) => {
                 self.handle_message_received(msg, connection, clipboard, injection, capture, clipboard_tx, input_tx).await;
+                None
             }
             ConnectionEvent::Error(e) => {
                 error!("[continuity] connection error: {e}");
+                None
             }
         }
     }
@@ -64,7 +67,7 @@ impl ContinuityInner {
         clipboard: &mut super::clipboard::WaylandClipboard,
         injection: &mut WaylandInjection,
         capture: &mut EvdevCapture,
-    ) {
+    ) -> Option<ReconnectSleep> {
         info!("[continuity] disconnected: {reason}");
         let was_active = self.data.active_connection.take();
         self.data.sharing_state = SharingState::Idle;
@@ -76,10 +79,13 @@ impl ContinuityInner {
         injection.stop();
         capture.stop();
 
-        if let Some(conn) = was_active {
-            self.start_reconnect(&conn.peer_id, &conn.peer_name);
-        }
+        let reconnect_sleep = if let Some(conn) = was_active {
+            self.start_reconnect(&conn.peer_id, &conn.peer_name)
+        } else {
+            None
+        };
         self.push();
+        reconnect_sleep
     }
 
     pub(super) async fn handle_message_received(

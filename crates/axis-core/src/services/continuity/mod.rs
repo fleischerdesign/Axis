@@ -16,12 +16,10 @@ use std::time::{Instant, Duration};
 
 use super::{Service, ServiceConfig};
 use crate::store::ServiceStore;
-use clipboard::ClipboardSync;
-use input::{InputCapture, InputInjection};
-use connection::{ConnectionEvent, ConnectionProvider};
+use connection::ConnectionEvent;
 pub use protocol::Side;
-use discovery::{DiscoveryEvent, DiscoveryProvider};
-use log::{error, info};
+use discovery::DiscoveryEvent;
+use log::info;
 
 // ── Constants ──────────────────────────────────────────────────────────
 
@@ -380,8 +378,7 @@ impl ContinuityInner {
         let mut injection = input::WaylandInjection::new();
         let mut capture = input::EvdevCapture::new();
         let mut heartbeat = interval(Duration::from_secs(HEARTBEAT_INTERVAL_SECS));
-        let mut reconnect_timer = interval(Duration::from_secs(1));
-        reconnect_timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        let mut reconnect_sleep: Option<reconnect::ReconnectSleep> = None;
 
         if let Ok(mut sock) = niri_ipc::socket::Socket::connect() {
             if let Ok(Ok(niri_ipc::Response::Outputs(outputs))) = sock.send(niri_ipc::Request::Outputs) {
@@ -426,7 +423,10 @@ impl ContinuityInner {
                     self.handle_discovery_event(event).await;
                 }
                 Ok(event) = conn_rx.recv() => {
-                    self.handle_connection_event(event, &mut connection, &mut clipboard, &mut injection, &mut capture, &clipboard_tx, &input_tx).await;
+                    let new_sleep = self.handle_connection_event(event, &mut connection, &mut clipboard, &mut injection, &mut capture, &clipboard_tx, &input_tx).await;
+                    if let Some(sleep) = new_sleep {
+                        reconnect_sleep = Some(sleep);
+                    }
                 }
                 Ok(event) = clipboard_rx.recv() => {
                     self.handle_clipboard_event(event, &connection).await;
@@ -437,8 +437,8 @@ impl ContinuityInner {
                 _ = heartbeat.tick(), if is_connected => {
                     self.handle_heartbeat(&mut connection, &mut capture);
                 }
-                _ = reconnect_timer.tick() => {
-                    self.handle_reconnect_tick(&mut connection, &conn_tx).await;
+                _ = async { reconnect_sleep.as_mut()?.await; Some(()) }, if reconnect_sleep.is_some() => {
+                    reconnect_sleep = self.handle_reconnect_attempt(&mut connection, &conn_tx);
                 }
             }
         }

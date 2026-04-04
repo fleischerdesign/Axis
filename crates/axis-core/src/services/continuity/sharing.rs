@@ -1,12 +1,11 @@
-use async_channel::Sender;
 use std::time::Instant;
-use log::{error, info};
+use log::info;
 
 use super::{
     ContinuityInner, SharingState, VIRTUAL_POS_BUFFER,
 };
-use super::connection::{ConnectionProvider, TcpConnectionProvider};
-use super::input::{EvdevCapture, InputCapture, InputInjection, WaylandInjection};
+use super::connection::ConnectionProvider;
+use super::input::{EvdevCapture, InputCapture};
 use super::protocol;
 
 impl ContinuityInner {

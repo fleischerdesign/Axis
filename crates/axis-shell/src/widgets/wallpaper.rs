@@ -2,7 +2,6 @@ use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use log::{error, info};
 use std::cell::RefCell;
-use std::rc::Rc;
 
 pub struct WallpaperService {
     app: libadwaita::Application,

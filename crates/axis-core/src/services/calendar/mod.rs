@@ -2,7 +2,6 @@ pub mod provider;
 pub mod google;
 
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, Mutex};
 
 pub use provider::{AuthStatus, CalendarEvent, CalendarProvider, DateRange};
 

@@ -3,14 +3,13 @@ use std::time::{Instant, Duration};
 use log::{error, info};
 
 use super::{
-    ContinuityInner, ContinuityCmd, ContinuityData, SharingState, PeerConfig, PeerArrangement,
+    ContinuityInner, SharingState, PeerConfig, PeerArrangement,
     PendingPin, CONTINUITY_PORT,
 };
 use super::clipboard::ClipboardSync;
 use super::connection::{ConnectionProvider, TcpConnectionProvider};
 use super::discovery::{AvahiDiscovery, DiscoveryProvider};
 use super::input::{EvdevCapture, InputCapture, InputInjection, WaylandInjection};
-use super::known_peers;
 use super::protocol;
 
 impl ContinuityInner {

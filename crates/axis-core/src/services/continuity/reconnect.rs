@@ -1,22 +1,46 @@
 use async_channel::Sender;
-use std::time::Duration;
 use log::{info, warn};
+use std::pin::Pin;
+use std::time::Duration;
 
 use super::{
     ContinuityInner, RECONNECT_MAX_ATTEMPTS, RECONNECT_BASE_DELAY_MS,
 };
 use super::connection::{ConnectionEvent, ConnectionProvider, TcpConnectionProvider};
-use super::protocol;
+
+pub(super) type ReconnectSleep = Pin<Box<tokio::time::Sleep>>;
 
 impl ContinuityInner {
-    pub(super) fn start_reconnect(&mut self, peer_id: &str, peer_name: &str) {
+    pub(super) fn schedule_reconnect(&mut self) -> Option<ReconnectSleep> {
+        let reconnect = match &self.data.reconnect {
+            Some(r) => r.clone(),
+            None => return None,
+        };
+
+        if reconnect.attempt > reconnect.max_attempts {
+            warn!("[continuity] reconnect failed after {} attempts, giving up", reconnect.attempt - 1);
+            self.data.reconnect = None;
+            self.push();
+            return None;
+        }
+
+        let delay_secs = reconnect.delay_secs;
+        info!("[continuity] scheduling reconnect for {} (attempt {}/{}, in {}s)",
+            reconnect.peer_name, reconnect.attempt, reconnect.max_attempts, delay_secs);
+
+        Some(Box::pin(tokio::time::sleep(Duration::from_secs(delay_secs))))
+    }
+
+    pub(super) fn cancel_reconnect(&mut self) {
+        self.data.reconnect = None;
+    }
+
+    pub(super) fn start_reconnect(&mut self, peer_id: &str, peer_name: &str) -> Option<ReconnectSleep> {
         if self.data.reconnect.is_some() {
-            return;
+            return None;
         }
         let attempt = 1;
         let delay_secs = RECONNECT_BASE_DELAY_MS / 1000;
-        info!("[continuity] scheduling reconnect for {peer_name} (attempt {}/{}, in {}s)",
-            attempt, RECONNECT_MAX_ATTEMPTS, delay_secs);
         self.data.reconnect = Some(super::ReconnectState {
             peer_id: peer_id.to_string(),
             peer_name: peer_name.to_string(),
@@ -24,33 +48,18 @@ impl ContinuityInner {
             max_attempts: RECONNECT_MAX_ATTEMPTS,
             delay_secs,
         });
+        self.schedule_reconnect()
     }
 
-    pub(super) fn cancel_reconnect(&mut self) {
-        self.data.reconnect = None;
-    }
-
-    pub(super) async fn handle_reconnect_tick(
+    pub(super) fn handle_reconnect_attempt(
         &mut self,
         connection: &mut TcpConnectionProvider,
         conn_tx: &Sender<ConnectionEvent>,
-    ) {
+    ) -> Option<ReconnectSleep> {
         let reconnect = match &self.data.reconnect {
             Some(r) => r.clone(),
-            None => return,
+            None => return None,
         };
-
-        if reconnect.delay_secs > 0 {
-            self.data.reconnect.as_mut().unwrap().delay_secs -= 1;
-            return;
-        }
-
-        if reconnect.attempt > reconnect.max_attempts {
-            warn!("[continuity] reconnect failed after {} attempts, giving up", reconnect.attempt - 1);
-            self.data.reconnect = None;
-            self.push();
-            return;
-        }
 
         info!("[continuity] reconnect attempt {}/{} for {}",
             reconnect.attempt, reconnect.max_attempts, reconnect.peer_name);
@@ -75,8 +84,11 @@ impl ContinuityInner {
             self.data.reconnect.as_mut().unwrap().attempt += 1;
             self.data.reconnect.as_mut().unwrap().delay_secs = next_delay;
             self.push();
+
+            self.schedule_reconnect()
         } else {
             self.data.reconnect.as_mut().unwrap().delay_secs = 5;
+            self.schedule_reconnect()
         }
     }
 }
