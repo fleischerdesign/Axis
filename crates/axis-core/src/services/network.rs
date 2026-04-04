@@ -132,7 +132,6 @@ impl Service for NetworkService {
 
             let mut state_changed = proxy.receive_state_changed().await;
             let mut wifi_changed = proxy.receive_wireless_enabled_changed().await;
-            let mut interval = tokio::time::interval(Duration::from_secs(30));
 
             // AP change listeners + scan status (if WiFi device found)
             let mut ap_added_stream: Option<_> = None;
@@ -154,7 +153,6 @@ impl Service for NetworkService {
                 let should_update;
 
                 tokio::select! {
-                    _ = interval.tick() => { should_update = true; }
                     Some(_) = state_changed.next() => { should_update = true; }
                     Some(_) = wifi_changed.next() => { should_update = true; }
                     Some(_) = async { ap_added_stream.as_mut()?.next().await }, if ap_added_stream.is_some() => {

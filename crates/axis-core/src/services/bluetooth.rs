@@ -383,7 +383,6 @@ impl Service for BluetoothService {
             let mut powered_changed = adapter_proxy.receive_powered_changed().await;
             let mut interfaces_added = obj_manager.receive_interfaces_added().await.unwrap();
             let mut interfaces_removed = obj_manager.receive_interfaces_removed().await.unwrap();
-            let mut interval = tokio::time::interval(Duration::from_secs(60));
 
             let mut cmd_rx = Box::pin(cmd_rx);
             let mut current_data = BluetoothData::default();
@@ -507,7 +506,6 @@ impl Service for BluetoothService {
                         pair_timeout = Box::pin(tokio::time::sleep(Duration::MAX));
                     }
                     // Other events
-                    _ = interval.tick() => {}
                     Some(_) = powered_changed.next() => {
                         // BlueZ confirmed the power change — allow fetch_data to run
                         skip_fetch_after_toggle = false;
