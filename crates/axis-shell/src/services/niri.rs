@@ -20,22 +20,14 @@ pub struct NiriData {
 
 impl PartialEq for NiriData {
     fn eq(&self, other: &Self) -> bool {
-        if self.workspaces.len() != other.workspaces.len()
-            || self.windows.len() != other.windows.len()
-        {
-            return false;
-        }
-        // Vergleich der Workspaces
-        let ws_eq = self
-            .workspaces
-            .iter()
-            .zip(&other.workspaces)
-            .all(|(a, b)| a.id == b.id && a.is_active == b.is_active);
-        // Vergleich der Fenster (IDs und Fokus reichen für UI-Update-Trigger)
-        let win_eq = self.windows.iter().zip(&other.windows).all(|(a, b)| {
-            a.id == b.id && a.is_focused == b.is_focused && a.workspace_id == b.workspace_id
-        });
-        ws_eq && win_eq
+        self.workspaces.len() == other.workspaces.len()
+            && self.windows.len() == other.windows.len()
+            && self.outputs.len() == other.outputs.len()
+            && self.outputs.keys().all(|k| other.outputs.contains_key(k))
+            && self.workspaces.iter().zip(&other.workspaces)
+                .all(|(a, b)| a.id == b.id && a.is_active == b.is_active)
+            && self.windows.iter().zip(&other.windows)
+                .all(|(a, b)| a.id == b.id && a.is_focused == b.is_focused && a.workspace_id == b.workspace_id)
     }
 }
 
