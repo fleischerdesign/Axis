@@ -206,6 +206,42 @@ impl ContinuityInner {
                 connection.send_message(protocol::Message::PinRequest { pin });
                 self.push();
             }
+        } else {
+            let is_trusted = self.data.peer_configs.get(&device_id).map(|c| c.trusted).unwrap_or(false);
+            if is_trusted {
+                info!("[continuity] trusted peer connected (incoming), skipping PIN");
+                self.data.active_connection = Some(ActiveConnectionInfo {
+                    peer_id: device_id,
+                    peer_name: device_name,
+                    since: Instant::now(),
+                });
+                self.data.pending_pin = None;
+                self.data.reconnect = None;
+                self.last_message_at = Some(Instant::now());
+                self.push();
+
+                connection.send_message(protocol::Message::ScreenInfo {
+                    width: self.data.screen_width,
+                    height: self.data.screen_height,
+                });
+
+                if let Err(e) = injection.start() {
+                    error!("[continuity] failed to start input injection: {e}");
+                }
+                let _ = capture.prepare();
+            } else {
+                let pin = format!("{:06}", rand::random_range(0..1_000_000));
+                info!("[continuity] incoming pairing request, generating PIN: {pin}");
+                self.data.pending_pin = Some(PendingPin {
+                    pin: pin.clone(),
+                    peer_id: device_id,
+                    peer_name: device_name,
+                    is_incoming: true,
+                    created_at: Instant::now(),
+                });
+                connection.send_message(protocol::Message::PinRequest { pin });
+                self.push();
+            }
         }
     }
 
