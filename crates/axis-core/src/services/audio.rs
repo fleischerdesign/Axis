@@ -244,8 +244,37 @@ impl Service for AudioService {
     }
 }
 
+impl AudioData {
+    fn merge_sink(&self, volume: f64, is_muted: bool) -> Self {
+        Self { volume, is_muted, ..self.clone() }
+    }
+
+    fn merge_sink_inputs(&self, sink_inputs: Vec<SinkInputData>) -> Self {
+        Self { sink_inputs, ..self.clone() }
+    }
+
+    fn merge_sinks(&self, sinks: Vec<SinkData>) -> Self {
+        Self { sinks, ..self.clone() }
+    }
+
+    fn merge_sources(&self, sources: Vec<SourceData>) -> Self {
+        Self { sources, ..self.clone() }
+    }
+}
+
+fn emit_audio_data(
+    state: &Rc<RefCell<AudioData>>,
+    data_tx: &Sender<AudioData>,
+    update: impl FnOnce(&AudioData) -> AudioData,
+) {
+    let current = state.borrow();
+    let data = update(&current);
+    drop(current);
+    *state.borrow_mut() = data.clone();
+    let _ = data_tx.send_blocking(data);
+}
+
 impl AudioService {
-    /// Fetch default sink volume/mute. Updates shared state + sends AudioData.
     fn fetch_sink(
         ctx_ref: &Rc<RefCell<Context>>,
         data_tx: &Sender<AudioData>,
@@ -260,23 +289,14 @@ impl AudioService {
                 if let ListResult::Item(sink) = result {
                     let vol_raw = sink.volume.avg().0 as f64 / Volume::NORMAL.0 as f64;
                     let vol = (vol_raw * 100.0).round() / 100.0;
-                    let current = state.borrow();
-                    let data = AudioData {
-                        volume: vol,
-                        is_muted: sink.mute,
-                        sink_inputs: current.sink_inputs.clone(),
-                        sinks: current.sinks.clone(),
-                        sources: current.sources.clone(),
-                    };
-                    drop(current);
-                    *state.borrow_mut() = data.clone();
-                    let _ = tx.send_blocking(data);
+                    emit_audio_data(&state, &tx, |current| {
+                        current.merge_sink(vol, sink.mute)
+                    });
                 }
             }
         });
     }
 
-    /// Fetch all sink-inputs. Preserves known sink volume/mute from shared state.
     fn fetch_sink_inputs(
         ctx_ref: &Rc<RefCell<Context>>,
         data_tx: &Sender<AudioData>,
@@ -310,24 +330,15 @@ impl AudioService {
                     });
                 }
                 ListResult::End => {
-                    let current = state.borrow();
-                    let data = AudioData {
-                        sink_inputs: inputs.borrow().clone(),
-                        volume: current.volume,
-                        is_muted: current.is_muted,
-                        sinks: current.sinks.clone(),
-                        sources: current.sources.clone(),
-                    };
-                    drop(current);
-                    *state.borrow_mut() = data.clone();
-                    let _ = tx.send_blocking(data);
+                    emit_audio_data(&state, &tx, |current| {
+                        current.merge_sink_inputs(inputs.borrow().clone())
+                    });
                 }
                 ListResult::Error => {}
             }
         });
     }
 
-    /// Fetch all output sinks, marking the default one.
     fn fetch_sinks(
         ctx_ref: &Rc<RefCell<Context>>,
         data_tx: &Sender<AudioData>,
@@ -339,7 +350,6 @@ impl AudioService {
         let tx = data_tx.clone();
         let state = state.clone();
 
-        // First get the server info to know the default sink name
         let default_sink: Rc<RefCell<String>> = Rc::new(RefCell::new(String::new()));
         let default_ref = Rc::clone(&default_sink);
 
@@ -349,7 +359,6 @@ impl AudioService {
             }
         });
 
-        // Then enumerate all sinks
         introspector.get_sink_info_list(move |result: ListResult<&SinkInfo>| match result {
             ListResult::Item(info) => {
                 let name = info.name.as_deref().unwrap_or_default().to_string();
@@ -364,23 +373,14 @@ impl AudioService {
                 });
             }
             ListResult::End => {
-                let current = state.borrow();
-                let data = AudioData {
-                    sinks: sinks.borrow().clone(),
-                    volume: current.volume,
-                    is_muted: current.is_muted,
-                    sink_inputs: current.sink_inputs.clone(),
-                    sources: current.sources.clone(),
-                };
-                drop(current);
-                *state.borrow_mut() = data.clone();
-                let _ = tx.send_blocking(data);
+                emit_audio_data(&state, &tx, |current| {
+                    current.merge_sinks(sinks.borrow().clone())
+                });
             }
             ListResult::Error => {}
         });
     }
 
-    /// Fetch all input sources (excluding monitor sources), marking the default one.
     fn fetch_sources(
         ctx_ref: &Rc<RefCell<Context>>,
         data_tx: &Sender<AudioData>,
@@ -403,7 +403,6 @@ impl AudioService {
 
         introspector.get_source_info_list(move |result: ListResult<&SourceInfo>| match result {
             ListResult::Item(info) => {
-                // Skip monitor sources (virtual sources that record output)
                 if info.monitor_of_sink.is_some() {
                     return;
                 }
@@ -419,17 +418,9 @@ impl AudioService {
                 });
             }
             ListResult::End => {
-                let current = state.borrow();
-                let data = AudioData {
-                    sources: sources.borrow().clone(),
-                    volume: current.volume,
-                    is_muted: current.is_muted,
-                    sink_inputs: current.sink_inputs.clone(),
-                    sinks: current.sinks.clone(),
-                };
-                drop(current);
-                *state.borrow_mut() = data.clone();
-                let _ = tx.send_blocking(data);
+                emit_audio_data(&state, &tx, |current| {
+                    current.merge_sources(sources.borrow().clone())
+                });
             }
             ListResult::Error => {}
         });
