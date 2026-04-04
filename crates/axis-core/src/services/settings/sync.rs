@@ -6,6 +6,20 @@ use crate::services::ServiceConfig;
 use super::SettingsCmd;
 use super::config::AxisConfig;
 
+/// Snapshot of a peer's config for change detection in continuity sync.
+/// Replaces the previous unnamed 8-tuple.
+#[derive(Clone, PartialEq)]
+struct PeerSyncSnapshot {
+    device_id: String,
+    side: crate::services::continuity::Side,
+    offset: i32,
+    clipboard: bool,
+    audio: bool,
+    drag_drop: bool,
+    version: u64,
+    trusted: bool,
+}
+
 /// Generic bidirectional sync between a ServiceConfig service and settings.
 ///
 /// - Config → Service: when SettingsData changes, send a command only if the
@@ -110,23 +124,23 @@ pub fn wire_continuity_sync(
 
     // ── Service → Config ──────────────────────────────────────────────────
     let s_tx = settings_tx.clone();
-    let last_state: Rc<RefCell<Option<(bool, Vec<(String, Side, i32, bool, bool, bool, u64, bool)>)>>> = Rc::new(RefCell::new(None));
+    let last_state: Rc<RefCell<Option<(bool, Vec<PeerSyncSnapshot>)>>> = Rc::new(RefCell::new(None));
     
     cont_store.subscribe(move |data| {
-        let mut current_peers: Vec<(String, Side, i32, bool, bool, bool, u64, bool)> = data.peer_configs.iter()
-            .map(|(id, cfg)| (
-                id.clone(), 
-                cfg.arrangement.side, 
-                cfg.arrangement.offset,
-                cfg.clipboard,
-                cfg.audio,
-                cfg.drag_drop,
-                cfg.version,
-                cfg.trusted
-            ))
+        use crate::services::continuity::Side;
+        let mut current_peers: Vec<PeerSyncSnapshot> = data.peer_configs.iter()
+            .map(|(id, cfg)| PeerSyncSnapshot {
+                device_id: id.clone(),
+                side: cfg.arrangement.side,
+                offset: cfg.arrangement.offset,
+                clipboard: cfg.clipboard,
+                audio: cfg.audio,
+                drag_drop: cfg.drag_drop,
+                version: cfg.version,
+                trusted: cfg.trusted,
+            })
             .collect();
-        // Sort for stable comparison
-        current_peers.sort_by(|a, b| a.0.cmp(&b.0));
+        current_peers.sort_by(|a, b| a.device_id.cmp(&b.device_id));
 
         let state = (data.enabled, current_peers.clone());
         if last_state.borrow().as_ref() == Some(&state) {
@@ -142,49 +156,49 @@ pub fn wire_continuity_sync(
         let _ = s_tx.try_send(SettingsCmd::UpdatePartial(Box::new(move |cfg| {
             cfg.continuity.enabled = enabled;
             
-            for (id, side, offset, clipboard, audio, drag_drop, version, trusted) in peer_updates {
-                let a_side = match side {
+            for peer in peer_updates {
+                let a_side = match peer.side {
                     Side::Left => ArrangementSide::Left,
                     Side::Right => ArrangementSide::Right,
                     Side::Top => ArrangementSide::Top,
                     Side::Bottom => ArrangementSide::Bottom,
                 };
-                let (ax, ay) = match side {
-                    Side::Left | Side::Right => (0, offset),
-                    Side::Top | Side::Bottom => (offset, 0),
+                let (ax, ay) = match peer.side {
+                    Side::Left | Side::Right => (0, peer.offset),
+                    Side::Top | Side::Bottom => (peer.offset, 0),
                 };
 
-                if let Some(p) = cfg.continuity.peer_configs.iter_mut().find(|p| p.device_id == id) {
+                if let Some(p) = cfg.continuity.peer_configs.iter_mut().find(|p| p.device_id == peer.device_id) {
                     if p.arrangement_side != a_side 
                         || p.arrangement_x != ax 
                         || p.arrangement_y != ay 
-                        || p.clipboard != clipboard
-                        || p.audio != audio
-                        || p.drag_drop != drag_drop
-                        || p.version != version
-                        || p.trusted != trusted
+                        || p.clipboard != peer.clipboard
+                        || p.audio != peer.audio
+                        || p.drag_drop != peer.drag_drop
+                        || p.version != peer.version
+                        || p.trusted != peer.trusted
                     {
                         p.arrangement_side = a_side;
                         p.arrangement_x = ax;
                         p.arrangement_y = ay;
-                        p.clipboard = clipboard;
-                        p.audio = audio;
-                        p.drag_drop = drag_drop;
-                        p.version = version;
-                        p.trusted = trusted;
+                        p.clipboard = peer.clipboard;
+                        p.audio = peer.audio;
+                        p.drag_drop = peer.drag_drop;
+                        p.version = peer.version;
+                        p.trusted = peer.trusted;
                     }
                 } else {
                     cfg.continuity.peer_configs.push(PeerPersistedConfig {
-                        device_id: id,
+                        device_id: peer.device_id,
                         device_name: "New Peer".to_string(),
-                        trusted,
+                        trusted: peer.trusted,
                         arrangement_side: a_side,
                         arrangement_x: ax,
                         arrangement_y: ay,
-                        clipboard,
-                        audio,
-                        drag_drop,
-                        version,
+                        clipboard: peer.clipboard,
+                        audio: peer.audio,
+                        drag_drop: peer.drag_drop,
+                        version: peer.version,
                     });
                 }
             }
