@@ -351,33 +351,11 @@ impl CalendarPopup {
             }
             entry.set_text("");
 
-            let requires_api_thread = {
-                let registry = ctx_c.task_registry.lock().unwrap();
-                registry.active().requires_api_thread()
-            };
-
-            if requires_api_thread {
-                {
-                    let mut registry = ctx_c.task_registry.lock().unwrap();
-                    registry.optimistic_add_task(&title);
-                }
-                task_section::render_tasks(&task_list_c, &list_selector_c, &ctx_c, &spinner_c, &auth_box_c, &tx_c);
-
-                let reg = ctx_c.task_registry.clone();
-                let title_c = title.clone();
-                std::thread::spawn(move || {
-                    let mut r = reg.lock().unwrap();
-                    let list_id = r.last_list_id().unwrap_or("default").to_string();
-                    let _ = r.active_mut().add_task(&list_id, &title_c);
-                    let _ = r.refresh_tasks();
-                });
-            } else {
-                {
-                    let mut registry = ctx_c.task_registry.lock().unwrap();
-                    registry.optimistic_add_task(&title);
-                }
-                task_section::render_tasks(&task_list_c, &list_selector_c, &ctx_c, &spinner_c, &auth_box_c, &tx_c);
+            {
+                let mut registry = ctx_c.task_registry.lock().unwrap();
+                registry.optimistic_add_task(&title);
             }
+            task_section::render_tasks(&task_list_c, &list_selector_c, &ctx_c, &spinner_c, &auth_box_c, &tx_c);
         });
     }
 }

@@ -186,28 +186,69 @@ impl TaskProvider for GoogleTasksProvider {
         Ok(())
     }
 
-    // ── Optimistic UI: Google Tasks is async, so we return placeholders
-    // and let the caller handle the actual API call. ────────────────────
+    // ── Optimistic UI: Google Tasks spawns its own background threads ───
 
-    fn optimistic_add(&mut self, _list_id: &str, title: &str) -> Option<super::provider::Task> {
+    fn optimistic_add(&mut self, list_id: &str, title: &str) -> Option<super::provider::Task> {
         let placeholder = super::provider::Task {
             id: String::new(),
             title: title.to_string(),
             done: false,
             provider: "remote".to_string(),
         };
+
+        let client = self.http_client.clone();
+        let list_id = list_id.to_string();
+        let title = title.to_string();
+        std::thread::spawn(move || {
+            match GoogleAuthRegistry::load().and_then(|mut r| r.ensure_token(TASKS_SCOPE)) {
+                Ok(token) => {
+                    let url = format!("https://tasks.googleapis.com/tasks/v1/lists/{}/tasks", list_id);
+                    let _ = crate::services::tasks::utils::api_post::<serde_json::Value>(
+                        &client, &url, &token,
+                        &serde_json::json!({ "title": title }),
+                    );
+                    log::info!("[tasks] Background add completed: {}", title);
+                }
+                Err(e) => log::warn!("[tasks] Background add failed: {e}"),
+            }
+        });
+
         Some(placeholder)
     }
 
-    fn optimistic_toggle(&mut self, _list_id: &str, _task_id: &str, _done: bool) {
-        // Caller must spawn API call separately
+    fn optimistic_toggle(&mut self, list_id: &str, task_id: &str, done: bool) {
+        let client = self.http_client.clone();
+        let list_id = list_id.to_string();
+        let task_id = task_id.to_string();
+        std::thread::spawn(move || {
+            match GoogleAuthRegistry::load().and_then(|mut r| r.ensure_token(TASKS_SCOPE)) {
+                Ok(token) => {
+                    let url = format!("https://tasks.googleapis.com/tasks/v1/lists/{}/tasks/{}", list_id, task_id);
+                    let status = if done { "completed" } else { "needsAction" };
+                    let _ = crate::services::tasks::utils::api_patch::<serde_json::Value>(
+                        &client, &url, &token,
+                        &serde_json::json!({ "status": status }),
+                    );
+                    log::info!("[tasks] Background toggle completed: {}", task_id);
+                }
+                Err(e) => log::warn!("[tasks] Background toggle failed: {e}"),
+            }
+        });
     }
 
-    fn optimistic_delete(&mut self, _list_id: &str, _task_id: &str) {
-        // Caller must spawn API call separately
-    }
-
-    fn requires_api_thread(&self) -> bool {
-        true
+    fn optimistic_delete(&mut self, list_id: &str, task_id: &str) {
+        let client = self.http_client.clone();
+        let list_id = list_id.to_string();
+        let task_id = task_id.to_string();
+        std::thread::spawn(move || {
+            match GoogleAuthRegistry::load().and_then(|mut r| r.ensure_token(TASKS_SCOPE)) {
+                Ok(token) => {
+                    let url = format!("https://tasks.googleapis.com/tasks/v1/lists/{}/tasks/{}", list_id, task_id);
+                    let _ = crate::services::tasks::utils::api_delete(&client, &url, &token);
+                    log::info!("[tasks] Background delete completed: {}", task_id);
+                }
+                Err(e) => log::warn!("[tasks] Background delete failed: {e}"),
+            }
+        });
     }
 }

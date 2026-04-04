@@ -73,12 +73,4 @@ pub trait TaskProvider: Send + Sync {
     fn optimistic_delete(&mut self, list_id: &str, task_id: &str) {
         let _ = self.delete_task(list_id, task_id);
     }
-
-    /// Returns true if the provider requires the caller to spawn a separate
-    /// thread for API calls (e.g. Google Tasks with OAuth).
-    /// Sync providers (LocalTodoProvider) return false — operations complete
-    /// inline via optimistic_add/toggle/delete.
-    fn requires_api_thread(&self) -> bool {
-        false
-    }
 }

@@ -139,10 +139,6 @@ fn build_task_row(
     let tx_toggle = refresh_tx.clone();
     check.connect_toggled(move |btn| {
         let done = btn.is_active();
-        let requires_api_thread = {
-            let registry = ctx_c.task_registry.lock().unwrap();
-            registry.active().requires_api_thread()
-        };
 
         if done {
             row_c.add_css_class("calendar-task-done");
@@ -150,26 +146,8 @@ fn build_task_row(
             row_c.remove_css_class("calendar-task-done");
         }
 
-        if requires_api_thread {
-            // Async: optimistic UI + background API call
-            {
-                let mut registry = ctx_c.task_registry.lock().unwrap();
-                registry.update_cached_task(&task_id, done);
-            }
-            let reg = ctx_c.task_registry.clone();
-            let tid = task_id.clone();
-            let tx = tx_toggle.clone();
-            std::thread::spawn(move || {
-                let mut r = reg.lock().unwrap();
-                let list_id = r.last_list_id().unwrap_or("default").to_string();
-                let _ = r.active_mut().toggle_task(&list_id, &tid, done);
-                let _ = tx.send(());
-            });
-        } else {
-            // Sync: update directly
-            let mut registry = ctx_c.task_registry.lock().unwrap();
-            registry.optimistic_toggle_task(&task_id, done);
-        }
+        let mut registry = ctx_c.task_registry.lock().unwrap();
+        registry.optimistic_toggle_task(&task_id, done);
     });
 
     // Delete handler
@@ -177,32 +155,9 @@ fn build_task_row(
     let task_id = task.id.clone();
     let tx_delete = refresh_tx.clone();
     delete_btn.connect_clicked(move |_| {
-        let requires_api_thread = {
-            let registry = ctx_c.task_registry.lock().unwrap();
-            registry.active().requires_api_thread()
-        };
-
-        if requires_api_thread {
-            {
-                let mut registry = ctx_c.task_registry.lock().unwrap();
-                registry.remove_cached_task(&task_id);
-            }
-            let _ = tx_delete.send(());
-
-            let reg = ctx_c.task_registry.clone();
-            let tid = task_id.clone();
-            let tx = tx_delete.clone();
-            std::thread::spawn(move || {
-                let mut r = reg.lock().unwrap();
-                let list_id = r.last_list_id().unwrap_or("default").to_string();
-                let _ = r.active_mut().delete_task(&list_id, &tid);
-                let _ = tx.send(());
-            });
-        } else {
-            let mut registry = ctx_c.task_registry.lock().unwrap();
-            registry.optimistic_delete_task(&task_id);
-            let _ = tx_delete.send(());
-        }
+        let mut registry = ctx_c.task_registry.lock().unwrap();
+        registry.optimistic_delete_task(&task_id);
+        let _ = tx_delete.send(());
     });
 
     row
