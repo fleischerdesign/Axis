@@ -188,16 +188,16 @@ entry:focus-visible {
 }
 
 /* Launcher: Selektion sichtbar machen */
-.launcher-list row.launcher-row {
+.launcher-list row .launcher-row {
     border-radius: 8px;
     transition: background 100ms ease;
 }
 
-.launcher-list row.launcher-row:hover {
+.launcher-list row:hover .launcher-row {
     background-color: rgba(255, 255, 255, 0.05);
 }
 
-.launcher-list row.launcher-row:selected {
+.launcher-list row:selected .launcher-row {
     background-color: rgba(255, 255, 255, 0.1);
     color: @accent_bg_color;
 }
