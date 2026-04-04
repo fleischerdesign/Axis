@@ -235,6 +235,10 @@ impl ContinuityInner {
         if let Some(pending) = &self.data.pending_pin {
             if pending.pin == pin {
                 info!("[continuity] peer confirmed PIN, connection active");
+
+                self.data.peer_configs.entry(pending.peer_id.clone()).or_default().trusted = true;
+                self.persist_known_peers();
+
                 self.data.active_connection = Some(ActiveConnectionInfo {
                     peer_id: pending.peer_id.clone(),
                     peer_name: pending.peer_name.clone(),
