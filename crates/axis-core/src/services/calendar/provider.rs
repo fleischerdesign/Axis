@@ -54,5 +54,9 @@ pub trait CalendarProvider: Send + Sync {
         true
     }
 
+    fn required_scopes(&self) -> &[&str] {
+        &[]
+    }
+
     fn events(&mut self, start: &str, end: &str) -> Result<Vec<CalendarEvent>, String>;
 }

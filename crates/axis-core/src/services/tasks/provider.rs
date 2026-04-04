@@ -46,6 +46,10 @@ pub trait TaskProvider: Send + Sync {
         true
     }
 
+    fn required_scopes(&self) -> &[&str] {
+        &[]
+    }
+
     // ── CRUD ───────────────────────────────────────────────────────────
 
     fn lists(&mut self) -> Result<Vec<TaskList>, String>;

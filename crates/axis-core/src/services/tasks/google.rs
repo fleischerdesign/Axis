@@ -41,12 +41,16 @@ impl TaskProvider for GoogleTasksProvider {
     }
 
     fn authenticate(&mut self) -> Result<AuthStatus, String> {
-        crate::services::google::google_authenticate(TASKS_SCOPE);
+        crate::services::google::google_authenticate(&TASKS_SCOPE.iter().map(|s| s.to_string()).collect::<Vec<_>>());
         Ok(AuthStatus::Authenticated)
     }
 
     fn is_authenticated(&self) -> bool {
         crate::services::google::google_is_authenticated()
+    }
+
+    fn required_scopes(&self) -> &[&str] {
+        TASKS_SCOPE
     }
 
     fn lists(&mut self) -> Result<Vec<TaskList>, String> {

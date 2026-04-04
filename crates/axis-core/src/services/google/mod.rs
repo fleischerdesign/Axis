@@ -17,6 +17,7 @@ pub const DEFAULT_SCOPES: &[&str] = &[
 
 const GOOGLE_AUTH_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
+const REDIRECT_PORT: u16 = 8080;
 const REDIRECT_URI: &str = "http://localhost:8080/callback";
 
 // ── Shared Auth Helpers ────────────────────────────────────────────────
@@ -33,8 +34,9 @@ pub fn google_auth_status() -> AuthStatus {
     }
 }
 
-pub fn google_authenticate(scopes: &'static [&'static str]) {
-    GoogleAuthRegistry::authenticate(scopes, |result| {
+pub fn google_authenticate(scopes: &[String]) {
+    let scopes_owned: Vec<String> = scopes.to_vec();
+    GoogleAuthRegistry::authenticate(&scopes_owned, |result| {
         match result {
             Ok(()) => log::info!("[google-auth] Auth successful"),
             Err(e) => log::warn!("[google-auth] Auth failed: {e}"),
@@ -151,7 +153,7 @@ impl GoogleAuthRegistry {
         crate::services::tasks::utils::save_json(&token_path, &self.token);
     }
 
-    pub fn execute_auth_flow(&mut self, scopes: &[&str]) -> Result<(), String> {
+    pub fn execute_auth_flow(&mut self, scopes: &[String]) -> Result<(), String> {
         let cred = self.credential.as_ref().ok_or("No credentials")?;
 
         let client = BasicClient::new(ClientId::new(cred.client_id.clone()))
@@ -164,13 +166,13 @@ impl GoogleAuthRegistry {
 
         let (auth_url, _csrf) = client
             .authorize_url(CsrfToken::new_random)
-            .add_scopes(scopes.iter().map(|s| Scope::new(s.to_string())))
+            .add_scopes(scopes.iter().map(|s| Scope::new(s.clone())))
             .set_pkce_challenge(pkce_challenge)
             .url();
 
         log::info!("[google-auth] Auth URL: {}", auth_url.as_str());
 
-        let listener = TcpListener::bind("127.0.0.1:8099")
+        let listener = TcpListener::bind(format!("127.0.0.1:{REDIRECT_PORT}"))
             .map_err(|e| format!("Cannot bind localhost:8099 — {e}"))?;
 
         match open::that(auth_url.as_str()) {
@@ -202,13 +204,11 @@ impl GoogleAuthRegistry {
         Ok(())
     }
 
-    pub fn authenticate<F>(scopes: &[&str], on_complete: F)
+    pub fn authenticate<F>(scopes: &[String], on_complete: F)
     where F: FnOnce(Result<(), String>) + Send + 'static
     {
-        let scopes_owned: Vec<String> = scopes.iter().map(|s| s.to_string()).collect();
+        let scopes_owned: Vec<String> = scopes.to_vec();
         std::thread::spawn(move || {
-            let scopes_ref: Vec<&str> = scopes_owned.iter().map(|s| s.as_str()).collect();
-            
             let mut registry = match GoogleAuthRegistry::load() {
                 Ok(r) => r,
                 Err(e) => {
@@ -217,7 +217,7 @@ impl GoogleAuthRegistry {
                 }
             };
 
-            match registry.execute_auth_flow(&scopes_ref) {
+            match registry.execute_auth_flow(&scopes_owned) {
                 Ok(()) => on_complete(Ok(())),
                 Err(e) => on_complete(Err(e)),
             }

@@ -61,6 +61,10 @@ impl CalendarRegistry {
         self.provider.auth_status()
     }
 
+    pub fn required_scopes(&self) -> &[&str] {
+        self.provider.required_scopes()
+    }
+
     pub fn authenticate(&mut self) -> Result<provider::AuthStatus, String> {
         self.provider.authenticate()
     }

@@ -1,6 +1,6 @@
 use crate::app_context::AppContext;
 use axis_core::services::calendar::{CalendarEvent, DateRange};
-use axis_core::services::google::GoogleAuthRegistry;
+use axis_core::services::google::{GoogleAuthRegistry, DEFAULT_SCOPES};
 use gtk4::prelude::*;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -228,7 +228,17 @@ fn show_google_auth_prompt(auth_box: &gtk4::Box, ctx: &AppContext, refresh_tx: m
         let cal_reg = ctx_c.calendar_registry.clone();
         let tx = refresh_tx.clone();
         
-        GoogleAuthRegistry::authenticate(&axis_core::services::google::DEFAULT_SCOPES, move |result| match result {
+        let mut all_scopes: Vec<String> = DEFAULT_SCOPES.iter().map(|s| s.to_string()).collect();
+        
+        let task_reg_lock = task_reg.lock().unwrap();
+        all_scopes.extend(task_reg_lock.required_scopes().iter().map(|s| s.to_string()));
+        drop(task_reg_lock);
+        
+        let cal_reg_lock = cal_reg.lock().unwrap();
+        all_scopes.extend(cal_reg_lock.required_scopes().iter().map(|s| s.to_string()));
+        drop(cal_reg_lock);
+        
+        GoogleAuthRegistry::authenticate(&all_scopes, move |result| match result {
             Ok(()) => {
                 log::info!("[auth] Google auth successful, loading data...");
                 

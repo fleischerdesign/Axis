@@ -40,12 +40,16 @@ impl CalendarProvider for GoogleCalendarProvider {
     }
 
     fn authenticate(&mut self) -> Result<AuthStatus, String> {
-        crate::services::google::google_authenticate(CALENDAR_SCOPE);
+        crate::services::google::google_authenticate(&CALENDAR_SCOPE.iter().map(|s| s.to_string()).collect::<Vec<_>>());
         Ok(AuthStatus::Authenticated)
     }
 
     fn is_authenticated(&self) -> bool {
         crate::services::google::google_is_authenticated()
+    }
+
+    fn required_scopes(&self) -> &[&str] {
+        CALENDAR_SCOPE
     }
 
     fn events(&mut self, start: &str, end: &str) -> Result<Vec<CalendarEvent>, String> {

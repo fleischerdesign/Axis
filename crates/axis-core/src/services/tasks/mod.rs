@@ -67,6 +67,10 @@ impl TaskRegistry {
         self.last_list_id.as_deref()
     }
 
+    pub fn required_scopes(&self) -> &[&str] {
+        self.providers[self.active].required_scopes()
+    }
+
     // ── Refresh ────────────────────────────────────────────────────────
 
     pub fn refresh_tasks(&mut self) -> Result<Vec<Task>, String> {
