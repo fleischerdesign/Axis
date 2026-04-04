@@ -20,8 +20,7 @@ impl PowerActionStack {
 
         let screenshot_btn = Self::create_btn("camera-photo-symbolic");
         let settings_btn = Self::create_btn("emblem-system-symbolic");
-        settings_btn.set_sensitive(false);
-        settings_btn.set_tooltip_text(Some("Coming soon"));
+        settings_btn.set_tooltip_text(Some("Axis Settings"));
         let lock_btn = Self::create_btn("system-lock-screen-symbolic");
         lock_btn.set_tooltip_text(Some("Lock Screen"));
         let power_btn = Self::create_btn("system-shutdown-symbolic");
@@ -57,6 +56,14 @@ impl PowerActionStack {
                 show_pointer: false,
                 path: None,
             });
+        });
+
+        // Settings
+        settings_btn.connect_clicked(move |_| {
+            match std::process::Command::new("axis-settings").spawn() {
+                Ok(_) => log::info!("[qs] Settings app launched"),
+                Err(e) => log::warn!("[qs] Failed to launch settings app: {e}"),
+            }
         });
 
         // Lock Screen
