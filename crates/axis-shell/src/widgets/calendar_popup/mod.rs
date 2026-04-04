@@ -351,12 +351,12 @@ impl CalendarPopup {
             }
             entry.set_text("");
 
-            let is_async = {
+            let requires_api_thread = {
                 let registry = ctx_c.task_registry.lock().unwrap();
-                registry.active().is_async()
+                registry.active().requires_api_thread()
             };
 
-            if is_async {
+            if requires_api_thread {
                 {
                     let mut registry = ctx_c.task_registry.lock().unwrap();
                     registry.optimistic_add_task(&title);

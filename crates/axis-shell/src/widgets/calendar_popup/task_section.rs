@@ -139,9 +139,9 @@ fn build_task_row(
     let tx_toggle = refresh_tx.clone();
     check.connect_toggled(move |btn| {
         let done = btn.is_active();
-        let is_async = {
+        let requires_api_thread = {
             let registry = ctx_c.task_registry.lock().unwrap();
-            registry.active().is_async()
+            registry.active().requires_api_thread()
         };
 
         if done {
@@ -150,7 +150,7 @@ fn build_task_row(
             row_c.remove_css_class("calendar-task-done");
         }
 
-        if is_async {
+        if requires_api_thread {
             // Async: optimistic UI + background API call
             {
                 let mut registry = ctx_c.task_registry.lock().unwrap();
@@ -177,12 +177,12 @@ fn build_task_row(
     let task_id = task.id.clone();
     let tx_delete = refresh_tx.clone();
     delete_btn.connect_clicked(move |_| {
-        let is_async = {
+        let requires_api_thread = {
             let registry = ctx_c.task_registry.lock().unwrap();
-            registry.active().is_async()
+            registry.active().requires_api_thread()
         };
 
-        if is_async {
+        if requires_api_thread {
             {
                 let mut registry = ctx_c.task_registry.lock().unwrap();
                 registry.remove_cached_task(&task_id);

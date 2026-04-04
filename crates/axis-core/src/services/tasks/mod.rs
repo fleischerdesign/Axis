@@ -98,51 +98,23 @@ impl TaskRegistry {
     // ── Optimistic Add (encapsulates local-vs-remote branching) ────────
 
     pub fn optimistic_add_task(&mut self, title: &str) -> Option<Task> {
-        if self.providers[self.active].is_async() {
-            // Async provider: add placeholder to cache, caller handles API
-            let placeholder = Task {
-                id: String::new(),
-                title: title.to_string(),
-                done: false,
-                provider: "remote".to_string(),
-            };
-            self.cached_tasks.push(placeholder.clone());
-            Some(placeholder)
-        } else {
-            // Sync provider: do it now
-            let list_id = self.last_list_id().unwrap_or("default").to_string();
-            match self.providers[self.active].add_task(&list_id, title) {
-                Ok(task) => {
-                    self.cached_tasks.push(task.clone());
-                    Some(task)
-                }
-                Err(e) => {
-                    log::warn!("[tasks] add_task failed: {e}");
-                    None
-                }
-            }
+        let list_id = self.last_list_id().unwrap_or("default").to_string();
+        let task = self.providers[self.active].optimistic_add(&list_id, title);
+        if let Some(ref t) = task {
+            self.cached_tasks.push(t.clone());
         }
+        task
     }
 
     pub fn optimistic_toggle_task(&mut self, task_id: &str, done: bool) {
         self.update_cached_task(task_id, done);
-
-        if self.providers[self.active].is_async() {
-            // Async: caller must spawn API call separately
-        } else {
-            let list_id = self.last_list_id().unwrap_or("default").to_string();
-            let _ = self.providers[self.active].toggle_task(&list_id, task_id, done);
-        }
+        let list_id = self.last_list_id().unwrap_or("default").to_string();
+        self.providers[self.active].optimistic_toggle(&list_id, task_id, done);
     }
 
     pub fn optimistic_delete_task(&mut self, task_id: &str) {
         self.remove_cached_task(task_id);
-
-        if self.providers[self.active].is_async() {
-            // Async: caller must spawn API call separately
-        } else {
-            let list_id = self.last_list_id().unwrap_or("default").to_string();
-            let _ = self.providers[self.active].delete_task(&list_id, task_id);
-        }
+        let list_id = self.last_list_id().unwrap_or("default").to_string();
+        self.providers[self.active].optimistic_delete(&list_id, task_id);
     }
 }

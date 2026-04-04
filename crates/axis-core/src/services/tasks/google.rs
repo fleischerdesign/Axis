@@ -36,10 +36,6 @@ impl TaskProvider for GoogleTasksProvider {
         "google-symbolic"
     }
 
-    fn is_async(&self) -> bool {
-        true
-    }
-
     fn auth_status(&mut self) -> AuthStatus {
         match GoogleAuthRegistry::load() {
             Ok(reg) if reg.is_authenticated() => AuthStatus::Authenticated,
@@ -188,5 +184,30 @@ impl TaskProvider for GoogleTasksProvider {
 
         info!("[tasks] Deleted: {}", task_id);
         Ok(())
+    }
+
+    // ── Optimistic UI: Google Tasks is async, so we return placeholders
+    // and let the caller handle the actual API call. ────────────────────
+
+    fn optimistic_add(&mut self, _list_id: &str, title: &str) -> Option<super::provider::Task> {
+        let placeholder = super::provider::Task {
+            id: String::new(),
+            title: title.to_string(),
+            done: false,
+            provider: "remote".to_string(),
+        };
+        Some(placeholder)
+    }
+
+    fn optimistic_toggle(&mut self, _list_id: &str, _task_id: &str, _done: bool) {
+        // Caller must spawn API call separately
+    }
+
+    fn optimistic_delete(&mut self, _list_id: &str, _task_id: &str) {
+        // Caller must spawn API call separately
+    }
+
+    fn requires_api_thread(&self) -> bool {
+        true
     }
 }

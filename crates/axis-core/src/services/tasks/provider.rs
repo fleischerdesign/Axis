@@ -32,12 +32,6 @@ pub trait TaskProvider: Send + Sync {
     fn name(&self) -> &str;
     fn icon(&self) -> &str;
 
-    /// Whether the provider uses async/background operations.
-    /// Async providers get optimistic UI + thread-spawn pattern.
-    fn is_async(&self) -> bool {
-        false
-    }
-
     // ── Auth (defaults: always authenticated) ──────────────────────────
 
     fn auth_status(&mut self) -> AuthStatus {
@@ -59,4 +53,32 @@ pub trait TaskProvider: Send + Sync {
     fn add_task(&mut self, list_id: &str, title: &str) -> Result<Task, String>;
     fn toggle_task(&mut self, list_id: &str, task_id: &str, done: bool) -> Result<(), String>;
     fn delete_task(&mut self, list_id: &str, task_id: &str) -> Result<(), String>;
+
+    // ── Optimistic UI (defaults: sync path, override for async) ────────
+
+    fn optimistic_add(&mut self, list_id: &str, title: &str) -> Option<Task> {
+        match self.add_task(list_id, title) {
+            Ok(task) => Some(task),
+            Err(e) => {
+                log::warn!("[tasks] add_task failed: {e}");
+                None
+            }
+        }
     }
+
+    fn optimistic_toggle(&mut self, list_id: &str, task_id: &str, done: bool) {
+        let _ = self.toggle_task(list_id, task_id, done);
+    }
+
+    fn optimistic_delete(&mut self, list_id: &str, task_id: &str) {
+        let _ = self.delete_task(list_id, task_id);
+    }
+
+    /// Returns true if the provider requires the caller to spawn a separate
+    /// thread for API calls (e.g. Google Tasks with OAuth).
+    /// Sync providers (LocalTodoProvider) return false — operations complete
+    /// inline via optimistic_add/toggle/delete.
+    fn requires_api_thread(&self) -> bool {
+        false
+    }
+}
