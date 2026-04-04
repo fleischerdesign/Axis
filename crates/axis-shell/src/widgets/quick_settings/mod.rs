@@ -2,6 +2,7 @@ mod audio_page;
 mod bluetooth_page;
 pub mod bluetooth_pair_dialog;
 mod continuity_page;
+pub mod continuity_pair_dialog;
 pub mod components;
 mod kdeconnect_page;
 mod main_page;
