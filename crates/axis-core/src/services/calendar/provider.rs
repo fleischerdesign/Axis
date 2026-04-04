@@ -19,7 +19,9 @@ impl CalendarEvent {
         } else if let (Some(start), Some(end)) = (self.start.split('T').nth(1), self.end.split('T').nth(1)) {
             let start_time = start.split('+').next().unwrap_or(start);
             let end_time = end.split('+').next().unwrap_or(end);
-            format!("{} - {}", &start_time[..5], &end_time[..5])
+            format!("{} - {}",
+                start_time.get(..5).unwrap_or(start_time),
+                end_time.get(..5).unwrap_or(end_time))
         } else {
             "Ganztägig".to_string()
         }

@@ -8,6 +8,8 @@ use super::{Service, ServiceConfig};
 use crate::store::ServiceStore;
 use log::{error, info};
 
+const BLUETOOTH_POWER_RETRY_ATTEMPTS: u32 = 5;
+
 // ─── D-Bus Proxies ──────────────────────────────────────────────────────────
 
 #[proxy(
@@ -425,7 +427,7 @@ impl Service for BluetoothService {
                                     log::debug!("[bluetooth] TogglePower({on}) ignored — already in that state");
                                 } else {
                                     info!("[bluetooth] Power toggled: {}", if on { "on" } else { "off" });
-                                    for attempt in 0..5 {
+                                    for attempt in 0..BLUETOOTH_POWER_RETRY_ATTEMPTS {
                                         match adapter_proxy.set_powered(on).await {
                                             Ok(()) => break,
                                             Err(e) if e.to_string().contains("Busy") => {

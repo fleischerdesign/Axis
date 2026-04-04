@@ -99,16 +99,22 @@ define_status_notifier_watcher!(StatusNotifierWatcherKde, "org.kde.StatusNotifie
 
 pub struct TrayService;
 
+async fn fetch_item_data(proxy: &StatusNotifierItemProxy<'_>) -> (String, String, String, String, String) {
+    (
+        proxy.id().await.unwrap_or_default(),
+        proxy.title().await.unwrap_or_default(),
+        proxy.icon_name().await.unwrap_or_default(),
+        proxy.attention_icon_name().await.unwrap_or_default(),
+        proxy.status().await.unwrap_or_else(|_| "Active".to_string()),
+    )
+}
+
 async fn fetch_and_emit(
     proxy: &StatusNotifierItemProxy<'_>,
     bus_name: &str,
     event_tx: &Sender<ItemEvent>,
 ) {
-    let _id = proxy.id().await.unwrap_or_default();
-    let title = proxy.title().await.unwrap_or_default();
-    let icon_name = proxy.icon_name().await.unwrap_or_default();
-    let attention_icon_name = proxy.attention_icon_name().await.unwrap_or_default();
-    let status = proxy.status().await.unwrap_or_else(|_| "Active".to_string());
+    let (_id, title, icon_name, attention_icon_name, status) = fetch_item_data(proxy).await;
 
     let _ = event_tx.send(ItemEvent::Updated {
         bus_name: bus_name.to_string(),
@@ -157,13 +163,7 @@ async fn add_item(
         }
     };
 
-    let (id, title, icon_name, attention_icon_name, status) = (
-        proxy.id().await.unwrap_or_default(),
-        proxy.title().await.unwrap_or_default(),
-        proxy.icon_name().await.unwrap_or_default(),
-        proxy.attention_icon_name().await.unwrap_or_default(),
-        proxy.status().await.unwrap_or_else(|_| "Active".to_string()),
-    );
+    let (id, title, icon_name, attention_icon_name, status) = fetch_item_data(&proxy).await;
 
     info!("[tray] Item details: id={id}, title={title}, icon={icon_name}, status={status}");
 

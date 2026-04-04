@@ -27,6 +27,7 @@ pub const PIN_LENGTH: usize = 6;
 const RECONNECT_MAX_ATTEMPTS: u32 = 5;
 const RECONNECT_BASE_DELAY_MS: u64 = 1000;
 const PIN_EXPIRY_SECS: u64 = 30;
+const VIRTUAL_POS_BUFFER: f64 = 40.0;
 
 // ── Data Types ─────────────────────────────────────────────────────────
 
@@ -355,7 +356,7 @@ impl ContinuityInner {
     /// at `entry_side` with `edge_pos` along the entry edge (in remote coords).
     fn init_virtual_pos(entry_side: Side, edge_pos: f64, remote_w: i32, remote_h: i32) -> (f64, f64) {
         let (rw, rh) = (remote_w as f64, remote_h as f64);
-        let buffer = 40.0;
+        let buffer = VIRTUAL_POS_BUFFER;
         match entry_side {
             Side::Right => (buffer, edge_pos.clamp(0.0, rh)),
             Side::Left => (rw - buffer, edge_pos.clamp(0.0, rh)),

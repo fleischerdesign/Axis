@@ -7,6 +7,8 @@ use super::Service;
 use crate::store::ServiceStore;
 use log::{error, info};
 
+const MAX_ACCESS_POINTS: usize = 15;
+
 #[proxy(
     interface = "org.freedesktop.NetworkManager",
     default_service = "org.freedesktop.NetworkManager",
@@ -269,7 +271,7 @@ impl NetworkService {
                 }
 
                 if let Ok(ap_paths) = wifi_proxy.get_access_points().await {
-                    for ap_path in ap_paths.into_iter().take(15) { 
+                    for ap_path in ap_paths.into_iter().take(MAX_ACCESS_POINTS) { 
                         if let Ok(ap_proxy) = AccessPointProxy::builder(conn).path(ap_path.clone()).unwrap().build().await {
                             if let Ok(ssid_bytes) = ap_proxy.ssid().await {
                                 let ssid = String::from_utf8_lossy(&ssid_bytes).to_string();

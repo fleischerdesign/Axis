@@ -117,7 +117,11 @@ fn get_month_range(year: i32, month: u32) -> (String, String) {
     let start = chrono::NaiveDate::from_ymd_opt(year, month, 1)
         .unwrap_or_default()
         .and_hms_opt(0, 0, 0).unwrap();
-    let last_day = last_day_of_month(year, month);
+    use chrono::Datelike;
+    let last_day = chrono::NaiveDate::from_ymd_opt(year, month + 1, 1)
+        .and_then(|d| d.pred_opt())
+        .map(|d| d.day())
+        .unwrap_or(30);
     let end = chrono::NaiveDate::from_ymd_opt(year, month, last_day)
         .unwrap_or_default()
         .and_hms_opt(23, 59, 59).unwrap();
@@ -125,19 +129,4 @@ fn get_month_range(year: i32, month: u32) -> (String, String) {
         format!("{}Z", start.format("%Y-%m-%dT%H:%M:%S")),
         format!("{}Z", end.format("%Y-%m-%dT%H:%M:%S")),
     )
-}
-
-fn last_day_of_month(year: i32, month: u32) -> u32 {
-    match month {
-        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
-        4 | 6 | 9 | 11 => 30,
-        2 => {
-            if (year % 4 == 0 && year % 100 != 0) || year % 400 == 0 {
-                29
-            } else {
-                28
-            }
-        }
-        _ => 30,
-    }
 }

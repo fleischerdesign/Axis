@@ -70,7 +70,7 @@ impl Service for BacklightService {
                 return;
             }
 
-            // Command-Thread: Brightness setzen über brightness Crate (D-Bus)
+            // Command thread: set brightness via brightness crate (D-Bus)
             thread::spawn(move || {
                 for dev in brightness::blocking::brightness_devices().flatten() {
                     loop {

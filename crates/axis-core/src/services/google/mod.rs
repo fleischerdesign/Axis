@@ -1,4 +1,3 @@
-pub mod auth_flow;
 pub mod token;
 
 use oauth2::basic::BasicClient;

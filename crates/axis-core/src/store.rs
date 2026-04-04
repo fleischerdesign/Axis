@@ -56,7 +56,7 @@ impl<T: Clone + PartialEq + 'static> ReadOnlyHandle<T> {
     }
 }
 
-/// Ein reaktiver Store für einen Service-Datentyp.
+/// A reactive store for a service data type.
 pub struct ServiceStore<T: Clone + PartialEq + 'static> {
     pub store: Store<T>,
 }

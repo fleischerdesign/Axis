@@ -6,6 +6,8 @@ use zbus::Connection;
 
 use super::{PeerInfo, known_peers};
 
+const AVAHI_SCAN_RETRIES: u32 = 10;
+
 // ── Discovery Events ───────────────────────────────────────────────────
 
 #[derive(Debug)]
@@ -246,7 +248,7 @@ async fn browse_services(
     let tx_scan = event_tx.clone();
     tokio::spawn(async move {
         let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
-        for i in 0..10 {
+        for i in 0..AVAHI_SCAN_RETRIES {
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             match scan_cached_services(&conn_scan).await {
                 Ok(peers) => {

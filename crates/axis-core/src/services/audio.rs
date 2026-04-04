@@ -56,6 +56,12 @@ pub enum AudioCmd {
     SetDefaultSource(String),
 }
 
+const PULSE_MAX_VOLUME_MULTIPLE: u32 = 2;
+
+fn to_pulse_volume(frac: f64) -> Volume {
+    Volume(((frac * Volume::NORMAL.0 as f64) as u32).min(Volume::NORMAL.0 * PULSE_MAX_VOLUME_MULTIPLE))
+}
+
 pub struct AudioService;
 
 impl Service for AudioService {
@@ -140,7 +146,7 @@ impl Service for AudioService {
             // sink-only and sink-input-only fetches can preserve the other half.
             let last_state: Rc<RefCell<AudioData>> = Rc::new(RefCell::new(AudioData::default()));
 
-            // Subscribe für Sink + SinkInput + Server Events
+            // Subscribe to Sink + SinkInput + Server events
             let ctx_ref = Rc::clone(&context);
             let data_tx2 = data_tx.clone();
             let state_sub = last_state.clone();
@@ -188,9 +194,7 @@ impl Service for AudioService {
                 match cmd {
                     AudioCmd::SetVolume(new_vol) => {
                         info!("[audio] Volume set to {:.0}%", new_vol * 100.0);
-                        let pulse_vol = Volume(
-                            ((new_vol * Volume::NORMAL.0 as f64) as u32).min(Volume::NORMAL.0 * 2),
-                        );
+                        let pulse_vol = to_pulse_volume(new_vol);
                         let mut cv = ChannelVolumes::default();
                         cv.set(ChannelVolumes::CHANNELS_MAX, pulse_vol);
                         context.borrow().introspect().set_sink_volume_by_name(
@@ -208,9 +212,7 @@ impl Service for AudioService {
                         );
                     }
                     AudioCmd::SetSinkInputVolume(index, new_vol) => {
-                        let pulse_vol = Volume(
-                            ((new_vol * Volume::NORMAL.0 as f64) as u32).min(Volume::NORMAL.0 * 2),
-                        );
+                        let pulse_vol = to_pulse_volume(new_vol);
                         let mut cv = ChannelVolumes::default();
                         cv.set(ChannelVolumes::CHANNELS_MAX, pulse_vol);
                         context.borrow().introspect().set_sink_input_volume(
