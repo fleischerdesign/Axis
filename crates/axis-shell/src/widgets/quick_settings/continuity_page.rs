@@ -1,5 +1,5 @@
 use crate::app_context::AppContext;
-use axis_core::services::continuity::{ContinuityCmd, PeerArrangement, SharingMode, Side};
+use axis_core::services::continuity::{ContinuityCmd, PeerArrangement, SharingState, Side};
 use crate::widgets::components::scrolled_list::ScrolledList;
 use crate::widgets::components::subpage_header::SubPageHeader;
 use gtk4::prelude::*;
@@ -139,6 +139,18 @@ impl ContinuityPage {
         });
         container.append(&disconnect_btn);
 
+        // Cancel reconnect button (hidden by default)
+        let cancel_reconnect_btn = gtk4::Button::with_label("Wiederverbindung abbrechen");
+        cancel_reconnect_btn.set_margin_start(12);
+        cancel_reconnect_btn.set_margin_end(12);
+        cancel_reconnect_btn.add_css_class("destructive-action");
+        cancel_reconnect_btn.set_visible(false);
+        let tx_cancel_rc = ctx.continuity.tx.clone();
+        cancel_reconnect_btn.connect_clicked(move |_| {
+            let _ = tx_cancel_rc.try_send(ContinuityCmd::CancelReconnect);
+        });
+        container.append(&cancel_reconnect_btn);
+
         // Subscribe to service data
         let list_c = scrolled_list.list;
         let tx_connect = ctx.continuity.tx.clone();
@@ -149,6 +161,7 @@ impl ContinuityPage {
         let pin_label_c = pin_label.clone();
         let confirm_btn_c = confirm_btn.clone();
         let disconnect_btn_c = disconnect_btn.clone();
+        let cancel_reconnect_btn_c = cancel_reconnect_btn.clone();
 
         ctx.continuity.subscribe(move |data| {
             // Update status
@@ -157,17 +170,17 @@ impl ContinuityPage {
                 role_label_c.set_label("");
             } else if let Some(conn) = &data.active_connection {
                 status_label_c.set_label(&format!("Verbunden mit {}", conn.peer_name));
-                match data.sharing_mode {
-                    SharingMode::Idle => {
+                match &data.sharing_state {
+                    SharingState::Idle => {
                         role_label_c.set_label("Cursor ist lokal");
                     }
-                    SharingMode::Pending | SharingMode::PendingSwitch => {
+                    SharingState::Pending { .. } | SharingState::PendingSwitch => {
                         role_label_c.set_label("Übergang wird bestätigt...");
                     }
-                    SharingMode::Sharing => {
+                    SharingState::Sharing { .. } => {
                         role_label_c.set_label("Cursor ist auf Remote");
                     }
-                    SharingMode::Receiving => {
+                    SharingState::Receiving => {
                         role_label_c.set_label("Remote-Cursor aktiv");
                     }
                 }
@@ -199,6 +212,20 @@ impl ContinuityPage {
 
             // Disconnect button
             disconnect_btn_c.set_visible(data.active_connection.is_some());
+
+            // Reconnect status
+            if let Some(rc) = &data.reconnect {
+                status_label_c.set_label(&format!("Getrennt – Wiederverbindung mit {} ({}/{})",
+                    rc.peer_name, rc.attempt, rc.max_attempts));
+                if rc.delay_secs > 0 {
+                    role_label_c.set_label(&format!("Nächster Versuch in {}s", rc.delay_secs));
+                } else {
+                    role_label_c.set_label("Verbindung wird hergestellt...");
+                }
+                cancel_reconnect_btn_c.set_visible(true);
+            } else {
+                cancel_reconnect_btn_c.set_visible(false);
+            }
 
             // Peer list
             while let Some(child) = list_c.first_child() {

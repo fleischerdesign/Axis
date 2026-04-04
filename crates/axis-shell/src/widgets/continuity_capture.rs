@@ -4,7 +4,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::time::Instant;
 use crate::app_context::AppContext;
-use axis_core::services::continuity::{ContinuityCmd, PeerArrangement, SharingMode, Side};
+use axis_core::services::continuity::{ContinuityCmd, PeerArrangement, SharingState, Side};
 use log::info;
 
 pub struct ContinuityCaptureController {
@@ -33,13 +33,13 @@ impl ContinuityCaptureController {
 
             let show_edge = data.enabled
                 && data.active_connection.is_some()
-                && (data.sharing_mode == SharingMode::Idle
-                    || data.sharing_mode == SharingMode::Receiving);
+                && data.sharing_state.is_idle()
+                    || matches!(data.sharing_state, SharingState::Receiving);
 
             if show_edge {
                 let config = data.active_peer_config();
                 let side = config.arrangement.side;
-                let is_receiving = data.sharing_mode == SharingMode::Receiving;
+                let is_receiving = matches!(data.sharing_state, SharingState::Receiving);
 
                 let arrangement_changed = edge.is_some()
                     && *ctrl_c.last_arrangement.borrow() != config.arrangement;
@@ -61,7 +61,7 @@ impl ContinuityCaptureController {
                     );
                     w.present();
                     info!("[continuity:edge] presenting edge window for {:?}, screen={}x{}, remote={:?}, mode={:?}",
-                        side, data.screen_width, data.screen_height, data.remote_screen, data.sharing_mode);
+                        side, data.screen_width, data.screen_height, data.remote_screen, data.sharing_state);
                     *edge = Some(w);
                     *ctrl_c.last_arrangement.borrow_mut() = config.arrangement;
                 }
@@ -72,7 +72,7 @@ impl ContinuityCaptureController {
                 }
             }
 
-            let show_overlay = data.enabled && data.sharing_mode == SharingMode::Sharing;
+            let show_overlay = data.enabled && matches!(data.sharing_state, SharingState::Sharing { .. });
             if show_overlay {
                 if overlay.is_none() {
                     let w = ctrl_c.create_capture_overlay(&app_c);

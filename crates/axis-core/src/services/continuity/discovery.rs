@@ -4,7 +4,7 @@ use log::{error, info, warn};
 use zbus::zvariant::OwnedObjectPath;
 use zbus::Connection;
 
-use super::PeerInfo;
+use super::{PeerInfo, known_peers};
 
 // ── Discovery Events ───────────────────────────────────────────────────
 
@@ -396,12 +396,7 @@ async fn scan_cached_services(
         .await
         .map_err(|e| format!("avahi-browse: {e}"))?;
 
-    let self_hostname = std::process::Command::new("hostname")
-        .output()
-        .ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .map(|s| s.trim().to_string())
-        .unwrap_or_default();
+    let self_hostname = known_peers::hostname();
 
     // First pass: collect all valid addresses grouped by service name
     struct RawEntry {

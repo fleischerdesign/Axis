@@ -10,7 +10,7 @@ use crate::widgets::lock_screen::LockScreen;
 use crate::services::ipc::IpcService;
 use crate::services::ipc::server::ShellIpcCmd;
 use axis_core::services::settings::dbus::SettingsDbusServer;
-use axis_core::services::continuity::dbus::{ContinuityDbusServer, build_snapshot};
+use axis_core::services::continuity::dbus::{ContinuityDbusServer, build_snapshot, ContinuityStateSnapshot};
 
 pub fn spawn_dbus_host(
     ctx: &AppContext,
@@ -36,18 +36,16 @@ pub fn spawn_dbus_host(
         settings_config.clone(),
     );
 
-    // ── Continuity Cache + Notification ──────────────────────────────────
-    let continuity_state = Arc::new(Mutex::new(build_snapshot(&ctx.continuity.store.get())));
-    let (continuity_notify_tx, continuity_notify_rx) = async_channel::unbounded::<()>();
+    // ── Continuity State (watch channel, no Mutex) ─────────────────────
+    let initial_snapshot = build_snapshot(&ctx.continuity.store.get());
+    let (continuity_state_tx, continuity_state_rx) = tokio::sync::watch::channel(initial_snapshot);
 
-    let cont_cache = continuity_state.clone();
     ctx.continuity.store.subscribe(move |data| {
-        *cont_cache.lock().unwrap() = build_snapshot(data);
-        let _ = continuity_notify_tx.try_send(());
+        let _ = continuity_state_tx.send(build_snapshot(data));
     });
 
     let continuity_tx = ctx.continuity.tx.clone();
-    let continuity_server = ContinuityDbusServer::new(continuity_tx, continuity_state.clone());
+    let continuity_server = ContinuityDbusServer::new(continuity_tx, continuity_state_rx.clone());
 
     // 2. Setup IPC Command Loop (GTK Thread)
     let shell_ipc = shell_ctrl.clone();
@@ -102,10 +100,15 @@ pub fn spawn_dbus_host(
                 };
 
                 // Continuity signal loop
+                let mut continuity_rx = continuity_state_rx;
                 let continuity_loop = async {
-                    while let Ok(()) = continuity_notify_rx.recv().await {
-                        let json = serde_json::to_string(&*continuity_state.lock().unwrap())
+                    loop {
+                        if continuity_rx.changed().await.is_err() {
+                            break;
+                        }
+                        let json = serde_json::to_string(&*continuity_rx.borrow_and_update())
                             .unwrap_or_default();
+                        drop(continuity_rx.borrow_and_update());
 
                         let iface_res = conn
                             .object_server()

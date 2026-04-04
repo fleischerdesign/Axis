@@ -6,6 +6,41 @@ use zbus::Connection;
 use axis_core::services::continuity::dbus::ContinuityStateSnapshot;
 use axis_core::services::continuity::PeerArrangement;
 
+macro_rules! dbus_command {
+    ($fn_name:ident, $method:ident) => {
+        pub async fn $fn_name(&self) -> Result<bool, Box<dyn std::error::Error>> {
+            let result: bool = self.conn
+                .call_method(
+                    Some("org.axis.Shell"),
+                    "/org/axis/Shell/Continuity",
+                    Some("org.axis.Shell.Continuity"),
+                    stringify!($method),
+                    &(),
+                )
+                .await?
+                .body()
+                .deserialize()?;
+            Ok(result)
+        }
+    };
+    ($fn_name:ident, $method:ident, $param_name:ident: $param_ty:ty) => {
+        pub async fn $fn_name(&self, $param_name: $param_ty) -> Result<bool, Box<dyn std::error::Error>> {
+            let result: bool = self.conn
+                .call_method(
+                    Some("org.axis.Shell"),
+                    "/org/axis/Shell/Continuity",
+                    Some("org.axis.Shell.Continuity"),
+                    stringify!($method),
+                    &($param_name,),
+                )
+                .await?
+                .body()
+                .deserialize()?;
+            Ok(result)
+        }
+    };
+}
+
 /// Typed D-Bus client for org.axis.Shell.Continuity.
 /// Subscribes to StateChanged signal and notifies listeners.
 pub struct ContinuityProxy {
@@ -144,65 +179,11 @@ impl ContinuityProxy {
 
     // ── Commands ────────────────────────────────────────────────────────
 
-    pub async fn connect_to_peer(&self, peer_id: &str) -> Result<bool, Box<dyn std::error::Error>> {
-        let result: bool = self.conn
-            .call_method(
-                Some("org.axis.Shell"),
-                "/org/axis/Shell/Continuity",
-                Some("org.axis.Shell.Continuity"),
-                "ConnectToPeer",
-                &(peer_id,),
-            )
-            .await?
-            .body()
-            .deserialize()?;
-        Ok(result)
-    }
-
-    pub async fn confirm_pin(&self) -> Result<bool, Box<dyn std::error::Error>> {
-        let result: bool = self.conn
-            .call_method(
-                Some("org.axis.Shell"),
-                "/org/axis/Shell/Continuity",
-                Some("org.axis.Shell.Continuity"),
-                "ConfirmPin",
-                &(),
-            )
-            .await?
-            .body()
-            .deserialize()?;
-        Ok(result)
-    }
-
-    pub async fn reject_pin(&self) -> Result<bool, Box<dyn std::error::Error>> {
-        let result: bool = self.conn
-            .call_method(
-                Some("org.axis.Shell"),
-                "/org/axis/Shell/Continuity",
-                Some("org.axis.Shell.Continuity"),
-                "RejectPin",
-                &(),
-            )
-            .await?
-            .body()
-            .deserialize()?;
-        Ok(result)
-    }
-
-    pub async fn disconnect(&self) -> Result<bool, Box<dyn std::error::Error>> {
-        let result: bool = self.conn
-            .call_method(
-                Some("org.axis.Shell"),
-                "/org/axis/Shell/Continuity",
-                Some("org.axis.Shell.Continuity"),
-                "Disconnect",
-                &(),
-            )
-            .await?
-            .body()
-            .deserialize()?;
-        Ok(result)
-    }
+    dbus_command!(connect_to_peer, ConnectToPeer, peer_id: &str);
+    dbus_command!(confirm_pin, ConfirmPin);
+    dbus_command!(reject_pin, RejectPin);
+    dbus_command!(disconnect, Disconnect);
+    dbus_command!(set_enabled, SetEnabled, enabled: bool);
 
     pub async fn set_peer_arrangement(
         &self,
@@ -216,21 +197,6 @@ impl ContinuityProxy {
                 Some("org.axis.Shell.Continuity"),
                 "SetPeerArrangement",
                 &(&json,),
-            )
-            .await?
-            .body()
-            .deserialize()?;
-        Ok(result)
-    }
-
-    pub async fn set_enabled(&self, enabled: bool) -> Result<bool, Box<dyn std::error::Error>> {
-        let result: bool = self.conn
-            .call_method(
-                Some("org.axis.Shell"),
-                "/org/axis/Shell/Continuity",
-                Some("org.axis.Shell.Continuity"),
-                "SetEnabled",
-                &(enabled,),
             )
             .await?
             .body()

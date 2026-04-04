@@ -4,6 +4,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 pub const PROTOCOL_VERSION: u32 = 1;
 pub const MAGIC: &[u8; 4] = b"AXIS";
+pub const MAX_MESSAGE_SIZE: usize = 10 * 1024 * 1024;
 
 // ── Message Types ──────────────────────────────────────────────────────
 
@@ -85,7 +86,7 @@ pub enum Message {
 
     // Clipboard
     ClipboardUpdate {
-        content: String,
+        content: Vec<u8>,
         mime_type: String,
     },
 
@@ -190,7 +191,7 @@ pub async fn read_message<R: AsyncReadExt + Unpin>(
         ));
     }
 
-    if len > 10 * 1024 * 1024 {
+    if len > MAX_MESSAGE_SIZE {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             "message too large",

@@ -262,6 +262,26 @@ impl EvdevCapture {
 /// A typical touchpad width of ~3500 units mapped to ~1920px means ~0.55px per unit,
 /// but we want some acceleration so we use a higher factor.
 const TOUCHPAD_SENSITIVITY: f64 = 0.75;
+const EMERGENCY_EXIT_PRESSES: u32 = 4;
+const EMERGENCY_EXIT_WINDOW_MS: u64 = 1000;
+
+/// Device name prefixes that indicate virtual/loopback devices we must skip.
+const VIRTUAL_DEVICE_PREFIXES: &[&str] = &[
+    "axis continuity virtual",
+    "axis continuity",
+];
+
+/// Exact device names to exclude (our own virtual devices).
+const VIRTUAL_DEVICE_EXACT: &[&str] = &[
+    "axis continuity virtual keyboard",
+    "axis continuity virtual pointer",
+];
+
+fn is_virtual_device(name: &str) -> bool {
+    let lower = name.to_lowercase();
+    VIRTUAL_DEVICE_EXACT.iter().any(|n| lower == *n)
+        || VIRTUAL_DEVICE_PREFIXES.iter().any(|p| lower.starts_with(p))
+}
 
 impl InputCapture for EvdevCapture {
     fn prepare(&mut self) -> Result<(), String> {
@@ -291,9 +311,8 @@ impl InputCapture for EvdevCapture {
 
         for (path, device) in devices_collected {
             let name = device.name().unwrap_or("Unknown").to_string();
-            let name_lower = name.to_lowercase();
 
-            if name_lower.contains("axis continuity") || name_lower.contains("passthrough") || name_lower.contains("virtual") {
+            if is_virtual_device(&name) {
                 continue;
             }
 
@@ -371,7 +390,6 @@ impl InputCapture for EvdevCapture {
             let task = tokio::spawn(async move {
                 let mut esc_count = 0;
                 let mut last_esc = Instant::now();
-                // Touchpad ABS→REL conversion state
                 let mut tp_tracker = if is_touchpad { Some(TouchpadTracker::new()) } else { None };
 
                 loop {
@@ -380,86 +398,83 @@ impl InputCapture for EvdevCapture {
                         Err(_) => break,
                     };
 
-                    let result = guard.try_io(|fd| {
-                        fd.get_mut().fetch_events().map(|events| events.collect::<Vec<_>>())
-                    });
-
-                    match result {
-                        Ok(Ok(events)) => {
-                            for ev in events {
-                                match ev.destructure() {
-                                    EventSummary::RelativeAxis(_, axis, val) => {
-                                        if axis == RelativeAxisCode::REL_X {
-                                            let _ = tx_c.send(InputEvent::CursorMove { dx: val as f64, dy: 0.0 }).await;
-                                        } else if axis == RelativeAxisCode::REL_Y {
-                                            let _ = tx_c.send(InputEvent::CursorMove { dx: 0.0, dy: val as f64 }).await;
-                                        } else if axis == RelativeAxisCode::REL_WHEEL {
-                                            let _ = tx_c.send(InputEvent::PointerAxis { dx: 0.0, dy: val as f64 }).await;
-                                        } else if axis == RelativeAxisCode::REL_HWHEEL {
-                                            let _ = tx_c.send(InputEvent::PointerAxis { dx: val as f64, dy: 0.0 }).await;
-                                        }
-                                    }
-                                    EventSummary::AbsoluteAxis(_, axis, val) => {
-                                        if let Some(tracker) = tp_tracker.as_mut() {
-                                            if axis == AbsoluteAxisCode::ABS_MT_POSITION_X {
-                                                if let Some(dx) = tracker.update_x(val) {
-                                                    let scaled = dx as f64 * TOUCHPAD_SENSITIVITY;
-                                                    let _ = tx_c.send(InputEvent::CursorMove { dx: scaled, dy: 0.0 }).await;
-                                                }
-                                            } else if axis == AbsoluteAxisCode::ABS_MT_POSITION_Y {
-                                                if let Some(dy) = tracker.update_y(val) {
-                                                    let scaled = dy as f64 * TOUCHPAD_SENSITIVITY;
-                                                    let _ = tx_c.send(InputEvent::CursorMove { dx: 0.0, dy: scaled }).await;
-                                                }
-                                            } else if axis == AbsoluteAxisCode::ABS_MT_TRACKING_ID && val == -1 {
-                                                // Finger lifted
-                                                tracker.reset();
-                                            }
-                                        }
-                                    }
-                                    EventSummary::Key(_, code, val) => {
-                                        let code_u32 = code.code() as u32;
-
-                                        if code == KeyCode::KEY_ESC && val == 1 {
-                                            let now = Instant::now();
-                                            if now.duration_since(last_esc) < Duration::from_millis(1000) {
-                                                esc_count += 1;
-                                            } else {
-                                                esc_count = 1;
-                                            }
-                                            last_esc = now;
-
-                                            if esc_count >= 4 {
-                                                info!("[continuity:input] KERNEL EMERGENCY EXIT triggered for {}", name_c);
-                                                let _ = tx_c.send(InputEvent::EmergencyExit).await;
-                                                return;
-                                            }
-                                        }
-
-                                        let is_mouse = code_u32 >= 272 && code_u32 <= 276;
-                                        if is_mouse {
-                                            if val == 1 {
-                                                let _ = tx_c.send(InputEvent::PointerButton { button: code_u32, state: 1 }).await;
-                                            } else if val == 0 {
-                                                let _ = tx_c.send(InputEvent::PointerButton { button: code_u32, state: 0 }).await;
-                                            }
-                                        } else {
-                                            if val == 1 || val == 2 {
-                                                let _ = tx_c.send(InputEvent::KeyPress { key: code_u32, state: 1 }).await;
-                                            } else if val == 0 {
-                                                let _ = tx_c.send(InputEvent::KeyRelease { key: code_u32 }).await;
-                                            }
-                                        }
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        }
+                    let events: Vec<_> = match guard.try_io(|fd| {
+                        fd.get_mut().fetch_events().map(|events| events.collect())
+                    }) {
+                        Ok(Ok(events)) => events,
                         Ok(Err(e)) => {
                             warn!("[continuity:input] read error for {}: {}", name_c, e);
                             break;
                         }
-                        Err(_would_block) => continue,
+                        Err(_) => continue,
+                    };
+
+                    for ev in events {
+                        match ev.destructure() {
+                            EventSummary::RelativeAxis(_, axis, val) => {
+                                if axis == RelativeAxisCode::REL_X {
+                                    let _ = tx_c.send(InputEvent::CursorMove { dx: val as f64, dy: 0.0 }).await;
+                                } else if axis == RelativeAxisCode::REL_Y {
+                                    let _ = tx_c.send(InputEvent::CursorMove { dx: 0.0, dy: val as f64 }).await;
+                                } else if axis == RelativeAxisCode::REL_WHEEL {
+                                    let _ = tx_c.send(InputEvent::PointerAxis { dx: 0.0, dy: val as f64 }).await;
+                                } else if axis == RelativeAxisCode::REL_HWHEEL {
+                                    let _ = tx_c.send(InputEvent::PointerAxis { dx: val as f64, dy: 0.0 }).await;
+                                }
+                            }
+                            EventSummary::AbsoluteAxis(_, axis, val) => {
+                                if let Some(tracker) = tp_tracker.as_mut() {
+                                    if axis == AbsoluteAxisCode::ABS_MT_POSITION_X {
+                                        if let Some(dx) = tracker.update_x(val) {
+                                            let scaled = dx as f64 * TOUCHPAD_SENSITIVITY;
+                                            let _ = tx_c.send(InputEvent::CursorMove { dx: scaled, dy: 0.0 }).await;
+                                        }
+                                    } else if axis == AbsoluteAxisCode::ABS_MT_POSITION_Y {
+                                        if let Some(dy) = tracker.update_y(val) {
+                                            let scaled = dy as f64 * TOUCHPAD_SENSITIVITY;
+                                            let _ = tx_c.send(InputEvent::CursorMove { dx: 0.0, dy: scaled }).await;
+                                        }
+                                    } else if axis == AbsoluteAxisCode::ABS_MT_TRACKING_ID && val == -1 {
+                                        tracker.reset();
+                                    }
+                                }
+                            }
+                            EventSummary::Key(_, code, val) => {
+                                let code_u32 = code.code() as u32;
+
+                                if code == KeyCode::KEY_ESC && val == 1 {
+                                    let now = Instant::now();
+                                    if now.duration_since(last_esc) < Duration::from_millis(EMERGENCY_EXIT_WINDOW_MS) {
+                                        esc_count += 1;
+                                    } else {
+                                        esc_count = 1;
+                                    }
+                                    last_esc = now;
+
+                                    if esc_count >= EMERGENCY_EXIT_PRESSES {
+                                        info!("[continuity:input] KERNEL EMERGENCY EXIT triggered for {}", name_c);
+                                        let _ = tx_c.send(InputEvent::EmergencyExit).await;
+                                        return;
+                                    }
+                                }
+
+                                let is_mouse = code_u32 >= 272 && code_u32 <= 276;
+                                if is_mouse {
+                                    if val == 1 {
+                                        let _ = tx_c.send(InputEvent::PointerButton { button: code_u32, state: 1 }).await;
+                                    } else if val == 0 {
+                                        let _ = tx_c.send(InputEvent::PointerButton { button: code_u32, state: 0 }).await;
+                                    }
+                                } else {
+                                    if val == 1 || val == 2 {
+                                        let _ = tx_c.send(InputEvent::KeyPress { key: code_u32, state: 1 }).await;
+                                    } else if val == 0 {
+                                        let _ = tx_c.send(InputEvent::KeyRelease { key: code_u32 }).await;
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
                     }
                 }
                 // async_fd (and the Device inside) is dropped here → fd closed → grab released

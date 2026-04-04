@@ -1,15 +1,17 @@
 use async_channel::Sender;
-use log::{error, info};
+use log::{error, info, warn};
 use std::process::Stdio;
-use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::{Child, Command};
 use tokio::task::JoinHandle;
+
+const MAX_CLIPBOARD_SIZE: usize = 10 * 1024 * 1024;
 
 // ── Clipboard Events ──────────────────────────────────────────────────
 
 #[derive(Debug)]
 pub enum ClipboardEvent {
-    ContentChanged { content: String, mime_type: String },
+    ContentChanged { content: Vec<u8>, mime_type: String },
 }
 
 // ── Clipboard Provider Trait ──────────────────────────────────────────
@@ -17,7 +19,7 @@ pub enum ClipboardEvent {
 pub trait ClipboardSync: Send {
     fn start_monitoring(&mut self, tx: Sender<ClipboardEvent>) -> Result<(), String>;
     fn stop_monitoring(&mut self);
-    fn set_content(&mut self, content: &str, mime_type: &str) -> Result<(), String>;
+    fn set_content(&mut self, content: &[u8], mime_type: &str) -> Result<(), String>;
 }
 
 // ── Wayland Implementation ─────────────────────────────────────────────
@@ -37,7 +39,7 @@ impl WaylandClipboard {
         }
     }
 
-    fn hash(content: &str) -> u64 {
+    fn hash(content: &[u8]) -> u64 {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
         let mut hasher = DefaultHasher::new();
@@ -52,10 +54,6 @@ impl ClipboardSync for WaylandClipboard {
 
         info!("[continuity:clipboard] starting monitoring via wl-paste");
 
-        // We use wl-paste --watch to get notified on every change.
-        // Since wl-paste --watch executes a command on change, we use a small trick:
-        // We run it with 'sh -c "echo CHANGED"' and then we manually fetch the content.
-        // Actually, a simpler way is to just run `wl-paste --watch cat`.
         let mut child = Command::new("wl-paste")
             .arg("--watch")
             .arg("cat")
@@ -66,35 +64,38 @@ impl ClipboardSync for WaylandClipboard {
         let stdout = child.stdout.take().ok_or("failed to take stdout")?;
         self.monitor_child = Some(child);
 
-        let mut reader = BufReader::new(stdout);
+        let mut reader = stdout;
 
         let task = tokio::spawn(async move {
-            // Note: wl-paste cat will output the full clipboard content on every change.
-            // This might be large, but for text/plain it's usually fine.
-            // A more robust way would be using a specialized tool or raw Wayland protocols,
-            // but wl-paste is the most reliable "just works" approach on NixOS/Niri.
-            
             loop {
-                // Read everything until EOF (which wl-paste cat provides for each change)
                 let mut content = Vec::new();
-                match reader.read_to_end(&mut content).await {
-                    Ok(0) => break, // EOF
-                    Ok(_) => {
-                        if let Ok(text) = String::from_utf8(content) {
-                            let text = text.trim().to_string();
-                            if !text.is_empty() {
-                                let _ = tx.send(ClipboardEvent::ContentChanged {
-                                    content: text,
-                                    mime_type: "text/plain".to_string(),
-                                }).await;
+                let mut remaining = MAX_CLIPBOARD_SIZE;
+                let mut buf = [0u8; 8192];
+                loop {
+                    match reader.read(&mut buf).await {
+                        Ok(0) => break,
+                        Ok(n) => {
+                            let take = n.min(remaining);
+                            content.extend_from_slice(&buf[..take]);
+                            remaining = remaining.saturating_sub(take);
+                            if remaining == 0 {
+                                warn!("[continuity:clipboard] content exceeded {} byte limit, truncated", MAX_CLIPBOARD_SIZE);
+                                break;
                             }
                         }
-                    }
-                    Err(e) => {
-                        error!("[continuity:clipboard] monitor read error: {e}");
-                        break;
+                        Err(e) => {
+                            error!("[continuity:clipboard] monitor read error: {e}");
+                            break;
+                        }
                     }
                 }
+                if content.is_empty() {
+                    break;
+                }
+                let _ = tx.send(ClipboardEvent::ContentChanged {
+                    content,
+                    mime_type: "text/plain".to_string(),
+                }).await;
             }
         });
 
@@ -111,7 +112,7 @@ impl ClipboardSync for WaylandClipboard {
         }
     }
 
-    fn set_content(&mut self, content: &str, mime_type: &str) -> Result<(), String> {
+    fn set_content(&mut self, content: &[u8], mime_type: &str) -> Result<(), String> {
         let hash = Self::hash(content);
         if hash == self.last_hash {
             return Ok(()); // Dedup: avoid loops
@@ -132,10 +133,10 @@ impl ClipboardSync for WaylandClipboard {
             .map_err(|e| format!("failed to spawn wl-copy: {e}"))?;
 
         let mut stdin = child.stdin.take().ok_or("failed to take stdin")?;
-        let content_owned = content.to_string();
+        let content_owned = content.to_vec();
         
         tokio::spawn(async move {
-            if let Err(e) = stdin.write_all(content_owned.as_bytes()).await {
+            if let Err(e) = stdin.write_all(&content_owned).await {
                 error!("[continuity:clipboard] wl-copy write error: {e}");
             }
             let _ = stdin.shutdown().await;
