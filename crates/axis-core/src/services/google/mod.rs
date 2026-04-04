@@ -9,16 +9,43 @@ use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-
-const GOOGLE_AUTH_URL: &str = "https://accounts.google.com/o/oauth2/auth";
-const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
-pub const REDIRECT_URI: &str = "http://localhost:8099/callback";
+use std::thread;
 
 pub const DEFAULT_SCOPES: &[&str] = &[
-    "https://www.googleapis.com/auth/calendar.events.readonly",
-    "https://www.googleapis.com/auth/tasks",
+    "https://www.googleapis.com/auth/userinfo.profile",
+    "https://www.googleapis.com/auth/userinfo.email",
 ];
+
+const GOOGLE_AUTH_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
+const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
+const REDIRECT_URI: &str = "http://localhost:8080/callback";
+
+// ── Shared Auth Helpers ────────────────────────────────────────────────
+//
+// Free functions used by all Google-based providers (Tasks, Calendar).
+// Each provider just calls these instead of duplicating the logic.
+
+use crate::services::tasks::provider::AuthStatus;
+
+pub fn google_auth_status() -> AuthStatus {
+    match GoogleAuthRegistry::load() {
+        Ok(reg) if reg.is_authenticated() => AuthStatus::Authenticated,
+        _ => AuthStatus::NeedsAuth { url: String::new(), code: None },
+    }
+}
+
+pub fn google_authenticate(scopes: &'static [&'static str]) {
+    GoogleAuthRegistry::authenticate(scopes, |result| {
+        match result {
+            Ok(()) => log::info!("[google-auth] Auth successful"),
+            Err(e) => log::warn!("[google-auth] Auth failed: {e}"),
+        }
+    });
+}
+
+pub fn google_is_authenticated() -> bool {
+    GoogleAuthRegistry::load().map(|r| r.is_authenticated()).unwrap_or(false)
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct GoogleCredential {

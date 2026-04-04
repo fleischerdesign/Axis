@@ -1,5 +1,5 @@
 use super::provider::{AuthStatus, Task, TaskList, TaskProvider};
-use crate::services::google::{GoogleAuthRegistry, DEFAULT_SCOPES};
+use crate::services::google::GoogleAuthRegistry;
 use crate::services::tasks::utils::{api_get, api_patch, api_post, build_http_client};
 use log::info;
 use serde::{Deserialize, Serialize};
@@ -37,26 +37,16 @@ impl TaskProvider for GoogleTasksProvider {
     }
 
     fn auth_status(&mut self) -> AuthStatus {
-        match GoogleAuthRegistry::load() {
-            Ok(reg) if reg.is_authenticated() => AuthStatus::Authenticated,
-            _ => AuthStatus::NeedsAuth { url: String::new(), code: None },
-        }
+        crate::services::google::google_auth_status()
     }
 
     fn authenticate(&mut self) -> Result<AuthStatus, String> {
-        GoogleAuthRegistry::authenticate(DEFAULT_SCOPES, |result| {
-            match result {
-                Ok(()) => log::info!("[tasks] Auth successful"),
-                Err(e) => log::warn!("[tasks] Auth failed: {}", e),
-            }
-        });
+        crate::services::google::google_authenticate(TASKS_SCOPE);
         Ok(AuthStatus::Authenticated)
     }
 
     fn is_authenticated(&self) -> bool {
-        GoogleAuthRegistry::load()
-            .map(|r| r.is_authenticated())
-            .unwrap_or(false)
+        crate::services::google::google_is_authenticated()
     }
 
     fn lists(&mut self) -> Result<Vec<TaskList>, String> {

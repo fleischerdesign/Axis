@@ -1,5 +1,5 @@
 use super::provider::{AuthStatus, CalendarEvent, CalendarProvider};
-use crate::services::google::{GoogleAuthRegistry, DEFAULT_SCOPES};
+use crate::services::google::GoogleAuthRegistry;
 use crate::services::tasks::utils::{api_get, build_http_client};
 use serde::Deserialize;
 
@@ -35,31 +35,17 @@ impl CalendarProvider for GoogleCalendarProvider {
         "calendar-symbolic"
     }
 
-    fn is_async(&self) -> bool {
-        true
-    }
-
     fn auth_status(&mut self) -> AuthStatus {
-        match GoogleAuthRegistry::load() {
-            Ok(reg) if reg.is_authenticated() => AuthStatus::Authenticated,
-            _ => AuthStatus::NeedsAuth { url: String::new(), code: None },
-        }
+        crate::services::google::google_auth_status()
     }
 
     fn authenticate(&mut self) -> Result<AuthStatus, String> {
-        GoogleAuthRegistry::authenticate(DEFAULT_SCOPES, |result| {
-            match result {
-                Ok(()) => log::info!("[calendar] Auth successful"),
-                Err(e) => log::warn!("[calendar] Auth failed: {}", e),
-            }
-        });
+        crate::services::google::google_authenticate(CALENDAR_SCOPE);
         Ok(AuthStatus::Authenticated)
     }
 
     fn is_authenticated(&self) -> bool {
-        GoogleAuthRegistry::load()
-            .map(|r| r.is_authenticated())
-            .unwrap_or(false)
+        crate::services::google::google_is_authenticated()
     }
 
     fn events(&mut self, start: &str, end: &str) -> Result<Vec<CalendarEvent>, String> {
