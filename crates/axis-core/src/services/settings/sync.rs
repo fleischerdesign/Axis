@@ -6,20 +6,6 @@ use crate::services::ServiceConfig;
 use super::SettingsCmd;
 use super::config::AxisConfig;
 
-/// Snapshot of a peer's config for change detection in continuity sync.
-/// Replaces the previous unnamed 8-tuple.
-#[derive(Clone, PartialEq)]
-struct PeerSyncSnapshot {
-    device_id: String,
-    side: crate::services::continuity::Side,
-    offset: i32,
-    clipboard: bool,
-    audio: bool,
-    drag_drop: bool,
-    version: u64,
-    trusted: bool,
-}
-
 /// Generic bidirectional sync between a ServiceConfig service and settings.
 ///
 /// - Config → Service: when SettingsData changes, send a command only if the
@@ -68,140 +54,42 @@ pub fn wire_service_config_full<S: ServiceConfig>(
     });
 }
 
-/// Specialized sync for Continuity: handles both the global 'enabled' flag
-/// and the 'peer_configs' map (arrangements).
+/// Specialized sync for Continuity: handles only the global 'enabled' flag.
+/// Peer configs (arrangements, capabilities) are managed exclusively by the
+/// Continuity service via known_peers.json — no longer synced through config.
 pub fn wire_continuity_sync(
     settings_store: &ServiceStore<super::SettingsData>,
     cont_store: &ServiceStore<crate::services::continuity::ContinuityData>,
     cont_tx: &Sender<crate::services::continuity::ContinuityCmd>,
     settings_tx: &Sender<SettingsCmd>,
 ) {
-    use crate::services::continuity::{ContinuityCmd, PeerArrangement, Side, PeerConfig};
-    use super::config::{ArrangementSide, PeerPersistedConfig};
-    use std::collections::HashMap;
+    use crate::services::continuity::ContinuityCmd;
 
-    // ── Config → Service ──────────────────────────────────────────────────
+    // ── Config → Service (enabled only) ──────────────────────────────────
     let ctx = cont_tx.clone();
     let c_store = cont_store.clone();
     settings_store.subscribe(move |data| {
         let cfg = &data.config.continuity;
         let current = c_store.get();
 
-        // 1. Enabled state
         if cfg.enabled != current.enabled {
             let _ = ctx.try_send(ContinuityCmd::SetEnabled(cfg.enabled));
         }
-
-        // 2. Peer Configs (Arrangements)
-        let mut service_update = HashMap::new();
-        for p_cfg in &cfg.peer_configs {
-            let side = match p_cfg.arrangement_side {
-                ArrangementSide::Left => Side::Left,
-                ArrangementSide::Right => Side::Right,
-                ArrangementSide::Top => Side::Top,
-                ArrangementSide::Bottom => Side::Bottom,
-            };
-            let offset = match side {
-                Side::Left | Side::Right => p_cfg.arrangement_y,
-                Side::Top | Side::Bottom => p_cfg.arrangement_x,
-            };
-
-            service_update.insert(p_cfg.device_id.clone(), PeerConfig {
-                trusted: p_cfg.trusted,
-                arrangement: PeerArrangement { side, offset },
-                clipboard: p_cfg.clipboard,
-                audio: p_cfg.audio,
-                drag_drop: p_cfg.drag_drop,
-                version: p_cfg.version,
-            });
-        }
-
-        // Only send update if different from what service has
-        if service_update != current.peer_configs {
-            let _ = ctx.try_send(ContinuityCmd::UpdatePeerConfigs(service_update));
-        }
     });
 
-    // ── Service → Config ──────────────────────────────────────────────────
+    // ── Service → Config (enabled only) ──────────────────────────────────
     let s_tx = settings_tx.clone();
-    let last_state: Rc<RefCell<Option<(bool, Vec<PeerSyncSnapshot>)>>> = Rc::new(RefCell::new(None));
-    
-    cont_store.subscribe(move |data| {
-        use crate::services::continuity::Side;
-        let mut current_peers: Vec<PeerSyncSnapshot> = data.peer_configs.iter()
-            .map(|(id, cfg)| PeerSyncSnapshot {
-                device_id: id.clone(),
-                side: cfg.arrangement.side,
-                offset: cfg.arrangement.offset,
-                clipboard: cfg.clipboard,
-                audio: cfg.audio,
-                drag_drop: cfg.drag_drop,
-                version: cfg.version,
-                trusted: cfg.trusted,
-            })
-            .collect();
-        current_peers.sort_by(|a, b| a.device_id.cmp(&b.device_id));
+    let last_enabled: Rc<RefCell<Option<bool>>> = Rc::new(RefCell::new(None));
 
-        let state = (data.enabled, current_peers.clone());
-        if last_state.borrow().as_ref() == Some(&state) {
+    cont_store.subscribe(move |data| {
+        if last_enabled.borrow().as_ref() == Some(&data.enabled) {
             return;
         }
-        *last_state.borrow_mut() = Some(state);
+        *last_enabled.borrow_mut() = Some(data.enabled);
 
-        log::debug!("[sync] continuity→config: diff detected (enabled={}, peers={})", data.enabled, current_peers.len());
-        
         let enabled = data.enabled;
-        let peer_updates = current_peers;
-
         let _ = s_tx.try_send(SettingsCmd::UpdatePartial(Box::new(move |cfg| {
             cfg.continuity.enabled = enabled;
-            
-            for peer in peer_updates {
-                let a_side = match peer.side {
-                    Side::Left => ArrangementSide::Left,
-                    Side::Right => ArrangementSide::Right,
-                    Side::Top => ArrangementSide::Top,
-                    Side::Bottom => ArrangementSide::Bottom,
-                };
-                let (ax, ay) = match peer.side {
-                    Side::Left | Side::Right => (0, peer.offset),
-                    Side::Top | Side::Bottom => (peer.offset, 0),
-                };
-
-                if let Some(p) = cfg.continuity.peer_configs.iter_mut().find(|p| p.device_id == peer.device_id) {
-                    if p.arrangement_side != a_side 
-                        || p.arrangement_x != ax 
-                        || p.arrangement_y != ay 
-                        || p.clipboard != peer.clipboard
-                        || p.audio != peer.audio
-                        || p.drag_drop != peer.drag_drop
-                        || p.version != peer.version
-                        || p.trusted != peer.trusted
-                    {
-                        p.arrangement_side = a_side;
-                        p.arrangement_x = ax;
-                        p.arrangement_y = ay;
-                        p.clipboard = peer.clipboard;
-                        p.audio = peer.audio;
-                        p.drag_drop = peer.drag_drop;
-                        p.version = peer.version;
-                        p.trusted = peer.trusted;
-                    }
-                } else {
-                    cfg.continuity.peer_configs.push(PeerPersistedConfig {
-                        device_id: peer.device_id,
-                        device_name: "New Peer".to_string(),
-                        trusted: peer.trusted,
-                        arrangement_side: a_side,
-                        arrangement_x: ax,
-                        arrangement_y: ay,
-                        clipboard: peer.clipboard,
-                        audio: peer.audio,
-                        drag_drop: peer.drag_drop,
-                        version: peer.version,
-                    });
-                }
-            }
         })));
     });
 }
@@ -220,12 +108,14 @@ pub fn wire_nightlight_config_sync(
         let _ = nl_tx.try_send(NightlightCmd::Toggle(nl.enabled));
         let _ = nl_tx.try_send(NightlightCmd::SetTempDay(nl.temp_day));
         let _ = nl_tx.try_send(NightlightCmd::SetTempNight(nl.temp_night));
-        let _ = nl_tx.try_send(NightlightCmd::SetSchedule(
-            nl.sunrise.clone(), nl.sunset.clone(),
-        ));
-        if !nl.latitude.is_empty() && !nl.longitude.is_empty() {
+        let _ = nl_tx.try_send(NightlightCmd::SetAutoSchedule(nl.auto_schedule));
+        if nl.auto_schedule && !nl.latitude.is_empty() && !nl.longitude.is_empty() {
             let _ = nl_tx.try_send(NightlightCmd::SetLocation(
                 nl.latitude.clone(), nl.longitude.clone(),
+            ));
+        } else if !nl.auto_schedule && !nl.sunrise.is_empty() && !nl.sunset.is_empty() {
+            let _ = nl_tx.try_send(NightlightCmd::SetSchedule(
+                nl.sunrise.clone(), nl.sunset.clone(),
             ));
         }
     });

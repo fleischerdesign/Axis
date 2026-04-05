@@ -210,6 +210,18 @@ impl ContinuityDbusServer {
         self.cmd_tx.try_send(ContinuityCmd::SetEnabled(enabled)).is_ok()
     }
 
+    /// Update peer configs (capabilities, arrangement) as JSON.
+    /// Accepts a JSON object mapping device_id → partial config updates.
+    async fn update_peer_configs(&self, json: &str) -> bool {
+        match serde_json::from_str::<HashMap<String, PeerConfig>>(json) {
+            Ok(configs) => self.cmd_tx.try_send(ContinuityCmd::UpdatePeerConfigs(configs)).is_ok(),
+            Err(e) => {
+                log::warn!("[continuity-dbus] Failed to parse peer configs: {e}");
+                false
+            }
+        }
+    }
+
     #[zbus(property)]
     fn version(&self) -> &str {
         env!("CARGO_PKG_VERSION")

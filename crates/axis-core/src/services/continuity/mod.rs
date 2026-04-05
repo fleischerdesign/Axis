@@ -266,13 +266,8 @@ impl ContinuityInner {
         let known_peers = known_peers::load_known_peers();
         let mut data = ContinuityData::default();
 
-        for (id, peer) in &known_peers.peers {
-            if peer.trusted {
-                data.peer_configs.insert(id.clone(), PeerConfig {
-                    trusted: true,
-                    ..Default::default()
-                });
-            }
+        for (id, known_peer) in &known_peers.peers {
+            data.peer_configs.insert(id.clone(), known_peer.to_peer_config());
         }
 
         Self {
@@ -288,38 +283,57 @@ impl ContinuityInner {
     }
 
     fn persist_known_peers(&self) {
-        let known_map: std::collections::HashMap<_, _> = self.known_peers.peers.iter()
-            .map(|(id, p)| (id, p))
-            .collect();
-        let peers_map: std::collections::HashMap<_, _> = self.data.peers.iter()
-            .map(|p| (&p.device_id, p))
-            .collect();
-
-        let peers = self.data.peer_configs.iter()
+        let peers: std::collections::HashMap<_, _> = self.data.peer_configs.iter()
             .filter(|(_, c)| c.trusted)
             .filter_map(|(id, config)| {
-                let known_peer = known_map.get(id).map(|p| {
-                    (id.clone(), known_peers::KnownPeer {
-                        device_id: p.device_id.clone(),
-                        device_name: p.device_name.clone(),
-                        hostname: p.hostname.clone(),
-                        address: p.address.clone(),
-                        address_v6: p.address_v6.clone(),
-                        trusted: config.trusted,
+                let existing = self.known_peers.peers.get(id);
+                let (device_name, hostname, address, address_v6) = existing
+                    .map(|kp| (
+                        kp.device_name.clone(),
+                        kp.hostname.clone(),
+                        kp.address.clone(),
+                        kp.address_v6.clone(),
+                    ))
+                    .or_else(|| {
+                        self.data.peers.iter()
+                            .find(|p| &p.device_id == id)
+                            .map(|p| (
+                                p.device_name.clone(),
+                                p.hostname.clone(),
+                                p.address.to_string(),
+                                p.address_v6.map(|a| a.to_string()),
+                            ))
                     })
-                }).or_else(|| {
-                    peers_map.get(id).map(|peer| {
-                        (id.clone(), known_peers::KnownPeer {
-                            device_id: peer.device_id.clone(),
-                            device_name: peer.device_name.clone(),
-                            hostname: peer.hostname.clone(),
-                            address: peer.address.to_string(),
-                            address_v6: peer.address_v6.map(|a| a.to_string()),
-                            trusted: config.trusted,
-                        })
-                    })
-                });
-                known_peer
+                    .unwrap_or_else(|| (String::new(), String::new(), String::new(), None));
+
+                let (arrangement_side, arrangement_x, arrangement_y) = match config.arrangement.side {
+                    Side::Left | Side::Right => (
+                        known_peers::KnownPeerArrangementSide::from(config.arrangement.side),
+                        0,
+                        config.arrangement.offset,
+                    ),
+                    Side::Top | Side::Bottom => (
+                        known_peers::KnownPeerArrangementSide::from(config.arrangement.side),
+                        config.arrangement.offset,
+                        0,
+                    ),
+                };
+
+                let known_peer = known_peers::KnownPeer {
+                    device_id: id.clone(),
+                    device_name,
+                    hostname,
+                    address,
+                    address_v6,
+                    trusted: config.trusted,
+                    clipboard: config.clipboard,
+                    audio: config.audio,
+                    drag_drop: config.drag_drop,
+                    arrangement_side,
+                    arrangement_x,
+                    arrangement_y,
+                };
+                Some((id.clone(), known_peer))
             })
             .collect();
 

@@ -5,6 +5,8 @@ use log::{error, info, warn};
 use std::process::{Child, Command, Stdio};
 use std::thread;
 
+pub mod solar;
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct NightlightData {
     pub enabled: bool,
@@ -15,6 +17,7 @@ pub struct NightlightData {
     pub sunset: String,
     pub latitude: String,
     pub longitude: String,
+    pub auto_schedule: bool,
 }
 
 impl Default for NightlightData {
@@ -28,6 +31,7 @@ impl Default for NightlightData {
             sunset: "20:00".to_string(),
             latitude: "".to_string(),
             longitude: "".to_string(),
+            auto_schedule: false,
         }
     }
 }
@@ -38,6 +42,7 @@ pub enum NightlightCmd {
     SetTempNight(u32),
     SetSchedule(String, String), // sunrise, sunset
     SetLocation(String, String), // lat, long
+    SetAutoSchedule(bool),
 }
 
 pub struct NightlightService;
@@ -133,6 +138,11 @@ impl NightlightService {
                 data.longitude = lo;
                 data.sunrise.clear();
                 data.sunset.clear();
+                Self::restart_if_enabled(child, data);
+            }
+            NightlightCmd::SetAutoSchedule(on) => {
+                info!("[nightlight] auto_schedule {}", if on { "enabled" } else { "disabled" });
+                data.auto_schedule = on;
                 Self::restart_if_enabled(child, data);
             }
         }

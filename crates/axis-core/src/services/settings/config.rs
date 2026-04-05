@@ -176,6 +176,8 @@ pub struct NightlightConfig {
     pub latitude: String,
     #[serde(default)]
     pub longitude: String,
+    #[serde(default)]
+    pub auto_schedule: bool,
 }
 
 impl Default for NightlightConfig {
@@ -188,6 +190,7 @@ impl Default for NightlightConfig {
             sunset: "20:00".into(),
             latitude: String::new(),
             longitude: String::new(),
+            auto_schedule: false,
         }
     }
 }
@@ -201,44 +204,9 @@ impl ConfigSection for NightlightConfig {
 pub struct ContinuityConfig {
     #[serde(default)]
     pub enabled: bool,
-    #[serde(default)]
-    pub peer_configs: Vec<PeerPersistedConfig>,
 }
 impl ConfigSection for ContinuityConfig {
     const SECTION_KEY: &'static str = "Continuity";
-}
-
-/// Which edge of the local screen a peer is positioned at.
-/// Mirrors `axis_core::services::continuity::protocol::Side` for config persistence.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
-pub enum ArrangementSide {
-    Left,
-    #[default]
-    Right,
-    Top,
-    Bottom,
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-pub struct PeerPersistedConfig {
-    pub device_id: String,
-    pub device_name: String,
-    #[serde(default)]
-    pub trusted: bool,
-    #[serde(default = "default_true")]
-    pub clipboard: bool,
-    #[serde(default)]
-    pub audio: bool,
-    #[serde(default)]
-    pub drag_drop: bool,
-    #[serde(default)]
-    pub arrangement_x: i32,
-    #[serde(default)]
-    pub arrangement_y: i32,
-    #[serde(default)]
-    pub arrangement_side: ArrangementSide,
-    #[serde(default)]
-    pub version: u64,
 }
 
 // ── Services Config ─────────────────────────────────────────────────────────

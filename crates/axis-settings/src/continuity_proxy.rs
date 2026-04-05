@@ -4,7 +4,7 @@ use gtk4::glib;
 use zbus::Connection;
 
 use axis_core::services::continuity::dbus::ContinuityStateSnapshot;
-use axis_core::services::continuity::PeerArrangement;
+use axis_core::services::continuity::{PeerArrangement, PeerConfig};
 
 macro_rules! dbus_command {
     ($fn_name:ident, $method:ident) => {
@@ -184,6 +184,7 @@ impl ContinuityProxy {
     dbus_command!(reject_pin, RejectPin);
     dbus_command!(disconnect, Disconnect);
     dbus_command!(set_enabled, SetEnabled, enabled: bool);
+    dbus_command!(unpair, Unpair, peer_id: &str);
 
     pub async fn set_peer_arrangement(
         &self,
@@ -202,5 +203,49 @@ impl ContinuityProxy {
             .body()
             .deserialize()?;
         Ok(result)
+    }
+
+    pub async fn update_peer_configs(
+        &self,
+        configs: &std::collections::HashMap<String, PeerConfig>,
+    ) -> Result<bool, Box<dyn std::error::Error>> {
+        let json = serde_json::to_string(configs)?;
+        let result: bool = self.conn
+            .call_method(
+                Some("org.axis.Shell"),
+                "/org/axis/Shell/Continuity",
+                Some("org.axis.Shell.Continuity"),
+                "UpdatePeerConfigs",
+                &(&json,),
+            )
+            .await?
+            .body()
+            .deserialize()?;
+        Ok(result)
+    }
+
+    /// Convenience: update a single peer's config fields.
+    /// Fetches current state, merges the update, and sends it.
+    pub async fn update_peer_config_fields(
+        &self,
+        peer_id: &str,
+        clipboard: Option<bool>,
+        audio: Option<bool>,
+        drag_drop: Option<bool>,
+    ) -> Result<bool, Box<dyn std::error::Error>> {
+        let state = self.state();
+        let mut configs = std::collections::HashMap::new();
+        if let Some(current) = state.peer_configs.get(peer_id) {
+            let mut updated = current.clone();
+            if let Some(v) = clipboard { updated.clipboard = v; }
+            if let Some(v) = audio { updated.audio = v; }
+            if let Some(v) = drag_drop { updated.drag_drop = v; }
+            updated.version += 1;
+            configs.insert(peer_id.to_string(), updated);
+        }
+        if configs.is_empty() {
+            return Ok(false);
+        }
+        self.update_peer_configs(&configs).await
     }
 }

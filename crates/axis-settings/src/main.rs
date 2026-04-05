@@ -11,6 +11,7 @@ use std::rc::Rc;
 
 use proxy::SettingsProxy;
 use continuity_proxy::ContinuityProxy;
+use page::SettingsPage;
 
 fn main() {
     // Tokio runtime must live as long as the app — zbus uses it for its
@@ -71,6 +72,7 @@ fn build_window(
     proxy: &Rc<SettingsProxy>,
     continuity: Option<&Rc<ContinuityProxy>>,
 ) {
+    use std::cell::RefCell;
     use std::collections::HashMap;
 
     let window = libadwaita::ApplicationWindow::builder()
@@ -80,6 +82,22 @@ fn build_window(
         .default_height(650)
         .build();
 
+    // ── HeaderBar ────────────────────────────────────────────────────────
+
+    let header = libadwaita::HeaderBar::new();
+
+    let back_btn = gtk4::Button::builder()
+        .icon_name("go-previous-symbolic")
+        .visible(false)
+        .build();
+    header.pack_start(&back_btn);
+
+    let title_label = gtk4::Label::builder()
+        .label("Axis Settings")
+        .css_classes(["title"])
+        .build();
+    header.set_title_widget(Some(&title_label));
+
     // ── Navigation ───────────────────────────────────────────────────────
 
     let sidebar_list = gtk4::ListBox::builder()
@@ -88,11 +106,12 @@ fn build_window(
 
     let nav_view = libadwaita::NavigationView::new();
 
-    let all_pages = pages::all_pages(continuity);
-
-    // Build pages and store references for navigation
+    // Build pages — continuity page needs special handling for peer navigation
     let mut page_map: HashMap<String, libadwaita::NavigationPage> = HashMap::new();
     let mut first = true;
+
+    let all_pages: Vec<Box<dyn page::SettingsPage>> = pages::all_pages_except(continuity, "continuity");
+
     for page in &all_pages {
         let widget = page.build(proxy);
         let nav_page = libadwaita::NavigationPage::with_tag(
@@ -110,27 +129,86 @@ fn build_window(
         sidebar_list.append(&row);
     }
 
+    // Continuity page with peer navigation callback
+    let nav_view_for_continuity = nav_view.clone();
+    let continuity_page = if let Some(cp) = continuity {
+        let cp_clone = cp.clone();
+        let cp_for_name = cp.clone();
+        pages::ContinuityPage::new(Some(&cp))
+            .with_peer_callback(move |peer_id: String| {
+                let cp = cp_clone.clone();
+                let state = cp_for_name.state();
+                let peer_name = state.peers.iter()
+                    .find(|p| p.device_id == peer_id)
+                    .map(|p| p.device_name.clone())
+                    .unwrap_or_else(|| peer_id.clone());
+                let page = pages::PeerDetailPage::new(peer_id.clone(), peer_name.clone(), cp);
+                let widget = page.build();
+                let nav_page = libadwaita::NavigationPage::with_tag(
+                    &widget, &peer_name, "peer_detail",
+                );
+                nav_view_for_continuity.push(&nav_page);
+            })
+    } else {
+        pages::ContinuityPage::new(None)
+    };
+
+    let cont_widget = continuity_page.build(proxy);
+    let cont_nav_page = libadwaita::NavigationPage::with_tag(
+        &cont_widget, continuity_page.title(), continuity_page.id(),
+    );
+
+    if first {
+        nav_view.push(&cont_nav_page);
+        first = false;
+    }
+
+    page_map.insert(continuity_page.id().to_string(), cont_nav_page);
+
+    let row = pages::create_sidebar_row(continuity_page.title(), continuity_page.icon(), continuity_page.id());
+    sidebar_list.append(&row);
+
     // Select first page by default
     if let Some(first_row) = sidebar_list.row_at_index(0) {
         sidebar_list.select_row(Some(&first_row));
     }
 
-    // Sidebar selection → pop current, push new page
+    // ── HeaderBar: update title + back button on navigation ─────────────
+
+    let nav_view_title = nav_view.clone();
+    let title_label_c = title_label.clone();
+    let back_btn_c = back_btn.clone();
+    nav_view.connect_visible_page_notify(move |_| {
+        if let Some(page) = nav_view_title.visible_page() {
+            let title = page.title().to_string();
+            title_label_c.set_text(&title);
+
+            // Show back button only for peer_detail subpages
+            let is_subpage = page.tag().as_deref() == Some("peer_detail");
+            back_btn_c.set_visible(is_subpage);
+        }
+    });
+
+    let nav_view_back = nav_view.clone();
+    back_btn.connect_clicked(move |_| {
+        nav_view_back.pop();
+    });
+
+    // ── Sidebar selection → replace current page (no stack entry) ────────
+
     let nav_view_c = nav_view.clone();
     let page_map = Rc::new(page_map);
     sidebar_list.connect_row_selected(move |_, row| {
         if let Some(row) = row {
             let id = row.widget_name();
             if !id.is_empty() {
-                // Don't navigate if already on this page
                 let current_tag = nav_view_c.visible_page()
                     .and_then(|p| p.tag().map(|t| t.to_string()));
                 if current_tag.as_deref() == Some(id.as_str()) {
                     return;
                 }
-                nav_view_c.pop();
                 if let Some(nav_page) = page_map.get(id.as_str()) {
-                    nav_view_c.push(nav_page);
+                    nav_view_c.replace(&[nav_page.clone()]);
                 }
             }
         }
@@ -141,23 +219,26 @@ fn build_window(
     let sidebar_scrolled = gtk4::ScrolledWindow::builder()
         .hscrollbar_policy(gtk4::PolicyType::Never)
         .vexpand(true)
-        .min_content_width(220)
         .child(&sidebar_list)
         .build();
+    sidebar_scrolled.set_hexpand(false);
+    sidebar_scrolled.set_size_request(220, -1);
 
-    let sidebar_page = libadwaita::NavigationPage::new(&sidebar_scrolled, "Settings");
+    nav_view.set_hexpand(true);
+    nav_view.set_vexpand(true);
 
-    let split_view = libadwaita::NavigationSplitView::builder()
-        .sidebar(&sidebar_page)
-        .content(&libadwaita::NavigationPage::new(&nav_view, "Settings"))
-        .sidebar_width_fraction(0.3)
-        .build();
+    let content_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+    content_box.set_hexpand(true);
+    content_box.set_vexpand(true);
+    content_box.append(&sidebar_scrolled);
+    content_box.append(&nav_view);
 
-    let toolbar = libadwaita::ToolbarView::builder()
-        .content(&split_view)
-        .build();
-    toolbar.add_top_bar(&libadwaita::HeaderBar::new());
+    let main_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    main_box.set_hexpand(true);
+    main_box.set_vexpand(true);
+    main_box.append(&header);
+    main_box.append(&content_box);
 
-    window.set_content(Some(&toolbar));
+    window.set_content(Some(&main_box));
     window.present();
 }

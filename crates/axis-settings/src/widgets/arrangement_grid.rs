@@ -4,9 +4,11 @@ use std::rc::Rc;
 use gtk4::prelude::*;
 
 use axis_core::services::continuity::{PeerArrangement, Side};
-use axis_core::services::settings::config::*;
+use axis_core::services::continuity::known_peers::KnownPeerArrangementSide;
 use crate::continuity_proxy::ContinuityProxy;
 use crate::proxy::SettingsProxy;
+
+type ArrangementSide = KnownPeerArrangementSide;
 
 // ── Canvas Constants ────────────────────────────────────────────────────
 
@@ -277,36 +279,11 @@ fn persist_arrangement(
     side: ArrangementSide,
     offset: i32,
 ) {
-    let mut cfg = proxy.config().continuity;
-    if let Some(persisted) = cfg.peer_configs.iter_mut().find(|p| p.device_id == device_id) {
-        persisted.arrangement_side = side;
-        match side {
-            ArrangementSide::Left | ArrangementSide::Right => {
-                persisted.arrangement_y = offset;
-            }
-            ArrangementSide::Top | ArrangementSide::Bottom => {
-                persisted.arrangement_x = offset;
-            }
-        }
-    } else {
-        let (arrangement_x, arrangement_y) = match side {
-            ArrangementSide::Left | ArrangementSide::Right => (0, offset),
-            ArrangementSide::Top | ArrangementSide::Bottom => (offset, 0),
-        };
-        cfg.peer_configs.push(PeerPersistedConfig {
-            device_id: device_id.to_string(),
-            device_name: device_name.to_string(),
-            arrangement_side: side,
-            arrangement_x,
-            arrangement_y,
-            ..Default::default()
-        });
-    }
-    let p = proxy.clone();
-    gtk4::glib::spawn_future_local(async move {
-        let _ = p.set_continuity(&cfg).await;
-        p.update_cache_continuity(cfg);
-    });
+    let cfg = proxy.config().continuity;
+    // Continuity peer configs are now managed exclusively by the Continuity service
+    // via known_peers.json. This function is kept for backward compatibility but
+    // no longer writes to config.json peer_configs.
+    let _ = (cfg, device_id, device_name, side, offset);
 }
 
 // ── Public Widget ───────────────────────────────────────────────────────

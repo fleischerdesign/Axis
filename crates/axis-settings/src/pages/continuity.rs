@@ -11,13 +11,20 @@ use axis_core::services::continuity::dbus::ContinuityStateSnapshot;
 
 pub struct ContinuityPage {
     continuity: Option<Rc<ContinuityProxy>>,
+    on_peer_clicked: Option<Rc<dyn Fn(String)>>,
 }
 
 impl ContinuityPage {
     pub fn new(continuity: Option<&Rc<ContinuityProxy>>) -> Self {
         Self {
             continuity: continuity.cloned(),
+            on_peer_clicked: None,
         }
+    }
+
+    pub fn with_peer_callback(mut self, cb: impl Fn(String) + 'static) -> Self {
+        self.on_peer_clicked = Some(Rc::new(cb));
+        self
     }
 }
 
@@ -50,7 +57,6 @@ impl SettingsPage for ContinuityPage {
                 let enabled = row.is_active();
                 gtk4::glib::spawn_future_local(async move {
                     let _ = p.set_enabled(enabled).await;
-                    // Reload after toggle to get fresh peer list
                     p.reload();
                 });
             });
@@ -70,65 +76,6 @@ impl SettingsPage for ContinuityPage {
         }
         main_group.add(&enable_row);
 
-        // Reactive: update enable switch on external config changes (fallback path)
-        if self.continuity.is_none() {
-            let enable_row_c = enable_row.clone();
-            let updating_c = updating.clone();
-            let proxy_c = proxy.clone();
-            proxy.on_change(move || {
-                let cfg = proxy_c.config();
-                updating_c.set(true);
-                enable_row_c.set_active(cfg.continuity.enabled);
-                updating_c.set(false);
-            });
-        }
-
-        // ── Status Row (single row: status + action) ────────────────────
-        let status_group = libadwaita::PreferencesGroup::builder()
-            .title("Connection")
-            .build();
-
-        let status_row = libadwaita::ActionRow::builder()
-            .title("Disconnected")
-            .build();
-
-        let status_action_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
-        status_action_box.set_valign(gtk4::Align::Center);
-
-        let disconnect_btn = gtk4::Button::builder()
-            .label("Disconnect")
-            .css_classes(["destructive-action", "flat"])
-            .valign(gtk4::Align::Center)
-            .visible(false)
-            .build();
-        status_action_box.append(&disconnect_btn);
-        status_row.add_suffix(&status_action_box);
-        status_group.add(&status_row);
-
-        // PIN confirmation (hidden by default)
-        let pin_row = libadwaita::ActionRow::builder()
-            .title("Pairing Request")
-            .build();
-
-        let pin_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
-        pin_box.set_valign(gtk4::Align::Center);
-
-        let pin_confirm_btn = gtk4::Button::builder()
-            .label("Accept")
-            .css_classes(["suggested-action", "flat"])
-            .valign(gtk4::Align::Center)
-            .build();
-        let pin_reject_btn = gtk4::Button::builder()
-            .label("Decline")
-            .css_classes(["destructive-action", "flat"])
-            .valign(gtk4::Align::Center)
-            .build();
-        pin_box.append(&pin_confirm_btn);
-        pin_box.append(&pin_reject_btn);
-        pin_row.add_suffix(&pin_box);
-        pin_row.set_visible(false);
-        status_group.add(&pin_row);
-
         // ── Arrangement Grid ────────────────────────────────────────────
         let arrangement_group = libadwaita::PreferencesGroup::builder()
             .title("Display Arrangement")
@@ -138,7 +85,7 @@ impl SettingsPage for ContinuityPage {
         let grid = ArrangementGrid::new(proxy, self.continuity.as_ref());
         arrangement_group.add(grid.widget());
 
-        // ── Devices (single unified list) ───────────────────────────────
+        // ── Devices (unified list with connection status) ───────────────
         let devices_group = libadwaita::PreferencesGroup::builder()
             .title("Devices")
             .build();
@@ -149,35 +96,8 @@ impl SettingsPage for ContinuityPage {
         // ── Live Updates via Continuity Proxy ───────────────────────────
         if let Some(ref cp) = self.continuity {
             let cp_c = cp.clone();
-            let status_row_c = status_row.clone();
-            let disconnect_btn_c = disconnect_btn.clone();
-            let pin_row_c = pin_row.clone();
             let devices_list_c = devices_list.clone();
-
-            // Disconnect button
-            let cp_d = cp_c.clone();
-            disconnect_btn.connect_clicked(move |_| {
-                let p = cp_d.clone();
-                gtk4::glib::spawn_future_local(async move {
-                    let _ = p.disconnect().await;
-                });
-            });
-
-            // PIN buttons
-            let cp_pc = cp_c.clone();
-            pin_confirm_btn.connect_clicked(move |_| {
-                let p = cp_pc.clone();
-                gtk4::glib::spawn_future_local(async move {
-                    let _ = p.confirm_pin().await;
-                });
-            });
-            let cp_pr = cp_c.clone();
-            pin_reject_btn.connect_clicked(move |_| {
-                let p = cp_pr.clone();
-                gtk4::glib::spawn_future_local(async move {
-                    let _ = p.reject_pin().await;
-                });
-            });
+            let on_peer_clicked = self.on_peer_clicked.clone().unwrap_or_else(|| Rc::new(|_| {}));
 
             // Main update callback
             let proxy_c = proxy.clone();
@@ -188,15 +108,11 @@ impl SettingsPage for ContinuityPage {
                 updating_c.set(true);
                 enable_row_c.set_active(state.enabled);
                 updating_c.set(false);
-                update_status(&status_row_c, &disconnect_btn_c, &state);
-                update_pin(&pin_row_c, &state);
-                rebuild_devices_list(&devices_list_c, &state, &cp_c, &proxy_c);
+                rebuild_devices_list(&devices_list_c, &state, &cp_c, on_peer_clicked.clone());
             });
 
-            // Ensure fresh data when page is first shown
             cp.reload();
         } else {
-            // No continuity proxy — show static persisted peers
             let row = libadwaita::ActionRow::builder()
                 .title("No devices found")
                 .subtitle("Enable Continuity and pair devices via Quick Settings")
@@ -208,66 +124,71 @@ impl SettingsPage for ContinuityPage {
         // ── Page Assembly ───────────────────────────────────────────────
         let page = libadwaita::PreferencesPage::new();
         page.add(&main_group);
-        page.add(&status_group);
         page.add(&arrangement_group);
         page.add(&devices_group);
         page.into()
     }
 }
 
-// ── Update Helpers ──────────────────────────────────────────────────────
-
-fn update_status(
-    row: &libadwaita::ActionRow,
-    disconnect_btn: &gtk4::Button,
-    state: &ContinuityStateSnapshot,
-) {
-    if let Some(ref conn) = state.active_connection {
-        row.set_title(&format!("Connected to {}", conn.peer_name));
-        if conn.connected_secs < 60 {
-            row.set_subtitle(&format!("{}s ago", conn.connected_secs));
-        } else {
-            let mins = conn.connected_secs / 60;
-            row.set_subtitle(&format!("{}m ago", mins));
-        }
-        disconnect_btn.set_visible(true);
-        disconnect_btn.set_sensitive(true);
-    } else {
-        row.set_title("Disconnected");
-        row.set_subtitle("");
-        disconnect_btn.set_visible(false);
-    }
-}
-
-fn update_pin(row: &libadwaita::ActionRow, state: &ContinuityStateSnapshot) {
-    // Only show PIN confirmation for incoming requests
-    // (the device that receives the connection request needs to accept/decline)
-    if let Some(ref pin) = state.pending_pin {
-        if pin.is_incoming {
-            row.set_title(&format!("{} wants to connect", pin.peer_name));
-            row.set_subtitle("Waiting for your approval");
-            row.set_visible(true);
-        } else {
-            // Outgoing request — we're waiting for the other side to accept
-            row.set_visible(false);
-        }
-    } else {
-        row.set_visible(false);
-    }
-}
+// ── Device List Builder ─────────────────────────────────────────────────
 
 fn rebuild_devices_list(
     container: &gtk4::Box,
     state: &ContinuityStateSnapshot,
     cp: &Rc<ContinuityProxy>,
-    _settings: &Rc<SettingsProxy>,
+    on_peer_clicked: Rc<dyn Fn(String)>,
 ) {
-    // Clear all children
     while let Some(child) = container.first_child() {
         container.remove(&child);
     }
 
-    if state.peers.is_empty() {
+    // ── PIN Request Row (if incoming) ───────────────────────────────────
+    if let Some(ref pin) = state.pending_pin {
+        if pin.is_incoming {
+            let pin_row = libadwaita::ActionRow::builder()
+                .title(&format!("{} möchte verbinden", pin.peer_name))
+                .subtitle("Pairing-Anfrage")
+                .build();
+
+            let pin_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
+            pin_box.set_valign(gtk4::Align::Center);
+
+            let accept_btn = gtk4::Button::builder()
+                .label("Accept")
+                .css_classes(["suggested-action", "flat"])
+                .valign(gtk4::Align::Center)
+                .build();
+            let decline_btn = gtk4::Button::builder()
+                .label("Decline")
+                .css_classes(["destructive-action", "flat"])
+                .valign(gtk4::Align::Center)
+                .build();
+            pin_box.append(&accept_btn);
+            pin_box.append(&decline_btn);
+            pin_row.add_suffix(&pin_box);
+
+            let cp_a = cp.clone();
+            accept_btn.connect_clicked(move |_| {
+                let p = cp_a.clone();
+                gtk4::glib::spawn_future_local(async move {
+                    let _ = p.confirm_pin().await;
+                });
+            });
+
+            let cp_d = cp.clone();
+            decline_btn.connect_clicked(move |_| {
+                let p = cp_d.clone();
+                gtk4::glib::spawn_future_local(async move {
+                    let _ = p.reject_pin().await;
+                });
+            });
+
+            container.append(&pin_row);
+        }
+    }
+
+    // ── Peer Rows ───────────────────────────────────────────────────────
+    if state.peers.is_empty() && state.pending_pin.as_ref().map_or(true, |p| !p.is_incoming) {
         let row = libadwaita::ActionRow::builder()
             .title("No devices found")
             .subtitle("Make sure Continuity is enabled on other devices")
@@ -284,15 +205,59 @@ fn rebuild_devices_list(
 
         let row = libadwaita::ActionRow::builder()
             .title(&peer.device_name)
-            .subtitle(&peer.hostname)
             .build();
 
+        // Connection status subtitle
         if is_connected {
-            let status_icon = gtk4::Image::from_icon_name("emblem-ok-symbolic");
-            status_icon.set_tooltip_text(Some("Connected"));
-            status_icon.add_css_class("success");
-            status_icon.set_valign(gtk4::Align::Center);
-            row.add_suffix(&status_icon);
+            let connected_secs = state.active_connection
+                .as_ref()
+                .map_or(0, |c| c.connected_secs);
+            let time_str = if connected_secs < 60 {
+                format!("{}s ago", connected_secs)
+            } else {
+                format!("{}m ago", connected_secs / 60)
+            };
+            row.set_subtitle(&format!("Verbunden · {}", time_str));
+        } else {
+            row.set_subtitle(&peer.hostname);
+        }
+
+        // Row click → peer detail (GestureClick since it's in a Box, not ListBox)
+        let gesture = gtk4::GestureClick::new();
+        let on_click = on_peer_clicked.clone();
+        let peer_id = peer.device_id.clone();
+        gesture.connect_released(move |_, _, _, _| {
+            on_click(peer_id.clone());
+        });
+        row.add_controller(gesture);
+
+        // Suffix: arrow for all peers
+        let arrow = gtk4::Image::from_icon_name("go-next-symbolic");
+        arrow.set_valign(gtk4::Align::Center);
+        row.add_suffix(&arrow);
+
+        // Disconnect button for connected peers
+        if is_connected {
+            let disconnect_btn = gtk4::Button::builder()
+                .label("Disconnect")
+                .css_classes(["destructive-action", "flat"])
+                .valign(gtk4::Align::Center)
+                .build();
+
+            let cp_d = cp.clone();
+            disconnect_btn.connect_clicked(move |_| {
+                let p = cp_d.clone();
+                gtk4::glib::spawn_future_local(async move {
+                    let _ = p.disconnect().await;
+                });
+            });
+
+            // Prevent row click when clicking disconnect
+            let stop_gesture = gtk4::GestureClick::new();
+            stop_gesture.connect_released(|_, _, _, _| {});
+            disconnect_btn.add_controller(stop_gesture);
+
+            row.add_suffix(&disconnect_btn);
         } else {
             let connect_btn = gtk4::Button::builder()
                 .label("Connect")
@@ -300,15 +265,21 @@ fn rebuild_devices_list(
                 .valign(gtk4::Align::Center)
                 .build();
 
-            let peer_id = peer.device_id.clone();
-            let proxy_c = cp.clone();
+            let cp_c = cp.clone();
+            let peer_id_c = peer.device_id.clone();
             connect_btn.connect_clicked(move |_| {
-                let p = proxy_c.clone();
-                let id = peer_id.clone();
+                let p = cp_c.clone();
+                let id = peer_id_c.clone();
                 gtk4::glib::spawn_future_local(async move {
                     let _ = p.connect_to_peer(&id).await;
                 });
             });
+
+            // Prevent row click when clicking connect
+            let stop_gesture = gtk4::GestureClick::new();
+            stop_gesture.connect_released(|_, _, _, _| {});
+            connect_btn.add_controller(stop_gesture);
+
             row.add_suffix(&connect_btn);
         }
 

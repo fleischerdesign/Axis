@@ -3,9 +3,10 @@ use std::time::{Instant, Duration};
 use log::{error, info};
 
 use super::{
-    ContinuityInner, SharingState, PeerConfig, PeerArrangement,
-    PendingPin, CONTINUITY_PORT,
+    ContinuityInner, SharingState, PeerConfig, PeerArrangement, Side,
+    CONTINUITY_PORT,
 };
+use super::known_peers;
 use super::clipboard::ClipboardSync;
 use super::connection::{ConnectionProvider, TcpConnectionProvider};
 use super::discovery::{AvahiDiscovery, DiscoveryProvider};
@@ -112,8 +113,23 @@ impl ContinuityInner {
             info!("[continuity] PIN confirmed locally");
             connection.send_message(protocol::Message::PinConfirm { pin: pending.pin.clone() });
 
-            self.data.peer_configs.entry(pending.peer_id.clone()).or_default().trusted = true;
-            self.persist_known_peers();
+            let config = self.data.peer_configs.entry(pending.peer_id.clone()).or_default();
+            config.trusted = true;
+
+            if let Some(known) = self.known_peers.peers.get_mut(&pending.peer_id) {
+                known.trusted = true;
+            } else {
+                self.known_peers.peers.insert(pending.peer_id.clone(), known_peers::KnownPeer {
+                    device_id: pending.peer_id.clone(),
+                    device_name: pending.peer_name.clone(),
+                    hostname: String::new(),
+                    address: String::new(),
+                    address_v6: None,
+                    trusted: true,
+                    ..Default::default()
+                });
+            }
+            known_peers::save_known_peers(&self.known_peers);
 
             if pending.is_incoming {
                 info!("[continuity] Connection to {} is now active", pending.peer_name);
@@ -198,7 +214,8 @@ impl ContinuityInner {
     ) {
         info!("[continuity] unpairing {peer_id}");
         self.data.peer_configs.remove(peer_id);
-        self.persist_known_peers();
+        self.known_peers.peers.remove(peer_id);
+        known_peers::save_known_peers(&self.known_peers);
 
         if self.data.active_connection.as_ref().is_some_and(|c| c.peer_id == peer_id) {
             connection.disconnect_active();
@@ -288,10 +305,23 @@ impl ContinuityInner {
     ) {
         if let Some(conn) = &self.data.active_connection {
             let peer_id = conn.peer_id.clone();
-            let config = self.data.peer_configs.entry(peer_id).or_default();
+            let config = self.data.peer_configs.entry(peer_id.clone()).or_default();
             config.arrangement = arrangement;
             config.version += 1;
             let version = config.version;
+
+            if let Some(known) = self.known_peers.peers.get_mut(&peer_id) {
+                known.arrangement_side = known_peers::KnownPeerArrangementSide::from(arrangement.side);
+                match arrangement.side {
+                    Side::Left | Side::Right => {
+                        known.arrangement_y = arrangement.offset;
+                    }
+                    Side::Top | Side::Bottom => {
+                        known.arrangement_x = arrangement.offset;
+                    }
+                }
+                known_peers::save_known_peers(&self.known_peers);
+            }
 
             info!("[continuity] updated config for peer {}: {:?} (v{})", conn.peer_name, arrangement, version);
 
@@ -313,13 +343,37 @@ impl ContinuityInner {
     ) {
         let mut changed = false;
         for (id, config) in configs {
-            let entry = self.data.peer_configs.entry(id).or_default();
+            let entry = self.data.peer_configs.entry(id.clone()).or_default();
             if entry.version < config.version || (entry.version == config.version && entry.arrangement != config.arrangement) {
-                *entry = config;
+                *entry = config.clone();
                 changed = true;
+            } else if entry.clipboard != config.clipboard
+                || entry.audio != config.audio
+                || entry.drag_drop != config.drag_drop
+            {
+                entry.clipboard = config.clipboard;
+                entry.audio = config.audio;
+                entry.drag_drop = config.drag_drop;
+                changed = true;
+            }
+
+            if let Some(known) = self.known_peers.peers.get_mut(&id) {
+                known.clipboard = config.clipboard;
+                known.audio = config.audio;
+                known.drag_drop = config.drag_drop;
+                known.arrangement_side = known_peers::KnownPeerArrangementSide::from(config.arrangement.side);
+                match config.arrangement.side {
+                    Side::Left | Side::Right => {
+                        known.arrangement_y = config.arrangement.offset;
+                    }
+                    Side::Top | Side::Bottom => {
+                        known.arrangement_x = config.arrangement.offset;
+                    }
+                }
             }
         }
         if changed {
+            known_peers::save_known_peers(&self.known_peers);
             self.push();
         }
     }

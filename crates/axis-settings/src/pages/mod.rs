@@ -4,6 +4,8 @@ mod nightlight;
 mod services;
 mod shortcuts;
 mod continuity;
+mod peer_detail;
+mod about;
 
 pub use bar::BarPage;
 pub use appearance::AppearancePage;
@@ -11,9 +13,12 @@ pub use nightlight::NightlightPage;
 pub use services::ServicesPage;
 pub use shortcuts::ShortcutsPage;
 pub use continuity::ContinuityPage;
+pub use peer_detail::PeerDetailPage;
+pub use about::AboutPage;
+
+pub use crate::page::SettingsPage;
 
 use std::rc::Rc;
-use crate::page::SettingsPage;
 use crate::continuity_proxy::ContinuityProxy;
 
 pub fn all_pages(continuity: Option<&Rc<ContinuityProxy>>) -> Vec<Box<dyn SettingsPage>> {
@@ -24,7 +29,19 @@ pub fn all_pages(continuity: Option<&Rc<ContinuityProxy>>) -> Vec<Box<dyn Settin
         Box::new(ServicesPage),
         Box::new(ContinuityPage::new(continuity)),
         Box::new(ShortcutsPage),
+        Box::new(AboutPage),
     ]
+}
+
+/// Build all pages except the given one (used when that page needs special wiring).
+pub fn all_pages_except(
+    continuity: Option<&Rc<ContinuityProxy>>,
+    except_id: &str,
+) -> Vec<Box<dyn SettingsPage>> {
+    all_pages(continuity)
+        .into_iter()
+        .filter(|p| p.id() != except_id)
+        .collect()
 }
 
 pub fn create_sidebar_row(title: &str, icon: &str, id: &str) -> libadwaita::ActionRow {
