@@ -13,10 +13,11 @@ pub struct NotificationToastManager {
     last_shown_id: Cell<u32>,
     active_toasts: RefCell<HashMap<u32, gtk4::Revealer>>,
     ctx: AppContext,
+    popup_open: Cell<bool>,
 }
 
 thread_local! {
-    static MANAGER: RefCell<Option<NotificationToastManager>> = RefCell::new(None);
+    pub static MANAGER: RefCell<Option<NotificationToastManager>> = RefCell::new(None);
 }
 
 impl NotificationToastManager {
@@ -46,6 +47,7 @@ impl NotificationToastManager {
                 last_shown_id: Cell::new(0),
                 active_toasts: RefCell::new(HashMap::new()),
                 ctx: ctx.clone(),
+                popup_open: Cell::new(false),
             });
         });
 
@@ -144,5 +146,34 @@ impl NotificationToastManager {
                 }),
             );
         }
+    }
+
+    fn hide_all_toasts(&self) {
+        let toasts: Vec<_> = self.active_toasts.borrow_mut().drain().map(|(_, r)| r).collect();
+        if toasts.is_empty() {
+            return;
+        }
+        for revealer in toasts {
+            let container_c = self.container.clone();
+            let window_c = self.window.clone();
+            let container_for_cb = self.container.clone();
+            let window_for_cb = self.window.clone();
+            revealer_handle::animate_out(&revealer, &container_c, Some(move || {
+                if container_for_cb.first_child().is_none() {
+                    window_for_cb.set_visible(false);
+                }
+            }));
+        }
+    }
+
+    pub fn set_popup_open(open: bool) {
+        MANAGER.with_borrow(|m| {
+            if let Some(mgr) = m {
+                mgr.popup_open.set(open);
+                if open {
+                    mgr.hide_all_toasts();
+                }
+            }
+        });
     }
 }

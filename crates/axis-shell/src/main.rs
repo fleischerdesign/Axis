@@ -410,6 +410,10 @@ impl AppShell {
         ));
         shell_ctrl.register(&qs);
 
+        qs.base.is_open.subscribe(move |&is_open| {
+            crate::widgets::notification::toast::NotificationToastManager::set_popup_open(is_open);
+        });
+
         // Archive overlay
         let notification_archive =
             crate::widgets::notification::archive::NotificationArchiveManager::new(ctx.clone());
