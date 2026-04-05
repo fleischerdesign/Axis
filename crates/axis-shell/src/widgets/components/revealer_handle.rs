@@ -6,7 +6,7 @@ use std::time::Duration;
 pub fn create_revealer() -> gtk4::Revealer {
     gtk4::Revealer::builder()
         .transition_type(gtk4::RevealerTransitionType::Crossfade)
-        .transition_duration(250)
+        .transition_duration(REVEALER_TRANSITION_MS)
         .build()
 }
 
