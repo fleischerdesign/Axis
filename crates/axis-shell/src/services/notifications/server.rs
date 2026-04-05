@@ -67,6 +67,7 @@ impl NotificationServer {
             actions: parsed_actions,
             on_action: None,
             internal_id: 0,
+            timeout: 0,
         };
 
         let _ = self.cmd_tx.send_blocking(NotificationCmd::Show(notification));

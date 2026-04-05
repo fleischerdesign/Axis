@@ -64,6 +64,7 @@ fn create_pairing_notification(req: &PairingRequest, tx: Sender<BluetoothCmd>) -
         ],
         on_action: Some(on_action),
         internal_id: 1,
+        timeout: 0,
     }
 }
 

@@ -21,6 +21,7 @@ pub struct Notification {
     #[serde(skip)]
     pub on_action: Option<HashMap<String, Arc<dyn Fn() + Send + Sync>>>,
     pub internal_id: u64,
+    pub timeout: u64,
 }
 
 impl Default for Notification {
@@ -29,6 +30,7 @@ impl Default for Notification {
             id: 0, app_name: String::new(), app_icon: String::new(),
             summary: String::new(), body: String::new(), urgency: 0,
             timestamp: 0, actions: Vec::new(), on_action: None, internal_id: 0,
+            timeout: 0,
         }
     }
 }
@@ -39,7 +41,7 @@ impl PartialEq for Notification {
             && self.app_icon == other.app_icon && self.summary == other.summary
             && self.body == other.body && self.urgency == other.urgency
             && self.timestamp == other.timestamp && self.actions == other.actions
-            && self.internal_id == other.internal_id
+            && self.internal_id == other.internal_id && self.timeout == other.timeout
     }
 }
 

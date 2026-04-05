@@ -3,6 +3,7 @@ pub mod server;
 use crate::services::notifications::server::{NotificationServer, NotificationCmd, NotificationServerSignals};
 use async_channel::{bounded, Sender};
 use log::{error, info};
+use std::time::Duration;
 use zbus::connection::Builder;
 use zbus::object_server::InterfaceRef;
 use axis_core::ServiceStore;
@@ -20,6 +21,7 @@ impl axis_core::Service for NotificationService {
         let (data_tx, data_rx) = bounded::<NotificationData>(64);
         let (cmd_tx, cmd_rx) = bounded::<NotificationCmd>(64);
         let server_cmd_tx = cmd_tx.clone();
+        let return_cmd_tx = cmd_tx.clone();
 
         tokio::spawn(async move {
             let conn = async {
@@ -61,6 +63,7 @@ impl axis_core::Service for NotificationService {
                             NotificationCmd::Show(n) => {
                                 info!("[notifications] {} - {}", n.app_name, n.summary);
                                 let id = n.id;
+                                let timeout = n.timeout;
                                 if let Some(pos) = history.iter().position(|x| x.id == id) {
                                     history[pos] = n;
                                 } else {
@@ -71,6 +74,14 @@ impl axis_core::Service for NotificationService {
                                     notifications: history.clone(),
                                     last_id: id
                                 }).await;
+
+                                if timeout > 0 {
+                                    let tx = cmd_tx.clone();
+                                    tokio::spawn(async move {
+                                        tokio::time::sleep(Duration::from_millis(timeout)).await;
+                                        let _ = tx.send(NotificationCmd::Close(id)).await;
+                                    });
+                                }
                             }
                             NotificationCmd::Close(id) => {
                                 info!("[notifications] Notification {id} closed");
@@ -97,6 +108,6 @@ impl axis_core::Service for NotificationService {
             }
         });
 
-        (ServiceStore::new(data_rx, Default::default()), cmd_tx)
+        (ServiceStore::new(data_rx, Default::default()), return_cmd_tx)
     }
 }

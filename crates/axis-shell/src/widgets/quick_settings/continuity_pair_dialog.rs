@@ -71,6 +71,7 @@ fn create_pairing_notification(
         ],
         on_action: Some(create_pairing_action_handlers(&tx)),
         internal_id: 2,
+        timeout: 0,
     }
 }
 
@@ -86,6 +87,7 @@ fn create_connected_notification(peer_name: &str) -> Notification {
         actions: vec![],
         on_action: None,
         internal_id: 3,
+        timeout: 5000,
     }
 }
 
