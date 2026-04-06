@@ -1,3 +1,5 @@
+pub mod dbus;
+
 use futures_util::StreamExt;
 use zbus::{proxy, Connection, zvariant::OwnedObjectPath};
 use async_channel::{Sender, bounded};

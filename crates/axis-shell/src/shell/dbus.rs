@@ -11,6 +11,8 @@ use crate::services::ipc::IpcService;
 use crate::services::ipc::server::ShellIpcCmd;
 use axis_core::services::settings::dbus::SettingsDbusServer;
 use axis_core::services::continuity::dbus::{ContinuityDbusServer, build_snapshot};
+use axis_core::services::bluetooth::dbus::{BluetoothDbusServer, build_snapshot as build_bt_snapshot};
+use axis_core::services::network::dbus::{NetworkDbusServer, build_snapshot as build_net_snapshot};
 
 pub fn spawn_dbus_host(
     ctx: &AppContext,
@@ -47,6 +49,28 @@ pub fn spawn_dbus_host(
     let continuity_tx = ctx.continuity.tx.clone();
     let continuity_server = ContinuityDbusServer::new(continuity_tx, continuity_state_rx.clone());
 
+    // ── Bluetooth State ────────────────────────────────────────────────────
+    let initial_bt_snapshot = build_bt_snapshot(&ctx.bluetooth.store.get());
+    let (bluetooth_state_tx, bluetooth_state_rx) = tokio::sync::watch::channel(initial_bt_snapshot);
+
+    ctx.bluetooth.store.subscribe(move |data| {
+        let _ = bluetooth_state_tx.send(build_bt_snapshot(data));
+    });
+
+    let bluetooth_tx = ctx.bluetooth.tx.clone();
+    let bluetooth_server = BluetoothDbusServer::new(bluetooth_tx, bluetooth_state_rx.clone());
+
+    // ── Network State ──────────────────────────────────────────────────────
+    let initial_net_snapshot = build_net_snapshot(&ctx.network.store.get());
+    let (network_state_tx, network_state_rx) = tokio::sync::watch::channel(initial_net_snapshot);
+
+    ctx.network.store.subscribe(move |data| {
+        let _ = network_state_tx.send(build_net_snapshot(data));
+    });
+
+    let network_tx = ctx.network.tx.clone();
+    let network_server = NetworkDbusServer::new(network_tx, network_state_rx.clone());
+
     // 2. Setup IPC Command Loop (GTK Thread)
     let shell_ipc = shell_ctrl.clone();
     let ipc_lock = lock_screen.clone();
@@ -70,6 +94,8 @@ pub fn spawn_dbus_host(
             let builder = builder.serve_at("/org/axis/Shell", ipc_server)?;
             let builder = builder.serve_at("/org/axis/Shell/Settings", settings_server)?;
             let builder = builder.serve_at("/org/axis/Shell/Continuity", continuity_server)?;
+            let builder = builder.serve_at("/org/axis/Shell/Bluetooth", bluetooth_server)?;
+            let builder = builder.serve_at("/org/axis/Shell/Network", network_server)?;
             builder.build().await
         }.await;
 
@@ -125,8 +151,60 @@ pub fn spawn_dbus_host(
                     }
                 };
 
-                // Run both signal loops concurrently
-                futures_util::join!(settings_loop, continuity_loop);
+                // Bluetooth signal loop
+                let mut bluetooth_rx = bluetooth_state_rx;
+                let bluetooth_loop = async {
+                    loop {
+                        if bluetooth_rx.changed().await.is_err() {
+                            break;
+                        }
+                        let json = serde_json::to_string(&*bluetooth_rx.borrow_and_update())
+                            .unwrap_or_default();
+                        drop(bluetooth_rx.borrow_and_update());
+
+                        let iface_res = conn
+                            .object_server()
+                            .interface::<_, BluetoothDbusServer>("/org/axis/Shell/Bluetooth")
+                            .await;
+
+                        if let Ok(iface) = iface_res {
+                            let _ = BluetoothDbusServer::state_changed(
+                                iface.signal_emitter(),
+                                &json,
+                            )
+                            .await;
+                        }
+                    }
+                };
+
+                // Network signal loop
+                let mut network_rx = network_state_rx;
+                let network_loop = async {
+                    loop {
+                        if network_rx.changed().await.is_err() {
+                            break;
+                        }
+                        let json = serde_json::to_string(&*network_rx.borrow_and_update())
+                            .unwrap_or_default();
+                        drop(network_rx.borrow_and_update());
+
+                        let iface_res = conn
+                            .object_server()
+                            .interface::<_, NetworkDbusServer>("/org/axis/Shell/Network")
+                            .await;
+
+                        if let Ok(iface) = iface_res {
+                            let _ = NetworkDbusServer::state_changed(
+                                iface.signal_emitter(),
+                                &json,
+                            )
+                            .await;
+                        }
+                    }
+                };
+
+                // Run all signal loops concurrently
+                futures_util::join!(settings_loop, continuity_loop, bluetooth_loop, network_loop);
             }
             Err(e) => error!("[dbus-host] Failed to register D-Bus host: {:?}", e),
         }

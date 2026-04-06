@@ -1,5 +1,7 @@
 mod bindings;
 mod continuity_proxy;
+mod network_proxy;
+mod bluetooth_proxy;
 mod page;
 mod pages;
 mod proxy;
@@ -11,6 +13,8 @@ use std::rc::Rc;
 
 use proxy::SettingsProxy;
 use continuity_proxy::ContinuityProxy;
+use network_proxy::NetworkProxy;
+use bluetooth_proxy::BluetoothProxy;
 use page::SettingsPage;
 
 fn main() {
@@ -59,7 +63,31 @@ fn main() {
             }
         };
 
-        build_window(app, &proxy, continuity_proxy.as_ref());
+        // Load network state via D-Bus (optional)
+        let network_proxy = match rt.block_on(NetworkProxy::new()) {
+            Ok(p) => {
+                log::info!("[settings] Connected to Network D-Bus service");
+                Some(Rc::new(p))
+            }
+            Err(e) => {
+                log::warn!("[settings] Network D-Bus unavailable: {e}");
+                None
+            }
+        };
+
+        // Load bluetooth state via D-Bus (optional)
+        let bluetooth_proxy = match rt.block_on(BluetoothProxy::new()) {
+            Ok(p) => {
+                log::info!("[settings] Connected to Bluetooth D-Bus service");
+                Some(Rc::new(p))
+            }
+            Err(e) => {
+                log::warn!("[settings] Bluetooth D-Bus unavailable: {e}");
+                None
+            }
+        };
+
+        build_window(app, &proxy, continuity_proxy.as_ref(), network_proxy.as_ref(), bluetooth_proxy.as_ref());
     });
 
     let args: Vec<String> = std::env::args().collect();
@@ -71,6 +99,8 @@ fn build_window(
     app: &libadwaita::Application,
     proxy: &Rc<SettingsProxy>,
     continuity: Option<&Rc<ContinuityProxy>>,
+    network: Option<&Rc<NetworkProxy>>,
+    bluetooth: Option<&Rc<BluetoothProxy>>,
 ) {
     use std::cell::RefCell;
     use std::collections::HashMap;
@@ -110,7 +140,7 @@ fn build_window(
     let mut page_map: HashMap<String, libadwaita::NavigationPage> = HashMap::new();
     let mut first = true;
 
-    let all_pages: Vec<Box<dyn page::SettingsPage>> = pages::all_pages_except(continuity, "continuity");
+    let all_pages: Vec<Box<dyn page::SettingsPage>> = pages::all_pages_except(continuity, network, bluetooth, "continuity");
 
     for page in &all_pages {
         let widget = page.build(proxy);

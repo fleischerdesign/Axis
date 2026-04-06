@@ -96,19 +96,19 @@ impl SettingsPage for ContinuityPage {
         // ── Live Updates via Continuity Proxy ───────────────────────────
         if let Some(ref cp) = self.continuity {
             let cp_c = cp.clone();
+            // Main update callback
             let devices_list_c = devices_list.clone();
             let on_peer_clicked = self.on_peer_clicked.clone().unwrap_or_else(|| Rc::new(|_| {}));
 
-            // Main update callback
-            let proxy_c = proxy.clone();
             let enable_row_c = enable_row.clone();
             let updating_c = updating.clone();
+            let cp_inner = cp.clone();
             cp.on_change(move || {
-                let state = cp_c.state();
+                let state = cp_inner.state();
                 updating_c.set(true);
                 enable_row_c.set_active(state.enabled);
                 updating_c.set(false);
-                rebuild_devices_list(&devices_list_c, &state, &cp_c, on_peer_clicked.clone());
+                rebuild_devices_list(&devices_list_c, &state, &cp_inner, on_peer_clicked.clone());
             });
 
             cp.reload();
