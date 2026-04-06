@@ -14,6 +14,7 @@ struct RowEntry {
     list_row: ListRow,
     list_box_row: gtk4::ListBoxRow,
     auth_revealer: gtk4::Revealer,
+    connect_btn: gtk4::Button,
     path: String,
 }
 
@@ -21,7 +22,7 @@ fn build_auth_revealer(
     ap_path: &str,
     ap_ssid: &str,
     tx: &async_channel::Sender<NetworkCmd>,
-) -> gtk4::Revealer {
+) -> (gtk4::Revealer, gtk4::Button) {
     let revealer = gtk4::Revealer::builder()
         .transition_type(gtk4::RevealerTransitionType::SlideDown)
         .transition_duration(200)
@@ -64,7 +65,7 @@ fn build_auth_revealer(
         }
 
         let spinner = gtk4::Spinner::builder()
-            .spinning(false)
+            .spinning(true)
             .css_classes(vec!["subpage-spinner".to_string()])
             .build();
         btn_c.set_child(Some(&spinner));
@@ -77,7 +78,7 @@ fn build_auth_revealer(
         ));
     });
 
-    revealer
+    (revealer, connect_btn)
 }
 
 fn ap_icon(ap: &axis_core::services::network::AccessPointData) -> &'static str {
@@ -170,13 +171,25 @@ impl WifiPage {
                     entry
                         .list_row
                         .update(&ap.ssid, icon, ap.is_active, sublabel, false);
+                    
+                    // If connection was successful: close revealer and reset button
+                    if ap.is_active {
+                        if entry.auth_revealer.reveals_child() {
+                            entry.auth_revealer.set_reveal_child(false);
+                            entry.list_row.container.remove_css_class("expanded");
+                        }
+                        // Reset button state (remove spinner, restore label)
+                        entry.connect_btn.set_child(None::<&gtk4::Widget>);
+                        entry.connect_btn.set_label("Verbinden");
+                        entry.connect_btn.set_sensitive(true);
+                    }
                     continue;
                 }
 
                 // New row
                 let list_row = ListRow::new(&ap.ssid, icon, ap.is_active, sublabel, false);
 
-                let auth_revealer = build_auth_revealer(&ap.path, &ap.ssid, &tx);
+                let (auth_revealer, connect_btn) = build_auth_revealer(&ap.path, &ap.ssid, &tx);
                 list_row.container.append(&auth_revealer);
 
                 let tx_click = tx.clone();
@@ -214,6 +227,7 @@ impl WifiPage {
                         list_row,
                         list_box_row,
                         auth_revealer,
+                        connect_btn,
                         path: ap.path.clone(),
                     },
                 );
