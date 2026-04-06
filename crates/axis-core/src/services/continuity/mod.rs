@@ -208,8 +208,6 @@ pub enum ContinuityCmd {
     Disconnect,
     CancelReconnect,
     ForceLocal,
-    StartDiscovery,
-    StopDiscovery,
     StartSharing(Side, f64),
     StopSharing(f64),
     SendInput(protocol::Message),
@@ -358,8 +356,6 @@ impl ContinuityInner {
     ) {
         match cmd {
             ContinuityCmd::SetEnabled(on) => self.handle_set_enabled(on, discovery, connection, clipboard, injection, capture, discovery_tx, conn_tx).await,
-            ContinuityCmd::StartDiscovery => self.handle_start_discovery(discovery, discovery_tx).await,
-            ContinuityCmd::StopDiscovery => self.handle_stop_discovery(discovery).await,
             ContinuityCmd::ConnectToPeer(peer_id) => self.handle_connect_to_peer(&peer_id, connection, discovery_tx, conn_tx).await,
             ContinuityCmd::ConfirmPin => self.handle_confirm_pin(connection, clipboard, injection, capture, clipboard_tx).await,
             ContinuityCmd::RejectPin => self.handle_reject_pin(connection, clipboard, injection, capture).await,

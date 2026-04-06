@@ -32,7 +32,6 @@ pub struct QuickSettingsPopup {
     qs_stack: gtk4::Stack,
     main_page: MainPage,
     bt_tx: async_channel::Sender<BluetoothCmd>,
-    ct_tx: async_channel::Sender<axis_core::services::continuity::ContinuityCmd>,
 }
 
 impl PopupExt for QuickSettingsPopup {
@@ -47,7 +46,6 @@ impl PopupExt for QuickSettingsPopup {
     fn on_close(&self) {
         self.qs_stack.set_visible_child_name("main");
         let _ = self.bt_tx.try_send(BluetoothCmd::StopScan);
-        let _ = self.ct_tx.try_send(axis_core::services::continuity::ContinuityCmd::StopDiscovery);
     }
 
     fn handle_escape(&self) {
@@ -74,7 +72,6 @@ impl QuickSettingsPopup {
         let base = PopupBase::new(app, "AXIS Quick Settings", true);
 
         let bt_tx = ctx.bluetooth.tx.clone();
-        let ct_tx = ctx.continuity.tx.clone();
 
         let qs_container = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
         qs_container.add_css_class("qs-panel");
@@ -120,10 +117,8 @@ impl QuickSettingsPopup {
         };
 
         let stack_ct = qs_stack.clone();
-        let tx_ct = ctx.continuity.tx.clone();
         let open_continuity = move || {
             stack_ct.set_visible_child_name("continuity");
-            let _ = tx_ct.try_send(axis_core::services::continuity::ContinuityCmd::StartDiscovery);
         };
 
         let main_page = MainPage::new(
@@ -220,7 +215,6 @@ impl QuickSettingsPopup {
             qs_stack,
             main_page,
             bt_tx,
-            ct_tx,
         }
     }
 }

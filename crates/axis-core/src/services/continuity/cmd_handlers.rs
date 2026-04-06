@@ -56,25 +56,6 @@ impl ContinuityInner {
         self.push();
     }
 
-    pub(super) async fn handle_start_discovery(
-        &mut self,
-        discovery: &mut AvahiDiscovery,
-        discovery_tx: &Sender<super::discovery::DiscoveryEvent>,
-    ) {
-        if self.data.enabled {
-            info!("[continuity] starting peer discovery");
-            if let Err(e) = discovery.browse(discovery_tx.clone()) {
-                error!("[continuity] discovery browse failed: {e}");
-            }
-        }
-    }
-
-    pub(super) async fn handle_stop_discovery(&mut self, discovery: &mut AvahiDiscovery) {
-        discovery.stop_browse();
-        self.data.peers.clear();
-        self.push();
-    }
-
     pub(super) async fn handle_connect_to_peer(
         &mut self,
         peer_id: &str,

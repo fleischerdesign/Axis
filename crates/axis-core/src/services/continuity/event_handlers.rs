@@ -13,11 +13,13 @@ impl ContinuityInner {
                 if peer.hostname == self.data.device_name {
                     return;
                 }
-                if !self.data.peers.iter().any(|p| p.device_id == peer.device_id) {
+                if let Some(existing) = self.data.peers.iter_mut().find(|p| p.device_id == peer.device_id) {
+                    *existing = peer;
+                } else {
                     info!("[continuity] peer found: {} at {}", peer.device_name, peer.address);
                     self.data.peers.push(peer);
-                    self.push();
                 }
+                self.push();
             }
             DiscoveryEvent::PeerLost(device_id) => {
                 self.data.peers.retain(|p| p.device_id != device_id);
