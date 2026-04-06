@@ -49,3 +49,13 @@ flowboxchild:selected .accent-swatch {
     border: 1px solid alpha(@borders, 0.3);
     min-height: 300px;
 }
+
+/* Wi-Fi Auth Section in Settings */
+.network-auth-box {
+    padding: 6px 12px 12px 12px;
+}
+
+.network-connect-btn {
+    margin-left: 8px;
+    border-radius: 8px;
+}
