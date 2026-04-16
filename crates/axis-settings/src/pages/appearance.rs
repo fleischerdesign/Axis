@@ -28,8 +28,9 @@ impl SettingsPage for AppearancePage {
         let theme_dark = gtk4::CheckButton::with_label("Dark");
         theme_dark.set_group(Some(&theme_light));
 
-        // Read initial state from GSettings via StyleManager
-        if libadwaita::StyleManager::default().is_dark() {
+        let interface_settings = gio::Settings::new("org.gnome.desktop.interface");
+        let scheme = interface_settings.enum_("color-scheme");
+        if scheme == 1 {
             theme_dark.set_active(true);
         } else {
             theme_light.set_active(true);
@@ -37,13 +38,13 @@ impl SettingsPage for AppearancePage {
 
         theme_light.connect_toggled(|btn| {
             if !btn.is_active() { return; }
-            libadwaita::StyleManager::default()
-                .set_color_scheme(libadwaita::ColorScheme::ForceLight);
+            let settings = gio::Settings::new("org.gnome.desktop.interface");
+            let _ = settings.set_enum("color-scheme", 2);
         });
         theme_dark.connect_toggled(|btn| {
             if !btn.is_active() { return; }
-            libadwaita::StyleManager::default()
-                .set_color_scheme(libadwaita::ColorScheme::ForceDark);
+            let settings = gio::Settings::new("org.gnome.desktop.interface");
+            let _ = settings.set_enum("color-scheme", 1);
         });
 
         // React to external theme changes (e.g. another app changes GSettings)

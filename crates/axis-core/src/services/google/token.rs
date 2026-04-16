@@ -4,17 +4,19 @@ pub fn refresh_token(
     client_id: &str,
     client_secret: &str,
     refresh_token: Option<&str>,
-    _scopes: &[&str],
+    scopes: &[&str],
 ) -> Result<String, String> {
     let refresh_token = refresh_token.ok_or("No refresh token available")?;
 
     let client = reqwest::blocking::Client::new();
 
+    let scope_str = scopes.join(" ");
     let params = [
         ("client_id", client_id),
         ("client_secret", client_secret),
         ("refresh_token", refresh_token),
         ("grant_type", "refresh_token"),
+        ("scope", &scope_str),
     ];
 
     let response = client

@@ -23,8 +23,8 @@ pub struct CalendarPopup {
     add_entry: gtk4::Entry,
     spinner: gtk4::Spinner,
     calendar_grid: Rc<calendar_grid::CalendarGrid>,
+    events_header: gtk4::Box,
     calendar_list: gtk4::Box,
-    calendar_range_toggle: gtk4::Box,
     calendar_auth_box: gtk4::Box,
     selected_date: Rc<RefCell<(i32, u32, u32)>>,
     ctx: AppContext,
@@ -56,7 +56,7 @@ impl PopupExt for CalendarPopup {
 
         calendar_section::render_calendar(
             &self.calendar_list,
-            &self.calendar_range_toggle,
+            &self.events_header,
             &self.ctx,
             &self.spinner,
             &self.calendar_auth_box,
@@ -84,7 +84,7 @@ impl PopupExt for CalendarPopup {
         let source = self.refresh_source.clone();
         let base_is_open = self.base.is_open.clone();
         let cl = self.calendar_list.clone();
-        let rt = self.calendar_range_toggle.clone();
+        let eh = self.events_header.clone();
         let cab = self.calendar_auth_box.clone();
         let grid = self.calendar_grid.clone();
         let sel = self.selected_date.clone();
@@ -94,7 +94,7 @@ impl PopupExt for CalendarPopup {
             move || {
                 if rx.try_recv().is_ok() && base_is_open.get() {
                     task_section::render_tasks(&tl, &ls, &ctx, &sp, &ab, &tx, &task_list_built);
-                    calendar_section::render_calendar(&cl, &rt, &ctx, &sp, &cab, &tx, &sel);
+                    calendar_section::render_calendar(&cl, &eh, &ctx, &sp, &cab, &tx, &sel);
                     let registry = ctx.calendar_registry.lock().unwrap();
                     let month_evts = registry.month_events().to_vec();
                     drop(registry);
@@ -133,7 +133,7 @@ impl CalendarPopup {
             .orientation(gtk4::Orientation::Horizontal)
             .css_classes(vec!["calendar-wrapper".to_string()])
             .spacing(16)
-            .width_request(520)
+            .width_request(900)
             .build();
 
         // ── LEFT: Tasks section ──
@@ -186,7 +186,8 @@ impl CalendarPopup {
             .orientation(gtk4::Orientation::Vertical)
             .spacing(4)
             .css_classes(vec!["calendar-section".to_string()])
-            .hexpand(true)
+            .width_request(260)
+            .hexpand(false)
             .build();
 
         let date_label = gtk4::Label::builder()
@@ -207,11 +208,12 @@ impl CalendarPopup {
             .hexpand(true)
             .build();
 
-        let calendar_range_toggle = gtk4::Box::builder()
+        let events_header = gtk4::Box::builder()
             .orientation(gtk4::Orientation::Horizontal)
             .spacing(10)
+            .css_classes(vec!["calendar-tasks-header-row".to_string()])
             .build();
-        events_section.append(&calendar_range_toggle);
+        events_section.append(&events_header);
 
         let calendar_scroll = gtk4::ScrolledWindow::builder()
             .vexpand(true)
@@ -237,7 +239,7 @@ impl CalendarPopup {
         // Wire day-click: update selected_date, re-render event panel
         let sel_date_c = selected_date.clone();
         let cl_c = calendar_list.clone();
-        let rt_c = calendar_range_toggle.clone();
+        let eh_c = events_header.clone();
         let cab_c = calendar_auth_box.clone();
         let sp_c = spinner.clone();
         let ctx_c = ctx.clone();
@@ -245,7 +247,7 @@ impl CalendarPopup {
         cal_grid.set_on_day_click(move |year, month, day| {
             *sel_date_c.borrow_mut() = (year, month, day);
             calendar_section::render_calendar(
-                &cl_c, &rt_c, &ctx_c, &sp_c, &cab_c, &tx_c, &sel_date_c,
+                &cl_c, &eh_c, &ctx_c, &sp_c, &cab_c, &tx_c, &sel_date_c,
             );
         });
 
@@ -286,8 +288,8 @@ impl CalendarPopup {
             add_entry,
             spinner,
             calendar_grid: cal_grid,
+            events_header,
             calendar_list,
-            calendar_range_toggle,
             calendar_auth_box,
             selected_date,
             ctx,

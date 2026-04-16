@@ -112,20 +112,15 @@ impl GoogleAuthRegistry {
             return Err("Not authenticated".to_string());
         }
 
-        if !self.has_all_scopes(required_scopes) {
-            let refresh = self.token.refresh_token.as_ref().map(|s| s.as_str());
-            let new_token = token::refresh_token(
-                &cred.client_id,
-                &cred.client_secret,
-                refresh,
-                required_scopes,
-            )?;
-            self.token.access_token = Some(new_token.clone());
-            self.token.expires_at = Some(chrono::Utc::now().timestamp() + 3600);
-            self.token.granted_scopes = required_scopes.iter().map(|s| s.to_string()).collect();
-            self.save_token();
-            return Ok(new_token);
+        // Accumulate scopes: add any new ones we haven't seen yet
+        for s in required_scopes.iter() {
+            let s_owned = s.to_string();
+            if !self.token.granted_scopes.contains(&s_owned) {
+                self.token.granted_scopes.push(s_owned);
+            }
         }
+
+        let all_scopes: Vec<&str> = self.token.granted_scopes.iter().map(|s| s.as_str()).collect();
 
         if let Some(expires) = self.token.expires_at {
             if expires > chrono::Utc::now().timestamp() + 60 {
@@ -138,7 +133,7 @@ impl GoogleAuthRegistry {
             &cred.client_id,
             &cred.client_secret,
             self.token.refresh_token.as_ref().map(|s| s.as_str()),
-            required_scopes,
+            &all_scopes,
         )?;
 
         self.token.access_token = Some(new_token.clone());

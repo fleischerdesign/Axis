@@ -8,7 +8,7 @@ use std::sync::mpsc;
 
 pub fn render_calendar(
     calendar_box: &gtk4::Box,
-    _range_toggle: &gtk4::Box,
+    events_header: &gtk4::Box,
     ctx: &AppContext,
     spinner: &gtk4::Spinner,
     auth_box: &gtk4::Box,
@@ -34,28 +34,23 @@ pub fn render_calendar(
 
     let (sel_year, sel_month, sel_day) = *selected_date.borrow();
 
-    // Header row: "Termine" + Tag/Woche buttons side by side
-    let header_row = gtk4::Box::builder()
-        .orientation(gtk4::Orientation::Horizontal)
-        .spacing(10)
-        .css_classes(vec!["calendar-tasks-header-row".to_string()])
-        .build();
-
+    // ── Header: "Termine" + Tag/Woche buttons (outside scroll) ──
+    while let Some(child) = events_header.first_child() {
+        events_header.remove(&child);
+    }
     let label = gtk4::Label::builder()
         .label("Termine")
         .css_classes(vec!["calendar-tasks-header".to_string()])
         .halign(gtk4::Align::Start)
         .hexpand(true)
         .build();
-    header_row.append(&label);
+    events_header.append(&label);
+    build_range_buttons(events_header, ctx, selected_range, refresh_tx.clone());
 
-    build_range_buttons(&header_row, ctx, selected_range, refresh_tx.clone());
-
-    // Clear old content and rebuild
+    // ── Event rows only (inside scroll) ──
     while let Some(child) = calendar_box.first_child() {
         calendar_box.remove(&child);
     }
-    calendar_box.append(&header_row);
 
     let filtered = filter_events(&all_events, sel_year, sel_month, sel_day, selected_range);
 
