@@ -6,6 +6,7 @@ use std::sync::mpsc;
 
 pub fn render_tasks(
     task_list: &gtk4::Box,
+    task_scroll: &gtk4::ScrolledWindow,
     list_selector: &gtk4::Box,
     ctx: &AppContext,
     spinner: &gtk4::Spinner,
@@ -15,6 +16,7 @@ pub fn render_tasks(
 ) {
     auth_box.set_visible(false);
     spinner.set_visible(false);
+    task_scroll.set_visible(true);
 
     let google_auth = GoogleAuthRegistry::load()
         .map(|r| r.is_authenticated())
@@ -62,7 +64,17 @@ pub fn render_tasks(
             let ctx_c = ctx.clone();
             let tx_c = refresh_tx.clone();
             let lists_clone = lists.clone();
+            let spinner_c = spinner.clone();
+            let task_list_c = task_list.clone();
+            let task_scroll_c = task_scroll.clone();
             dropdown.connect_selected_notify(move |dd| {
+                while let Some(child) = task_list_c.first_child() {
+                    task_list_c.remove(&child);
+                }
+                task_scroll_c.set_visible(false);
+                spinner_c.set_visible(true);
+                spinner_c.set_spinning(true);
+
                 let selected = dd.selected();
                 if let Some(list) = lists_clone.get(selected as usize) {
                     let reg = ctx_c.task_registry.clone();
@@ -78,7 +90,9 @@ pub fn render_tasks(
             list_selector.append(&dropdown);
         }
 
-        list_selector_built.set(true);
+        if !lists.is_empty() {
+            list_selector_built.set(true);
+        }
     }
 
     // ── Render Tasks ──

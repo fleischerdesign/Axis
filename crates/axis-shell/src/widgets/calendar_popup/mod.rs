@@ -18,6 +18,7 @@ use std::sync::mpsc;
 pub struct CalendarPopup {
     base: PopupBase,
     task_list: gtk4::Box,
+    task_scroll: gtk4::ScrolledWindow,
     list_selector: gtk4::Box,
     auth_box: gtk4::Box,
     add_entry: gtk4::Entry,
@@ -46,6 +47,7 @@ impl PopupExt for CalendarPopup {
     fn on_open(&self) {
         task_section::render_tasks(
             &self.task_list,
+            &self.task_scroll,
             &self.list_selector,
             &self.ctx,
             &self.spinner,
@@ -76,6 +78,7 @@ impl PopupExt for CalendarPopup {
         let rx = self.refresh_rx.borrow_mut().take()
             .expect("refresh_rx already taken");
         let tl = self.task_list.clone();
+        let ts = self.task_scroll.clone();
         let ls = self.list_selector.clone();
         let ctx = self.ctx.clone();
         let sp = self.spinner.clone();
@@ -93,7 +96,7 @@ impl PopupExt for CalendarPopup {
             std::time::Duration::from_millis(CALENDAR_REFRESH_INTERVAL_MS),
             move || {
                 if rx.try_recv().is_ok() && base_is_open.get() {
-                    task_section::render_tasks(&tl, &ls, &ctx, &sp, &ab, &tx, &task_list_built);
+                    task_section::render_tasks(&tl, &ts, &ls, &ctx, &sp, &ab, &tx, &task_list_built);
                     calendar_section::render_calendar(&cl, &eh, &ctx, &sp, &cab, &tx, &sel);
                     let registry = ctx.calendar_registry.lock().unwrap();
                     let month_evts = registry.month_events().to_vec();
@@ -168,8 +171,8 @@ impl CalendarPopup {
             .spinning(true)
             .visible(false)
             .halign(gtk4::Align::Center)
-            .margin_top(8)
-            .margin_bottom(8)
+            .valign(gtk4::Align::Center)
+            .vexpand(true)
             .build();
         tasks_section.append(&spinner);
 
@@ -283,6 +286,7 @@ impl CalendarPopup {
         Self {
             base,
             task_list,
+            task_scroll,
             list_selector,
             auth_box,
             add_entry,
@@ -345,6 +349,7 @@ impl CalendarPopup {
     fn wire_add_task(&self) {
         let ctx_c = self.ctx.clone();
         let task_list_c = self.task_list.clone();
+        let task_scroll_c = self.task_scroll.clone();
         let list_selector_c = self.list_selector.clone();
         let spinner_c = self.spinner.clone();
         let auth_box_c = self.auth_box.clone();
@@ -362,7 +367,7 @@ impl CalendarPopup {
                 let mut registry = ctx_c.task_registry.lock().unwrap();
                 registry.optimistic_add_task(&title);
             }
-            task_section::render_tasks(&task_list_c, &list_selector_c, &ctx_c, &spinner_c, &auth_box_c, &tx_c, &task_list_built_c);
+            task_section::render_tasks(&task_list_c, &task_scroll_c, &list_selector_c, &ctx_c, &spinner_c, &auth_box_c, &tx_c, &task_list_built_c);
         });
     }
 }
