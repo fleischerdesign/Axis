@@ -4,6 +4,7 @@ pub mod audio;
 pub mod bluetooth;
 pub mod brightness;
 pub mod calendar;
+pub mod cloud;
 pub mod clock;
 pub mod config;
 pub mod continuity;

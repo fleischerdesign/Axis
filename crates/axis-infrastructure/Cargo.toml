@@ -23,3 +23,7 @@ notify.workspace = true
 gtk4.workspace = true
 gtk4-session-lock.workspace = true
 pam.workspace = true
+oauth2.workspace = true
+reqwest.workspace = true
+open.workspace = true
+url = "2"
