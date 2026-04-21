@@ -2,7 +2,8 @@ use libadwaita::prelude::*;
 use libadwaita::subclass::prelude::*;
 use gtk4::glib;
 use crate::presentation::workspaces::WorkspaceView;
-use axis_domain::models::workspaces::Workspace;
+use axis_domain::models::workspaces::WorkspaceStatus;
+use axis_presentation::View;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -18,8 +19,9 @@ impl WorkspaceDots {
     }
 }
 
-impl WorkspaceView for WorkspaceDots {
-    fn update_workspaces(&self, mut workspaces: Vec<Workspace>) {
+impl View<WorkspaceStatus> for WorkspaceDots {
+    fn render(&self, status: &WorkspaceStatus) {
+        let mut workspaces = status.workspaces.clone();
         workspaces.sort_by_key(|w| w.id);
         let container = self.clone();
         let callback = self.imp().click_callback.borrow().clone();
@@ -43,7 +45,6 @@ impl WorkspaceView for WorkspaceDots {
                     }
                     child = existing_dot.next_sibling();
                 } else {
-                    // Neuen interaktiven Dot (Button) erstellen
                     let dot = gtk4::Button::builder()
                         .css_classes(["ws-dot"])
                         .valign(gtk4::Align::Center)
@@ -67,7 +68,9 @@ impl WorkspaceView for WorkspaceDots {
             glib::ControlFlow::Break
         });
     }
+}
 
+impl WorkspaceView for WorkspaceDots {
     fn on_workspace_clicked(&self, f: Box<dyn Fn(u32) + Send + Sync>) {
         *self.imp().click_callback.borrow_mut() = Some(Rc::new(f));
     }

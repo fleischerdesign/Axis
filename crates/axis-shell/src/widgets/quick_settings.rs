@@ -1,7 +1,7 @@
 use libadwaita::prelude::*;
 use libadwaita::subclass::prelude::*;
 use gtk4::{glib, gio};
-use axis_domain::models::popups::PopupType;
+use axis_domain::models::popups::{PopupType, PopupStatus};
 use axis_domain::models::audio::AudioStatus;
 use axis_domain::models::brightness::BrightnessStatus;
 use crate::widgets::popup_base::PopupContainer;
@@ -277,6 +277,12 @@ impl BrightnessView for QuickSettingsPopup {
                 if !win.imp().is_bright_updating.get() { f(scale.value()); }
             });
         }
+    }
+}
+
+impl View<PopupStatus> for QuickSettingsPopup {
+    fn render(&self, status: &PopupStatus) {
+        self.handle_status(status);
     }
 }
 

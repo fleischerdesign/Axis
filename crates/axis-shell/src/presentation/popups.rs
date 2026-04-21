@@ -1,11 +1,10 @@
 use std::sync::Arc;
-use futures_util::StreamExt;
 use axis_application::use_cases::popups::SubscribeToPopupUpdatesUseCase;
-use axis_domain::models::popups::PopupType;
-use std::cell::RefCell;
+use axis_domain::models::popups::{PopupType, PopupStatus};
+use axis_presentation::{Presenter, View};
 use crate::widgets::popup_base::PopupContainer;
 
-pub trait PopupView {
+pub trait PopupView: View<PopupStatus> {
     fn get_type(&self) -> PopupType;
     fn popup_container(&self) -> PopupContainer;
     fn popup_window(&self) -> gtk4::ApplicationWindow;
@@ -17,42 +16,42 @@ pub trait PopupView {
     fn hide(&self) {
         self.popup_container().animate_hide(&self.popup_window());
     }
+
+    fn handle_status(&self, status: &PopupStatus) {
+        if status.active_popup == Some(self.get_type()) {
+            self.show();
+        } else {
+            self.hide();
+        }
+    }
 }
 
 pub struct PopupPresenter {
-    subscribe_use_case: Arc<SubscribeToPopupUpdatesUseCase>,
-    last_active: RefCell<Option<PopupType>>,
+    inner: Presenter<PopupStatus>,
 }
 
 impl PopupPresenter {
     pub fn new(subscribe_use_case: Arc<SubscribeToPopupUpdatesUseCase>) -> Self {
-        Self { 
-            subscribe_use_case,
-            last_active: RefCell::new(None),
-        }
-    }
-
-    pub async fn bind(&self, popups: Vec<Box<dyn PopupView>>) {
-        if let Ok(mut stream) = self.subscribe_use_case.execute().await {
-            while let Some(status) = stream.next().await {
-                let current = status.active_popup;
-                let last = *self.last_active.borrow();
-
-                if current == last {
-                    continue;
-                }
-
-                for popup in &popups {
-                    let p_type = popup.get_type();
-                    if Some(p_type) == current {
-                        popup.show();
-                    } else if Some(p_type) == last {
-                        popup.hide();
+        let uc = subscribe_use_case.clone();
+        let inner = Presenter::new(move || {
+            let uc = uc.clone();
+            Box::pin(async_stream::stream! {
+                if let Ok(mut stream) = uc.execute().await {
+                    while let Some(status) = futures_util::StreamExt::next(&mut stream).await {
+                        yield status;
                     }
                 }
+            })
+        });
 
-                *self.last_active.borrow_mut() = current;
-            }
-        }
+        Self { inner }
+    }
+
+    pub fn add_popup(&self, popup: Box<dyn PopupView>) {
+        self.inner.add_view(popup);
+    }
+
+    pub async fn run_sync(&self) {
+        self.inner.run_sync().await;
     }
 }

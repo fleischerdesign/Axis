@@ -1,6 +1,7 @@
 use libadwaita::prelude::*;
 use libadwaita::subclass::prelude::*;
 use gtk4::glib;
+use axis_presentation::View;
 
 glib::wrapper! {
     pub struct ToggleTile(ObjectSubclass<imp::ToggleTile>)
@@ -55,11 +56,13 @@ impl ToggleTile {
     }
 }
 
-impl crate::presentation::toggle::ToggleView for ToggleTile {
-    fn set_active(&self, active: bool) {
-        self.set_active(active);
+impl View<bool> for ToggleTile {
+    fn render(&self, status: &bool) {
+        self.set_active(*status);
     }
+}
 
+impl crate::presentation::toggle::ToggleView for ToggleTile {
     fn set_icon(&self, icon_name: &str) {
         self.set_icon(icon_name);
     }

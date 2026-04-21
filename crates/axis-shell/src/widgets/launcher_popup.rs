@@ -1,12 +1,14 @@
 use libadwaita::prelude::*;
 use libadwaita::subclass::prelude::*;
 use gtk4::{glib, gio};
-use axis_domain::models::launcher::LauncherItem;
+use axis_domain::models::launcher::{LauncherItem, LauncherStatus};
 use axis_domain::models::popups::PopupType;
+use axis_domain::models::popups::PopupStatus;
 use crate::widgets::popup_base::PopupContainer;
 use crate::widgets::components::list_row::ListRow;
 use crate::presentation::popups::PopupView;
 use crate::presentation::launcher::LauncherView;
+use axis_presentation::View;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -194,6 +196,12 @@ fn smooth_scroll(adj: &gtk4::Adjustment, target: f64) {
     });
 }
 
+impl View<PopupStatus> for LauncherPopup {
+    fn render(&self, status: &PopupStatus) {
+        self.handle_status(status);
+    }
+}
+
 impl PopupView for LauncherPopup {
     fn get_type(&self) -> PopupType { PopupType::Launcher }
     fn popup_container(&self) -> PopupContainer { self.imp().container.clone() }
@@ -209,10 +217,13 @@ impl PopupView for LauncherPopup {
     }
 }
 
-impl LauncherView for LauncherPopup {
-    fn render_results(&self, results: &[LauncherItem], selected_index: Option<usize>) {
-        self.update_results(results, selected_index);
+impl View<LauncherStatus> for LauncherPopup {
+    fn render(&self, status: &LauncherStatus) {
+        self.update_results(&status.results, status.selected_index);
     }
+}
+
+impl LauncherView for LauncherPopup {
     fn clear_and_focus(&self) {
         self.clear_and_focus();
     }

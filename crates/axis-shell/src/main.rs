@@ -585,8 +585,7 @@ fn main() -> glib::ExitCode {
 
         let launcher_popup = LauncherPopup::new(app);
         let lp = launcher_presenter.clone();
-        let lp_view: Rc<dyn LauncherView> = Rc::new(launcher_popup.clone());
-        lp.bind(lp_view);
+        lp.add_view(Box::new(launcher_popup.clone()));
 
         let lp_search = lp.clone();
         launcher_popup.on_search(Box::new(move |query| {
@@ -633,19 +632,19 @@ fn main() -> glib::ExitCode {
         }));
 
         let pp = popup_presenter.clone();
+        pp.add_popup(Box::new(qs_popup));
+        pp.add_popup(Box::new(launcher_popup));
+        
+        let pp_sync = pp.clone();
         glib::spawn_future_local(async move {
-            let popups: Vec<Box<dyn PopupView>> = vec![
-                Box::new(qs_popup),
-                Box::new(launcher_popup),
-            ];
-            pp.bind(popups).await;
+            pp_sync.run_sync().await;
         });
 
         let ahp = auto_hide_presenter.clone();
         let bar_win = bar_window.clone();
-        let pp = popup_provider.clone();
+        let pp_prov = popup_provider.clone();
         glib::spawn_future_local(async move {
-            if let Ok(mut stream) = pp.subscribe().await {
+            if let Ok(mut stream) = pp_prov.subscribe().await {
                 while let Some(status) = futures_util::StreamExt::next(&mut stream).await {
                     ahp.set_force_visible(&bar_win, status.active_popup.is_some());
                 }
