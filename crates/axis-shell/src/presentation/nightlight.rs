@@ -6,7 +6,7 @@ use axis_application::use_cases::nightlight::set_temp_day::SetNightlightTempDayU
 use axis_application::use_cases::nightlight::set_temp_night::SetNightlightTempNightUseCase;
 use axis_application::use_cases::nightlight::set_schedule::SetNightlightScheduleUseCase;
 use axis_domain::models::nightlight::NightlightStatus;
-use super::presenter::{Presenter, View};
+use axis_presentation::{Presenter, View};
 
 pub trait NightlightView: View<NightlightStatus> {
     fn on_set_enabled(&self, f: Box<dyn Fn(bool) + 'static>);
@@ -31,7 +31,7 @@ impl<T: NightlightView + ?Sized> NightlightView for std::rc::Rc<T> {
 }
 
 pub struct NightlightPresenter {
-    inner: Presenter<dyn NightlightView, NightlightStatus>,
+    inner: Presenter<NightlightStatus>,
     set_enabled_use_case: Arc<SetNightlightEnabledUseCase>,
     set_temp_day_use_case: Arc<SetNightlightTempDayUseCase>,
     set_temp_night_use_case: Arc<SetNightlightTempNightUseCase>,
@@ -73,12 +73,12 @@ impl NightlightPresenter {
         }
     }
 
-    pub fn add_view(&self, view: Box<dyn NightlightView>) {
+    pub fn add_view(&self, view: Box<dyn View<NightlightStatus>>) {
         self.inner.add_view(view);
     }
 
     pub async fn run_sync(&self) {
-        self.inner.run().await;
+        self.inner.run_sync().await;
     }
 
     pub fn set_enabled(&self, enabled: bool) {

@@ -1,0 +1,7 @@
+[package]
+name = "axis-presentation"
+edition = "2024"
+version.workspace = true
+
+[dependencies]
+futures-util.workspace = true

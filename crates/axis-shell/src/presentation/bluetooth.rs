@@ -7,7 +7,7 @@ use axis_application::use_cases::bluetooth::set_powered::SetBluetoothPoweredUseC
 use axis_application::use_cases::bluetooth::start_scan::StartBluetoothScanUseCase;
 use axis_application::use_cases::bluetooth::stop_scan::StopBluetoothScanUseCase;
 use axis_domain::models::bluetooth::BluetoothStatus;
-use super::presenter::{Presenter, View};
+use axis_presentation::{Presenter, View};
 
 pub trait BluetoothView: View<BluetoothStatus> {
     fn on_connect_device(&self, f: Box<dyn Fn(String) + 'static>);
@@ -36,7 +36,7 @@ impl<T: BluetoothView + ?Sized> BluetoothView for std::rc::Rc<T> {
 }
 
 pub struct BluetoothPresenter {
-    inner: Presenter<dyn BluetoothView, BluetoothStatus>,
+    inner: Presenter<BluetoothStatus>,
     connect_use_case: Arc<ConnectBluetoothDeviceUseCase>,
     disconnect_use_case: Arc<DisconnectBluetoothDeviceUseCase>,
     set_powered_use_case: Arc<SetBluetoothPoweredUseCase>,
@@ -82,12 +82,12 @@ impl BluetoothPresenter {
         }
     }
 
-    pub fn add_view(&self, view: Box<dyn BluetoothView>) {
+    pub fn add_view(&self, view: Box<dyn View<BluetoothStatus>>) {
         self.inner.add_view(view);
     }
 
     pub async fn run_sync(&self) {
-        self.inner.run().await;
+        self.inner.run_sync().await;
     }
 
     pub fn connect_device(&self, id: String) {

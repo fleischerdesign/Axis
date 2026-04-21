@@ -1,7 +1,7 @@
 use libadwaita::prelude::*;
 use libadwaita::subclass::prelude::*;
 use gtk4::glib;
-use crate::presentation::presenter::View;
+use axis_presentation::View;
 use crate::presentation::audio::{AudioView, audio_icon};
 use axis_domain::models::audio::AudioStatus;
 

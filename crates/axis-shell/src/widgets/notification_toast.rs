@@ -3,7 +3,7 @@ use gtk4_layer_shell::{LayerShell, Layer, Edge};
 use axis_domain::models::notifications::{Notification, NotificationStatus};
 use axis_domain::models::dnd::DndStatus;
 use crate::widgets::notification_card::{NotificationCard, CloseCallback, ActionCallback};
-use crate::presentation::presenter::View;
+use axis_presentation::View;
 use crate::presentation::notifications::NotificationPopupAware;
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};

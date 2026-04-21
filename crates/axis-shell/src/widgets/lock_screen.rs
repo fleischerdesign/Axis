@@ -5,7 +5,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use crate::presentation::lock::LockView;
-use crate::presentation::presenter::View;
+use axis_presentation::View;
 use crate::widgets::components::blurred_picture::BlurredPicture;
 use axis_domain::models::lock::LockStatus;
 use axis_domain::models::power::PowerStatus;

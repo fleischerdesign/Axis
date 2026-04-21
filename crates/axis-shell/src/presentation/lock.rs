@@ -2,7 +2,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use gtk4::glib;
-use crate::presentation::presenter::{Presenter, View};
+use axis_presentation::{Presenter, View};
 use axis_application::use_cases::lock::lock::LockSessionUseCase;
 use axis_application::use_cases::lock::unlock::UnlockSessionUseCase;
 use axis_application::use_cases::lock::authenticate::AuthenticateUseCase;
@@ -26,7 +26,7 @@ impl<T: LockView + ?Sized> LockView for Arc<T> {
 }
 
 pub struct LockPresenter {
-    inner: Presenter<dyn LockView, LockStatus>,
+    inner: Presenter<LockStatus>,
     lock_uc: Arc<LockSessionUseCase>,
     unlock_uc: Arc<UnlockSessionUseCase>,
     authenticate_uc: Arc<AuthenticateUseCase>,
@@ -58,12 +58,12 @@ impl LockPresenter {
         }
     }
 
-    pub fn add_view(&self, view: Box<dyn LockView>) {
+    pub fn add_view(&self, view: Box<dyn View<LockStatus>>) {
         self.inner.add_view(view);
     }
 
     pub async fn run_sync(&self) {
-        self.inner.run().await;
+        self.inner.run_sync().await;
     }
 
     pub fn lock(&self) {

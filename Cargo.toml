@@ -4,6 +4,7 @@ members = [
     "crates/axis-domain",
     "crates/axis-application",
     "crates/axis-infrastructure",
+    "crates/axis-presentation",
     "crates/axis-shell",
     "crates/axis-settings",
 ]
@@ -15,6 +16,7 @@ version = "0.1.0"
 axis-domain = { path = "crates/axis-domain" }
 axis-application = { path = "crates/axis-application" }
 axis-infrastructure = { path = "crates/axis-infrastructure" }
+axis-presentation = { path = "crates/axis-presentation" }
 chrono = { version = "0.4.44", features = ["serde"] }
 futures-util = "0.3.32"
 gtk4 = { version = "0.11", features = ["v4_12"] }
@@ -31,6 +33,7 @@ serde = { version = "1.0", features = ["derive"] }
 async-channel = "2.5.0"
 log = "0.4"
 fern = "0.7"
+dirs = "6"
 gtk4-session-lock = { version = "0.4", features = ["v1_1"] }
 pam = { version = "0.8", features = ["client"] }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }

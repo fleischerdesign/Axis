@@ -33,8 +33,8 @@ impl AutoHidePresenter {
 
     pub fn handle_enter<V: AutoHideView>(&self, view: &V) {
         self.is_hovering.set(true);
-        let mut gen = self.current_generation.borrow_mut();
-        *gen += 1;
+        let mut generation = self.current_generation.borrow_mut();
+        *generation += 1;
 
         if !*self.is_visible.borrow() {
             *self.is_visible.borrow_mut() = true;

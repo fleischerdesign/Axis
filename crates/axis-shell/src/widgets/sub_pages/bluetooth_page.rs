@@ -1,7 +1,7 @@
 use gtk4::prelude::*;
 use gtk4::glib;
 use axis_domain::models::bluetooth::BluetoothStatus;
-use crate::presentation::presenter::View;
+use axis_presentation::View;
 use crate::presentation::bluetooth::{BluetoothPresenter, BluetoothView};
 use crate::widgets::components::list_row::ListRow;
 use crate::widgets::components::popup_header::PopupHeader;

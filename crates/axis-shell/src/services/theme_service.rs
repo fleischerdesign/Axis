@@ -3,7 +3,7 @@ use log::{info, warn};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::presentation::presenter::View;
+use axis_presentation::View;
 
 pub struct ThemeService {
     provider: Rc<gtk4::CssProvider>,

@@ -4,7 +4,7 @@ use axis_domain::models::audio::AudioStatus;
 use axis_domain::models::brightness::BrightnessStatus;
 use crate::presentation::audio::{AudioView, audio_icon};
 use crate::presentation::brightness::BrightnessView;
-use crate::presentation::presenter::View;
+use axis_presentation::View;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::Duration;

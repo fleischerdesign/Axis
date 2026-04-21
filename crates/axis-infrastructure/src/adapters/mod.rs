@@ -6,6 +6,7 @@ pub mod pulse;
 pub mod backlight;
 pub mod network;
 pub mod bluetooth;
+pub mod cloud;
 pub mod nightlight;
 pub mod dnd;
 pub mod google_auth;

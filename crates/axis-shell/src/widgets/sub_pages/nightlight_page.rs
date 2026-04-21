@@ -1,6 +1,6 @@
 use gtk4::prelude::*;
 use axis_domain::models::nightlight::NightlightStatus;
-use crate::presentation::presenter::View;
+use axis_presentation::View;
 use crate::presentation::nightlight::{NightlightPresenter, NightlightView};
 use crate::widgets::components::popup_header::PopupHeader;
 use std::cell::Cell;

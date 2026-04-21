@@ -1,12 +1,10 @@
 use std::sync::Arc;
 use axis_application::use_cases::clock::subscribe::SubscribeToClockUpdatesUseCase;
 use axis_domain::models::clock::TimeStatus;
-use super::presenter::{Presenter, View};
-
-pub trait ClockView: View<TimeStatus> {}
+use axis_presentation::{Presenter, View};
 
 pub struct ClockPresenter {
-    inner: Presenter<dyn ClockView, TimeStatus>,
+    inner: Presenter<TimeStatus>,
 }
 
 impl ClockPresenter {
@@ -25,7 +23,7 @@ impl ClockPresenter {
         Self { inner }
     }
 
-    pub async fn bind(&self, view: Box<dyn ClockView>) {
+    pub async fn bind(&self, view: Box<dyn View<TimeStatus>>) {
         self.inner.bind(view).await;
     }
 }

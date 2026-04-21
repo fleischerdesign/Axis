@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct CloudAccount {
     pub id: String,
     pub provider_name: String,
@@ -16,7 +16,7 @@ pub enum AccountStatus {
     Error(String),
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct CloudStatus {
     pub accounts: Vec<CloudAccount>,
 }

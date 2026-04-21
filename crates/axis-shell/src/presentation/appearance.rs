@@ -4,10 +4,10 @@ use axis_application::use_cases::appearance::get_status::GetAppearanceStatusUseC
 use axis_application::use_cases::appearance::subscribe::SubscribeToAppearanceUseCase;
 use axis_domain::models::appearance::AppearanceStatus;
 
-use super::presenter::{Presenter, View};
+use axis_presentation::{Presenter, View};
 
 pub struct AppearancePresenter {
-    inner: Presenter<dyn View<AppearanceStatus>, AppearanceStatus>,
+    inner: Presenter<AppearanceStatus>,
 }
 
 impl AppearancePresenter {
@@ -40,6 +40,6 @@ impl AppearancePresenter {
     }
 
     pub async fn run_sync(&self) {
-        self.inner.run().await;
+        self.inner.run_sync().await;
     }
 }

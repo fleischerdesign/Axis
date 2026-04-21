@@ -4,7 +4,7 @@ use std::rc::Rc;
 use libadwaita::prelude::*;
 use libadwaita::subclass::prelude::*;
 use gtk4::glib;
-use crate::presentation::presenter::View;
+use axis_presentation::View;
 use crate::presentation::tray::TrayView;
 use crate::widgets::island::Island;
 use axis_domain::models::tray::{TrayItemStatus, TrayStatus};

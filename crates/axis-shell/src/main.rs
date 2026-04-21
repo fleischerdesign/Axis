@@ -1,4 +1,5 @@
 use libadwaita::prelude::*;
+use futures_util::StreamExt;
 use gtk4::{glib, gdk};
 use clap::Parser;
 
@@ -112,7 +113,7 @@ use presentation::toggle::TogglePresenter;
 use presentation::brightness::BrightnessPresenter;
 use presentation::launcher::{LauncherPresenter, LauncherView};
 use presentation::notifications::NotificationPresenter;
-use presentation::presenter::{Presenter, View};
+use axis_presentation::{Presenter, View};
 use presentation::network::NetworkPresenter;
 use presentation::bluetooth::BluetoothPresenter;
 use presentation::nightlight::NightlightPresenter;
@@ -552,11 +553,11 @@ fn main() -> glib::ExitCode {
 
         {
             let dnd_prov_c = dnd_for_toast.clone();
-            let dnd_presenter: Rc<Presenter<dyn View<DndStatus>, DndStatus>> = Rc::new(Presenter::new(move || {
+            let dnd_presenter: Rc<Presenter<DndStatus>> = Rc::new(Presenter::new(move || {
                 let dnd = dnd_prov_c.clone();
                 Box::pin(async_stream::stream! {
                     if let Ok(mut stream) = dnd.subscribe().await {
-                        while let Some(status) = futures_util::StreamExt::next(&mut stream).await {
+                        while let Some(status) = stream.next().await {
                             yield status;
                         }
                     }
@@ -564,7 +565,8 @@ fn main() -> glib::ExitCode {
             }));
             dnd_presenter.add_view(Box::new(toast.clone()));
             let dp = dnd_presenter.clone();
-            glib::spawn_future_local(async move { dp.run().await; });
+            glib::spawn_future_local(async move { dp.run_sync().await; });
+
         }
 
         let archive = std::rc::Rc::new(NotificationArchive::new(on_close.clone(), on_action.clone()));

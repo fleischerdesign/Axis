@@ -5,7 +5,7 @@ use std::cell::RefCell;
 use axis_application::use_cases::brightness::subscribe::SubscribeToBrightnessUpdatesUseCase;
 use axis_application::use_cases::brightness::set::SetBrightnessUseCase;
 use axis_domain::models::brightness::BrightnessStatus;
-use super::presenter::{Presenter, View};
+use axis_presentation::{Presenter, View};
 
 const FEEDBACK_SUPPRESS_SECS: f64 = 0.5;
 const FEEDBACK_TOLERANCE: f64 = 2.0;
@@ -21,7 +21,7 @@ impl<T: BrightnessView + ?Sized> BrightnessView for std::rc::Rc<T> {
 }
 
 pub struct BrightnessPresenter {
-    inner: Presenter<dyn BrightnessView, BrightnessStatus>,
+    inner: Presenter<BrightnessStatus>,
     set_use_case: Arc<SetBrightnessUseCase>,
     last_user_change: Rc<RefCell<Option<(f64, Instant)>>>,
 }
@@ -50,7 +50,7 @@ impl BrightnessPresenter {
         }
     }
 
-    pub fn add_view(&self, view: Box<dyn BrightnessView>) {
+    pub fn add_view(&self, view: Box<dyn View<BrightnessStatus>>) {
         self.inner.add_view(view);
     }
 

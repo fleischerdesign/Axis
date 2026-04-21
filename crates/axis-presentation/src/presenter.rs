@@ -3,37 +3,20 @@ use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
 use futures_util::{Stream, StreamExt};
+use crate::view::View;
 
-pub trait View<S> {
-    fn render(&self, status: &S);
-}
-
-impl<S, T: View<S> + ?Sized> View<S> for Rc<T> {
-    fn render(&self, status: &S) {
-        (**self).render(status);
-    }
-}
-
-impl<S, T: View<S> + ?Sized> View<S> for std::sync::Arc<T> {
-    fn render(&self, status: &S) {
-        (**self).render(status);
-    }
-}
-
-pub struct Presenter<V: ?Sized, S>
+pub struct Presenter<S>
 where
     S: Clone + PartialEq + Send + 'static,
-    V: View<S>,
 {
-    views: Rc<RefCell<Vec<Box<V>>>>,
+    views: Rc<RefCell<Vec<Box<dyn View<S>>>>>,
     current_status: Rc<RefCell<Option<S>>>,
     subscribe: Arc<dyn Fn() -> Pin<Box<dyn Stream<Item = S> + Send>> + Send + Sync>,
 }
 
-impl<V: ?Sized, S> Clone for Presenter<V, S>
+impl<S> Clone for Presenter<S>
 where
     S: Clone + PartialEq + Send + 'static,
-    V: View<S>,
 {
     fn clone(&self) -> Self {
         Self {
@@ -44,10 +27,9 @@ where
     }
 }
 
-impl<V: ?Sized, S> Presenter<V, S>
+impl<S> Presenter<S>
 where
     S: Clone + PartialEq + Send + 'static,
-    V: View<S>,
 {
     pub fn new(
         subscribe: impl Fn() -> Pin<Box<dyn Stream<Item = S> + Send>> + Send + Sync + 'static,
@@ -64,7 +46,7 @@ where
         self
     }
 
-    pub fn add_view(&self, view: Box<V>) {
+    pub fn add_view(&self, view: Box<dyn View<S>>) {
         if let Some(status) = self.current_status.borrow().as_ref() {
             view.render(status);
         }
@@ -76,11 +58,16 @@ where
     }
 
     pub fn update(&self, status: S) {
-        *self.current_status.borrow_mut() = Some(status);
+        *self.current_status.borrow_mut() = Some(status.clone());
         self.render_all();
     }
 
-    pub async fn run(&self) {
+    pub async fn bind(&self, view: Box<dyn View<S>>) {
+        self.add_view(view);
+        self.run_sync().await;
+    }
+
+    pub async fn run_sync(&self) {
         let mut stream = (self.subscribe)();
         while let Some(status) = stream.next().await {
             let prev = self.current_status.borrow().clone();
@@ -102,11 +89,6 @@ where
                 self.render_all();
             }
         }
-    }
-
-    pub async fn bind(&self, view: Box<V>) {
-        self.add_view(view);
-        self.run().await;
     }
 
     fn render_all(&self) {

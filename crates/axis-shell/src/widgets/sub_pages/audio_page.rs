@@ -2,7 +2,7 @@ use gtk4::prelude::*;
 use libadwaita::prelude::*;
 use axis_domain::models::audio::{AudioStatus, AudioDevice};
 use crate::presentation::audio::{AudioPresenter, AudioView, audio_icon};
-use crate::presentation::presenter::View;
+use axis_presentation::View;
 use crate::widgets::components::popup_header::PopupHeader;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;

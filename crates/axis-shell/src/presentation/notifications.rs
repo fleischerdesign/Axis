@@ -3,10 +3,10 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use axis_domain::models::notifications::NotificationStatus;
 use axis_domain::ports::notifications::NotificationService;
-use super::presenter::{Presenter, View};
+use axis_presentation::{Presenter, View};
 
 pub struct NotificationPresenter {
-    inner: Presenter<dyn View<NotificationStatus>, NotificationStatus>,
+    inner: Presenter<NotificationStatus>,
     service: Arc<dyn NotificationService>,
     toast_view: RefCell<Option<Rc<dyn NotificationPopupAware>>>,
     archive_view: RefCell<Option<Rc<dyn NotificationPopupAware>>>,
@@ -51,7 +51,7 @@ impl NotificationPresenter {
     }
 
     pub async fn run_sync(&self) {
-        self.inner.run().await;
+        self.inner.run_sync().await;
     }
 
     pub fn close_notification(&self, id: u32) {

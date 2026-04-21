@@ -3,7 +3,7 @@ use libadwaita::subclass::prelude::*;
 use gtk4::glib;
 use axis_domain::models::power::PowerStatus;
 use crate::presentation::battery::{BatteryView, battery_icon};
-use crate::presentation::presenter::View;
+use axis_presentation::View;
 
 glib::wrapper! {
     pub struct BatteryButton(ObjectSubclass<imp::BatteryButton>)

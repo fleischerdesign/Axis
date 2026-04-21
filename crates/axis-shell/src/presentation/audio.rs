@@ -6,7 +6,7 @@ use axis_application::use_cases::audio::set_default_sink::SetDefaultSinkUseCase;
 use axis_application::use_cases::audio::set_default_source::SetDefaultSourceUseCase;
 use axis_application::use_cases::audio::set_sink_input_volume::SetSinkInputVolumeUseCase;
 use axis_domain::models::audio::AudioStatus;
-use super::presenter::{Presenter, View};
+use axis_presentation::{Presenter, View};
 
 pub trait AudioView: View<AudioStatus> {
     fn on_volume_changed(&self, f: Box<dyn Fn(f64) + 'static>);
@@ -43,7 +43,7 @@ pub(crate) fn audio_icon(status: &AudioStatus) -> &'static str {
 }
 
 pub struct AudioPresenter {
-    inner: Presenter<dyn AudioView, AudioStatus>,
+    inner: Presenter<AudioStatus>,
     set_volume_use_case: Arc<SetVolumeUseCase>,
     set_default_sink_use_case: Arc<SetDefaultSinkUseCase>,
     set_default_source_use_case: Arc<SetDefaultSourceUseCase>,
@@ -85,12 +85,12 @@ impl AudioPresenter {
         }
     }
 
-    pub fn add_view(&self, view: Box<dyn AudioView>) {
+    pub fn add_view(&self, view: Box<dyn View<AudioStatus>>) {
         self.inner.add_view(view);
     }
 
     pub async fn run_sync(&self) {
-        self.inner.run().await;
+        self.inner.run_sync().await;
     }
 
     pub fn handle_user_volume_change(&self, new_vol: f64) {

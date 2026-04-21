@@ -10,7 +10,7 @@ use crate::widgets::components::toggle_tile::ToggleTile;
 use crate::widgets::components::battery_button::BatteryButton;
 use crate::widgets::components::power_actions::PowerActionStack;
 use crate::presentation::notifications::NotificationPresenter;
-use crate::presentation::presenter::View;
+use axis_presentation::View;
 use crate::presentation::popups::PopupView;
 use crate::presentation::audio::{AudioPresenter, AudioView, audio_icon};
 use crate::presentation::toggle::TogglePresenter;

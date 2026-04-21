@@ -1,7 +1,7 @@
 use gtk4::prelude::*;
 use axis_domain::models::notifications::NotificationStatus;
 use crate::widgets::notification_card::{NotificationCard, CloseCallback, ActionCallback};
-use crate::presentation::presenter::View;
+use axis_presentation::View;
 use crate::presentation::notifications::NotificationPopupAware;
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};

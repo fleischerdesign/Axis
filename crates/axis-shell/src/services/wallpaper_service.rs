@@ -4,7 +4,7 @@ use log::{error, info};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::presentation::presenter::View;
+use axis_presentation::View;
 use axis_domain::models::appearance::AppearanceStatus;
 
 type TextureCallback = dyn Fn(Option<gtk4::gdk::Texture>);

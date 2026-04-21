@@ -1,8 +1,7 @@
 use libadwaita::prelude::*;
 use libadwaita::subclass::prelude::*;
 use gtk4::glib;
-use crate::presentation::presenter::View;
-use crate::presentation::clock::ClockView;
+use axis_presentation::View;
 use axis_domain::models::clock::TimeStatus;
 
 glib::wrapper! {
@@ -27,8 +26,6 @@ impl View<TimeStatus> for ClockWidget {
         });
     }
 }
-
-impl ClockView for ClockWidget {}
 
 mod imp {
     use super::*;

@@ -1,12 +1,13 @@
 [package]
 name = "axis-shell"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 axis-domain.workspace = true
 axis-application.workspace = true
 axis-infrastructure.workspace = true
+axis-presentation.workspace = true
 tokio.workspace = true
 tokio-stream.workspace = true
 chrono.workspace = true

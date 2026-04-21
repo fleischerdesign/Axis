@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use axis_application::use_cases::power::subscribe::SubscribeToPowerUpdatesUseCase;
 use axis_domain::models::power::PowerStatus;
-use super::presenter::{Presenter, View};
+use super::{Presenter, View};
 
 pub trait BatteryView: View<PowerStatus> {}
 
@@ -49,7 +49,7 @@ pub(crate) fn battery_icon(percentage: f64, charging: bool) -> &'static str {
 }
 
 pub struct BatteryPresenter {
-    inner: Presenter<dyn BatteryView, PowerStatus>,
+    inner: Presenter<PowerStatus>,
 }
 
 impl BatteryPresenter {
@@ -68,15 +68,15 @@ impl BatteryPresenter {
         Self { inner }
     }
 
-    pub fn add_view(&self, view: Box<dyn BatteryView>) {
+    pub fn add_view(&self, view: Box<dyn View<PowerStatus>>) {
         self.inner.add_view(view);
     }
 
     pub async fn run_sync(&self) {
-        self.inner.run().await;
+        self.inner.run_sync().await;
     }
 
-    pub async fn bind(&self, view: Box<dyn BatteryView>) {
+    pub async fn bind(&self, view: Box<dyn View<PowerStatus>>) {
         self.inner.bind(view).await;
     }
 }

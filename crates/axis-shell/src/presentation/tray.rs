@@ -5,7 +5,7 @@ use axis_application::use_cases::tray::activate::ActivateTrayItemUseCase;
 use axis_application::use_cases::tray::context_menu::ContextMenuTrayItemUseCase;
 use axis_application::use_cases::tray::scroll::ScrollTrayItemUseCase;
 use axis_domain::models::tray::TrayStatus;
-use super::presenter::{Presenter, View};
+use axis_presentation::{Presenter, View};
 
 pub trait TrayView: View<TrayStatus> {
     fn on_activate(&self, f: Box<dyn Fn(String, i32, i32) + 'static>);
@@ -26,7 +26,7 @@ impl<T: TrayView + ?Sized> TrayView for std::rc::Rc<T> {
 }
 
 pub struct TrayPresenter {
-    inner: Presenter<dyn TrayView, TrayStatus>,
+    inner: Presenter<TrayStatus>,
     activate_use_case: Arc<ActivateTrayItemUseCase>,
     context_menu_use_case: Arc<ContextMenuTrayItemUseCase>,
     scroll_use_case: Arc<ScrollTrayItemUseCase>,
@@ -66,12 +66,12 @@ impl TrayPresenter {
         }
     }
 
-    pub fn add_view(&self, view: Box<dyn TrayView>) {
+    pub fn add_view(&self, view: Box<dyn View<TrayStatus>>) {
         self.inner.add_view(view);
     }
 
     pub async fn run_sync(&self) {
-        self.inner.run().await;
+        self.inner.run_sync().await;
     }
 
     pub fn activate(&self, bus_name: String, x: i32, y: i32) {

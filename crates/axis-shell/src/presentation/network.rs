@@ -5,7 +5,7 @@ use axis_application::use_cases::network::scan_wifi::ScanWifiUseCase;
 use axis_application::use_cases::network::connect_to_ap::ConnectToApUseCase;
 use axis_application::use_cases::network::disconnect_wifi::DisconnectWifiUseCase;
 use axis_domain::models::network::NetworkStatus;
-use super::presenter::{Presenter, View};
+use axis_presentation::{Presenter, View};
 
 pub trait NetworkView: View<NetworkStatus> {
     fn on_scan_requested(&self, f: Box<dyn Fn() + 'static>);
@@ -26,7 +26,7 @@ impl<T: NetworkView + ?Sized> NetworkView for std::rc::Rc<T> {
 }
 
 pub struct NetworkPresenter {
-    inner: Presenter<dyn NetworkView, NetworkStatus>,
+    inner: Presenter<NetworkStatus>,
     scan_use_case: Arc<ScanWifiUseCase>,
     connect_use_case: Arc<ConnectToApUseCase>,
     disconnect_use_case: Arc<DisconnectWifiUseCase>,
@@ -60,12 +60,12 @@ impl NetworkPresenter {
         Self { inner, scan_use_case, connect_use_case, disconnect_use_case }
     }
 
-    pub fn add_view(&self, view: Box<dyn NetworkView>) {
+    pub fn add_view(&self, view: Box<dyn View<NetworkStatus>>) {
         self.inner.add_view(view);
     }
 
     pub async fn run_sync(&self) {
-        self.inner.run().await;
+        self.inner.run_sync().await;
     }
 
     pub fn scan(&self) {

@@ -4,3 +4,18 @@ edition = "2024"
 version.workspace = true
 
 [dependencies]
+axis-domain.workspace = true
+axis-application.workspace = true
+axis-infrastructure.workspace = true
+axis-presentation.workspace = true
+libadwaita.workspace = true
+dirs.workspace = true
+gtk4.workspace = true
+tokio = { workspace = true, features = ["full"] }
+tokio-stream.workspace = true
+futures-util.workspace = true
+log.workspace = true
+async-trait.workspace = true
+async-stream.workspace = true
+serde.workspace = true
+serde_json.workspace = true

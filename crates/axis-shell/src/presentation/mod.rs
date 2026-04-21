@@ -1,4 +1,5 @@
-pub mod presenter;
+pub use axis_presentation::{Presenter, View};
+
 pub mod appearance;
 pub mod battery;
 pub mod clock;
