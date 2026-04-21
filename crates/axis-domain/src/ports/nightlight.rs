@@ -1,0 +1,23 @@
+use crate::models::nightlight::NightlightStatus;
+use async_trait::async_trait;
+use thiserror::Error;
+use futures_util::Stream;
+use std::pin::Pin;
+
+#[derive(Error, Debug)]
+pub enum NightlightError {
+    #[error("Nightlight provider error: {0}")]
+    ProviderError(String),
+}
+
+pub type NightlightStream = Pin<Box<dyn Stream<Item = NightlightStatus> + Send>>;
+
+#[async_trait]
+pub trait NightlightProvider: Send + Sync {
+    async fn get_status(&self) -> Result<NightlightStatus, NightlightError>;
+    async fn subscribe(&self) -> Result<NightlightStream, NightlightError>;
+    async fn set_enabled(&self, enabled: bool) -> Result<(), NightlightError>;
+    async fn set_temp_day(&self, temp: u32) -> Result<(), NightlightError>;
+    async fn set_temp_night(&self, temp: u32) -> Result<(), NightlightError>;
+    async fn set_schedule(&self, sunrise: &str, sunset: &str) -> Result<(), NightlightError>;
+}

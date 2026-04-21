@@ -1,153 +1,128 @@
-/* Accent colors — overridden at runtime via update_theme_css */
+/* Semantic Color Palette (Dark defaults — overridden by ThemeService at PRIORITY_USER) */
 @define-color accent_bg_color #3584e4;
 @define-color accent_fg_color #ffffff;
 @define-color accent_hover_color #5ca0e9;
 
+@define-color window_bg_color #242424;
+@define-color window_fg_color #ffffff;
+@define-color card_bg_color #303030;
+@define-color border_color rgba(255, 255, 255, 0.1);
+@define-color dim_label_color rgba(255, 255, 255, 0.5);
+@define-color faint_label_color rgba(255, 255, 255, 0.3);
+@define-color muted_label_color rgba(255, 255, 255, 0.4);
+@define-color hover_bg_color rgba(255, 255, 255, 0.05);
+@define-color hover_bg_color_strong rgba(255, 255, 255, 0.1);
+@define-color body_text_color rgba(255, 255, 255, 0.75);
+@define-color title_text_color rgba(255, 255, 255, 0.9);
+@define-color section_label_color rgba(255, 255, 255, 0.6);
+@define-color slider_trough_color #303030;
+@define-color ws_dot_inactive_color rgba(255, 255, 255, 0.25);
+@define-color ws_dot_hover_color rgba(255, 255, 255, 0.5);
+
+/* Font override (set by ThemeService) */
+
 /* Global Window Styling */
-window {
-    background: transparent;
-    --font-family: system-ui;
+window.bar-window {
+    background-color: rgba(0, 0, 0, 0.01);
 }
 
-window * {
-    font-family: var(--font-family);
+window.popup-window {
+    background-color: transparent;
 }
 
-/* Fokus-Ringe deaktivieren, da wir eigene Auswahl-Logik haben */
-*:focus {
-    outline: none;
-    box-shadow: none;
-}
-
-/* Sichtbare Fokus-Indikatoren nur bei Tastatur-Navigation */
-button:focus-visible,
-entry:focus-visible {
-    outline: 2px solid @accent_bg_color;
-    outline-offset: 2px;
-}
-
-/* Inset Focus-Ring für Elemente mit border-radius (Tiles, Rows, Cards) */
-.tile button:focus-visible,
-.qs-list row:focus-visible {
-    box-shadow: inset 0 0 0 2px alpha(@accent_bg_color, 0.5);
-    outline: none; /* Outline wird an border-radius abgeschnitten */
-}
-
-/* Workspace cards: no focus ring — .active is the only indicator */
-.workspace-card:focus-visible {
-    outline: none;
-    box-shadow: none;
-}
-
-.qs-entry:focus-visible {
-    outline: none; /* Hat immer blauen Border+Glow via .qs-entry */
-}
-
-/* The Island Component */
-.island {
-    background-color: #242424;
-    color: #ffffff;
-    border-radius: 16px;
-    padding: 6px 16px;
-    margin: 0 10px;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
-}
-
-
-/* Quick Settings Panel */
-.qs-panel {
-    background-color: #1e1e1e;
-    color: white;
-    padding: 20px;
+.popup-content {
+    background-color: @window_bg_color;
+    color: @window_fg_color;
     border-radius: 24px;
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-    min-width: 380px;
-    border: none;
+    border: 1px solid @border_color;
+    padding: 20px;
+    margin: 0;
+    box-shadow: none;
+    opacity: 1;
+    transition: opacity 250ms ease;
 }
 
-/* Quick Settings Tiles (Split Buttons) */
-.tile {
-    background-color: #303030;
-    color: #ffffff;
-    border-radius: 16px;
-    min-width: 140px;
-    min-height: 52px;
+.popup-content.popup-hiding {
+    opacity: 0;
+}
+
+.quick-setting {
+}
+
+.qs-panel {
+}
+
+/* --- AXIS CUSTOM SLIDER PILL --- */
+.slider-row {
+    background-color: @slider_trough_color;
+    border-radius: 22px;
+    min-height: 44px;
+    margin: 4px 0;
+}
+
+.volume-slider scale {
+    margin: 0;
     padding: 0;
-    transition: all 0.2s ease-in-out;
 }
 
-.tile.active {
-    background-color: @accent_bg_color;
-}
-
-.tile.active button:focus-visible {
-    box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.4);
-}
-
-.tile button {
-    background: none;
+.volume-slider scale trough {
+    min-height: 44px;
+    border-radius: 22px 0 0 22px;
     background-color: transparent;
     border: none;
-    border-radius: 0;
+}
+
+.volume-slider scale highlight {
+    min-height: 44px;
+    background-color: @accent_bg_color;
+    border-radius: 22px;
+    transition: border-radius 0.2s ease;
+}
+
+.volume-slider scale.with-arrow:not(.highlight-partial) highlight {
+    border-radius: 22px 0 0 22px;
+}
+
+.volume-slider scale slider {
+    all: unset;
+    min-width: 0;
+    min-height: 0;
+    opacity: 0;
+}
+
+.slider-icon-overlay {
+    color: @window_fg_color;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Der optionale Pfeil rechts */
+.tile-arrow {
+    all: unset;
+    border-radius: 0 22px 22px 0;
+    padding: 0 16px;
+    box-shadow: inset 1px 0 0 @border_color;
+    background-color: transparent;
+    color: @window_fg_color;
+    transition: all 0.2s ease;
+}
+
+.tile-arrow.max {
+    background-color: @accent_bg_color;
     box-shadow: none;
-    color: inherit;
-    padding: 0 12px;
 }
 
-.tile .tile-main {
-    border-radius: 16px 0 0 16px;
+.tile-arrow:hover {
+    background-color: @hover_bg_color_strong;
 }
 
-.tile .tile-main.sole {
-    border-radius: 16px; /* Vollständig rund, wenn kein Pfeil da ist */
+.tile-arrow.max:hover {
+    background-color: @accent_hover_color;
 }
 
-.tile .tile-main:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-}
-
-.tile .tile-arrow {
-    border-radius: 0 16px 16px 0;
-    padding: 0 8px;
-    box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.1);
-}
-
-.tile .tile-arrow:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-}
-
-.tile-label {
-    font-weight: 600;
-    font-size: 13px;
-}
-
-/* QS Sub-pages */
-.subpage-back-btn {
-    background: transparent;
-    border-radius: 999px;
-    min-width: 36px;
-    min-height: 36px;
-    padding: 0;
-}
-
-.subpage-back-btn:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-}
-
-.subpage-title {
-    font-weight: 800;
-    font-size: 15px;
-}
-
-.subpage-spinner {
-    min-width: 14px;
-    min-height: 14px;
-    opacity: 0.5;
-}
-
+/* --- QS LIST --- */
 .qs-list {
-    background-color: #242424;
-    color: white;
+    background-color: @window_bg_color;
+    color: @window_fg_color;
     padding: 6px;
     border-radius: 16px;
 }
@@ -155,24 +130,9 @@ entry:focus-visible {
 .qs-scrolled,
 .qs-scrolled viewport {
     border-radius: 16px;
-    background-color: #242424;
+    background-color: @window_bg_color;
 }
 
-.list-row {
-    background: transparent;
-    border: none;
-    box-shadow: none;
-    color: inherit;
-    border-radius: 12px;
-    padding: 0;
-    font-weight: normal;
-}
-
-.list-row:hover {
-    background-color: rgba(255, 255, 255, 0.05);
-}
-
-/* Entfernt den kantigen Standard-Hintergrund der ListBox-Zeilen */
 .qs-list row {
     background: transparent;
     border: none;
@@ -181,320 +141,135 @@ entry:focus-visible {
     border-radius: 12px;
 }
 
-/* Quick Settings: Selektion komplett ausblenden (Buttons haben eigene Styles) */
-.qs-list:not(.launcher-list) row:not(.qs-wifi-item):hover,
-.qs-list:not(.launcher-list) row:not(.qs-wifi-item):selected {
+.qs-list:not(.launcher-list) row:hover,
+.qs-list:not(.launcher-list) row:selected {
     background: transparent;
 }
 
-/* Launcher: Selektion sichtbar machen */
-.launcher-list row .launcher-row {
+/* --- GENERIC LIST ROW --- */
+.list-row {
     border-radius: 8px;
     transition: background 100ms ease;
 }
 
-.launcher-list row:hover .launcher-row {
-    background-color: rgba(255, 255, 255, 0.05);
-}
-
-.launcher-list row .launcher-row.launcher-selected {
-    background-color: rgba(255, 255, 255, 0.1);
-    color: @accent_bg_color;
+.qs-list row:hover .list-row {
+    background-color: @hover_bg_color;
+    border-radius: 12px;
+    margin: -8px -12px;
+    padding: 8px 12px;
 }
 
 .list-row.active {
-    background-color: rgba(255, 255, 255, 0.1);
+    background-color: alpha(@accent_bg_color, 0.15);
     color: @accent_bg_color;
-    font-weight: bold;
-}
-
-.list-sublabel {
-    color: rgba(255, 255, 255, 0.5);
-    font-size: 11px;
-}
-
-/* Launcher Specifics */
-.qs-entry {
-    background-color: #303030;
-    color: white;
     border-radius: 12px;
+    margin: -8px -12px;
     padding: 8px 12px;
-    border: 1px solid @accent_bg_color;
-    box-shadow: 0 0 0 2px alpha(@accent_bg_color, 0.3);
 }
 
-.launcher-details {
-    border-left: 1px solid rgba(255, 255, 255, 0.1);
-    padding: 12px;
+.qs-list row:hover .list-row.active {
+    background-color: alpha(@accent_bg_color, 0.22);
 }
 
-.qs-list .qs-wifi-item:hover {
-    background: rgba(255, 255, 255, 0.05);
+.list-row.launcher-selected {
+    background-color: alpha(@accent_bg_color, 0.15);
+    border-radius: 12px;
+    margin: -8px -12px;
+    padding: 8px 12px;
+}
+
+.list-row.launcher-selected label {
+    color: @accent_bg_color;
+}
+
+/* --- QS WIFI ITEM --- */
+.qs-wifi-item .list-row {
     border-radius: 12px;
 }
 
-.qs-list .qs-wifi-item .list-row:hover {
-    background: transparent;
+.qs-wifi-item:hover {
+    background: @hover_bg_color;
+    border-radius: 12px;
 }
 
 .qs-wifi-item.expanded .list-row {
     border-radius: 12px 12px 0 0;
 }
 
-.qs-wifi-item .list-row {
+/* --- LAUNCHER LIST --- */
+.launcher-list row .list-row {
+    border-radius: 8px;
+    transition: background 100ms ease;
+}
+
+.launcher-list row:hover .list-row:not(.launcher-selected) {
+    background-color: @hover_bg_color;
     border-radius: 12px;
+    margin: -8px -12px;
+    padding: 8px 12px;
 }
 
-.qs-wifi-auth {
-    padding-left: 4px;
-}
-
-.qs-wifi-connect-btn {
+/* --- LAUNCHER ENTRY --- */
+.qs-entry {
+    background-color: @slider_trough_color;
+    color: @window_fg_color;
     border-radius: 12px;
-    padding: 0 16px;
+    padding: 8px 12px;
+    border: 1px solid @accent_bg_color;
+    box-shadow: 0 0 0 2px alpha(@accent_bg_color, 0.3);
 }
 
-/* GNOME Pill-Slider */
-.volume-slider scale {
-    margin-left: 0;
-    margin-right: 0;
-    padding: 0;
+/* --- LAUNCHER DETAILS --- */
+.launcher-details {
+    border-left: 1px solid @border_color;
+    padding: 12px;
 }
 
-.volume-slider scale trough {
-    min-height: 44px;
-    border-radius: 999px;
-    background-color: rgba(255, 255, 255, 0.1);
-    border: none;
-    margin: 0;
+.subpage-title {
+    font-weight: 800;
+    font-size: 15px;
 }
 
-.volume-slider scale highlight {
-    min-height: 44px;
-    background-color: @accent_bg_color;
-}
-
-.volume-slider scale slider {
-    all: unset;
-    min-width: 0;
-    min-height: 0;
-}
-
-.volume-slider scale:focus-visible trough {
-    box-shadow: inset 0 0 0 2px alpha(@accent_bg_color, 0.5);
-}
-
-/* Volume slider row (slider + arrow = one pill) */
-.volume-slider-row {
-    background-color: #303030;
-    border-radius: 999px;
-    min-height: 44px;
-}
-
-/* Hide the trough background — only the blue highlight is visible */
-.volume-slider-row .volume-slider scale trough,
-.volume-slider-row .volume-slider scale contents {
-    background-color: transparent;
-    border-radius: 999px 0 0 999px;
-}
-
-/* Default for highlight in the row: flat right side to connect to separator */
-.volume-slider-row .volume-slider scale highlight {
-    border-radius: 999px 0 0 999px;
-}
-
-/* ROUND right side ONLY when partial (< 100%) */
-.volume-slider-row .volume-slider scale.highlight-partial trough,
-.volume-slider-row .volume-slider scale.highlight-partial contents,
-.volume-slider-row .volume-slider scale.highlight-partial highlight {
-    border-radius: 999px;
-}
-
-.volume-slider-row .tile-arrow {
-    border-radius: 0 999px 999px 0;
-    padding: 0 12px;
-    background: transparent;
-    box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.1);
-}
-
-.volume-slider-row .tile-arrow.max {
-    background-color: @accent_bg_color;
-}
-
-.volume-slider-row .tile-arrow:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-}
-
-.volume-slider-row .tile-arrow.max:hover {
-    background-color: @accent_hover_color;
-}
-
-/* Audio page — master slider row */
-.audio-master-row {
-    background-color: #303030;
-    border-radius: 999px;
-    min-height: 44px;
-}
-
-.audio-master-row .volume-slider scale trough,
-.audio-master-row .volume-slider scale contents {
-    background-color: transparent;
-}
-
-/* Audio page — per-app rows */
-.audio-app-row {
-    background-color: #303030;
-    border-radius: 999px;
-    min-height: 44px;
-}
-
-.audio-app-row .volume-slider scale trough,
-.audio-app-row .volume-slider scale contents {
-    background-color: transparent;
-}
-
-.audio-app-name {
-    font-size: 13px;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.9);
-}
-
-/* Audio empty state */
-.audio-empty-icon {
-    opacity: 0.3;
-    margin-bottom: 4px;
-}
-
-.audio-empty-label {
-    font-size: 13px;
-    color: rgba(255, 255, 255, 0.4);
-}
-
-/* Audio device selectors (adw PreferencesGroup boxed-list) */
-preferencesgroup .boxed-list {
-    background-color: #303030;
-    border-radius: 16px;
-    color: white;
-}
-
-preferencesgroup .boxed-list row {
-    color: white;
-}
-
-preferencesgroup .boxed-list row label {
-    color: white;
-}
-
-preferencesgroup .boxed-list row .title {
-    color: rgba(255, 255, 255, 0.9);
-}
-
-preferencesgroup .boxed-list row .subtitle {
-    color: rgba(255, 255, 255, 0.5);
-}
-
-preferencesgroup > .title {
-    color: rgba(255, 255, 255, 0.6);
-    font-size: 12px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-preferencesgroup > .description {
-    color: rgba(255, 255, 255, 0.4);
+.list-sublabel {
+    color: @dim_label_color;
     font-size: 11px;
 }
 
-.qs-battery-btn {
-    background-color: #303030;
-    color: white;
-    min-height: 44px;
-    border-radius: 999px;
-    padding: 0 12px;
-    border: none;
+/* Bar Elements */
+.island {
+    background-color: @window_bg_color;
+    color: @window_fg_color;
+    border-radius: 16px;
+    padding: 8px 16px;
+    margin: 0 10px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
 }
 
-.qs-battery-btn:hover {
-    background-color: #3d3d3d;
+.workspace-dots {
+    padding: 0 4px;
 }
 
-/* Bottom Actions */
-.qs-bottom-btn {
-    background-color: #303030;
-    min-width: 44px;
-    min-height: 44px;
-    border-radius: 999px;
-    padding: 0;
-}
-
-.qs-bottom-btn:hover {
-    background-color: #3d3d3d;
-}
-
-.qs-bottom-btn:disabled {
-    opacity: 0.35;
-}
-
-/* Power Menu */
-.qs-power-btn {
-    background-color: #303030;
-    min-width: 44px;
-    min-height: 44px;
-    border-radius: 999px;
-    padding: 0;
-}
-
-.qs-power-btn:hover {
-    background-color: #3d3d3d;
-}
-
-.qs-power-btn.sleep:hover {
-    background-color: @accent_bg_color;
-}
-
-.qs-power-btn.shutdown:hover {
-    background-color: #e01b24;
-}
-
-.qs-power-btn.restart:hover {
-    background-color: #e5a50a;
-}
-
-/* Workspace Shelf & Cards */
-.workspace-shelf {
-    background-color: #1e1e1e;
-    padding: 24px;
-    border-radius: 28px;
-}
-
-.workspace-card {
-    padding: 16px;
-    border-radius: 20px;
-    transition: all 0.2s;
-    background: none;
+.ws-dot {
+    min-width: 6px;
+    min-height: 6px;
+    border-radius: 50%;
+    background-color: @ws_dot_inactive_color;
+    margin: 0 3px;
+    transition: all 0.2s ease-in-out;
+    background-image: none;
     border: none;
     box-shadow: none;
+    padding: 0;
 }
 
-.workspace-card.active {
-    background-color: rgba(255, 255, 255, 0.1);
-    box-shadow: inset 0 0 0 2px @accent_bg_color;
+.ws-dot:hover {
+    background-color: @ws_dot_hover_color;
 }
 
-.workspace-preview {
-    background-color: #0b0b0b;
-    border-radius: 12px;
-}
-
-.preview-window {
-    background-color: #333333;
-    border-radius: 6px;
-}
-
-.preview-window.focused {
-    background-color: #4a4a4a;
-    border-color: @accent_bg_color;
+.ws-dot.active {
+    background-color: @accent_bg_color;
+    min-width: 12px;
+    border-radius: 3px;
 }
 
 .clock-label {
@@ -502,362 +277,63 @@ preferencesgroup > .description {
     font-size: 13px;
 }
 
-/* Workspace Dots (libadwaita style) */
-.ws-dot {
-    min-width: 6px;
-    min-height: 6px;
-    border-radius: 50%;
-    background-color: rgba(255, 255, 255, 0.25);
-}
-
-.ws-dot.active {
-    background-color: @accent_bg_color;
-    box-shadow: 0 0 4px alpha(@accent_bg_color, 0.5);
-}
-
-separator {
-    margin: 6px 0;
-    background-color: rgba(255, 255, 255, 0.1);
-    min-width: 1px;
-}
-
-/* Calendar Popup — daily info panel */
-.calendar-wrapper {
-    background-color: #1e1e1e;
-    padding: 20px;
-    border-radius: 24px;
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-    border: none;
-    margin: 0 10px;
-}
-
-.calendar-date-header {
-    font-size: 16px;
-    font-weight: 700;
-    color: white;
-    margin-bottom: 14px;
-}
-
-/* Custom Calendar Grid */
-.cal-grid-wrapper {
-    margin-bottom: 8px;
-}
-
-.cal-grid-header {
-    margin-bottom: 8px;
-}
-
-.cal-grid-header button {
-    background: none;
-    border: none;
-    border-radius: 8px;
-    padding: 6px 10px;
-    color: rgba(255, 255, 255, 0.6);
-    min-width: 0;
-    min-height: 0;
-    box-shadow: none;
-}
-
-.cal-grid-header button:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-    color: white;
-}
-
-.cal-grid-month-label {
-    color: white;
-    font-weight: 700;
-    font-size: 14px;
-}
-
-.cal-grid-table {
-    margin: 0;
-}
-
-.cal-grid-day-name {
-    color: rgba(255, 255, 255, 0.45);
-    font-size: 11px;
-    font-weight: 600;
-    padding: 4px 0;
-}
-
-.cal-grid-cell {
-    background: none;
-    border: none;
-    border-radius: 10px;
-    padding: 6px 2px;
-    min-width: 0;
-    min-height: 0;
-    box-shadow: none;
-    margin: 0;
-}
-
-.cal-grid-cell:hover {
-    background-color: rgba(255, 255, 255, 0.08);
-}
-
-.cal-grid-cell-today .cal-grid-day-num {
-    color: @accent_bg_color;
-    font-weight: 700;
-}
-
-.cal-grid-cell-selected {
-    background-color: alpha(@accent_bg_color, 0.25);
-}
-
-.cal-grid-cell-other {
-    opacity: 0.3;
-}
-
-.cal-grid-cell-other:hover {
-    background: none;
-}
-
-.cal-grid-day-num {
-    color: white;
-    font-size: 12px;
-    font-weight: 500;
-    min-height: 18px;
-}
-
-.cal-grid-cell-selected .cal-grid-day-num {
-    font-weight: 700;
-}
-
-/* Calendar Sections */
-.calendar-section {
-}
-
-/* Event List */
-.calendar-event-scroll {
-}
-
-.calendar-task-scroll {
-    min-height: 200px;
-}
-
-.calendar-event-row {
-    padding: 6px 8px;
-    border-radius: 10px;
-    margin-bottom: 2px;
-}
-
-.calendar-event-row:hover {
-    background-color: rgba(255, 255, 255, 0.05);
-}
-
-.calendar-event-time {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.6);
-    min-width: 0;
-}
-
-.calendar-event-summary {
-    font-size: 13px;
-    color: rgba(255, 255, 255, 0.85);
-}
-
-/* Range Toggle */
-.calendar-range-btn {
-    min-height: 0;
-    padding: 6px 12px;
-    background-color: rgba(255, 255, 255, 0.06);
-    border: none;
-    box-shadow: none;
-    color: rgba(255, 255, 255, 0.6);
-    font-size: 12px;
-    font-weight: 600;
-    min-width: 0;
-    border-radius: 8px;
-}
-
-.calendar-range-btn:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-    color: white;
-}
-
-.calendar-range-active {
-    background-color: alpha(@accent_bg_color, 0.25);
-    color: white;
-}
-
-.calendar-range-active:hover {
-    background-color: alpha(@accent_bg_color, 0.35);
-    color: white;
-}
-
-/* Auth Prompt */
-.auth-prompt-label {
-    font-size: 13px;
-    color: rgba(255, 255, 255, 0.6);
-}
-
-.auth-prompt-btn {
-    background-color: @accent_bg_color;
-    color: white;
-    border: none;
-    border-radius: 10px;
-    padding: 8px 16px;
-    font-weight: 600;
-}
-
-.auth-prompt-btn:hover {
-    background-color: @accent_hover_color;
-}
-
-/* Task List */
-.calendar-tasks-header-row {
-    margin-bottom: 6px;
-}
-
-.calendar-tasks-header {
-    font-size: 14px;
-    font-weight: 700;
-    color: rgba(255, 255, 255, 0.7);
-}
-
-.calendar-list-dropdown {
-    min-height: 0;
-    padding: 0;
-    background: none;
-    border: none;
-    box-shadow: none;
-    color: rgba(255, 255, 255, 0.6);
-    font-size: 12px;
-    font-weight: 600;
-}
-
-.calendar-list-dropdown:hover {
-    color: white;
-}
-
-.calendar-task-row {
-    padding: 6px 8px;
-    border-radius: 10px;
-}
-
-.calendar-task-row:hover {
-    background-color: rgba(255, 255, 255, 0.05);
-}
-
-.calendar-task-done label {
-    text-decoration: line-through;
-    opacity: 0.4;
-}
-
-.calendar-task-label {
-    font-size: 13px;
-    color: rgba(255, 255, 255, 0.85);
-}
-
-.calendar-task-check {
-    margin-right: 2px;
-}
-
-.calendar-task-delete {
-    background: none;
-    border: none;
-    color: rgba(255, 255, 255, 0.2);
-    border-radius: 6px;
-    padding: 4px;
-    min-width: 0;
-    min-height: 0;
-    margin-left: 4px;
-    opacity: 0;
+/* --- AXIS TOGGLE TILES --- */
+.tile {
+    background-color: @card_bg_color;
+    border-radius: 12px;
+    min-height: 54px;
+    margin: 4px;
     transition: all 0.2s ease;
 }
 
-.calendar-task-row:hover .calendar-task-delete {
-    opacity: 1;
-}
-
-.calendar-task-delete:hover {
-    background-color: rgba(224, 108, 117, 0.2);
-    color: #e06c75;
-}
-
-.calendar-add-entry {
-    background-color: rgba(255, 255, 255, 0.06);
-    color: white;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
-    padding: 6px 10px;
-    min-height: 0;
-}
-
-.calendar-add-entry:focus {
-    border-color: @accent_bg_color;
-    box-shadow: 0 0 0 2px alpha(@accent_bg_color, 0.3);
-}
-
-.calendar-add-btn {
-    background: none;
-    border: none;
-    color: rgba(255, 255, 255, 0.5);
-    border-radius: 10px;
-    padding: 4px 8px;
-    min-width: 0;
-    min-height: 0;
-}
-
-.calendar-add-btn:hover {
-    background-color: rgba(255, 255, 255, 0.08);
-    color: white;
-}
-
-.calendar-empty {
-    font-size: 13px;
-    color: rgba(255, 255, 255, 0.35);
-    font-style: italic;
-}
-
-.calendar-error {
-    font-size: 13px;
-    color: #e06c75;
-}
-
-/* Auth Prompt */
-.calendar-auth-info {
-    font-size: 13px;
-    color: rgba(255, 255, 255, 0.6);
-}
-
-.calendar-auth-code {
-    font-size: 28px;
-    font-weight: 700;
-    letter-spacing: 6px;
-    color: @accent_bg_color;
-    background: alpha(@accent_bg_color, 0.1);
-    border-radius: 12px;
-    padding: 12px 24px;
-    margin: 4px 0;
-}
-
-.calendar-auth-url {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.4);
-}
-
-.calendar-auth-btn {
+.tile.active {
     background-color: @accent_bg_color;
-    color: white;
-    border: none;
-    border-radius: 10px;
-    padding: 8px 16px;
+    color: @window_fg_color;
+}
+
+.tile-main {
+    all: unset;
+    padding: 0 16px;
+    border-radius: 12px 0 0 12px;
+}
+
+.tile-main.sole {
+    border-radius: 12px;
+}
+
+.tile-main:hover {
+    background-color: @hover_bg_color;
+}
+
+.tile.active .tile-main:hover {
+    background-color: @hover_bg_color_strong;
+}
+
+.tile-label {
+    font-size: 14px;
     font-weight: 600;
 }
 
-.calendar-auth-btn:hover {
-    background-color: @accent_hover_color;
+.tile-arrow {
+    all: unset;
+    border-radius: 0 22px 22px 0;
+    padding: 0 16px;
+    box-shadow: inset 1px 0 0 @border_color;
+    background-color: transparent;
+    color: @window_fg_color;
+    transition: all 0.2s ease;
 }
 
-/* Notifications (Authentic GNOME Style) */
+.tile-arrow:hover {
+    background-color: @hover_bg_color;
+}
+
+/* --- NOTIFICATIONS --- */
 .notification-card {
-    background-color: #1e1e1e; /* Match system popups */
-    padding: 20px;
-    border-radius: 24px;
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
-    border: none;
-    min-width: 380px;
+    background-color: @window_bg_color;
+    padding: 16px;
+    border-radius: 16px;
+    border: 1px solid @border_color;
 }
 
 .notification-header {
@@ -868,69 +344,83 @@ separator {
     font-size: 11px;
     font-weight: 800;
     text-transform: uppercase;
-    color: rgba(255, 255, 255, 0.4);
+    color: @muted_label_color;
     letter-spacing: 0.5px;
+}
+
+.notification-time {
+    font-size: 11px;
+    color: @faint_label_color;
+}
+
+.notification-wrapper {
+    background-color: transparent;
 }
 
 .notification-close-btn {
     background: transparent;
     border: none;
     border-radius: 999px;
-    min-width: 24px;
-    min-height: 24px;
-    padding: 0;
-    color: rgba(255, 255, 255, 0.3);
+    min-width: 28px;
+    min-height: 28px;
+    color: @faint_label_color;
+    transition: all 0.15s ease;
 }
 
 .notification-close-btn:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-    color: #ffffff;
+    background-color: @hover_bg_color_strong;
+    color: @window_fg_color;
 }
 
 .notification-summary {
     font-weight: 800;
     font-size: 15px;
-    color: #ffffff;
-    margin-top: 2px;
+    color: @window_fg_color;
 }
 
 .notification-body {
     font-size: 14px;
-    color: rgba(255, 255, 255, 0.75);
-    margin-top: 6px;
+    color: @body_text_color;
     line-height: 1.4;
 }
 
 .notification-action-btn {
-    background-color: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    background-color: @hover_bg_color;
     border-radius: 12px;
-    color: white;
+    color: @window_fg_color;
     font-weight: 600;
     font-size: 13px;
-    padding: 8px 12px;
+    padding: 8px 16px;
+    transition: all 0.15s ease;
 }
 
 .notification-action-btn:hover {
-    background-color: rgba(255, 255, 255, 0.1);
+    background-color: @hover_bg_color_strong;
 }
 
-/* OSD (On-Screen Display) - Rotated Island Style */
+window.notification-toast-window {
+    background-color: transparent;
+}
+
+window.osd-window {
+    background-color: transparent;
+}
+
+/* --- OSD --- */
 .osd-module {
-    background-color: #242424;
-    color: #ffffff;
-    border-radius: 16px; /* Exakt wie .island */
-    padding: 16px 0;    /* Zentrierung über Rust halign */
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3); /* Exakt wie .island */
+    background-color: @window_bg_color;
+    color: @window_fg_color;
+    border-radius: 16px;
+    border: 1px solid @border_color;
+    padding: 16px 0;
 }
 
 .osd-level-bar {
-    min-width: 4px; /* Deutlich schlanker */
+    min-width: 4px;
 }
 
-/* Den Standard-Look von GTK LevelBar komplett auf modernes Design umstellen */
 levelbar.osd-level-bar trough {
-    border-radius: 4px; /* Harmonischer Radius für schmale Balken */
+    border-radius: 4px;
     background-color: rgba(255, 255, 255, 0.15);
     padding: 0;
 }
@@ -952,9 +442,142 @@ levelbar.osd-level-bar block.empty {
     background-color: transparent;
 }
 
-/* Notification wrapper (gestures need a clickable background) */
-.notification-wrapper {
-    background-color: rgba(0, 0, 0, 0.01);
+/* --- AUDIO PAGE --- */
+preferencesgroup .boxed-list {
+    background-color: @card_bg_color;
+    border-radius: 16px;
+    color: @window_fg_color;
+}
+
+preferencesgroup .boxed-list row {
+    color: @window_fg_color;
+}
+
+preferencesgroup .boxed-list row label {
+    color: @window_fg_color;
+}
+
+preferencesgroup .boxed-list row .title {
+    color: @title_text_color;
+}
+
+preferencesgroup .boxed-list row .subtitle {
+    color: @dim_label_color;
+}
+
+preferencesgroup > .title {
+    color: @section_label_color;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.audio-master-row {
+    background-color: @card_bg_color;
+    border-radius: 22px;
+    min-height: 44px;
+}
+
+.audio-master-row .volume-slider scale trough {
+    background-color: transparent;
+}
+
+.audio-master-row .volume-slider scale slider {
+    all: unset;
+    min-width: 0;
+    min-height: 0;
+    opacity: 0;
+}
+
+.audio-app-row {
+    background-color: @card_bg_color;
+    border-radius: 22px;
+    min-height: 44px;
+    padding: 0 8px;
+}
+
+.audio-app-row .volume-slider scale trough {
+    background-color: transparent;
+}
+
+.audio-app-row .volume-slider scale slider {
+    all: unset;
+    min-width: 0;
+    min-height: 0;
+    opacity: 0;
+}
+
+.audio-app-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: @title_text_color;
+}
+
+.audio-empty-icon {
+    opacity: 0.3;
+    margin-bottom: 4px;
+}
+
+.audio-empty-label {
+    font-size: 13px;
+    color: @muted_label_color;
+}
+
+/* --- QS BOTTOM ROW --- */
+.qs-battery-btn {
+    background-color: @card_bg_color;
+    color: @window_fg_color;
+    min-height: 44px;
+    border-radius: 999px;
+    padding: 0 12px;
+    border: none;
+}
+
+.qs-battery-btn:hover {
+    background-color: @hover_bg_color_strong;
+}
+
+.qs-bottom-btn {
+    background-color: @card_bg_color;
+    color: @window_fg_color;
+    min-width: 44px;
+    min-height: 44px;
+    border-radius: 999px;
+    padding: 0;
+    border: none;
+}
+
+.qs-bottom-btn:hover {
+    background-color: @hover_bg_color_strong;
+}
+
+.qs-bottom-btn:disabled {
+    opacity: 0.35;
+}
+
+.qs-power-btn {
+    background-color: @card_bg_color;
+    color: @window_fg_color;
+    min-width: 44px;
+    min-height: 44px;
+    border-radius: 999px;
+    padding: 0;
+    border: none;
+}
+
+.qs-power-btn:hover {
+    background-color: @hover_bg_color_strong;
+}
+
+.qs-power-btn.sleep:hover {
+    background-color: @accent_bg_color;
+}
+
+.qs-power-btn.shutdown:hover {
+    background-color: #e01b24;
+}
+
+.qs-power-btn.restart:hover {
+    background-color: #e5a50a;
 }
 
 /* Lock Screen */
@@ -1053,33 +676,4 @@ levelbar.osd-level-bar block.empty {
     color: #e01b24;
     font-weight: 600;
     transition: opacity 0.2s ease;
-}
-
-/* Continuity PIN Display */
-.pin-display {
-    font-size: 28px;
-    font-weight: 700;
-    font-family: monospace;
-    letter-spacing: 0.3em;
-    padding: 12px 16px;
-    background: alpha(@card_bg_color, 0.5);
-    border-radius: 8px;
-}
-
-/* Continuity */
-.continuity-edge-debug {
-    background-color: rgba(255, 0, 0, 0.3); /* Visible red for debugging */
-}
-
-.continuity-overlay {
-    background-color: rgba(0, 0, 0, 0.01); /* Almost invisible but can intercept events */
-}
-
-.unpair-btn {
-    color: @destructive_fg_color;
-}
-
-.unpair-btn:hover {
-    background: @destructive_bg_color;
-    color: @destructive_fg_color;
 }

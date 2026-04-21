@@ -38,7 +38,6 @@ mod imp {
             let tw = texture.width() as f32;
             let th = texture.height() as f32;
 
-            // Cover-fit: scale so the image fills the entire widget
             let scale = (w / tw).max(h / th);
             let iw = tw * scale;
             let ih = th * scale;
@@ -49,6 +48,12 @@ mod imp {
             let tex_node = gsk::TextureNode::new(texture, &bounds);
             let blur_node = gsk::BlurNode::new(tex_node, 30.0);
             snapshot.append_node(blur_node);
+        }
+
+        fn measure(&self, _orientation: gtk4::Orientation, _for_size: i32) -> (i32, i32, i32, i32) {
+            // Ein Hintergrund-Widget sollte keinen Platz anfordern (0,0),
+            // aber bereit sein, unendlich viel Platz einzunehmen (-1,-1).
+            (0, 0, -1, -1)
         }
     }
 }
@@ -64,5 +69,14 @@ impl BlurredPicture {
         let obj: Self = glib::Object::new();
         *obj.imp().texture.borrow_mut() = Some(texture.clone());
         obj
+    }
+
+    pub fn new_empty() -> Self {
+        glib::Object::new()
+    }
+
+    pub fn set_texture(&self, texture: Option<gdk::Texture>) {
+        *self.imp().texture.borrow_mut() = texture;
+        self.queue_draw();
     }
 }

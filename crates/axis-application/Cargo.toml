@@ -1,0 +1,10 @@
+[package]
+name = "axis-application"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axis-domain.workspace = true
+async-trait.workspace = true
+thiserror.workspace = true
+serde.workspace = true

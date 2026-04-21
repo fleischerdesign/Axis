@@ -1,0 +1,11 @@
+[package]
+name = "axis-domain"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-trait.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+futures-util.workspace = true

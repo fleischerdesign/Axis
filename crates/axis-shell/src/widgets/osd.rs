@@ -1,12 +1,16 @@
-use crate::app_context::AppContext;
-use crate::widgets::icons;
 use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, Layer, LayerShell};
-use std::cell::RefCell;
+use axis_domain::models::audio::AudioStatus;
+use axis_domain::models::brightness::BrightnessStatus;
+use crate::presentation::audio::{AudioView, audio_icon};
+use crate::presentation::brightness::BrightnessView;
+use crate::presentation::presenter::View;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::Duration;
 
 const OSD_AUTO_HIDE_MS: u64 = 300;
+const OSD_SHOW_MS: u64 = 2000;
 
 struct OsdModule {
     container: gtk4::Revealer,
@@ -77,16 +81,19 @@ pub struct OsdManager {
     bright_module: Rc<OsdModule>,
     hide_timeout: Rc<RefCell<Option<gtk4::glib::SourceId>>>,
     inner_timeout: Rc<RefCell<Option<gtk4::glib::SourceId>>>,
+    last_volume: Cell<Option<f64>>,
+    last_muted: Cell<Option<bool>>,
+    last_brightness: Cell<Option<f64>>,
 }
 
 impl OsdManager {
-    pub fn new(app: &libadwaita::Application, ctx: AppContext) -> Rc<Self> {
+    pub fn new(app: &libadwaita::Application) -> Self {
         let window = gtk4::ApplicationWindow::builder()
             .application(app)
-            .title("OSD")
             .build();
 
         window.init_layer_shell();
+        window.add_css_class("osd-window");
         window.set_layer(Layer::Overlay);
         window.set_anchor(Edge::Right, true);
         window.set_margin(Edge::Right, 10);
@@ -95,25 +102,24 @@ impl OsdManager {
 
         let main_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
 
+        let bright_module = Rc::new(OsdModule::new("display-brightness-symbolic"));
         let vol_module = Rc::new(OsdModule::new("audio-volume-high-symbolic"));
-        let bright_module = Rc::new(OsdModule::new("display-brightness-high-symbolic"));
 
         main_box.append(&bright_module.container);
         main_box.append(&vol_module.container);
 
         window.set_child(Some(&main_box));
 
-        let manager = Rc::new(Self {
+        Self {
             window,
             vol_module,
             bright_module,
             hide_timeout: Rc::new(RefCell::new(None)),
             inner_timeout: Rc::new(RefCell::new(None)),
-        });
-
-        manager.setup_subscriptions(ctx);
-
-        manager
+            last_volume: Cell::new(None),
+            last_muted: Cell::new(None),
+            last_brightness: Cell::new(None),
+        }
     }
 
     fn cancel_timeouts(&self) {
@@ -134,13 +140,12 @@ impl OsdManager {
         let timeout_ref = self.hide_timeout.clone();
         let inner_ref = self.inner_timeout.clone();
 
-        let src = gtk4::glib::timeout_add_local_once(Duration::from_secs(2), move || {
+        let src = gtk4::glib::timeout_add_local_once(Duration::from_millis(OSD_SHOW_MS), move || {
             *timeout_ref.borrow_mut() = None;
 
             vol.hide();
             bright.hide();
 
-            // After revealer animation, hide window
             let win_c = win.clone();
             let vol_c = vol.clone();
             let bright_c = bright.clone();
@@ -157,88 +162,79 @@ impl OsdManager {
 
         *self.hide_timeout.borrow_mut() = Some(src);
     }
+}
 
-    fn setup_subscriptions(&self, ctx: AppContext) {
-        let win_vol = self.window.clone();
-        let vol_mod = self.vol_module.clone();
-        let last_vol = Rc::new(RefCell::new(None::<f64>));
-        let last_mute = Rc::new(RefCell::new(None::<bool>));
+impl View<AudioStatus> for OsdManager {
+    fn render(&self, status: &AudioStatus) {
+        let mut changed = false;
 
-        let manager_vol = self.clone();
-        ctx.audio.subscribe(move |data| {
-            let mut changed = false;
-            if let Some(lv) = *last_vol.borrow() {
-                if (lv - data.volume).abs() > 0.01 {
-                    changed = true;
-                }
-            } else {
+        if let Some(lv) = self.last_volume.get() {
+            if (lv - status.volume).abs() > 0.01 {
                 changed = true;
             }
+        } else {
+            changed = true;
+        }
 
-            if let Some(lm) = *last_mute.borrow() {
-                if lm != data.is_muted {
-                    changed = true;
-                }
-            } else {
+        if let Some(lm) = self.last_muted.get() {
+            if lm != status.is_muted {
                 changed = true;
             }
+        } else {
+            changed = true;
+        }
 
-            *last_vol.borrow_mut() = Some(data.volume);
-            *last_mute.borrow_mut() = Some(data.is_muted);
+        self.last_volume.set(Some(status.volume));
+        self.last_muted.set(Some(status.is_muted));
 
-            if changed {
-                let icon_name = icons::volume_icon(data.volume, data.is_muted);
+        if changed {
+            let icon_name = audio_icon(status);
 
-                if !win_vol.is_visible() {
-                    win_vol.set_visible(true);
-                }
-                vol_mod.show(data.volume, icon_name);
-                manager_vol.reset_hide_timeout();
+            if !self.window.is_visible() {
+                self.window.set_visible(true);
             }
-        });
-
-        let win_bright = self.window.clone();
-        let bright_mod = self.bright_module.clone();
-        let last_bright = Rc::new(RefCell::new(None::<f64>));
-
-        let manager_bright = self.clone();
-        ctx.backlight.subscribe(move |data| {
-            if !data.initialized {
-                return;
-            }
-
-            let current_val = data.percentage / 100.0;
-            let mut changed = false;
-
-            if let Some(lb) = *last_bright.borrow() {
-                if (lb - current_val).abs() > 0.001 {
-                    changed = true;
-                }
-            } else {
-                changed = true;
-            }
-
-            *last_bright.borrow_mut() = Some(current_val);
-
-            if changed {
-                if !win_bright.is_visible() {
-                    win_bright.set_visible(true);
-                }
-                bright_mod.show(current_val, "display-brightness-symbolic");
-                manager_bright.reset_hide_timeout();
-            }
-        });
+            self.vol_module.show(status.volume, icon_name);
+            self.reset_hide_timeout();
+        }
     }
 }
 
-impl Clone for OsdManager {
-    fn clone(&self) -> Self {
-        Self {
-            window: self.window.clone(),
-            vol_module: self.vol_module.clone(),
-            bright_module: self.bright_module.clone(),
-            hide_timeout: self.hide_timeout.clone(),
-            inner_timeout: self.inner_timeout.clone(),
+impl View<BrightnessStatus> for OsdManager {
+    fn render(&self, status: &BrightnessStatus) {
+        if !status.has_backlight {
+            return;
+        }
+
+        let value = status.percentage / 100.0;
+        let mut changed = false;
+
+        if let Some(lb) = self.last_brightness.get() {
+            if (lb - value).abs() > 0.001 {
+                changed = true;
+            }
+        } else {
+            changed = true;
+        }
+
+        self.last_brightness.set(Some(value));
+
+        if changed {
+            if !self.window.is_visible() {
+                self.window.set_visible(true);
+            }
+            self.bright_module.show(value, "display-brightness-symbolic");
+            self.reset_hide_timeout();
         }
     }
+}
+
+impl AudioView for OsdManager {
+    fn on_volume_changed(&self, _f: Box<dyn Fn(f64) + 'static>) {}
+    fn on_set_default_sink(&self, _f: Box<dyn Fn(u32) + 'static>) {}
+    fn on_set_default_source(&self, _f: Box<dyn Fn(u32) + 'static>) {}
+    fn on_set_sink_input_volume(&self, _f: Box<dyn Fn(u32, f64) + 'static>) {}
+}
+
+impl BrightnessView for OsdManager {
+    fn on_brightness_changed(&self, _f: Box<dyn Fn(f64) + 'static>) {}
 }

@@ -1,0 +1,17 @@
+pub mod power;
+pub mod appearance;
+pub mod workspaces;
+pub mod popups;
+pub mod pulse;
+pub mod backlight;
+pub mod network;
+pub mod bluetooth;
+pub mod nightlight;
+pub mod dnd;
+pub mod launcher;
+pub mod ipc;
+pub mod lock;
+pub mod notifications;
+pub mod config;
+pub mod airplane;
+pub mod tray;

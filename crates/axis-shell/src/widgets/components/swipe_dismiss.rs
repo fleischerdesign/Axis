@@ -8,10 +8,9 @@ static SWIPE_ID: AtomicUsize = AtomicUsize::new(0);
 const SWIPE_THRESHOLD_PX: f64 = 100.0;
 const SWIPE_COOLDOWN_MS: u64 = 100;
 
-/// Generic swipe-to-dismiss wrapper. Works with mouse drag and trackpad scroll.
-/// Domain-agnostic — can wrap any widget in any context.
 pub struct SwipeDismiss {
     pub container: gtk4::Box,
+    #[allow(dead_code)]
     is_dragging: Rc<Cell<bool>>,
 }
 
@@ -27,7 +26,6 @@ impl SwipeDismiss {
         inner.append(child);
         container.append(&inner);
 
-        // CSS provider scoped to this instance only
         let provider = gtk4::CssProvider::new();
         #[allow(deprecated)]
         {
@@ -36,14 +34,11 @@ impl SwipeDismiss {
         }
 
         let on_dismiss = Rc::new(on_dismiss);
-
-        // --- State ---
         let is_swiped = Rc::new(Cell::new(false));
         let is_dragging = Rc::new(Cell::new(false));
         let acc_dx = Rc::new(Cell::new(0.0));
         let scroll_timeout: Rc<RefCell<Option<gtk4::glib::SourceId>>> = Rc::new(RefCell::new(None));
 
-        // --- DRAG (mouse / touch) ---
         let drag = gtk4::GestureDrag::new();
         drag.set_propagation_phase(gtk4::PropagationPhase::Capture);
 
@@ -91,7 +86,6 @@ impl SwipeDismiss {
         });
         container.add_controller(drag);
 
-        // --- SCROLL (trackpad 2-finger) ---
         let scroll = gtk4::EventControllerScroll::new(
             gtk4::EventControllerScrollFlags::HORIZONTAL
                 | gtk4::EventControllerScrollFlags::KINETIC,
@@ -127,7 +121,6 @@ impl SwipeDismiss {
                 return gtk4::glib::Propagation::Stop;
             }
 
-            // Debounce reset
             if let Some(src) = tout_s.borrow_mut().take() {
                 src.remove();
             }
@@ -164,7 +157,6 @@ impl SwipeDismiss {
 
         container.add_controller(scroll);
 
-        // Cleanup on destroy
         let st = scroll_timeout;
         container.connect_destroy(move |_| {
             if let Some(src) = st.borrow_mut().take() {
@@ -178,8 +170,7 @@ impl SwipeDismiss {
         }
     }
 
-    /// Returns whether a drag gesture is currently active.
-    /// Use this to guard click handlers against false triggers during drags.
+    #[allow(dead_code)]
     pub fn is_dragging(&self) -> bool {
         self.is_dragging.get()
     }
