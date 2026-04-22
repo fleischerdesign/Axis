@@ -1,12 +1,13 @@
 use axis_domain::ports::cloud_auth::{CloudAuthProvider, AuthError};
+use axis_domain::models::cloud::{CloudAccount, AccountStatus};
 use async_trait::async_trait;
 use oauth2::basic::BasicClient;
 use oauth2::{
     AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken,
     PkceCodeChallenge, RedirectUrl, Scope, TokenResponse, TokenUrl,
 };
-use std::io::{BufRead, BufReader, Write};
-use std::net::TcpListener;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::net::TcpListener;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use std::path::PathBuf;
@@ -14,6 +15,7 @@ use serde::{Deserialize, Serialize};
 
 const GOOGLE_AUTH_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
+const GOOGLE_USERINFO_URL: &str = "https://www.googleapis.com/oauth2/v3/userinfo";
 const REDIRECT_PORT: u16 = 8080;
 const REDIRECT_URI: &str = "http://localhost:8080/callback";
 
@@ -29,6 +31,13 @@ struct StoredToken {
 struct GoogleCredential {
     client_id: String,
     client_secret: String,
+}
+
+#[derive(Deserialize)]
+struct GoogleUserInfo {
+    sub: String,
+    name: String,
+    email: String,
 }
 
 pub struct GoogleCloudAdapter {
@@ -59,15 +68,15 @@ impl GoogleCloudAdapter {
 
     fn save_token(&self, token: &StoredToken) {
         let token_path = self.config_dir.join("google_token.json");
-        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&serde_json::to_string(token).unwrap()) {
-             let _ = std::fs::write(token_path, serde_json::to_string_pretty(&json).unwrap());
+        if let Ok(json) = serde_json::to_string_pretty(token) {
+             let _ = std::fs::write(token_path, json);
         }
     }
 }
 
 #[async_trait]
 impl CloudAuthProvider for GoogleCloudAdapter {
-    async fn authenticate(&self, scopes: &[String]) -> Result<(), AuthError> {
+    async fn authenticate(&self, scopes: &[String]) -> Result<CloudAccount, AuthError> {
         let cred = self.credentials.as_ref().ok_or_else(|| AuthError::Failed("Missing google_credentials.json".into()))?;
 
         let client = BasicClient::new(ClientId::new(cred.client_id.clone()))
@@ -86,21 +95,24 @@ impl CloudAuthProvider for GoogleCloudAdapter {
 
         let _ = open::that(auth_url.as_str());
 
-        let listener = TcpListener::bind(format!("127.0.0.1:{}", REDIRECT_PORT))
+        let listener = TcpListener::bind(format!("127.0.0.1:{}", REDIRECT_PORT)).await
             .map_err(|e| AuthError::Failed(format!("Failed to bind port: {}", e)))?;
 
         let (tx, mut rx) = tokio::sync::mpsc::channel(1);
 
-        std::thread::spawn(move || {
-            if let Ok((mut stream, _)) = listener.accept() {
-                let reader = BufReader::new(&stream);
-                if let Some(Ok(line)) = reader.lines().next() {
+        tokio::spawn(async move {
+            if let Ok((mut stream, _)) = listener.accept().await {
+                let (reader, mut writer) = stream.split();
+                let mut reader = BufReader::new(reader);
+                let mut line = String::new();
+                if reader.read_line(&mut line).await.is_ok() {
                     if let Some(query) = line.split_whitespace().nth(1) {
                         if let Some(code) = query.split("code=").nth(1).and_then(|s| s.split('&').next()) {
-                            let body = "<html><body><h1>Auth Success</h1></body></html>";
+                            let body = "<html><body><h1>Auth Success</h1><p>You can close this window now.</p></body></html>";
                             let response = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}", body.len(), body);
-                            let _ = stream.write_all(response.as_bytes());
-                            let _ = tx.blocking_send(code.to_string());
+                            let _ = writer.write_all(response.as_bytes()).await;
+                            let _ = writer.flush().await;
+                            let _ = tx.send(code.to_string()).await;
                         }
                     }
                 }
@@ -108,23 +120,38 @@ impl CloudAuthProvider for GoogleCloudAdapter {
         });
 
         let code = rx.recv().await.ok_or(AuthError::Cancelled)?;
-        let http_client = reqwest::blocking::Client::new();
+        let http_client = reqwest::Client::new();
         
         let token_result = client
             .exchange_code(AuthorizationCode::new(code))
             .set_pkce_verifier(pkce_verifier)
-            .request(&http_client)
+            .request_async(&http_client).await
             .map_err(|e| AuthError::Failed(format!("Token exchange failed: {}", e)))?;
 
+        let access_token = token_result.access_token().secret().clone();
+        
+        // Fetch User Info
+        let user_info: GoogleUserInfo = http_client.get(GOOGLE_USERINFO_URL)
+            .bearer_auth(&access_token)
+            .send().await
+            .map_err(|e| AuthError::Network(e.to_string()))?
+            .json().await
+            .map_err(|e| AuthError::Failed(format!("Failed to parse userinfo: {}", e)))?;
+
         let mut token = self.token.lock().await;
-        token.access_token = Some(token_result.access_token().secret().clone());
+        token.access_token = Some(access_token);
         token.refresh_token = token_result.refresh_token().map(|t| t.secret().clone());
         token.expires_at = Some(chrono::Utc::now().timestamp() + 3600);
         token.granted_scopes = scopes.to_vec();
         
         self.save_token(&token);
         
-        Ok(())
+        Ok(CloudAccount {
+            id: user_info.sub,
+            provider_name: "Google".into(),
+            display_name: user_info.email,
+            status: AccountStatus::Online,
+        })
     }
 
     async fn get_token(&self, _scopes: &[String]) -> Result<String, AuthError> {
@@ -132,14 +159,16 @@ impl CloudAuthProvider for GoogleCloudAdapter {
         
         if let Some(expires) = token.expires_at {
             if expires > chrono::Utc::now().timestamp() + 60 {
-                return token.access_token.clone().ok_or(AuthError::Failed("No token".into()));
+                if let Some(ref access_token) = token.access_token {
+                    return Ok(access_token.clone());
+                }
             }
         }
 
         let cred = self.credentials.as_ref().ok_or_else(|| AuthError::Failed("No credentials".into()))?;
         let refresh_token = token.refresh_token.as_ref().ok_or(AuthError::Failed("No refresh token".into()))?;
 
-        let http_client = reqwest::blocking::Client::new();
+        let http_client = reqwest::Client::new();
         let client = BasicClient::new(ClientId::new(cred.client_id.clone()))
             .set_client_secret(ClientSecret::new(cred.client_secret.clone()))
             .set_auth_uri(AuthUrl::new(GOOGLE_AUTH_URL.to_string()).unwrap())
@@ -147,7 +176,7 @@ impl CloudAuthProvider for GoogleCloudAdapter {
 
         let token_result = client
             .exchange_refresh_token(&oauth2::RefreshToken::new(refresh_token.clone()))
-            .request(&http_client)
+            .request_async(&http_client).await
             .map_err(|e| AuthError::Failed(format!("Token refresh failed: {}", e)))?;
 
         token.access_token = Some(token_result.access_token().secret().clone());

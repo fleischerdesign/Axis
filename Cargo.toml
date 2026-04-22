@@ -36,8 +36,8 @@ fern = "0.7"
 dirs = "6"
 gtk4-session-lock = { version = "0.4", features = ["v1_1"] }
 pam = { version = "0.8", features = ["client"] }
-reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
-oauth2 = { version = "5.0", default-features = false, features = ["reqwest-blocking"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+oauth2 = { version = "5.0", default-features = false, features = ["reqwest"] }
 open = "5"
 serde_json = "1.0"
 uuid = { version = "1", features = ["v4"] }

@@ -1,7 +1,6 @@
-use axis_domain::models::cloud::{CloudStatus, CloudAccount, AccountStatus};
+use axis_domain::models::cloud::{CloudStatus, CloudAccount};
 use axis_domain::ports::cloud::{CloudProvider, CloudError, CloudStream};
 use async_trait::async_trait;
-use std::sync::Arc;
 use tokio::sync::watch;
 use std::path::PathBuf;
 use tokio_stream::wrappers::WatchStream;
@@ -27,14 +26,6 @@ impl LocalCloudProvider {
         }
     }
 
-    pub fn add_account(&self, account: CloudAccount) {
-        let mut status = self.status_tx.borrow().clone();
-        status.accounts.retain(|a| a.id != account.id);
-        status.accounts.push(account);
-        let _ = self.status_tx.send(status.clone());
-        self.save_accounts(&status.accounts);
-    }
-
     fn save_accounts(&self, accounts: &[CloudAccount]) {
         let accounts_path = self.config_dir.join("cloud_accounts.json");
         if let Ok(json) = serde_json::to_string_pretty(accounts) {
@@ -52,6 +43,15 @@ impl CloudProvider for LocalCloudProvider {
     async fn subscribe(&self) -> Result<CloudStream, CloudError> {
         let rx = self.status_tx.subscribe();
         Ok(Box::pin(WatchStream::new(rx)))
+    }
+
+    async fn add_account(&self, account: CloudAccount) -> Result<(), CloudError> {
+        let mut status = self.status_tx.borrow().clone();
+        status.accounts.retain(|a| a.id != account.id);
+        status.accounts.push(account);
+        let _ = self.status_tx.send(status.clone());
+        self.save_accounts(&status.accounts);
+        Ok(())
     }
 
     async fn remove_account(&self, account_id: &str) -> Result<(), CloudError> {

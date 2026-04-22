@@ -57,7 +57,7 @@ fn build_ui(app: &adw::Application) {
 
     // 2. Use Cases
     let subscribe_cloud = Arc::new(SubscribeToCloudUpdatesUseCase::new(cloud_provider.clone()));
-    let authenticate_cloud = Arc::new(AuthenticateAccountUseCase::new(google_auth.clone()));
+    let authenticate_cloud = Arc::new(AuthenticateAccountUseCase::new(google_auth.clone(), cloud_provider.clone()));
 
     // 3. Presenters
     let accounts_presenter = Rc::new(AccountsPresenter::new(

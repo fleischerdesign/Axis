@@ -11,9 +11,11 @@ pub enum AuthError {
     Cancelled,
 }
 
+use crate::models::cloud::CloudAccount;
+
 #[async_trait]
 pub trait CloudAuthProvider: Send + Sync {
-    async fn authenticate(&self, scopes: &[String]) -> Result<(), AuthError>;
+    async fn authenticate(&self, scopes: &[String]) -> Result<CloudAccount, AuthError>;
     async fn get_token(&self, scopes: &[String]) -> Result<String, AuthError>;
     async fn is_authenticated(&self) -> bool;
 }
