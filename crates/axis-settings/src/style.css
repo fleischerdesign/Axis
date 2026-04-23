@@ -1,61 +1,45 @@
-/* Accent Color Swatches */
-.accent-swatch {
+/* Axis Settings - Modern Semantic Styling */
+
+/* Wir nutzen die vom ThemeService bereitgestellten Variablen.
+   Das macht die App zu 100% reaktiv. */
+
+.accent-button {
     border-radius: 999px;
-    min-width: 36px;
-    min-height: 36px;
-    padding: 0;
+    min-width: 32px;
+    min-height: 32px;
+    margin: 4px;
     border: 2px solid transparent;
-    box-shadow: none;
-    background-clip: content-box;
+    transition: transform 0.2s ease, border-color 0.2s ease;
 }
 
-.accent-swatch:hover {
-    opacity: 0.85;
+.accent-button:hover {
+    transform: scale(1.1);
 }
 
-.accent-swatch.active,
-flowboxchild:selected .accent-swatch {
-    border-color: @theme_selected_fg_color;
-    box-shadow: 0 0 0 2px @theme_selected_bg_color;
+/* Wenn ein Button aktiv ist, zeigen wir einen weißen Ring (oder schwarz im Light Mode) */
+.accent-button.active {
+    border-color: @window_fg_color;
 }
 
-.accent-blue   { background-color: #3584e4; }
-.accent-teal   { background-color: #33b5a0; }
-.accent-green  { background-color: #3ec35a; }
-.accent-yellow { background-color: #f5c211; }
-.accent-orange { background-color: #ed5b00; }
-.accent-red    { background-color: #e53935; }
-.accent-pink   { background-color: #e45b9c; }
-.accent-purple { background-color: #9141ac; }
-
-.accent-auto {
-    background-color: alpha(@theme_fg_color, 0.1);
+/* Sidebar Styling konsistent zur Shell */
+.sidebar-list {
+    padding: 8px;
+    background-color: transparent;
 }
 
-.accent-auto image {
-    color: @theme_fg_color;
-    opacity: 0.6;
-}
-
-/* Wallpaper preview */
-.wallpaper-preview {
-    border-radius: 8px;
-}
-
-/* Arrangement Grid (Continuity) */
-.arrangement-grid {
+.sidebar-list row {
     border-radius: 12px;
-    background-color: alpha(@theme_bg_color, 0.5);
-    border: 1px solid alpha(@borders, 0.3);
-    min-height: 300px;
+    margin: 2px 0;
+    padding: 4px;
+    transition: background-color 0.2s ease;
 }
 
-/* Wi-Fi Auth Section in Settings */
-.network-auth-box {
-    padding: 6px 12px 12px 12px;
+/* Nutze die Akzentfarbe für die markierte Zeile in der Sidebar */
+.sidebar-list row:selected {
+    background-color: alpha(@accent_bg_color, 0.2);
+    color: @accent_bg_color;
 }
 
-.network-connect-btn {
-    margin-left: 8px;
-    border-radius: 8px;
+.sidebar-list row:hover:not(:selected) {
+    background-color: @hover_bg_color;
 }

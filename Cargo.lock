@@ -396,7 +396,13 @@ dependencies = [
 name = "axis-presentation"
 version = "0.1.0"
 dependencies = [
+ "axis-domain",
+ "chrono",
  "futures-util",
+ "gtk4",
+ "image",
+ "libadwaita",
+ "log",
 ]
 
 [[package]]
