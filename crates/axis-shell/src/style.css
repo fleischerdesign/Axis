@@ -763,3 +763,14 @@ preferencesgroup > .title {
     border: none;
     box-shadow: none;
 }
+
+.background-none row {
+    background: none;
+    outline: none;
+    box-shadow: none;
+}
+
+.background-none row:hover,
+.background-none row:selected {
+    background: none;
+}
