@@ -26,6 +26,10 @@ impl TaskList {
         *self.imp().task_toggled_callback.borrow_mut() = Some(Rc::new(f));
     }
 
+    pub fn on_task_deleted(&self, f: Box<dyn Fn(String) + 'static>) {
+        *self.imp().task_deleted_callback.borrow_mut() = Some(Rc::new(f));
+    }
+
     pub fn render(&self, status: &AgendaStatus) {
         let imp = self.imp();
         
@@ -103,11 +107,19 @@ impl TaskList {
                 .ellipsize(gtk4::pango::EllipsizeMode::End)
                 .build();
 
+            let task_id_del = task.id.clone();
+            let callback_del = imp.task_deleted_callback.borrow().clone();
             let delete_btn = gtk4::Button::builder()
                 .icon_name("user-trash-symbolic")
                 .css_classes(["flat", "agenda-task-delete"])
                 .valign(gtk4::Align::Center)
                 .build();
+            
+            delete_btn.connect_clicked(move |_| {
+                if let Some(cb) = &callback_del {
+                    cb(task_id_del.clone());
+                }
+            });
 
             row.append(&check);
             row.append(&label);
@@ -137,6 +149,7 @@ mod imp {
         pub current_task_lists: RefCell<Vec<DomainTaskList>>,
         pub list_changed_callback: RefCell<Option<Rc<Box<dyn Fn(String) + 'static>>>>,
         pub task_toggled_callback: RefCell<Option<Rc<Box<dyn Fn(String, bool) + 'static>>>>,
+        pub task_deleted_callback: RefCell<Option<Rc<Box<dyn Fn(String) + 'static>>>>,
     }
 
     impl Default for TaskList {
@@ -169,6 +182,7 @@ mod imp {
                 current_task_lists: RefCell::new(Vec::new()),
                 list_changed_callback: RefCell::new(None),
                 task_toggled_callback: RefCell::new(None),
+                task_deleted_callback: RefCell::new(None),
             }
         }
     }

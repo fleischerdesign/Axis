@@ -16,5 +16,6 @@ impl TaskProvider for MockTaskProvider {
         ])
     }
     async fn toggle_task(&self, _l: &str, _t: &str, _d: bool) -> Result<(), TaskError> { Ok(()) }
+    async fn delete_task(&self, _l: &str, _t: &str) -> Result<(), TaskError> { Ok(()) }
     async fn get_auth_status(&self) -> Result<AuthStatus, TaskError> { Ok(AuthStatus::Authenticated) }
 }

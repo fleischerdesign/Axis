@@ -56,6 +56,10 @@ impl AgendaView for AgendaPopup {
     fn on_task_toggled(&self, f: Box<dyn Fn(String, bool) + 'static>) {
         self.imp().task_list.on_task_toggled(f);
     }
+
+    fn on_task_deleted(&self, f: Box<dyn Fn(String) + 'static>) {
+        self.imp().task_list.on_task_deleted(f);
+    }
 }
 
 mod imp {

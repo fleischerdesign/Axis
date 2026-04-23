@@ -6,6 +6,7 @@ use axis_presentation::{Presenter, View};
 use axis_application::use_cases::cloud::sync_calendar::SyncCalendarUseCase;
 use axis_application::use_cases::cloud::sync_tasks::SyncTasksUseCase;
 use axis_application::use_cases::tasks::toggle_task::ToggleTaskUseCase;
+use axis_application::use_cases::tasks::delete_task::DeleteTaskUseCase;
 use std::rc::Rc;
 use std::cell::{Cell, RefCell};
 use gtk4::glib;
@@ -16,6 +17,7 @@ use tokio_stream::wrappers::WatchStream;
 pub trait AgendaView: View<AgendaStatus> {
     fn on_list_changed(&self, f: Box<dyn Fn(String) + 'static>);
     fn on_task_toggled(&self, f: Box<dyn Fn(String, bool) + 'static>);
+    fn on_task_deleted(&self, f: Box<dyn Fn(String) + 'static>);
 }
 
 pub struct AgendaPresenter {
@@ -23,6 +25,7 @@ pub struct AgendaPresenter {
     sync_calendar_uc: Arc<SyncCalendarUseCase>,
     sync_tasks_uc: Arc<SyncTasksUseCase>,
     toggle_task_uc: Arc<ToggleTaskUseCase>,
+    delete_task_uc: Arc<DeleteTaskUseCase>,
     selected_list_id: Rc<RefCell<Option<String>>>,
     status_tx: watch::Sender<AgendaStatus>,
     is_syncing_events: Rc<Cell<bool>>,
@@ -34,6 +37,7 @@ impl AgendaPresenter {
         sync_calendar_uc: Arc<SyncCalendarUseCase>,
         sync_tasks_uc: Arc<SyncTasksUseCase>,
         toggle_task_uc: Arc<ToggleTaskUseCase>,
+        delete_task_uc: Arc<DeleteTaskUseCase>,
     ) -> Self {
         let (status_tx, _) = watch::channel(AgendaStatus::default());
         let status_tx_c = status_tx.clone();
@@ -48,6 +52,7 @@ impl AgendaPresenter {
             sync_calendar_uc,
             sync_tasks_uc,
             toggle_task_uc,
+            delete_task_uc,
             selected_list_id: Rc::new(RefCell::new(None)),
             status_tx,
             is_syncing_events: Rc::new(Cell::new(false)),
@@ -68,6 +73,11 @@ impl AgendaPresenter {
         let this_toggle = self.clone();
         view.on_task_toggled(Box::new(move |id, done| {
             this_toggle.toggle_task(id, done);
+        }));
+
+        let this_delete = self.clone();
+        view.on_task_deleted(Box::new(move |id| {
+            this_delete.delete_task(id);
         }));
 
         self.inner.add_view(view);
@@ -154,21 +164,40 @@ impl AgendaPresenter {
         let mut status = self.status_tx.borrow().clone();
         let list_id = status.selected_list_id.clone();
         
-        // 1. Optimistic Update: Change status in local state immediately
         if let Some(task) = status.tasks.iter_mut().find(|t| t.id == task_id) {
             task.done = done;
         }
         self.inner.update(status.clone());
         let _ = self.status_tx.send(status);
 
-        // 2. Perform background sync to Google
         if let Some(list_id) = list_id {
             let this = self.clone();
             let uc = self.toggle_task_uc.clone();
             glib::spawn_future_local(async move {
                 if let Err(e) = uc.execute(&list_id, &task_id, done).await {
                     log::error!("[agenda] Failed to toggle task: {e}");
-                    // 3. Rollback on error
+                    this.refresh(false, true).await;
+                }
+            });
+        }
+    }
+
+    pub fn delete_task(&self, task_id: String) {
+        let mut status = self.status_tx.borrow().clone();
+        let list_id = status.selected_list_id.clone();
+        
+        // 1. Optimistic Update: Remove from local state immediately
+        status.tasks.retain(|t| t.id != task_id);
+        self.inner.update(status.clone());
+        let _ = self.status_tx.send(status);
+
+        // 2. Perform background delete to Google
+        if let Some(list_id) = list_id {
+            let this = self.clone();
+            let uc = self.delete_task_uc.clone();
+            glib::spawn_future_local(async move {
+                if let Err(e) = uc.execute(&list_id, &task_id).await {
+                    log::error!("[agenda] Failed to delete task: {e}");
                     this.refresh(false, true).await;
                 }
             });
@@ -183,6 +212,7 @@ impl Clone for AgendaPresenter {
             sync_calendar_uc: self.sync_calendar_uc.clone(),
             sync_tasks_uc: self.sync_tasks_uc.clone(),
             toggle_task_uc: self.toggle_task_uc.clone(),
+            delete_task_uc: self.delete_task_uc.clone(),
             selected_list_id: self.selected_list_id.clone(),
             status_tx: self.status_tx.clone(),
             is_syncing_events: self.is_syncing_events.clone(),

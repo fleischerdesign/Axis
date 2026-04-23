@@ -116,6 +116,24 @@ impl TaskProvider for GoogleTasksAdapter {
         Ok(())
     }
 
+    async fn delete_task(&self, list_id: &str, task_id: &str) -> Result<(), TaskError> {
+        let scopes = vec!["https://www.googleapis.com/auth/tasks".to_string()];
+        let token = self.auth_provider.get_token(&scopes).await
+            .map_err(|e| TaskError::ProviderError(format!("Auth error: {}", e)))?;
+
+        let resp = self.http_client.delete(format!("{}/lists/{}/tasks/{}", GOOGLE_TASKS_API_URL, list_id, task_id))
+            .bearer_auth(&token)
+            .send().await
+            .map_err(|e| TaskError::ProviderError(e.to_string()))?;
+
+        if !resp.status().is_success() {
+            return Err(TaskError::ProviderError(format!("API error: {}", resp.status())));
+        }
+
+        log::debug!("[google-tasks] Deleted task {} from list {}", task_id, list_id);
+        Ok(())
+    }
+
     async fn get_auth_status(&self) -> Result<axis_domain::models::tasks::AuthStatus, TaskError> {
         if self.auth_provider.is_authenticated().await {
             Ok(axis_domain::models::tasks::AuthStatus::Authenticated)
