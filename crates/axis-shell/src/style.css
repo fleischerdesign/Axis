@@ -699,7 +699,6 @@ preferencesgroup > .title {
     border-radius: 50%;
     min-width: 28px;
     min-height: 28px;
-    text-align: center;
 }
 
 .calendar-day.today {
@@ -773,4 +772,28 @@ preferencesgroup > .title {
 .background-none row:hover,
 .background-none row:selected {
     background: none;
+}
+
+.agenda-task-entry {
+    background: rgba(255, 255, 255, 0.05);
+    border: none;
+    border-radius: 10px;
+    padding: 8px 12px;
+    margin: 8px 4px 4px 4px;
+    color: @window_fg_color;
+}
+
+.agenda-task-entry:focus {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.agenda-task-add-btn {
+    color: @accent_bg_color;
+    padding: 6px;
+    border-radius: 10px;
+    margin: 8px 4px 4px 0;
+}
+
+.agenda-task-add-btn:hover {
+    background: @hover_bg_color_strong;
 }

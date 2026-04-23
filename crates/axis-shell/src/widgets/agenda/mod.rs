@@ -60,6 +60,10 @@ impl AgendaView for AgendaPopup {
     fn on_task_deleted(&self, f: Box<dyn Fn(String) + 'static>) {
         self.imp().task_list.on_task_deleted(f);
     }
+
+    fn on_task_created(&self, f: Box<dyn Fn(String) + 'static>) {
+        self.imp().task_list.on_task_created(f);
+    }
 }
 
 mod imp {
@@ -101,7 +105,7 @@ mod imp {
             obj.set_anchor(Edge::Left, false);
             obj.set_anchor(Edge::Right, false);
             obj.set_margin(Edge::Bottom, 64);
-            obj.set_keyboard_mode(KeyboardMode::None);
+            obj.set_keyboard_mode(KeyboardMode::OnDemand);
             obj.add_css_class("popup-window");
 
             let main_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 16);

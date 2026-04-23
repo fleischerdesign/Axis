@@ -30,6 +30,10 @@ impl TaskList {
         *self.imp().task_deleted_callback.borrow_mut() = Some(Rc::new(f));
     }
 
+    pub fn on_task_created(&self, f: Box<dyn Fn(String) + 'static>) {
+        *self.imp().task_created_callback.borrow_mut() = Some(Rc::new(f));
+    }
+
     pub fn render(&self, status: &AgendaStatus) {
         let imp = self.imp();
         
@@ -74,57 +78,56 @@ impl TaskList {
                 .description("Alles erledigt!")
                 .build();
             imp.list_box.append(&empty);
-            return;
-        }
+        } else {
+            for task in &status.tasks {
+                let row = gtk4::Box::builder()
+                    .orientation(gtk4::Orientation::Horizontal)
+                    .spacing(12)
+                    .css_classes(["agenda-task-row"])
+                    .build();
 
-        for task in &status.tasks {
-            let row = gtk4::Box::builder()
-                .orientation(gtk4::Orientation::Horizontal)
-                .spacing(12)
-                .css_classes(["agenda-task-row"])
-                .build();
+                if task.done { row.add_css_class("done"); }
 
-            if task.done { row.add_css_class("done"); }
+                let check = gtk4::CheckButton::builder()
+                    .active(task.done)
+                    .css_classes(["agenda-task-check"])
+                    .build();
 
-            let check = gtk4::CheckButton::builder()
-                .active(task.done)
-                .css_classes(["agenda-task-check"])
-                .build();
+                let task_id = task.id.clone();
+                let callback = imp.task_toggled_callback.borrow().clone();
+                check.connect_toggled(move |btn| {
+                    if let Some(cb) = &callback {
+                        cb(task_id.clone(), btn.is_active());
+                    }
+                });
 
-            let task_id = task.id.clone();
-            let callback = imp.task_toggled_callback.borrow().clone();
-            check.connect_toggled(move |btn| {
-                if let Some(cb) = &callback {
-                    cb(task_id.clone(), btn.is_active());
-                }
-            });
+                let label = gtk4::Label::builder()
+                    .label(&task.title)
+                    .hexpand(true)
+                    .halign(gtk4::Align::Start)
+                    .css_classes(["agenda-task-label"])
+                    .ellipsize(gtk4::pango::EllipsizeMode::End)
+                    .build();
 
-            let label = gtk4::Label::builder()
-                .label(&task.title)
-                .hexpand(true)
-                .halign(gtk4::Align::Start)
-                .css_classes(["agenda-task-label"])
-                .ellipsize(gtk4::pango::EllipsizeMode::End)
-                .build();
+                let task_id_del = task.id.clone();
+                let callback_del = imp.task_deleted_callback.borrow().clone();
+                let delete_btn = gtk4::Button::builder()
+                    .icon_name("user-trash-symbolic")
+                    .css_classes(["flat", "agenda-task-delete"])
+                    .valign(gtk4::Align::Center)
+                    .build();
+                
+                delete_btn.connect_clicked(move |_| {
+                    if let Some(cb) = &callback_del {
+                        cb(task_id_del.clone());
+                    }
+                });
 
-            let task_id_del = task.id.clone();
-            let callback_del = imp.task_deleted_callback.borrow().clone();
-            let delete_btn = gtk4::Button::builder()
-                .icon_name("user-trash-symbolic")
-                .css_classes(["flat", "agenda-task-delete"])
-                .valign(gtk4::Align::Center)
-                .build();
-            
-            delete_btn.connect_clicked(move |_| {
-                if let Some(cb) = &callback_del {
-                    cb(task_id_del.clone());
-                }
-            });
-
-            row.append(&check);
-            row.append(&label);
-            row.append(&delete_btn);
-            imp.list_box.append(&row);
+                row.append(&check);
+                row.append(&label);
+                row.append(&delete_btn);
+                imp.list_box.append(&row);
+            }
         }
     }
 }
@@ -145,17 +148,32 @@ mod imp {
         pub scrolled: gtk4::ScrolledWindow,
         pub spinner: gtk4::Spinner,
         pub dropdown: gtk4::DropDown,
+        pub entry: gtk4::Entry,
+        pub add_button: gtk4::Button,
         pub is_updating_programmatically: Cell<bool>,
         pub current_task_lists: RefCell<Vec<DomainTaskList>>,
         pub list_changed_callback: RefCell<Option<Rc<Box<dyn Fn(String) + 'static>>>>,
         pub task_toggled_callback: RefCell<Option<Rc<Box<dyn Fn(String, bool) + 'static>>>>,
         pub task_deleted_callback: RefCell<Option<Rc<Box<dyn Fn(String) + 'static>>>>,
+        pub task_created_callback: RefCell<Option<Rc<Box<dyn Fn(String) + 'static>>>>,
     }
 
     impl Default for TaskList {
         fn default() -> Self {
             let dropdown = gtk4::DropDown::builder()
                 .css_classes(["agenda-list-dropdown"])
+                .valign(gtk4::Align::Center)
+                .build();
+
+            let entry = gtk4::Entry::builder()
+                .placeholder_text("Neue Aufgabe...")
+                .css_classes(["agenda-task-entry"])
+                .hexpand(true)
+                .build();
+
+            let add_button = gtk4::Button::builder()
+                .icon_name("list-add-symbolic")
+                .css_classes(["flat", "agenda-task-add-btn"])
                 .valign(gtk4::Align::Center)
                 .build();
 
@@ -171,18 +189,21 @@ mod imp {
                 scrolled: gtk4::ScrolledWindow::builder()
                     .hscrollbar_policy(gtk4::PolicyType::Never)
                     .vscrollbar_policy(gtk4::PolicyType::Automatic)
-                    .min_content_height(400)
+                    .min_content_height(350)
                     .build(),
                 spinner: gtk4::Spinner::builder()
                     .valign(gtk4::Align::Center)
                     .margin_start(8)
                     .build(),
                 dropdown,
+                entry,
+                add_button,
                 is_updating_programmatically: Cell::new(false),
                 current_task_lists: RefCell::new(Vec::new()),
                 list_changed_callback: RefCell::new(None),
                 task_toggled_callback: RefCell::new(None),
                 task_deleted_callback: RefCell::new(None),
+                task_created_callback: RefCell::new(None),
             }
         }
     }
@@ -217,6 +238,35 @@ mod imp {
             self.list_box.add_css_class("background-none");
             self.scrolled.set_child(Some(&self.list_box));
             obj.append(&self.scrolled);
+
+            let input_row = gtk4::Box::builder()
+                .orientation(gtk4::Orientation::Horizontal)
+                .spacing(4)
+                .build();
+            input_row.append(&self.entry);
+            input_row.append(&self.add_button);
+            obj.append(&input_row);
+
+            let obj_c = obj.clone();
+            let entry_c = self.entry.clone();
+            let on_add = move || {
+                let title = entry_c.text().to_string();
+                if title.is_empty() { return; }
+                
+                if let Some(cb) = obj_c.imp().task_created_callback.borrow().as_ref() {
+                    cb(title);
+                    entry_c.set_text("");
+                }
+            };
+
+            let on_add_btn = on_add.clone();
+            self.add_button.connect_clicked(move |_| {
+                on_add_btn();
+            });
+
+            self.entry.connect_activate(move |_| {
+                on_add();
+            });
 
             let obj_c = obj.clone();
             self.dropdown.connect_selected_notify(move |dd| {

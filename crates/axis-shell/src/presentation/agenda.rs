@@ -7,6 +7,8 @@ use axis_application::use_cases::cloud::sync_calendar::SyncCalendarUseCase;
 use axis_application::use_cases::cloud::sync_tasks::SyncTasksUseCase;
 use axis_application::use_cases::tasks::toggle_task::ToggleTaskUseCase;
 use axis_application::use_cases::tasks::delete_task::DeleteTaskUseCase;
+use axis_application::use_cases::tasks::create_task::CreateTaskUseCase;
+use axis_domain::models::tasks::Task;
 use std::rc::Rc;
 use std::cell::{Cell, RefCell};
 use gtk4::glib;
@@ -18,6 +20,7 @@ pub trait AgendaView: View<AgendaStatus> {
     fn on_list_changed(&self, f: Box<dyn Fn(String) + 'static>);
     fn on_task_toggled(&self, f: Box<dyn Fn(String, bool) + 'static>);
     fn on_task_deleted(&self, f: Box<dyn Fn(String) + 'static>);
+    fn on_task_created(&self, f: Box<dyn Fn(String) + 'static>);
 }
 
 pub struct AgendaPresenter {
@@ -26,6 +29,7 @@ pub struct AgendaPresenter {
     sync_tasks_uc: Arc<SyncTasksUseCase>,
     toggle_task_uc: Arc<ToggleTaskUseCase>,
     delete_task_uc: Arc<DeleteTaskUseCase>,
+    create_task_uc: Arc<CreateTaskUseCase>,
     selected_list_id: Rc<RefCell<Option<String>>>,
     status_tx: watch::Sender<AgendaStatus>,
     is_syncing_events: Rc<Cell<bool>>,
@@ -38,6 +42,7 @@ impl AgendaPresenter {
         sync_tasks_uc: Arc<SyncTasksUseCase>,
         toggle_task_uc: Arc<ToggleTaskUseCase>,
         delete_task_uc: Arc<DeleteTaskUseCase>,
+        create_task_uc: Arc<CreateTaskUseCase>,
     ) -> Self {
         let (status_tx, _) = watch::channel(AgendaStatus::default());
         let status_tx_c = status_tx.clone();
@@ -53,6 +58,7 @@ impl AgendaPresenter {
             sync_tasks_uc,
             toggle_task_uc,
             delete_task_uc,
+            create_task_uc,
             selected_list_id: Rc::new(RefCell::new(None)),
             status_tx,
             is_syncing_events: Rc::new(Cell::new(false)),
@@ -78,6 +84,11 @@ impl AgendaPresenter {
         let this_delete = self.clone();
         view.on_task_deleted(Box::new(move |id| {
             this_delete.delete_task(id);
+        }));
+
+        let this_create = self.clone();
+        view.on_task_created(Box::new(move |title| {
+            this_create.create_task(title);
         }));
 
         self.inner.add_view(view);
@@ -186,12 +197,10 @@ impl AgendaPresenter {
         let mut status = self.status_tx.borrow().clone();
         let list_id = status.selected_list_id.clone();
         
-        // 1. Optimistic Update: Remove from local state immediately
         status.tasks.retain(|t| t.id != task_id);
         self.inner.update(status.clone());
         let _ = self.status_tx.send(status);
 
-        // 2. Perform background delete to Google
         if let Some(list_id) = list_id {
             let this = self.clone();
             let uc = self.delete_task_uc.clone();
@@ -200,6 +209,35 @@ impl AgendaPresenter {
                     log::error!("[agenda] Failed to delete task: {e}");
                     this.refresh(false, true).await;
                 }
+            });
+        }
+    }
+
+    pub fn create_task(&self, title: String) {
+        let mut status = self.status_tx.borrow().clone();
+        let list_id = status.selected_list_id.clone();
+        
+        if let Some(ref list_id) = list_id {
+            // 1. Optimistic Update
+            let temp_task = Task {
+                id: format!("temp-{}", uuid::Uuid::new_v4()),
+                title: title.clone(),
+                done: false,
+                list_id: list_id.clone(),
+            };
+            status.tasks.insert(0, temp_task);
+            self.inner.update(status.clone());
+            let _ = self.status_tx.send(status);
+
+            // 2. Sync to Google
+            let this = self.clone();
+            let uc = self.create_task_uc.clone();
+            let list_id_c = list_id.clone();
+            glib::spawn_future_local(async move {
+                if let Err(e) = uc.execute(&list_id_c, &title).await {
+                    log::error!("[agenda] Failed to create task: {e}");
+                }
+                this.refresh(false, true).await;
             });
         }
     }
@@ -213,6 +251,7 @@ impl Clone for AgendaPresenter {
             sync_tasks_uc: self.sync_tasks_uc.clone(),
             toggle_task_uc: self.toggle_task_uc.clone(),
             delete_task_uc: self.delete_task_uc.clone(),
+            create_task_uc: self.create_task_uc.clone(),
             selected_list_id: self.selected_list_id.clone(),
             status_tx: self.status_tx.clone(),
             is_syncing_events: self.is_syncing_events.clone(),

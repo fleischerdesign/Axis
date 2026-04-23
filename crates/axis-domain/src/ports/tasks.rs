@@ -14,5 +14,6 @@ pub trait TaskProvider: Send + Sync {
     async fn get_tasks(&self, list_id: &str) -> Result<Vec<Task>, TaskError>;
     async fn toggle_task(&self, list_id: &str, task_id: &str, done: bool) -> Result<(), TaskError>;
     async fn delete_task(&self, list_id: &str, task_id: &str) -> Result<(), TaskError>;
+    async fn create_task(&self, list_id: &str, title: &str) -> Result<Task, TaskError>;
     async fn get_auth_status(&self) -> Result<AuthStatus, TaskError>;
 }

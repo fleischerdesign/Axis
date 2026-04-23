@@ -302,9 +302,10 @@ fn main() -> glib::ExitCode {
     let sync_calendar_uc = Arc::new(axis_application::use_cases::cloud::sync_calendar::SyncCalendarUseCase::new(google_calendar));
     let sync_tasks_uc = Arc::new(axis_application::use_cases::cloud::sync_tasks::SyncTasksUseCase::new(google_tasks.clone()));
     let toggle_task_uc = Arc::new(axis_application::use_cases::tasks::toggle_task::ToggleTaskUseCase::new(google_tasks.clone()));
-    let delete_task_uc = Arc::new(axis_application::use_cases::tasks::delete_task::DeleteTaskUseCase::new(google_tasks));
+    let delete_task_uc = Arc::new(axis_application::use_cases::tasks::delete_task::DeleteTaskUseCase::new(google_tasks.clone()));
+    let create_task_uc = Arc::new(axis_application::use_cases::tasks::create_task::CreateTaskUseCase::new(google_tasks));
     
-    let agenda_presenter = Rc::new(AgendaPresenter::new(sync_calendar_uc, sync_tasks_uc, toggle_task_uc, delete_task_uc));
+    let agenda_presenter = Rc::new(AgendaPresenter::new(sync_calendar_uc, sync_tasks_uc, toggle_task_uc, delete_task_uc, create_task_uc));
 
     let launcher_presenter = LauncherPresenter::new(search_launcher);
     let notification_presenter = Rc::new(NotificationPresenter::new(notification_provider.clone()));

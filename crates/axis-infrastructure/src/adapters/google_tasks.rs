@@ -134,6 +134,34 @@ impl TaskProvider for GoogleTasksAdapter {
         Ok(())
     }
 
+    async fn create_task(&self, list_id: &str, title: &str) -> Result<Task, TaskError> {
+        let scopes = vec!["https://www.googleapis.com/auth/tasks".to_string()];
+        let token = self.auth_provider.get_token(&scopes).await
+            .map_err(|e| TaskError::ProviderError(format!("Auth error: {}", e)))?;
+
+        let resp = self.http_client.post(format!("{}/lists/{}/tasks", GOOGLE_TASKS_API_URL, list_id))
+            .bearer_auth(&token)
+            .json(&serde_json::json!({ "title": title }))
+            .send().await
+            .map_err(|e| TaskError::ProviderError(e.to_string()))?;
+
+        if !resp.status().is_success() {
+            return Err(TaskError::ProviderError(format!("API error: {}", resp.status())));
+        }
+
+        let google_task: GoogleTaskItem = resp.json().await
+            .map_err(|e| TaskError::ProviderError(e.to_string()))?;
+
+        log::debug!("[google-tasks] Created task '{}' in list {}", title, list_id);
+        
+        Ok(Task {
+            id: google_task.id,
+            title: google_task.title,
+            done: google_task.status == "completed",
+            list_id: list_id.to_string(),
+        })
+    }
+
     async fn get_auth_status(&self) -> Result<axis_domain::models::tasks::AuthStatus, TaskError> {
         if self.auth_provider.is_authenticated().await {
             Ok(axis_domain::models::tasks::AuthStatus::Authenticated)
