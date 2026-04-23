@@ -84,7 +84,7 @@ impl BarWindow {
         let tp = toggle_popup_use_case.clone();
         clock_island.on_clicked(move || {
             let uc = tp.clone();
-            tokio::spawn(async move { let _ = uc.execute(PopupType::Calendar).await; });
+            tokio::spawn(async move { let _ = uc.execute(PopupType::Agenda).await; });
         });
         center_island_box.append(&clock_island);
 

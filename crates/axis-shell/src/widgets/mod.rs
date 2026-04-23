@@ -3,6 +3,7 @@ pub mod island;
 pub mod clock;
 pub mod bar;
 pub mod bar_window;
+pub mod agenda;
 pub mod audio;
 pub mod workspace_dots;
 pub mod launcher;

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 pub enum PopupType {
     Launcher,
     Workspaces,
-    Calendar,
+    Agenda,
     QuickSettings,
 }
 

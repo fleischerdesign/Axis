@@ -95,6 +95,8 @@ mod widgets;
 mod utils;
 mod services;
 
+use widgets::agenda::AgendaPopup;
+use presentation::agenda::AgendaPresenter;
 use widgets::bar_window::BarWindow;
 use widgets::quick_settings::QuickSettingsPopup;
 use widgets::launcher_popup::LauncherPopup;
@@ -287,6 +289,7 @@ fn main() -> glib::ExitCode {
         &rt,
     ));
     let brightness_presenter = Rc::new(BrightnessPresenter::new(subscribe_brightness, set_brightness));
+    let agenda_presenter = Rc::new(AgendaPresenter::new());
     let launcher_presenter = LauncherPresenter::new(search_launcher);
     let notification_presenter = Rc::new(NotificationPresenter::new(notification_provider.clone()));
 
@@ -631,9 +634,18 @@ fn main() -> glib::ExitCode {
             });
         }));
 
+        let agenda_popup = AgendaPopup::new(app);
+        agenda_presenter.add_view(Box::new(agenda_popup.clone()));
+        
+        let ap_sync = agenda_presenter.clone();
+        glib::spawn_future_local(async move {
+            ap_sync.run_sync().await;
+        });
+
         let pp = popup_presenter.clone();
         pp.add_popup(Box::new(qs_popup));
         pp.add_popup(Box::new(launcher_popup));
+        pp.add_popup(Box::new(agenda_popup));
         
         let pp_sync = pp.clone();
         glib::spawn_future_local(async move {

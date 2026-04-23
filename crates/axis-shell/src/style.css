@@ -677,3 +677,46 @@ preferencesgroup > .title {
     font-weight: 600;
     transition: opacity 0.2s ease;
 }
+
+/* --- AGENDA POPUP --- */
+.calendar-month-label {
+    font-size: 1.2rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: @title_text_color;
+}
+
+.calendar-day-header {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: @muted_label_color;
+    padding: 4px;
+}
+
+.calendar-day {
+    font-size: 0.9rem;
+    padding: 8px;
+    border-radius: 50%;
+    min-width: 32px;
+    min-height: 32px;
+    text-align: center;
+}
+
+.calendar-day.today {
+    background-color: @accent_bg_color;
+    color: @accent_fg_color;
+    font-weight: 700;
+}
+
+.agenda-section-header {
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: @accent_bg_color;
+    margin-bottom: 6px;
+    margin-left: 12px;
+}
+
+.agenda-task-row {
+    margin-bottom: 4px;
+}
