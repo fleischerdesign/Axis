@@ -41,6 +41,8 @@ impl SyncAgendaUseCase {
             tasks,
             task_lists,
             selected_list_id: selected_id,
+            is_loading_events: false,
+            is_loading_tasks: false,
         })
     }
 }

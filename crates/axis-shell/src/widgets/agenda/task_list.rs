@@ -5,7 +5,7 @@ use gtk4::glib;
 use axis_domain::models::agenda::AgendaStatus;
 use axis_presentation::View;
 use std::rc::Rc;
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 
 glib::wrapper! {
     pub struct TaskList(ObjectSubclass<imp::TaskList>)
@@ -25,73 +25,42 @@ impl TaskList {
     pub fn render(&self, status: &AgendaStatus) {
         let imp = self.imp();
         
-        // 1. Update Dropdown (Header) - ONLY IF NOT BUILT OR LISTS CHANGED
-        let needs_rebuild = !imp.dropdown_built.get() || 
-                           imp.last_list_count.get() != status.task_lists.len();
-
-        if needs_rebuild && !status.task_lists.is_empty() {
-            while let Some(child) = imp.header_box.first_child() {
-                imp.header_box.remove(&child);
-            }
-
-            let label = gtk4::Label::builder()
-                .label("Aufgaben")
-                .css_classes(["agenda-section-header"])
-                .halign(gtk4::Align::Start)
-                .hexpand(true)
-                .build();
-            imp.header_box.append(&label);
-
+        // 1. Update Dropdown Model
+        let current_count = imp.dropdown.model().map(|m| m.n_items()).unwrap_or(0);
+        if current_count != status.task_lists.len() as u32 {
             let list_names: Vec<&str> = status.task_lists.iter().map(|l| l.title.as_str()).collect();
-            let model = gtk4::StringList::new(&list_names);
-            let dropdown = gtk4::DropDown::builder()
-                .model(&model)
-                .css_classes(["agenda-list-dropdown"])
-                .valign(gtk4::Align::Center)
-                .build();
+            let new_model = gtk4::StringList::new(&list_names);
+            imp.dropdown.set_model(Some(&new_model));
+        }
 
-            if let Some(selected_id) = &status.selected_list_id {
-                if let Some(idx) = status.task_lists.iter().position(|l| l.id == *selected_id) {
-                    dropdown.set_selected(idx as u32);
-                }
-            }
-
-            let task_lists = status.task_lists.clone();
-            let callback = imp.list_changed_callback.borrow().clone();
-            let selected_list_id = status.selected_list_id.clone();
-            
-            dropdown.connect_selected_notify(move |dd| {
-                if let Some(cb) = &callback {
-                    let selected = dd.selected();
-                    if let Some(list) = task_lists.get(selected as usize) {
-                        // ONLY notify if the selection differs from the last known state
-                        if Some(list.id.clone()) != selected_list_id {
-                            cb(list.id.clone());
-                        }
-                    }
-                }
-            });
-
-            imp.header_box.append(&dropdown);
-            imp.dropdown_built.set(true);
-            imp.last_list_count.set(status.task_lists.len());
-        } else if let Some(dropdown) = imp.header_box.last_child().and_downcast::<gtk4::DropDown>() {
-            // Dropdown exists, just sync selection if it differs from status
-            if let Some(selected_id) = &status.selected_list_id {
-                if let Some(idx) = status.task_lists.iter().position(|l| l.id == *selected_id) {
-                    if dropdown.selected() != idx as u32 {
-                        dropdown.set_selected(idx as u32);
-                    }
-                }
+        // 2. Update Selection
+        if let Some(selected_id) = &status.selected_list_id {
+            if let Some(idx) = status.task_lists.iter().position(|l| l.id == *selected_id) {
+                imp.is_updating_programmatically.set(true);
+                imp.dropdown.set_selected(idx as u32);
+                imp.is_updating_programmatically.set(false);
             }
         }
 
-        // 2. Clear and Render Tasks
+        *imp.current_task_lists.borrow_mut() = status.task_lists.clone();
+
+        // 3. Loading State
+        if status.is_loading_tasks {
+            imp.spinner.start();
+            imp.spinner.set_visible(true);
+            imp.list_box.set_opacity(0.5);
+        } else {
+            imp.spinner.stop();
+            imp.spinner.set_visible(false);
+            imp.list_box.set_opacity(1.0);
+        }
+
+        // 4. Render Tasks
         while let Some(child) = imp.list_box.first_child() {
             imp.list_box.remove(&child);
         }
 
-        if status.tasks.is_empty() {
+        if status.tasks.is_empty() && !status.is_loading_tasks {
             let empty = adw::StatusPage::builder()
                 .title("Keine Aufgaben")
                 .description("Alles erledigt!")
@@ -107,9 +76,7 @@ impl TaskList {
                 .css_classes(["agenda-task-row"])
                 .build();
 
-            if task.done {
-                row.add_css_class("done");
-            }
+            if task.done { row.add_css_class("done"); }
 
             let check = gtk4::CheckButton::builder()
                 .active(task.done)
@@ -133,7 +100,6 @@ impl TaskList {
             row.append(&check);
             row.append(&label);
             row.append(&delete_btn);
-            
             imp.list_box.append(&row);
         }
     }
@@ -147,19 +113,26 @@ impl View<AgendaStatus> for TaskList {
 
 mod imp {
     use super::*;
-    use std::cell::RefCell;
+    use axis_domain::models::tasks::TaskList as DomainTaskList;
 
     pub struct TaskList {
         pub list_box: gtk4::ListBox,
         pub header_box: gtk4::Box,
         pub scrolled: gtk4::ScrolledWindow,
-        pub dropdown_built: Cell<bool>,
-        pub last_list_count: Cell<usize>,
+        pub spinner: gtk4::Spinner,
+        pub dropdown: gtk4::DropDown,
+        pub is_updating_programmatically: Cell<bool>,
+        pub current_task_lists: RefCell<Vec<DomainTaskList>>,
         pub list_changed_callback: RefCell<Option<Rc<Box<dyn Fn(String) + 'static>>>>,
     }
 
     impl Default for TaskList {
         fn default() -> Self {
+            let dropdown = gtk4::DropDown::builder()
+                .css_classes(["agenda-list-dropdown"])
+                .valign(gtk4::Align::Center)
+                .build();
+
             Self {
                 list_box: gtk4::ListBox::builder()
                     .selection_mode(gtk4::SelectionMode::None)
@@ -174,12 +147,18 @@ mod imp {
                     .vscrollbar_policy(gtk4::PolicyType::Automatic)
                     .min_content_height(400)
                     .build(),
-                dropdown_built: Cell::new(false),
-                last_list_count: Cell::new(0),
+                spinner: gtk4::Spinner::builder()
+                    .valign(gtk4::Align::Center)
+                    .margin_start(8)
+                    .build(),
+                dropdown,
+                is_updating_programmatically: Cell::new(false),
+                current_task_lists: RefCell::new(Vec::new()),
                 list_changed_callback: RefCell::new(None),
             }
         }
     }
+
     #[glib::object_subclass]
     impl ObjectSubclass for TaskList {
         const NAME: &'static str = "AxisTaskList";
@@ -195,12 +174,37 @@ mod imp {
             obj.set_spacing(12);
             obj.set_width_request(280);
 
+            let label = gtk4::Label::builder()
+                .label("Aufgaben")
+                .css_classes(["agenda-section-header"])
+                .halign(gtk4::Align::Start)
+                .hexpand(true)
+                .build();
+
+            self.header_box.append(&label);
+            self.header_box.append(&self.dropdown);
+            self.header_box.append(&self.spinner);
             obj.append(&self.header_box);
 
-            self.list_box.set_selection_mode(gtk4::SelectionMode::None);
-            self.list_box.add_css_class("background-none"); // Custom class to ensure no bg
+            self.list_box.add_css_class("background-none");
             self.scrolled.set_child(Some(&self.list_box));
             obj.append(&self.scrolled);
+
+            let obj_c = obj.clone();
+            self.dropdown.connect_selected_notify(move |dd| {
+                let imp = obj_c.imp();
+                if imp.is_updating_programmatically.get() {
+                    return;
+                }
+                
+                let selected = dd.selected();
+                let lists = imp.current_task_lists.borrow();
+                if let Some(list) = lists.get(selected as usize) {
+                    if let Some(cb) = imp.list_changed_callback.borrow().as_ref() {
+                        cb(list.id.clone());
+                    }
+                }
+            });
         }
     }
 
