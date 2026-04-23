@@ -1,6 +1,5 @@
 use libadwaita::prelude::*;
 use libadwaita as adw;
-use gtk4::{glib, gdk};
 use std::rc::Rc;
 use std::cell::RefCell;
 use axis_domain::models::appearance::{AccentColor, AppearanceStatus, ColorScheme};
@@ -89,32 +88,23 @@ impl AppearancePage {
 
         let dark_btn = gtk4::ToggleButton::builder().label("Dark").build();
         let light_btn = gtk4::ToggleButton::builder().label("Light").group(&dark_btn).build();
-        let system_btn = gtk4::ToggleButton::builder().label("System").group(&dark_btn).build();
 
         box_.append(&dark_btn);
         box_.append(&light_btn);
-        box_.append(&system_btn);
         
         self.scheme_group.add(&box_);
 
-        let cb = self.scheme_callback.clone();
+        let cb_d = self.scheme_callback.clone();
         dark_btn.connect_toggled(move |btn| {
             if btn.is_active() {
-                if let Some(f) = cb.borrow().as_ref() { f(ColorScheme::Dark); }
+                if let Some(f) = cb_d.borrow().as_ref() { f(ColorScheme::Dark); }
             }
         });
         
-        let cb = self.scheme_callback.clone();
+        let cb_l = self.scheme_callback.clone();
         light_btn.connect_toggled(move |btn| {
             if btn.is_active() {
-                if let Some(f) = cb.borrow().as_ref() { f(ColorScheme::Light); }
-            }
-        });
-
-        let cb = self.scheme_callback.clone();
-        system_btn.connect_toggled(move |btn| {
-            if btn.is_active() {
-                if let Some(f) = cb.borrow().as_ref() { f(ColorScheme::System); }
+                if let Some(f) = cb_l.borrow().as_ref() { f(ColorScheme::Light); }
             }
         });
     }
@@ -137,29 +127,28 @@ impl AppearancePage {
             ("Pink", AccentColor::Pink, "#d56191"),
             ("Purple", AccentColor::Purple, "#9141ac"),
         ];
-for (name, color_type, hex) in colors {
-    let btn = gtk4::Button::builder()
-        .tooltip_text(name)
-        .css_classes(vec!["accent-button".to_string()])
-        .build();
 
-    // Set individual button color
-    let provider = gtk4::CssProvider::new();
-    provider.load_from_string(&format!("button {{ background-color: {}; }}", hex));
-    #[allow(deprecated)]
-    btn.style_context().add_provider(&provider, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION);
+        for (name, color_type, hex) in colors {
+            let btn = gtk4::Button::builder()
+                .tooltip_text(name)
+                .css_classes(vec!["accent-button".to_string()])
+                .build();
+            
+            // Set individual button color
+            let provider = gtk4::CssProvider::new();
+            provider.load_from_string(&format!("button {{ background-color: {}; }}", hex));
+            #[allow(deprecated)]
+            btn.style_context().add_provider(&provider, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION);
+let cb = self.accent_callback.clone();
+let color_c = color_type.clone();
 
-    let cb = self.accent_callback.clone();
-    let color_c = color_type.clone();
-    let btn_ref = btn.clone();
+btn.connect_clicked(move |_| {
+    if let Some(f) = cb.borrow().as_ref() { f(color_c.clone()); }
+});
 
-    btn.connect_clicked(move |_| {
-        if let Some(f) = cb.borrow().as_ref() { f(color_c.clone()); }
-    });
 
-    flow_box.append(&btn);
-}
-
+            flow_box.append(&btn);
+        }
 
         self.accent_group.add(&flow_box);
     }

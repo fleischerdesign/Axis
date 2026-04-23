@@ -12,8 +12,13 @@ mod widgets;
 use presentation::accounts::AccountsPresenter;
 use presentation::appearance::AppearancePresenter;
 use presentation::navigation::{NavigationPresenter, PageDescriptor};
+use presentation::network::NetworkPresenter;
+use presentation::bluetooth::BluetoothPresenter;
+
 use widgets::accounts_page::AccountsPage;
 use widgets::appearance_page::AppearancePage;
+use widgets::network_page::NetworkPage;
+use widgets::bluetooth_page::BluetoothPage;
 use widgets::sidebar::Sidebar;
 use widgets::window::SettingsWindow;
 
@@ -24,10 +29,27 @@ use axis_application::use_cases::appearance::set_accent::SetAccentColorUseCase;
 use axis_application::use_cases::appearance::set_scheme::SetColorSchemeUseCase;
 use axis_application::use_cases::appearance::set_wallpaper::SetWallpaperUseCase;
 
+use axis_application::use_cases::network::subscribe::SubscribeToNetworkUpdatesUseCase;
+use axis_application::use_cases::network::get_status::GetNetworkStatusUseCase;
+use axis_application::use_cases::network::scan_wifi::ScanWifiUseCase;
+use axis_application::use_cases::network::connect_to_ap::ConnectToApUseCase;
+use axis_application::use_cases::network::disconnect_wifi::DisconnectWifiUseCase;
+
+use axis_application::use_cases::bluetooth::subscribe::SubscribeToBluetoothUpdatesUseCase;
+use axis_application::use_cases::bluetooth::get_status::GetBluetoothStatusUseCase;
+use axis_application::use_cases::bluetooth::connect::ConnectBluetoothDeviceUseCase;
+use axis_application::use_cases::bluetooth::disconnect::DisconnectBluetoothDeviceUseCase;
+use axis_application::use_cases::bluetooth::set_powered::SetBluetoothPoweredUseCase;
+use axis_application::use_cases::bluetooth::start_scan::StartBluetoothScanUseCase;
+use axis_application::use_cases::bluetooth::stop_scan::StopBluetoothScanUseCase;
+
 use axis_infrastructure::adapters::cloud::LocalCloudProvider;
 use axis_infrastructure::adapters::google_auth::GoogleCloudAdapter;
 use axis_infrastructure::adapters::appearance::ConfigAppearanceProvider;
 use axis_infrastructure::adapters::config::FileConfigProvider;
+use axis_infrastructure::adapters::network::NetworkManagerProvider;
+use axis_infrastructure::adapters::bluetooth::BlueZProvider;
+
 use axis_domain::models::config::AxisConfig;
 use axis_presentation::ThemeService;
 
@@ -62,13 +84,13 @@ fn main() -> glib::ExitCode {
     });
 
     app.connect_activate(move |app| {
-        build_ui(app, theme_provider.get().expect("theme provider not initialized").clone());
+        build_ui(app, theme_provider.get().expect("theme provider not initialized").clone(), &rt);
     });
     
     app.run()
 }
 
-fn build_ui(app: &adw::Application, theme_css: Rc<gtk4::CssProvider>) {
+fn build_ui(app: &adw::Application, theme_css: Rc<gtk4::CssProvider>, rt: &tokio::runtime::Runtime) {
     let config_dir = dirs::config_dir().unwrap_or(PathBuf::from(".")).join("axis");
     let _ = std::fs::create_dir_all(&config_dir);
 
@@ -77,6 +99,13 @@ fn build_ui(app: &adw::Application, theme_css: Rc<gtk4::CssProvider>) {
     let cloud_provider = Arc::new(LocalCloudProvider::new(config_dir.clone()));
     let google_auth = Arc::new(GoogleCloudAdapter::new(config_dir.clone()));
     let appearance_provider = ConfigAppearanceProvider::new(config_provider.clone());
+    
+    let network_provider = rt.block_on(async {
+        NetworkManagerProvider::new().await.expect("Failed to connect to NetworkManager")
+    });
+    let bluetooth_provider = rt.block_on(async {
+        BlueZProvider::new().await.expect("Failed to connect to BlueZ")
+    });
 
     // 2. Use Cases
     let subscribe_cloud = Arc::new(SubscribeToCloudUpdatesUseCase::new(cloud_provider.clone()));
@@ -87,36 +116,39 @@ fn build_ui(app: &adw::Application, theme_css: Rc<gtk4::CssProvider>) {
     let set_scheme = Arc::new(SetColorSchemeUseCase::new(appearance_provider.clone()));
     let set_wallpaper = Arc::new(SetWallpaperUseCase::new(appearance_provider.clone()));
 
-    // 3. Presenters
-    let accounts_presenter = Rc::new(AccountsPresenter::new(
-        subscribe_cloud,
-        authenticate_cloud,
-    ));
+    let subscribe_network = Arc::new(SubscribeToNetworkUpdatesUseCase::new(network_provider.clone()));
+    let get_network_status = Arc::new(GetNetworkStatusUseCase::new(network_provider.clone()));
+    let scan_wifi = Arc::new(ScanWifiUseCase::new(network_provider.clone()));
+    let connect_to_ap = Arc::new(ConnectToApUseCase::new(network_provider.clone()));
+    let disconnect_wifi = Arc::new(DisconnectWifiUseCase::new(network_provider.clone()));
 
-    let appearance_presenter = Rc::new(AppearancePresenter::new(
-        subscribe_appearance,
-        set_accent,
-        set_scheme,
-        set_wallpaper,
-    ));
+    let subscribe_bluetooth = Arc::new(SubscribeToBluetoothUpdatesUseCase::new(bluetooth_provider.clone()));
+    let get_bluetooth_status = Arc::new(GetBluetoothStatusUseCase::new(bluetooth_provider.clone()));
+    let bt_connect = Arc::new(ConnectBluetoothDeviceUseCase::new(bluetooth_provider.clone()));
+    let bt_disconnect = Arc::new(DisconnectBluetoothDeviceUseCase::new(bluetooth_provider.clone()));
+    let bt_set_powered = Arc::new(SetBluetoothPoweredUseCase::new(bluetooth_provider.clone()));
+    let bt_start_scan = Arc::new(StartBluetoothScanUseCase::new(bluetooth_provider.clone()));
+    let bt_stop_scan = Arc::new(StopBluetoothScanUseCase::new(bluetooth_provider.clone()));
+
+    // 3. Presenters
+    let accounts_presenter = Rc::new(AccountsPresenter::new(subscribe_cloud, authenticate_cloud));
+    let appearance_presenter = Rc::new(AppearancePresenter::new(subscribe_appearance, set_accent, set_scheme, set_wallpaper));
+    let network_presenter = Rc::new(NetworkPresenter::new(subscribe_network, get_network_status, scan_wifi, connect_to_ap, disconnect_wifi, rt));
+    let bluetooth_presenter = Rc::new(BluetoothPresenter::new(subscribe_bluetooth, get_bluetooth_status, bt_connect, bt_disconnect, bt_set_powered, bt_start_scan, bt_stop_scan, rt));
 
     let initial_pages = vec![
-        PageDescriptor {
-            id: "appearance".to_string(),
-            title: "Appearance".to_string(),
-            icon: "preferences-desktop-wallpaper-symbolic".to_string(),
-        },
-        PageDescriptor {
-            id: "accounts".to_string(),
-            title: "Accounts".to_string(),
-            icon: "avatar-default-symbolic".to_string(),
-        },
+        PageDescriptor { id: "appearance".to_string(), title: "Appearance".to_string(), icon: "preferences-desktop-wallpaper-symbolic".to_string() },
+        PageDescriptor { id: "network".to_string(), title: "Network".to_string(), icon: "network-wireless-symbolic".to_string() },
+        PageDescriptor { id: "bluetooth".to_string(), title: "Bluetooth".to_string(), icon: "bluetooth-active-symbolic".to_string() },
+        PageDescriptor { id: "accounts".to_string(), title: "Accounts".to_string(), icon: "avatar-default-symbolic".to_string() },
     ];
     let navigation_presenter = Rc::new(NavigationPresenter::new(initial_pages));
 
     // 4. Widgets
     let accounts_page = AccountsPage::new(accounts_presenter.clone());
     let appearance_page = AppearancePage::new(appearance_presenter.clone());
+    let network_page = NetworkPage::new(network_presenter.clone());
+    let bluetooth_page = BluetoothPage::new(bluetooth_presenter.clone());
     let sidebar = Sidebar::new(navigation_presenter.clone());
     let settings_window = SettingsWindow::new(app, sidebar.widget().upcast_ref());
 
@@ -124,27 +156,39 @@ fn build_ui(app: &adw::Application, theme_css: Rc<gtk4::CssProvider>) {
     let theme_service = ThemeService::new(theme_css);
     appearance_presenter.add_view(Box::new(theme_service));
 
-    // Register pages in the window
+    // Register pages
     settings_window.register_page_widget("appearance", "Appearance", appearance_page.widget());
+    settings_window.register_page_widget("network", "Network", network_page.widget());
+    settings_window.register_page_widget("bluetooth", "Bluetooth", bluetooth_page.widget());
     settings_window.register_page_widget("accounts", "Accounts", accounts_page.widget());
     
     // 6. Wiring (Reactive bindings)
     let ap_run = accounts_presenter.clone();
-    glib::spawn_future_local(async move {
-        ap_run.run().await;
-    });
+    glib::spawn_future_local(async move { ap_run.run().await; });
 
     let app_run = appearance_presenter.clone();
     let app_page_c = appearance_page.clone();
     glib::spawn_future_local(async move {
         app_run.bind(Box::new(app_page_c)).await;
-        app_run.run().await; // Dieser Aufruf fehlte!
+        app_run.run().await;
+    });
+
+    let net_run = network_presenter.clone();
+    let net_page_c = network_page.clone();
+    glib::spawn_future_local(async move {
+        net_run.bind(Box::new(net_page_c)).await;
+        net_run.run_sync().await;
+    });
+
+    let bt_run = bluetooth_presenter.clone();
+    let bt_page_c = bluetooth_page.clone();
+    glib::spawn_future_local(async move {
+        bt_run.bind(Box::new(bt_page_c)).await;
+        bt_run.run_sync().await;
     });
 
     let nav_run = navigation_presenter.clone();
-    glib::spawn_future_local(async move {
-        nav_run.run().await;
-    });
+    glib::spawn_future_local(async move { nav_run.run().await; });
 
     accounts_presenter.add_view(Box::new(accounts_page));
     navigation_presenter.add_view(Box::new(sidebar));
