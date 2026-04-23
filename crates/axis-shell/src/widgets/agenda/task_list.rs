@@ -18,6 +18,10 @@ impl TaskList {
         glib::Object::new()
     }
 
+    pub fn on_list_changed(&self, f: Box<dyn Fn(String) + 'static>) {
+        *self.imp().list_changed_callback.borrow_mut() = Some(Rc::new(f));
+    }
+
     pub fn render(&self, status: &AgendaStatus) {
         let imp = self.imp();
         
@@ -48,6 +52,17 @@ impl TaskList {
                     dropdown.set_selected(idx as u32);
                 }
             }
+
+            let task_lists = status.task_lists.clone();
+            let callback = imp.list_changed_callback.borrow().clone();
+            dropdown.connect_selected_notify(move |dd| {
+                if let Some(cb) = &callback {
+                    let selected = dd.selected();
+                    if let Some(list) = task_lists.get(selected as usize) {
+                        cb(list.id.clone());
+                    }
+                }
+            });
 
             imp.header_box.append(&dropdown);
             imp.dropdown_built.set(true);
@@ -114,12 +129,14 @@ impl View<AgendaStatus> for TaskList {
 
 mod imp {
     use super::*;
+    use std::cell::RefCell;
 
     pub struct TaskList {
         pub list_box: gtk4::ListBox,
         pub header_box: gtk4::Box,
         pub scrolled: gtk4::ScrolledWindow,
         pub dropdown_built: Cell<bool>,
+        pub list_changed_callback: RefCell<Option<Rc<Box<dyn Fn(String) + 'static>>>>,
     }
 
     impl Default for TaskList {
@@ -127,19 +144,22 @@ mod imp {
             Self {
                 list_box: gtk4::ListBox::builder()
                     .selection_mode(gtk4::SelectionMode::None)
-                    .css_classes(["boxed-list"])
                     .build(),
-                header_box: gtk4::Box::new(gtk4::Orientation::Horizontal, 0),
+                header_box: gtk4::Box::builder()
+                    .orientation(gtk4::Orientation::Horizontal)
+                    .spacing(8)
+                    .margin_bottom(8)
+                    .build(),
                 scrolled: gtk4::ScrolledWindow::builder()
                     .hscrollbar_policy(gtk4::PolicyType::Never)
                     .vscrollbar_policy(gtk4::PolicyType::Automatic)
                     .min_content_height(400)
                     .build(),
                 dropdown_built: Cell::new(false),
+                list_changed_callback: RefCell::new(None),
             }
         }
     }
-
     #[glib::object_subclass]
     impl ObjectSubclass for TaskList {
         const NAME: &'static str = "AxisTaskList";
@@ -157,6 +177,8 @@ mod imp {
 
             obj.append(&self.header_box);
 
+            self.list_box.set_selection_mode(gtk4::SelectionMode::None);
+            self.list_box.add_css_class("background-none"); // Custom class to ensure no bg
             self.scrolled.set_child(Some(&self.list_box));
             obj.append(&self.scrolled);
         }

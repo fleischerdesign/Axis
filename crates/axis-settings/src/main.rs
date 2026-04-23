@@ -1,6 +1,7 @@
 use libadwaita::prelude::*;
 use libadwaita as adw;
 use gtk4::{glib, gdk};
+use chrono::Local;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::path::PathBuf;
@@ -20,6 +21,7 @@ use axis_infrastructure::adapters::cloud::LocalCloudProvider;
 use axis_infrastructure::adapters::google_auth::GoogleCloudAdapter;
 
 fn main() -> glib::ExitCode {
+    setup_logger().expect("Failed to initialize logger");
     let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
     let _guard = rt.enter();
 
@@ -109,4 +111,27 @@ fn build_ui(app: &adw::Application) {
     navigation_presenter.add_view(Box::new(settings_window.clone()));
 
     settings_window.present();
+}
+
+fn setup_logger() -> Result<(), fern::InitError> {
+    let mut dispatch = fern::Dispatch::new()
+        .format(|out, message, record| {
+            out.finish(format_args!(
+                "{}[{}][{}] {}",
+                chrono::Local::now().format("[%Y-%m-%d][%H:%M:%S]"),
+                record.target(),
+                record.level(),
+                message
+            ))
+        })
+        .level(log::LevelFilter::Info);
+
+    if let Ok(lvl) = std::env::var("RUST_LOG") {
+        if let Ok(parsed) = lvl.parse() {
+            dispatch = dispatch.level(parsed);
+        }
+    }
+
+    dispatch.chain(std::io::stdout()).apply()?;
+    Ok(())
 }

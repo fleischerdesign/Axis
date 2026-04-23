@@ -10,6 +10,8 @@ pub mod cloud;
 pub mod nightlight;
 pub mod dnd;
 pub mod google_auth;
+pub mod google_calendar;
+pub mod google_tasks;
 pub mod launcher;
 pub mod ipc;
 pub mod lock;

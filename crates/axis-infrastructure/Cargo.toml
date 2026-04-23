@@ -26,4 +26,5 @@ pam.workspace = true
 oauth2.workspace = true
 reqwest.workspace = true
 open.workspace = true
+urlencoding = "2"
 url = "2"

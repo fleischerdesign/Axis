@@ -48,6 +48,16 @@ impl View<AgendaStatus> for AgendaPopup {
     }
 }
 
+impl AgendaView for AgendaPopup {
+    fn on_list_changed(&self, f: Box<dyn Fn(String) + 'static>) {
+        self.imp().task_list.on_list_changed(f);
+    }
+
+    fn on_task_toggled(&self, _f: Box<dyn Fn(String, bool) + 'static>) {
+        // TODO
+    }
+}
+
 mod imp {
     use super::*;
     use gtk4_layer_shell::{LayerShell, Layer, Edge, KeyboardMode};

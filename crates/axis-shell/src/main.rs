@@ -87,6 +87,8 @@ use axis_domain::ports::popups::PopupProvider;
 use axis_domain::models::ipc::IpcCommand;
 use axis_domain::models::dnd::DndStatus;
 
+use axis_infrastructure::adapters::google_auth::GoogleCloudAdapter;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::rc::Rc;
 
@@ -129,6 +131,7 @@ use services::wallpaper_service::WallpaperService;
 use axis_infrastructure::adapters::lock::SessionLockProvider;
 
 fn main() -> glib::ExitCode {
+    setup_logger().expect("Failed to initialize logger");
     let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
     let _guard = rt.enter();
 
@@ -205,6 +208,9 @@ fn main() -> glib::ExitCode {
     let popup_provider = LocalPopupProvider::new();
     let launcher_provider = CompositeLauncherProvider::new();
     let ipc_provider = ZbusIpcProvider::new();
+    let config_dir = dirs::config_dir().unwrap_or(PathBuf::from(".")).join("axis");
+    let google_auth = Arc::new(GoogleCloudAdapter::new(config_dir.clone()));
+
     let notification_provider: Arc<dyn NotificationService> = rt.block_on(async {
         match ZbusNotificationProvider::new().await {
             Ok(p) => p as Arc<dyn NotificationService>,
@@ -289,7 +295,12 @@ fn main() -> glib::ExitCode {
         &rt,
     ));
     let brightness_presenter = Rc::new(BrightnessPresenter::new(subscribe_brightness, set_brightness));
-    let agenda_presenter = Rc::new(AgendaPresenter::new());
+    
+    let google_calendar = Arc::new(axis_infrastructure::adapters::google_calendar::GoogleCalendarAdapter::new(google_auth.clone()));
+    let google_tasks = Arc::new(axis_infrastructure::adapters::google_tasks::GoogleTasksAdapter::new(google_auth.clone()));
+    let sync_agenda_uc = Arc::new(axis_application::use_cases::cloud::sync_agenda::SyncAgendaUseCase::new(google_calendar, google_tasks));
+    let agenda_presenter = Rc::new(AgendaPresenter::new(sync_agenda_uc));
+
     let launcher_presenter = LauncherPresenter::new(search_launcher);
     let notification_presenter = Rc::new(NotificationPresenter::new(notification_provider.clone()));
 
@@ -635,11 +646,18 @@ fn main() -> glib::ExitCode {
         }));
 
         let agenda_popup = AgendaPopup::new(app);
-        agenda_presenter.add_view(Box::new(agenda_popup.clone()));
+        let ap = agenda_presenter.clone();
+        let agenda_popup_c = agenda_popup.clone();
+        let pp_prov = popup_provider.clone();
         
-        let ap_sync = agenda_presenter.clone();
+        let ap_bind = ap.clone();
         glib::spawn_future_local(async move {
-            ap_sync.run_sync().await;
+            ap_bind.bind(Box::new(agenda_popup_c)).await;
+        });
+        
+        let ap_sync = ap.clone();
+        glib::spawn_future_local(async move {
+            ap_sync.run_sync(pp_prov).await;
         });
 
         let pp = popup_presenter.clone();
@@ -718,4 +736,27 @@ fn parse_color_scheme(s: &str) -> Option<ColorScheme> {
         "system" => Some(ColorScheme::System),
         _ => None,
     }
+}
+
+fn setup_logger() -> Result<(), fern::InitError> {
+    let mut dispatch = fern::Dispatch::new()
+        .format(|out, message, record| {
+            out.finish(format_args!(
+                "{}[{}][{}] {}",
+                chrono::Local::now().format("[%Y-%m-%d][%H:%M:%S]"),
+                record.target(),
+                record.level(),
+                message
+            ))
+        })
+        .level(log::LevelFilter::Info);
+
+    if let Ok(lvl) = std::env::var("RUST_LOG") {
+        if let Ok(parsed) = lvl.parse() {
+            dispatch = dispatch.level(parsed);
+        }
+    }
+
+    dispatch.chain(std::io::stdout()).apply()?;
+    Ok(())
 }

@@ -7,4 +7,5 @@ edition = "2021"
 axis-domain.workspace = true
 async-trait.workspace = true
 thiserror.workspace = true
+chrono.workspace = true
 serde.workspace = true

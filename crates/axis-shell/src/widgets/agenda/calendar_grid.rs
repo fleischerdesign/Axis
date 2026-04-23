@@ -175,7 +175,11 @@ mod imp {
             obj.set_spacing(8);
             obj.set_width_request(240);
 
-            let header = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+            let header = gtk4::Box::builder()
+                .orientation(gtk4::Orientation::Horizontal)
+                .spacing(8)
+                .margin_bottom(8)
+                .build();
             let prev = gtk4::Button::builder().icon_name("go-previous-symbolic").css_classes(["flat"]).build();
             let next = gtk4::Button::builder().icon_name("go-next-symbolic").css_classes(["flat"]).build();
             

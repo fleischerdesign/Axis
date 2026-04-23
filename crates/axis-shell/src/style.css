@@ -680,10 +680,10 @@ preferencesgroup > .title {
 
 /* --- AGENDA POPUP --- */
 .calendar-month-label {
-    font-size: 1.1rem;
+    font-size: 1.0rem;
     font-weight: 700;
-    margin-bottom: 4px;
     color: @title_text_color;
+    margin-bottom: 0;
 }
 
 .calendar-day-header {
@@ -709,52 +709,36 @@ preferencesgroup > .title {
 }
 
 .agenda-section-header {
-    font-size: 0.8rem;
+    font-size: 1.0rem;
     font-weight: 700;
-    text-transform: uppercase;
-    color: @accent_bg_color;
-    margin-bottom: 6px;
-    margin-left: 12px;
+    color: @title_text_color;
+    margin-bottom: 0;
 }
 
 .agenda-task-row {
-    margin-bottom: 4px;
-}
-
-/* --- UPDATED AGENDA STYLING --- */
-.calendar-day.selected {
-    border: 2px solid @accent_bg_color;
-}
-
-.calendar-day.other-month {
-    opacity: 0.3;
-}
-
-.agenda-list-dropdown {
     background: @card_bg_color;
+    margin-bottom: 6px;
+    padding: 8px 12px;
     border-radius: 12px;
-    padding: 4px 8px;
-    font-size: 0.9rem;
-}
-
-.agenda-task-row {
-    padding: 6px 10px;
-    border-radius: 10px;
-    transition: background 0.2s ease;
+    transition: transform 0.2s ease, background 0.2s ease;
 }
 
 .agenda-task-row:hover {
-    background: @hover_bg_color;
+    background: @hover_bg_color_strong;
+}
+
+.agenda-task-row.done {
+    opacity: 0.6;
 }
 
 .agenda-task-row.done .agenda-task-label {
     text-decoration: line-through;
-    opacity: 0.5;
 }
 
 .agenda-task-label {
-    font-size: 0.9rem;
+    font-size: 0.95rem;
     font-weight: 500;
+    color: @body_text_color;
 }
 
 .agenda-task-check {
@@ -768,4 +752,14 @@ preferencesgroup > .title {
 
 .agenda-task-row:hover .agenda-task-delete {
     opacity: 1;
+}
+
+.agenda-list-dropdown {
+    all: unset;
+}
+
+.background-none {
+    background: none;
+    border: none;
+    box-shadow: none;
 }

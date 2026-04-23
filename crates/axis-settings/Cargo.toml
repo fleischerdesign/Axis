@@ -13,8 +13,10 @@ dirs.workspace = true
 gtk4.workspace = true
 tokio = { workspace = true, features = ["full"] }
 tokio-stream.workspace = true
+chrono.workspace = true
 futures-util.workspace = true
 log.workspace = true
+fern.workspace = true
 async-trait.workspace = true
 async-stream.workspace = true
 serde.workspace = true
