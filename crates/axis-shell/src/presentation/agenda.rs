@@ -5,6 +5,7 @@ use axis_domain::ports::popups::PopupProvider;
 use axis_presentation::{Presenter, View};
 use axis_application::use_cases::cloud::sync_calendar::SyncCalendarUseCase;
 use axis_application::use_cases::cloud::sync_tasks::SyncTasksUseCase;
+use axis_application::use_cases::tasks::toggle_task::ToggleTaskUseCase;
 use std::rc::Rc;
 use std::cell::{Cell, RefCell};
 use gtk4::glib;
@@ -21,6 +22,7 @@ pub struct AgendaPresenter {
     inner: Presenter<AgendaStatus>,
     sync_calendar_uc: Arc<SyncCalendarUseCase>,
     sync_tasks_uc: Arc<SyncTasksUseCase>,
+    toggle_task_uc: Arc<ToggleTaskUseCase>,
     selected_list_id: Rc<RefCell<Option<String>>>,
     status_tx: watch::Sender<AgendaStatus>,
     is_syncing_events: Rc<Cell<bool>>,
@@ -31,6 +33,7 @@ impl AgendaPresenter {
     pub fn new(
         sync_calendar_uc: Arc<SyncCalendarUseCase>,
         sync_tasks_uc: Arc<SyncTasksUseCase>,
+        toggle_task_uc: Arc<ToggleTaskUseCase>,
     ) -> Self {
         let (status_tx, _) = watch::channel(AgendaStatus::default());
         let status_tx_c = status_tx.clone();
@@ -44,6 +47,7 @@ impl AgendaPresenter {
             inner, 
             sync_calendar_uc,
             sync_tasks_uc,
+            toggle_task_uc,
             selected_list_id: Rc::new(RefCell::new(None)),
             status_tx,
             is_syncing_events: Rc::new(Cell::new(false)),
@@ -60,6 +64,12 @@ impl AgendaPresenter {
         view.on_list_changed(Box::new(move |id| {
             this.set_list(id);
         }));
+
+        let this_toggle = self.clone();
+        view.on_task_toggled(Box::new(move |id, done| {
+            this_toggle.toggle_task(id, done);
+        }));
+
         self.inner.add_view(view);
     }
 
@@ -139,6 +149,31 @@ impl AgendaPresenter {
             this.refresh(false, true).await;
         });
     }
+
+    pub fn toggle_task(&self, task_id: String, done: bool) {
+        let mut status = self.status_tx.borrow().clone();
+        let list_id = status.selected_list_id.clone();
+        
+        // 1. Optimistic Update: Change status in local state immediately
+        if let Some(task) = status.tasks.iter_mut().find(|t| t.id == task_id) {
+            task.done = done;
+        }
+        self.inner.update(status.clone());
+        let _ = self.status_tx.send(status);
+
+        // 2. Perform background sync to Google
+        if let Some(list_id) = list_id {
+            let this = self.clone();
+            let uc = self.toggle_task_uc.clone();
+            glib::spawn_future_local(async move {
+                if let Err(e) = uc.execute(&list_id, &task_id, done).await {
+                    log::error!("[agenda] Failed to toggle task: {e}");
+                    // 3. Rollback on error
+                    this.refresh(false, true).await;
+                }
+            });
+        }
+    }
 }
 
 impl Clone for AgendaPresenter {
@@ -147,6 +182,7 @@ impl Clone for AgendaPresenter {
             inner: self.inner.clone(),
             sync_calendar_uc: self.sync_calendar_uc.clone(),
             sync_tasks_uc: self.sync_tasks_uc.clone(),
+            toggle_task_uc: self.toggle_task_uc.clone(),
             selected_list_id: self.selected_list_id.clone(),
             status_tx: self.status_tx.clone(),
             is_syncing_events: self.is_syncing_events.clone(),

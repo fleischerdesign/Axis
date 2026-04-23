@@ -300,9 +300,10 @@ fn main() -> glib::ExitCode {
     let google_tasks = Arc::new(axis_infrastructure::adapters::google_tasks::GoogleTasksAdapter::new(google_auth.clone()));
     
     let sync_calendar_uc = Arc::new(axis_application::use_cases::cloud::sync_calendar::SyncCalendarUseCase::new(google_calendar));
-    let sync_tasks_uc = Arc::new(axis_application::use_cases::cloud::sync_tasks::SyncTasksUseCase::new(google_tasks));
+    let sync_tasks_uc = Arc::new(axis_application::use_cases::cloud::sync_tasks::SyncTasksUseCase::new(google_tasks.clone()));
+    let toggle_task_uc = Arc::new(axis_application::use_cases::tasks::toggle_task::ToggleTaskUseCase::new(google_tasks));
     
-    let agenda_presenter = Rc::new(AgendaPresenter::new(sync_calendar_uc, sync_tasks_uc));
+    let agenda_presenter = Rc::new(AgendaPresenter::new(sync_calendar_uc, sync_tasks_uc, toggle_task_uc));
 
     let launcher_presenter = LauncherPresenter::new(search_launcher);
     let notification_presenter = Rc::new(NotificationPresenter::new(notification_provider.clone()));

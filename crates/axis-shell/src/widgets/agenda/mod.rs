@@ -53,8 +53,8 @@ impl AgendaView for AgendaPopup {
         self.imp().task_list.on_list_changed(f);
     }
 
-    fn on_task_toggled(&self, _f: Box<dyn Fn(String, bool) + 'static>) {
-        // TODO
+    fn on_task_toggled(&self, f: Box<dyn Fn(String, bool) + 'static>) {
+        self.imp().task_list.on_task_toggled(f);
     }
 }
 

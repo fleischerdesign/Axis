@@ -22,6 +22,10 @@ impl TaskList {
         *self.imp().list_changed_callback.borrow_mut() = Some(Rc::new(f));
     }
 
+    pub fn on_task_toggled(&self, f: Box<dyn Fn(String, bool) + 'static>) {
+        *self.imp().task_toggled_callback.borrow_mut() = Some(Rc::new(f));
+    }
+
     pub fn render(&self, status: &AgendaStatus) {
         let imp = self.imp();
         
@@ -83,6 +87,14 @@ impl TaskList {
                 .css_classes(["agenda-task-check"])
                 .build();
 
+            let task_id = task.id.clone();
+            let callback = imp.task_toggled_callback.borrow().clone();
+            check.connect_toggled(move |btn| {
+                if let Some(cb) = &callback {
+                    cb(task_id.clone(), btn.is_active());
+                }
+            });
+
             let label = gtk4::Label::builder()
                 .label(&task.title)
                 .hexpand(true)
@@ -124,6 +136,7 @@ mod imp {
         pub is_updating_programmatically: Cell<bool>,
         pub current_task_lists: RefCell<Vec<DomainTaskList>>,
         pub list_changed_callback: RefCell<Option<Rc<Box<dyn Fn(String) + 'static>>>>,
+        pub task_toggled_callback: RefCell<Option<Rc<Box<dyn Fn(String, bool) + 'static>>>>,
     }
 
     impl Default for TaskList {
@@ -155,6 +168,7 @@ mod imp {
                 is_updating_programmatically: Cell::new(false),
                 current_task_lists: RefCell::new(Vec::new()),
                 list_changed_callback: RefCell::new(None),
+                task_toggled_callback: RefCell::new(None),
             }
         }
     }
