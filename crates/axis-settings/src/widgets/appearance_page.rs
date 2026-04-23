@@ -128,6 +128,19 @@ impl AppearancePage {
             ("Purple", AccentColor::Purple, "#9141ac"),
         ];
 
+        // Add "Auto" button first
+        let auto_btn = gtk4::Button::builder()
+            .tooltip_text("Auto (from wallpaper)")
+            .css_classes(vec!["accent-button".to_string(), "accent-auto".to_string()])
+            .child(&gtk4::Image::from_icon_name("applications-graphics-symbolic"))
+            .build();
+        
+        let cb_auto = self.accent_callback.clone();
+        auto_btn.connect_clicked(move |_| {
+            if let Some(f) = cb_auto.borrow().as_ref() { f(AccentColor::Auto); }
+        });
+        flow_box.append(&auto_btn);
+
         for (name, color_type, hex) in colors {
             let btn = gtk4::Button::builder()
                 .tooltip_text(name)
