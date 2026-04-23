@@ -7,4 +7,5 @@ pub struct CalendarEvent {
     pub start: String,
     pub end: String,
     pub all_day: bool,
+    pub color_id: Option<String>,
 }

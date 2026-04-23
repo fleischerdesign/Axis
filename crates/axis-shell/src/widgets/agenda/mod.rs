@@ -90,12 +90,12 @@ mod imp {
             obj.set_keyboard_mode(KeyboardMode::None);
             obj.add_css_class("popup-window");
 
-            let main_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 24);
+            let main_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 16);
             main_box.add_css_class("qs-panel");
-            main_box.set_margin_start(12);
-            main_box.set_margin_end(12);
-            main_box.set_margin_top(12);
-            main_box.set_margin_bottom(12);
+            main_box.set_margin_start(4);
+            main_box.set_margin_end(4);
+            main_box.set_margin_top(4);
+            main_box.set_margin_bottom(4);
 
             main_box.append(&self.calendar_grid);
             

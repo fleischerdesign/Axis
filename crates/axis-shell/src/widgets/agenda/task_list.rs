@@ -4,6 +4,8 @@ use libadwaita::subclass::prelude::*;
 use gtk4::glib;
 use axis_domain::models::agenda::AgendaStatus;
 use axis_presentation::View;
+use std::rc::Rc;
+use std::cell::Cell;
 
 glib::wrapper! {
     pub struct TaskList(ObjectSubclass<imp::TaskList>)
@@ -19,58 +21,87 @@ impl TaskList {
     pub fn render(&self, status: &AgendaStatus) {
         let imp = self.imp();
         
-        // Clear existing
+        // 1. Update Dropdown (Header)
+        if !imp.dropdown_built.get() && !status.task_lists.is_empty() {
+            while let Some(child) = imp.header_box.first_child() {
+                imp.header_box.remove(&child);
+            }
+
+            let label = gtk4::Label::builder()
+                .label("Aufgaben")
+                .css_classes(["agenda-section-header"])
+                .halign(gtk4::Align::Start)
+                .hexpand(true)
+                .build();
+            imp.header_box.append(&label);
+
+            let list_names: Vec<&str> = status.task_lists.iter().map(|l| l.title.as_str()).collect();
+            let model = gtk4::StringList::new(&list_names);
+            let dropdown = gtk4::DropDown::builder()
+                .model(&model)
+                .css_classes(["agenda-list-dropdown"])
+                .valign(gtk4::Align::Center)
+                .build();
+
+            if let Some(selected_id) = &status.selected_list_id {
+                if let Some(idx) = status.task_lists.iter().position(|l| l.id == *selected_id) {
+                    dropdown.set_selected(idx as u32);
+                }
+            }
+
+            imp.header_box.append(&dropdown);
+            imp.dropdown_built.set(true);
+        }
+
+        // 2. Clear and Render Tasks
         while let Some(child) = imp.list_box.first_child() {
             imp.list_box.remove(&child);
         }
 
-        if status.events.is_empty() && status.tasks.is_empty() {
+        if status.tasks.is_empty() {
             let empty = adw::StatusPage::builder()
-                .title("Nothing scheduled")
-                .description("Enjoy your free time.")
+                .title("Keine Aufgaben")
+                .description("Alles erledigt!")
                 .build();
             imp.list_box.append(&empty);
             return;
         }
 
-        // Render Events
-        if !status.events.is_empty() {
-            let header = gtk4::Label::builder()
-                .label("Events")
-                .halign(gtk4::Align::Start)
-                .css_classes(["agenda-section-header"])
+        for task in &status.tasks {
+            let row = gtk4::Box::builder()
+                .orientation(gtk4::Orientation::Horizontal)
+                .spacing(12)
+                .css_classes(["agenda-task-row"])
                 .build();
-            imp.list_box.append(&header);
 
-            for event in &status.events {
-                let row = adw::ActionRow::builder()
-                    .title(&event.summary)
-                    .subtitle(&format!("{} - {}", event.start, event.end))
-                    .build();
-                imp.list_box.append(&row);
+            if task.done {
+                row.add_css_class("done");
             }
-        }
 
-        // Render Tasks
-        if !status.tasks.is_empty() {
-            let header = gtk4::Label::builder()
-                .label("Tasks")
-                .halign(gtk4::Align::Start)
-                .css_classes(["agenda-section-header"])
-                .margin_top(12)
+            let check = gtk4::CheckButton::builder()
+                .active(task.done)
+                .css_classes(["agenda-task-check"])
                 .build();
-            imp.list_box.append(&header);
 
-            for task in &status.tasks {
-                let check = gtk4::CheckButton::new();
-                check.set_active(task.done);
-                
-                let row = adw::ActionRow::builder()
-                    .title(&task.title)
-                    .build();
-                row.add_prefix(&check);
-                imp.list_box.append(&row);
-            }
+            let label = gtk4::Label::builder()
+                .label(&task.title)
+                .hexpand(true)
+                .halign(gtk4::Align::Start)
+                .css_classes(["agenda-task-label"])
+                .ellipsize(gtk4::pango::EllipsizeMode::End)
+                .build();
+
+            let delete_btn = gtk4::Button::builder()
+                .icon_name("user-trash-symbolic")
+                .css_classes(["flat", "agenda-task-delete"])
+                .valign(gtk4::Align::Center)
+                .build();
+
+            row.append(&check);
+            row.append(&label);
+            row.append(&delete_btn);
+            
+            imp.list_box.append(&row);
         }
     }
 }
@@ -86,7 +117,9 @@ mod imp {
 
     pub struct TaskList {
         pub list_box: gtk4::ListBox,
+        pub header_box: gtk4::Box,
         pub scrolled: gtk4::ScrolledWindow,
+        pub dropdown_built: Cell<bool>,
     }
 
     impl Default for TaskList {
@@ -96,11 +129,13 @@ mod imp {
                     .selection_mode(gtk4::SelectionMode::None)
                     .css_classes(["boxed-list"])
                     .build(),
+                header_box: gtk4::Box::new(gtk4::Orientation::Horizontal, 0),
                 scrolled: gtk4::ScrolledWindow::builder()
                     .hscrollbar_policy(gtk4::PolicyType::Never)
                     .vscrollbar_policy(gtk4::PolicyType::Automatic)
-                    .min_content_height(350)
+                    .min_content_height(400)
                     .build(),
+                dropdown_built: Cell::new(false),
             }
         }
     }
@@ -117,7 +152,10 @@ mod imp {
             self.parent_constructed();
             let obj = self.obj();
             obj.set_orientation(gtk4::Orientation::Vertical);
-            obj.set_width_request(320);
+            obj.set_spacing(12);
+            obj.set_width_request(280);
+
+            obj.append(&self.header_box);
 
             self.scrolled.set_child(Some(&self.list_box));
             obj.append(&self.scrolled);

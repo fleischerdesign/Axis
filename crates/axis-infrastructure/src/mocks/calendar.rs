@@ -14,6 +14,7 @@ impl CalendarProvider for MockCalendarProvider {
                 start: "2026-04-17T10:00:00".to_string(),
                 end: "2026-04-17T11:00:00".to_string(),
                 all_day: false,
+                color_id: Some("9".to_string()),
             }
         ])
     }
