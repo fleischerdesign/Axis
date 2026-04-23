@@ -118,7 +118,7 @@ impl AppearancePresenter {
 
         let uc = self.set_wallpaper_uc.clone();
         tokio::spawn(async move {
-            let _ = uc.execute(Some(path)).await;
+            let _ = uc.execute(path).await;
         });
     }
 }

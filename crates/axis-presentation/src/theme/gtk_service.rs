@@ -13,6 +13,7 @@ pub struct GtkThemeService {
     provider: Rc<gtk4::CssProvider>,
     cached_accent_from_wallpaper: RefCell<Option<String>>,
     last_wallpaper_path: RefCell<Option<String>>,
+    on_color_extracted: RefCell<Option<Box<dyn Fn(String) + 'static>>>,
 }
 
 impl GtkThemeService {
@@ -21,7 +22,12 @@ impl GtkThemeService {
             provider,
             cached_accent_from_wallpaper: RefCell::new(None),
             last_wallpaper_path: RefCell::new(None),
+            on_color_extracted: RefCell::new(None),
         }
+    }
+
+    pub fn on_color_extracted<F: Fn(String) + 'static>(&self, f: F) {
+        *self.on_color_extracted.borrow_mut() = Some(Box::new(f));
     }
 
     pub fn apply_color_scheme(scheme: &ColorScheme) {
@@ -68,6 +74,9 @@ impl View<AppearanceStatus> for GtkThemeService {
                     if self.last_wallpaper_path.borrow().as_ref() == Some(path) {
                         if let Some(cached) = self.cached_accent_from_wallpaper.borrow().clone() {
                             self.apply_theme(status, &cached);
+                            if let Some(ref f) = *self.on_color_extracted.borrow() {
+                                f(cached);
+                            }
                             return;
                         }
                     }
@@ -79,12 +88,18 @@ impl View<AppearanceStatus> for GtkThemeService {
                     let cached_accent = self.cached_accent_from_wallpaper.as_ptr();
                     let last_path = self.last_wallpaper_path.as_ptr();
 
+                    let on_extracted = self.on_color_extracted.as_ptr();
+
                     glib::spawn_future_local(async move {
                         // Schnellladung via Pixbuf
                         if let Some(hex) = extract_vibrant_color_stable(&path_c) {
                             unsafe {
                                 (*cached_accent) = Some(hex.clone());
                                 (*last_path) = Some(path_c.clone());
+                                
+                                if let Some(ref f) = *on_extracted {
+                                    f(hex.clone());
+                                }
                             }
                             
                             let css = generate_css(&status_c, &hex);

@@ -75,6 +75,7 @@ use axis_infrastructure::adapters::appearance::ConfigAppearanceProvider;
 use axis_infrastructure::adapters::config::FileConfigProvider;
 use axis_infrastructure::adapters::airplane::ConfigAirplaneProvider;
 use axis_infrastructure::adapters::tray::StatusNotifierAdapter;
+use axis_infrastructure::adapters::niri_layout::NiriLayoutProvider;
 
 use axis_domain::ports::network::NetworkProvider;
 use axis_domain::ports::lock::LockProvider;
@@ -112,12 +113,13 @@ use presentation::clock::ClockPresenter;
 use presentation::audio::AudioPresenter;
 use presentation::workspaces::WorkspacePresenter;
 use presentation::auto_hide::AutoHidePresenter;
-use presentation::popups::{PopupPresenter, PopupView};
+use presentation::popups::PopupPresenter;
 use presentation::toggle::TogglePresenter;
 use presentation::brightness::BrightnessPresenter;
-use presentation::launcher::{LauncherPresenter, LauncherView};
+use presentation::launcher::LauncherPresenter;
 use presentation::notifications::NotificationPresenter;
-use axis_presentation::{Presenter, View};
+use axis_presentation::{Presenter, View, view::FnView};
+use axis_domain::ports::layout::LayoutProvider;
 use presentation::network::NetworkPresenter;
 use presentation::bluetooth::BluetoothPresenter;
 use presentation::nightlight::NightlightPresenter;
@@ -497,9 +499,39 @@ fn main() -> glib::ExitCode {
     app.connect_activate(move |app| {
         let theme_svc = Rc::new(ThemeService::new(theme_provider.get().expect("theme provider not initialized").clone()));
         let wallpaper_svc = Rc::new(WallpaperService::new(app));
+        let config_dir = dirs::config_dir().unwrap_or(PathBuf::from(".")).join("axis");
+        let niri_layout = NiriLayoutProvider::new(config_dir);
+
+        // Sync auto-extracted colors
+        let niri_auto = niri_layout.clone();
+        theme_svc.on_color_extracted(move |hex| {
+            let niri = niri_auto.clone();
+            tokio::spawn(async move {
+                let _ = niri.set_active_border_color(hex).await;
+            });
+        });
 
         appearance_presenter.add_view(Box::new(theme_svc));
         appearance_presenter.add_view(Box::new(wallpaper_svc.clone()));
+        
+        // Sync manual color choices (non-Auto)
+        let niri_manual = niri_layout.clone();
+        appearance_presenter.add_view(Box::new(FnView::new(move |status: &axis_domain::models::appearance::AppearanceStatus| {
+            if let axis_domain::models::appearance::AccentColor::Custom(hex) = &status.accent_color {
+                let niri = niri_manual.clone();
+                let hex_c = hex.clone();
+                tokio::spawn(async move {
+                    let _ = niri.set_active_border_color(hex_c).await;
+                });
+            } else if status.accent_color != axis_domain::models::appearance::AccentColor::Auto {
+                // Handle Presets (Blue, Teal etc)
+                let niri = niri_manual.clone();
+                let hex = status.accent_color.hex_value().to_string();
+                tokio::spawn(async move {
+                    let _ = niri.set_active_border_color(hex).await;
+                });
+            }
+        })));
 
         let app_sync = appearance_presenter.clone();
         glib::spawn_future_local(async move { app_sync.run_sync().await; });

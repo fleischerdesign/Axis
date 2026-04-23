@@ -49,6 +49,7 @@ use axis_infrastructure::adapters::appearance::ConfigAppearanceProvider;
 use axis_infrastructure::adapters::config::FileConfigProvider;
 use axis_infrastructure::adapters::network::NetworkManagerProvider;
 use axis_infrastructure::adapters::bluetooth::BlueZProvider;
+use axis_infrastructure::adapters::niri_layout::NiriLayoutProvider;
 
 use axis_domain::models::config::AxisConfig;
 use axis_presentation::ThemeService;
@@ -99,6 +100,7 @@ fn build_ui(app: &adw::Application, theme_css: Rc<gtk4::CssProvider>, rt: &tokio
     let cloud_provider = Arc::new(LocalCloudProvider::new(config_dir.clone()));
     let google_auth = Arc::new(GoogleCloudAdapter::new(config_dir.clone()));
     let appearance_provider = ConfigAppearanceProvider::new(config_provider.clone());
+    let niri_layout_provider = NiriLayoutProvider::new(config_dir.clone());
     
     let network_provider = rt.block_on(async {
         NetworkManagerProvider::new().await.expect("Failed to connect to NetworkManager")
@@ -112,7 +114,7 @@ fn build_ui(app: &adw::Application, theme_css: Rc<gtk4::CssProvider>, rt: &tokio
     let authenticate_cloud = Arc::new(AuthenticateAccountUseCase::new(google_auth.clone(), cloud_provider.clone()));
     
     let subscribe_appearance = Arc::new(SubscribeToAppearanceUseCase::new(appearance_provider.clone()));
-    let set_accent = Arc::new(SetAccentColorUseCase::new(appearance_provider.clone()));
+    let set_accent = Arc::new(SetAccentColorUseCase::new(appearance_provider.clone(), niri_layout_provider));
     let set_scheme = Arc::new(SetColorSchemeUseCase::new(appearance_provider.clone()));
     let set_wallpaper = Arc::new(SetWallpaperUseCase::new(appearance_provider.clone()));
 

@@ -16,6 +16,7 @@ pub mod tasks;
 pub mod cloud;
 pub mod cloud_auth;
 pub mod workspaces;
+pub mod layout;
 pub mod popups;
 pub mod launcher;
 pub mod ipc;

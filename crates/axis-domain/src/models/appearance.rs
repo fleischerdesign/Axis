@@ -61,6 +61,10 @@ impl AccentColor {
         .into()
     }
 
+    pub fn is_valid_hex(hex: &str) -> bool {
+        hex.starts_with('#') && (hex.len() == 7 || hex.len() == 4) && hex[1..].chars().all(|c| c.is_ascii_hexdigit())
+    }
+
     pub fn all_presets() -> &'static [AccentColor] {
         &[
             Self::Blue,

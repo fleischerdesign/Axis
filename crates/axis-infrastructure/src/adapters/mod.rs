@@ -1,6 +1,7 @@
 pub mod power;
 pub mod appearance;
 pub mod workspaces;
+pub mod niri_layout;
 pub mod popups;
 pub mod pulse;
 pub mod backlight;
