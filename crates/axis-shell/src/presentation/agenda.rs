@@ -3,7 +3,8 @@ use axis_domain::models::agenda::AgendaStatus;
 use axis_domain::models::popups::PopupType;
 use axis_domain::ports::popups::PopupProvider;
 use axis_presentation::{Presenter, View};
-use axis_application::use_cases::cloud::sync_agenda::SyncAgendaUseCase;
+use axis_application::use_cases::cloud::sync_calendar::SyncCalendarUseCase;
+use axis_application::use_cases::cloud::sync_tasks::SyncTasksUseCase;
 use std::rc::Rc;
 use std::cell::{Cell, RefCell};
 use gtk4::glib;
@@ -18,13 +19,19 @@ pub trait AgendaView: View<AgendaStatus> {
 
 pub struct AgendaPresenter {
     inner: Presenter<AgendaStatus>,
-    sync_use_case: Arc<SyncAgendaUseCase>,
+    sync_calendar_uc: Arc<SyncCalendarUseCase>,
+    sync_tasks_uc: Arc<SyncTasksUseCase>,
     selected_list_id: Rc<RefCell<Option<String>>>,
     status_tx: watch::Sender<AgendaStatus>,
+    is_syncing_events: Rc<Cell<bool>>,
+    is_syncing_tasks: Rc<Cell<bool>>,
 }
 
 impl AgendaPresenter {
-    pub fn new(sync_use_case: Arc<SyncAgendaUseCase>) -> Self {
+    pub fn new(
+        sync_calendar_uc: Arc<SyncCalendarUseCase>,
+        sync_tasks_uc: Arc<SyncTasksUseCase>,
+    ) -> Self {
         let (status_tx, _) = watch::channel(AgendaStatus::default());
         let status_tx_c = status_tx.clone();
 
@@ -35,10 +42,17 @@ impl AgendaPresenter {
 
         Self { 
             inner, 
-            sync_use_case,
+            sync_calendar_uc,
+            sync_tasks_uc,
             selected_list_id: Rc::new(RefCell::new(None)),
             status_tx,
+            is_syncing_events: Rc::new(Cell::new(false)),
+            is_syncing_tasks: Rc::new(Cell::new(false)),
         }
+    }
+
+    pub fn add_view(&self, view: Box<dyn View<AgendaStatus>>) {
+        self.inner.add_view(view);
     }
 
     pub async fn bind(&self, view: Box<dyn AgendaView>) {
@@ -67,38 +81,51 @@ impl AgendaPresenter {
     }
 
     pub async fn refresh(&self, fetch_events: bool, fetch_tasks: bool) {
+        if fetch_events && self.is_syncing_events.get() { return; }
+        if fetch_tasks && self.is_syncing_tasks.get() { return; }
+
         let mut status = self.status_tx.borrow().clone();
-        
-        if fetch_events { status.is_loading_events = true; }
-        if fetch_tasks { status.is_loading_tasks = true; }
+        if fetch_events { 
+            self.is_syncing_events.set(true);
+            status.is_loading_events = true; 
+        }
+        if fetch_tasks { 
+            self.is_syncing_tasks.set(true);
+            status.is_loading_tasks = true; 
+        }
         let _ = self.status_tx.send(status.clone());
         self.inner.update(status.clone());
 
+        let this = self.clone();
         let list_id = self.selected_list_id.borrow().clone();
-        
-        // In a real optimized scenario, we would have separate UseCases for Events and Tasks.
-        // For now, we still use the SyncAgendaUseCase but we'll implement the UI feedback.
-        match self.sync_use_case.execute(list_id).await {
-            Ok(new_status) => {
-                let mut final_status = new_status;
-                final_status.is_loading_events = false;
-                final_status.is_loading_tasks = false;
-                
-                if self.selected_list_id.borrow().is_none() {
-                    *self.selected_list_id.borrow_mut() = final_status.selected_list_id.clone();
+
+        glib::spawn_future_local(async move {
+            let mut final_status = this.status_tx.borrow().clone();
+
+            if fetch_events {
+                if let Ok(events) = this.sync_calendar_uc.execute().await {
+                    final_status.events = events;
                 }
-                
-                self.inner.update(final_status.clone());
-                let _ = self.status_tx.send(final_status);
+                final_status.is_loading_events = false;
+                this.is_syncing_events.set(false);
             }
-            Err(e) => {
-                log::error!("[agenda] Sync failed: {e}");
-                let mut error_status = self.status_tx.borrow().clone();
-                error_status.is_loading_events = false;
-                error_status.is_loading_tasks = false;
-                self.inner.update(error_status);
+
+            if fetch_tasks {
+                if let Ok((lists, tasks, selected)) = this.sync_tasks_uc.execute(list_id).await {
+                    final_status.task_lists = lists;
+                    final_status.tasks = tasks;
+                    if this.selected_list_id.borrow().is_none() {
+                        *this.selected_list_id.borrow_mut() = selected.clone();
+                    }
+                    final_status.selected_list_id = selected;
+                }
+                final_status.is_loading_tasks = false;
+                this.is_syncing_tasks.set(false);
             }
-        }
+
+            this.inner.update(final_status.clone());
+            let _ = this.status_tx.send(final_status);
+        });
     }
 
     pub fn set_list(&self, list_id: String) {
@@ -109,7 +136,7 @@ impl AgendaPresenter {
         *self.selected_list_id.borrow_mut() = Some(list_id);
         let this = self.clone();
         glib::spawn_future_local(async move {
-            this.refresh(false, true).await; // Fast refresh: only tasks
+            this.refresh(false, true).await;
         });
     }
 }
@@ -118,9 +145,12 @@ impl Clone for AgendaPresenter {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
-            sync_use_case: self.sync_use_case.clone(),
+            sync_calendar_uc: self.sync_calendar_uc.clone(),
+            sync_tasks_uc: self.sync_tasks_uc.clone(),
             selected_list_id: self.selected_list_id.clone(),
             status_tx: self.status_tx.clone(),
+            is_syncing_events: self.is_syncing_events.clone(),
+            is_syncing_tasks: self.is_syncing_tasks.clone(),
         }
     }
 }
