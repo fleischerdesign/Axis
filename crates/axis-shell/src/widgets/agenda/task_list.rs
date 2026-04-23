@@ -25,8 +25,11 @@ impl TaskList {
     pub fn render(&self, status: &AgendaStatus) {
         let imp = self.imp();
         
-        // 1. Update Dropdown (Header)
-        if !imp.dropdown_built.get() && !status.task_lists.is_empty() {
+        // 1. Update Dropdown (Header) - ONLY IF NOT BUILT OR LISTS CHANGED
+        let needs_rebuild = !imp.dropdown_built.get() || 
+                           imp.last_list_count.get() != status.task_lists.len();
+
+        if needs_rebuild && !status.task_lists.is_empty() {
             while let Some(child) = imp.header_box.first_child() {
                 imp.header_box.remove(&child);
             }
@@ -55,17 +58,32 @@ impl TaskList {
 
             let task_lists = status.task_lists.clone();
             let callback = imp.list_changed_callback.borrow().clone();
+            let selected_list_id = status.selected_list_id.clone();
+            
             dropdown.connect_selected_notify(move |dd| {
                 if let Some(cb) = &callback {
                     let selected = dd.selected();
                     if let Some(list) = task_lists.get(selected as usize) {
-                        cb(list.id.clone());
+                        // ONLY notify if the selection differs from the last known state
+                        if Some(list.id.clone()) != selected_list_id {
+                            cb(list.id.clone());
+                        }
                     }
                 }
             });
 
             imp.header_box.append(&dropdown);
             imp.dropdown_built.set(true);
+            imp.last_list_count.set(status.task_lists.len());
+        } else if let Some(dropdown) = imp.header_box.last_child().and_downcast::<gtk4::DropDown>() {
+            // Dropdown exists, just sync selection if it differs from status
+            if let Some(selected_id) = &status.selected_list_id {
+                if let Some(idx) = status.task_lists.iter().position(|l| l.id == *selected_id) {
+                    if dropdown.selected() != idx as u32 {
+                        dropdown.set_selected(idx as u32);
+                    }
+                }
+            }
         }
 
         // 2. Clear and Render Tasks
@@ -136,6 +154,7 @@ mod imp {
         pub header_box: gtk4::Box,
         pub scrolled: gtk4::ScrolledWindow,
         pub dropdown_built: Cell<bool>,
+        pub last_list_count: Cell<usize>,
         pub list_changed_callback: RefCell<Option<Rc<Box<dyn Fn(String) + 'static>>>>,
     }
 
@@ -156,6 +175,7 @@ mod imp {
                     .min_content_height(400)
                     .build(),
                 dropdown_built: Cell::new(false),
+                last_list_count: Cell::new(0),
                 list_changed_callback: RefCell::new(None),
             }
         }

@@ -32,11 +32,18 @@ struct GoogleTaskItem {
 
 pub struct GoogleTasksAdapter {
     auth_provider: Arc<dyn CloudAuthProvider>,
+    http_client: reqwest::Client,
 }
 
 impl GoogleTasksAdapter {
     pub fn new(auth_provider: Arc<dyn CloudAuthProvider>) -> Self {
-        Self { auth_provider }
+        Self { 
+            auth_provider,
+            http_client: reqwest::Client::builder()
+                .tcp_keepalive(std::time::Duration::from_secs(60))
+                .build()
+                .unwrap_or_default(),
+        }
     }
 }
 
@@ -47,8 +54,7 @@ impl TaskProvider for GoogleTasksAdapter {
         let token = self.auth_provider.get_token(&scopes).await
             .map_err(|e| TaskError::ProviderError(format!("Auth error: {}", e)))?;
 
-        let client = reqwest::Client::new();
-        let resp = client.get(format!("{}/users/@me/lists", GOOGLE_TASKS_API_URL))
+        let resp = self.http_client.get(format!("{}/users/@me/lists", GOOGLE_TASKS_API_URL))
             .bearer_auth(&token)
             .send().await
             .map_err(|e| TaskError::ProviderError(e.to_string()))?;
@@ -70,8 +76,7 @@ impl TaskProvider for GoogleTasksAdapter {
         let token = self.auth_provider.get_token(&scopes).await
             .map_err(|e| TaskError::ProviderError(format!("Auth error: {}", e)))?;
 
-        let client = reqwest::Client::new();
-        let resp = client.get(format!("{}/lists/{}/tasks", GOOGLE_TASKS_API_URL, list_id))
+        let resp = self.http_client.get(format!("{}/lists/{}/tasks", GOOGLE_TASKS_API_URL, list_id))
             .bearer_auth(&token)
             .send().await
             .map_err(|e| TaskError::ProviderError(e.to_string()))?;
@@ -95,10 +100,9 @@ impl TaskProvider for GoogleTasksAdapter {
         let token = self.auth_provider.get_token(&scopes).await
             .map_err(|e| TaskError::ProviderError(format!("Auth error: {}", e)))?;
 
-        let client = reqwest::Client::new();
         let status = if done { "completed" } else { "needsAction" };
         
-        let resp = client.patch(format!("{}/lists/{}/tasks/{}", GOOGLE_TASKS_API_URL, list_id, task_id))
+        let resp = self.http_client.patch(format!("{}/lists/{}/tasks/{}", GOOGLE_TASKS_API_URL, list_id, task_id))
             .bearer_auth(&token)
             .json(&serde_json::json!({ "status": status }))
             .send().await
