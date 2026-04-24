@@ -1,6 +1,7 @@
 use axis_domain::ports::cloud_auth::{CloudAuthProvider, AuthError};
-use axis_domain::ports::cloud::{CloudProvider, CloudError};
+use axis_domain::ports::cloud::CloudProvider;
 use std::sync::Arc;
+use log::{info, error};
 
 pub struct AuthenticateAccountUseCase {
     auth_provider: Arc<dyn CloudAuthProvider>,
@@ -16,10 +17,25 @@ impl AuthenticateAccountUseCase {
     }
 
     pub async fn execute(&self, scopes: Vec<String>) -> Result<(), AuthError> {
-        let account = self.auth_provider.authenticate(&scopes).await?;
+        info!("[use-case] Starting cloud authentication flow with {} scopes", scopes.len());
+
+        let account = match self.auth_provider.authenticate(&scopes).await {
+            Ok(acc) => {
+                info!("[use-case] Authentication successful for account: {}", acc.display_name);
+                acc
+            },
+            Err(e) => {
+                error!("[use-case] Cloud authentication failed: {}", e);
+                return Err(e);
+            }
+        };
         
         self.cloud_provider.add_account(account).await
-            .map_err(|e| AuthError::Failed(format!("Failed to store account: {}", e)))?;
+            .map_err(|e| {
+                let err_msg = format!("Failed to store account: {}", e);
+                error!("[use-case] {}", err_msg);
+                AuthError::Failed(err_msg)
+            })?;
             
         Ok(())
     }
