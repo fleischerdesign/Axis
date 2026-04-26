@@ -1,11 +1,10 @@
 use libadwaita::prelude::*;
-use libadwaita::subclass::prelude::*;
 use gtk4::glib;
 use axis_domain::models::agenda::AgendaStatus;
 use axis_domain::models::calendar::CalendarEvent;
 use axis_presentation::View;
 use chrono::{Datelike, Local, NaiveDate, NaiveDateTime};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 const DAY_NAMES: [&str; 7] = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
@@ -14,44 +13,104 @@ const MONTH_NAMES: [&str; 12] = [
     "Juli", "August", "September", "Oktober", "November", "Dezember",
 ];
 
-glib::wrapper! {
-    pub struct CalendarGrid(ObjectSubclass<imp::CalendarGrid>)
-        @extends gtk4::Widget, gtk4::Box,
-        @implements gtk4::Accessible, gtk4::Buildable, gtk4::ConstraintTarget, gtk4::Orientable;
+#[derive(Clone)]
+pub struct CalendarGrid {
+    pub container: gtk4::Box,
+    grid: gtk4::Grid,
+    month_label: gtk4::Label,
+    year: Rc<Cell<i32>>,
+    month: Rc<Cell<u32>>,
+    selected_day: Rc<Cell<u32>>,
+    events: Rc<RefCell<Vec<CalendarEvent>>>,
 }
 
 impl CalendarGrid {
     pub fn new() -> Self {
-        glib::Object::new()
+        let now = Local::now();
+
+        let grid = gtk4::Grid::new();
+        grid.set_column_homogeneous(true);
+        grid.set_row_homogeneous(true);
+        grid.set_column_spacing(2);
+        grid.set_row_spacing(2);
+
+        let month_label = gtk4::Label::new(None);
+        month_label.set_hexpand(true);
+        month_label.add_css_class("calendar-month-label");
+
+        let header = gtk4::Box::builder()
+            .orientation(gtk4::Orientation::Horizontal)
+            .spacing(8)
+            .margin_bottom(8)
+            .build();
+        let prev = gtk4::Button::builder().icon_name("go-previous-symbolic").css_classes(["flat"]).build();
+        let next = gtk4::Button::builder().icon_name("go-next-symbolic").css_classes(["flat"]).build();
+        header.append(&prev);
+        header.append(&month_label);
+        header.append(&next);
+
+        let container = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
+        container.set_width_request(240);
+        container.append(&header);
+        container.append(&grid);
+
+        let cal = Self {
+            container,
+            grid,
+            month_label,
+            year: Rc::new(Cell::new(now.year())),
+            month: Rc::new(Cell::new(now.month())),
+            selected_day: Rc::new(Cell::new(now.day())),
+            events: Rc::new(RefCell::new(Vec::new())),
+        };
+
+        let cal_c = cal.clone();
+        prev.connect_clicked(move |_| {
+            let m = cal_c.month.get();
+            let y = cal_c.year.get();
+            if m == 1 { cal_c.month.set(12); cal_c.year.set(y - 1); }
+            else { cal_c.month.set(m - 1); }
+            cal_c.update_grid();
+        });
+
+        let cal_c = cal.clone();
+        next.connect_clicked(move |_| {
+            let m = cal_c.month.get();
+            let y = cal_c.year.get();
+            if m == 12 { cal_c.month.set(1); cal_c.year.set(y + 1); }
+            else { cal_c.month.set(m + 1); }
+            cal_c.update_grid();
+        });
+
+        cal.update_grid();
+        cal
     }
 
     fn update_grid(&self) {
-        let imp = self.imp();
-        let y = *imp.year.borrow();
-        let m = *imp.month.borrow();
-        let sel = *imp.selected_day.borrow();
-        let events = imp.events.borrow();
-        
-        imp.month_label.set_text(&format!("{} {}", MONTH_NAMES[(m-1) as usize], y));
+        let y = self.year.get();
+        let m = self.month.get();
+        let sel = self.selected_day.get();
+        let events = self.events.borrow();
 
-        while let Some(child) = imp.grid.first_child() {
-            imp.grid.remove(&child);
+        self.month_label.set_text(&format!("{} {}", MONTH_NAMES[(m - 1) as usize], y));
+
+        while let Some(child) = self.grid.first_child() {
+            self.grid.remove(&child);
         }
 
-        // Header
         for (i, name) in DAY_NAMES.iter().enumerate() {
             let label = gtk4::Label::builder()
                 .label(*name)
                 .css_classes(["calendar-day-header"])
                 .build();
-            imp.grid.attach(&label, i as i32, 0, 1, 1);
+            self.grid.attach(&label, i as i32, 0, 1, 1);
         }
 
         let now = Local::now();
         let first_weekday = NaiveDate::from_ymd_opt(y, m, 1)
             .map(|d| d.weekday().num_days_from_monday() as i32)
             .unwrap_or(0);
-        
+
         let days_in_cur = days_in_month(y, m);
         let (prev_y, prev_m) = if m == 1 { (y - 1, 12) } else { (y, m - 1) };
         let days_in_prev = days_in_month(prev_y, prev_m);
@@ -87,7 +146,7 @@ impl CalendarGrid {
                 }
 
                 let btn = self.create_day_btn(day_num, cell_y, cell_m, is_other, sel, &now, &events);
-                imp.grid.attach(&btn, col, row, 1, 1);
+                self.grid.attach(&btn, col, row, 1, 1);
             }
         }
     }
@@ -116,10 +175,10 @@ impl CalendarGrid {
                 apply_btn_bg(&btn, color);
             }
 
-            let obj = self.clone();
+            let cal = self.clone();
             btn.connect_clicked(move |_| {
-                *obj.imp().selected_day.borrow_mut() = day;
-                obj.update_grid();
+                cal.selected_day.set(day);
+                cal.update_grid();
             });
         }
 
@@ -129,100 +188,9 @@ impl CalendarGrid {
 
 impl View<AgendaStatus> for CalendarGrid {
     fn render(&self, status: &AgendaStatus) {
-        *self.imp().events.borrow_mut() = status.events.clone();
+        *self.events.borrow_mut() = status.events.clone();
         self.update_grid();
     }
-}
-
-mod imp {
-    use super::*;
-
-    pub struct CalendarGrid {
-        pub grid: gtk4::Grid,
-        pub month_label: gtk4::Label,
-        pub year: RefCell<i32>,
-        pub month: RefCell<u32>,
-        pub selected_day: RefCell<u32>,
-        pub events: RefCell<Vec<CalendarEvent>>,
-    }
-
-    impl Default for CalendarGrid {
-        fn default() -> Self {
-            let now = Local::now();
-            Self {
-                grid: gtk4::Grid::new(),
-                month_label: gtk4::Label::new(None),
-                year: RefCell::new(now.year()),
-                month: RefCell::new(now.month()),
-                selected_day: RefCell::new(now.day()),
-                events: RefCell::new(Vec::new()),
-            }
-        }
-    }
-
-    #[glib::object_subclass]
-    impl ObjectSubclass for CalendarGrid {
-        const NAME: &'static str = "AxisCalendarGrid";
-        type Type = super::CalendarGrid;
-        type ParentType = gtk4::Box;
-    }
-
-    impl ObjectImpl for CalendarGrid {
-        fn constructed(&self) {
-            self.parent_constructed();
-            let obj = self.obj();
-            obj.set_orientation(gtk4::Orientation::Vertical);
-            obj.set_spacing(8);
-            obj.set_width_request(240);
-
-            let header = gtk4::Box::builder()
-                .orientation(gtk4::Orientation::Horizontal)
-                .spacing(8)
-                .margin_bottom(8)
-                .build();
-            let prev = gtk4::Button::builder().icon_name("go-previous-symbolic").css_classes(["flat"]).build();
-            let next = gtk4::Button::builder().icon_name("go-next-symbolic").css_classes(["flat"]).build();
-            
-            self.month_label.set_hexpand(true);
-            self.month_label.add_css_class("calendar-month-label");
-            
-            header.append(&prev);
-            header.append(&self.month_label);
-            header.append(&next);
-            obj.append(&header);
-
-            self.grid.set_column_homogeneous(true);
-            self.grid.set_row_homogeneous(true);
-            self.grid.set_column_spacing(2);
-            self.grid.set_row_spacing(2);
-            obj.append(&self.grid);
-
-            let obj_c = obj.clone();
-            prev.connect_clicked(move |_| {
-                {
-                    let mut m = obj_c.imp().month.borrow_mut();
-                    let mut y = obj_c.imp().year.borrow_mut();
-                    if *m == 1 { *m = 12; *y -= 1; } else { *m -= 1; }
-                }
-                obj_c.update_grid();
-            });
-
-            let obj_c = obj.clone();
-            next.connect_clicked(move |_| {
-                {
-                    let mut m = obj_c.imp().month.borrow_mut();
-                    let mut y = obj_c.imp().year.borrow_mut();
-                    if *m == 12 { *m = 1; *y += 1; } else { *m += 1; }
-                }
-                obj_c.update_grid();
-            });
-
-            obj.update_grid();
-        }
-    }
-
-    impl WidgetImpl for CalendarGrid {}
-    impl BoxImpl for CalendarGrid {}
 }
 
 fn days_in_month(year: i32, month: u32) -> u32 {
@@ -235,8 +203,8 @@ fn days_in_month(year: i32, month: u32) -> u32 {
 }
 
 fn events_for_day(y: i32, m: u32, d: u32, events: &[CalendarEvent]) -> Vec<&CalendarEvent> {
-    let day_start = NaiveDate::from_ymd_opt(y, m, d).unwrap().and_hms_opt(0,0,0).unwrap();
-    let day_end = NaiveDate::from_ymd_opt(y, m, d).unwrap().and_hms_opt(23,59,59).unwrap();
+    let day_start = NaiveDate::from_ymd_opt(y, m, d).unwrap().and_hms_opt(0, 0, 0).unwrap();
+    let day_end = NaiveDate::from_ymd_opt(y, m, d).unwrap().and_hms_opt(23, 59, 59).unwrap();
     events.iter().filter(|e| {
         let (s, e) = parse_range(e);
         s <= day_end && e >= day_start
@@ -245,7 +213,7 @@ fn events_for_day(y: i32, m: u32, d: u32, events: &[CalendarEvent]) -> Vec<&Cale
 
 fn parse_range(e: &CalendarEvent) -> (NaiveDateTime, NaiveDateTime) {
     let p = |s: &str| NaiveDateTime::parse_from_str(s.split('+').next().unwrap().trim_end_matches('Z'), "%Y-%m-%dT%H:%M:%S").unwrap_or_else(|_| {
-        NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap_or_default().and_hms_opt(0,0,0).unwrap()
+        NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap_or_default().and_hms_opt(0, 0, 0).unwrap()
     });
     (p(&e.start), p(&e.end))
 }

@@ -164,7 +164,7 @@ impl View<NetworkStatus> for WifiPageView {
             let list_row = ListRow::new(&ap.ssid, icon);
             list_row.set_subtitle(subtitle.as_deref());
             list_row.set_active(ap.is_active);
-            outer.append(&list_row);
+            outer.append(&list_row.container);
 
             let auth_revealer = gtk4::Revealer::builder()
                 .transition_type(gtk4::RevealerTransitionType::SlideDown)

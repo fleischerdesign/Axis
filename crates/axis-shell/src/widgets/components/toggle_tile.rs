@@ -1,56 +1,84 @@
 use libadwaita::prelude::*;
-use libadwaita::subclass::prelude::*;
 use gtk4::glib;
 use axis_presentation::View;
 
-glib::wrapper! {
-    pub struct ToggleTile(ObjectSubclass<imp::ToggleTile>)
-        @extends gtk4::Widget, gtk4::Box,
-        @implements gtk4::Accessible, gtk4::Buildable, gtk4::ConstraintTarget, gtk4::Orientable;
+#[derive(Clone)]
+pub struct ToggleTile {
+    pub container: gtk4::Box,
+    main_btn: gtk4::Button,
+    arrow_btn: gtk4::Button,
+    icon: gtk4::Image,
+    label: gtk4::Label,
 }
 
 impl ToggleTile {
-    pub fn new(label: &str, icon_name: &str, has_arrow: bool) -> Self {
-        let obj: Self = glib::Object::new();
-        obj.set_label(label);
-        obj.set_icon(icon_name);
-        obj.set_show_arrow(has_arrow);
-        obj
+    pub fn new(label_text: &str, icon_name: &str, has_arrow: bool) -> Self {
+        let main_btn = gtk4::Button::new();
+        main_btn.add_css_class("tile-main");
+        main_btn.set_hexpand(true);
+        main_btn.add_css_class("sole");
+
+        let icon = gtk4::Image::new();
+        icon.set_pixel_size(18);
+
+        let label = gtk4::Label::new(None);
+        label.add_css_class("tile-label");
+
+        let content = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
+        content.append(&icon);
+        content.append(&label);
+        main_btn.set_child(Some(&content));
+
+        let arrow_btn = gtk4::Button::new();
+        arrow_btn.set_icon_name("go-next-symbolic");
+        arrow_btn.add_css_class("tile-arrow");
+        arrow_btn.set_visible(false);
+
+        let container = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+        container.add_css_class("tile");
+        container.append(&main_btn);
+        container.append(&arrow_btn);
+
+        let tile = Self { container, main_btn, arrow_btn, icon, label };
+        tile.set_label(label_text);
+        tile.set_icon(icon_name);
+        tile.set_show_arrow(has_arrow);
+        tile
     }
 
     pub fn set_label(&self, label: &str) {
-        self.imp().label.set_label(label);
+        self.label.set_label(label);
     }
 
     pub fn set_icon(&self, icon_name: &str) {
-        self.imp().icon.set_icon_name(Some(icon_name));
+        self.icon.set_icon_name(Some(icon_name));
     }
 
     pub fn set_active(&self, active: bool) {
         if active {
-            self.add_css_class("active");
+            self.container.add_css_class("active");
         } else {
-            self.remove_css_class("active");
+            self.container.remove_css_class("active");
         }
     }
 
     pub fn set_show_arrow(&self, show: bool) {
-        self.imp().arrow_btn.set_visible(show);
+        self.arrow_btn.set_visible(show);
         if show {
-            self.imp().main_btn.remove_css_class("sole");
+            self.main_btn.remove_css_class("sole");
         } else {
-            self.imp().main_btn.add_css_class("sole");
+            self.main_btn.add_css_class("sole");
         }
     }
 
     pub fn on_clicked<F: Fn() + 'static>(&self, f: F) {
-        self.imp().main_btn.connect_clicked(move |_| {
+        self.main_btn.connect_clicked(move |_| {
             f();
         });
     }
 
     pub fn on_arrow_clicked<F: Fn() + 'static>(&self, f: F) {
-        self.imp().arrow_btn.connect_clicked(move |_| {
+        self.arrow_btn.connect_clicked(move |_| {
             f();
         });
     }
@@ -74,59 +102,8 @@ impl crate::presentation::toggle::ToggleView for ToggleTile {
     fn on_toggled(&self, f: Box<dyn Fn(bool) + 'static>) {
         let tile = self.clone();
         self.on_clicked(move || {
-            let next_state = !tile.has_css_class("active");
+            let next_state = !tile.container.has_css_class("active");
             f(next_state);
         });
     }
-}
-
-mod imp {
-    use super::*;
-
-    #[derive(Default)]
-    pub struct ToggleTile {
-        pub main_btn: gtk4::Button,
-        pub arrow_btn: gtk4::Button,
-        pub icon: gtk4::Image,
-        pub label: gtk4::Label,
-    }
-
-    #[glib::object_subclass]
-    impl ObjectSubclass for ToggleTile {
-        const NAME: &'static str = "ToggleTile";
-        type Type = super::ToggleTile;
-        type ParentType = gtk4::Box;
-    }
-
-    impl ObjectImpl for ToggleTile {
-        fn constructed(&self) {
-            self.parent_constructed();
-            let obj = self.obj();
-
-            obj.set_spacing(0);
-            obj.add_css_class("tile");
-
-            self.main_btn.add_css_class("tile-main");
-            self.main_btn.set_hexpand(true);
-            self.main_btn.add_css_class("sole"); // Default
-
-            let content = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
-            self.icon.set_pixel_size(18);
-            self.label.add_css_class("tile-label");
-            
-            content.append(&self.icon);
-            content.append(&self.label);
-            self.main_btn.set_child(Some(&content));
-
-            self.arrow_btn.set_icon_name("go-next-symbolic");
-            self.arrow_btn.add_css_class("tile-arrow");
-            self.arrow_btn.set_visible(false);
-
-            obj.append(&self.main_btn);
-            obj.append(&self.arrow_btn);
-        }
-    }
-
-    impl WidgetImpl for ToggleTile {}
-    impl BoxImpl for ToggleTile {}
 }

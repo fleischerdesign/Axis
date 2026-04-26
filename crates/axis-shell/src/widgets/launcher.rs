@@ -1,45 +1,19 @@
 use libadwaita::prelude::*;
-use libadwaita::subclass::prelude::*;
-use gtk4::glib;
 
-glib::wrapper! {
-    pub struct LauncherWidget(ObjectSubclass<imp::LauncherWidget>)
-        @extends gtk4::Widget, gtk4::Box,
-        @implements gtk4::Accessible, gtk4::Buildable, gtk4::ConstraintTarget, gtk4::Orientable;
+pub struct LauncherWidget {
+    pub container: gtk4::Box,
 }
 
 impl LauncherWidget {
     pub fn new() -> Self {
-        glib::Object::new()
+        let container = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+        container.add_css_class("launcher-widget");
+
+        let icon = gtk4::Image::from_icon_name("view-app-grid-symbolic");
+        icon.set_pixel_size(20);
+        icon.add_css_class("status-icon");
+        container.append(&icon);
+
+        Self { container }
     }
-}
-
-mod imp {
-    use super::*;
-
-    #[derive(Default)]
-    pub struct LauncherWidget;
-
-    #[glib::object_subclass]
-    impl ObjectSubclass for LauncherWidget {
-        const NAME: &'static str = "LauncherWidget";
-        type Type = super::LauncherWidget;
-        type ParentType = gtk4::Box;
-    }
-
-    impl ObjectImpl for LauncherWidget {
-        fn constructed(&self) {
-            self.parent_constructed();
-            
-            let icon = gtk4::Image::from_icon_name("view-app-grid-symbolic");
-            icon.set_pixel_size(20);
-            icon.add_css_class("status-icon");
-            
-            self.obj().append(&icon);
-            self.obj().add_css_class("launcher-widget");
-        }
-    }
-
-    impl WidgetImpl for LauncherWidget {}
-    impl BoxImpl for LauncherWidget {}
 }

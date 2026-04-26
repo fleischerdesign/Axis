@@ -1,5 +1,4 @@
 use libadwaita::prelude::*;
-use libadwaita::subclass::prelude::*;
 use gtk4::glib;
 use crate::presentation::workspaces::WorkspaceView;
 use axis_domain::models::workspaces::WorkspaceStatus;
@@ -7,15 +6,20 @@ use axis_presentation::View;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-glib::wrapper! {
-    pub struct WorkspaceDots(ObjectSubclass<imp::WorkspaceDots>)
-        @extends gtk4::Widget, gtk4::Box,
-        @implements gtk4::Accessible, gtk4::Buildable, gtk4::ConstraintTarget, gtk4::Orientable;
+#[derive(Clone)]
+pub struct WorkspaceDots {
+    pub container: gtk4::Box,
+    click_callback: RefCell<Option<Rc<Box<dyn Fn(u32) + Send + Sync>>>>,
 }
 
 impl WorkspaceDots {
     pub fn new() -> Self {
-        glib::Object::new()
+        let container = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
+        container.add_css_class("workspace-dots");
+        Self {
+            container,
+            click_callback: RefCell::new(None),
+        }
     }
 }
 
@@ -23,8 +27,8 @@ impl View<WorkspaceStatus> for WorkspaceDots {
     fn render(&self, status: &WorkspaceStatus) {
         let mut workspaces = status.workspaces.clone();
         workspaces.sort_by_key(|w| w.id);
-        let container = self.clone();
-        let callback = self.imp().click_callback.borrow().clone();
+        let container = self.container.clone();
+        let callback = self.click_callback.borrow().clone();
 
         glib::idle_add_local(move || {
             let target = workspaces.len();
@@ -49,7 +53,7 @@ impl View<WorkspaceStatus> for WorkspaceDots {
                         .css_classes(["ws-dot"])
                         .valign(gtk4::Align::Center)
                         .build();
-                    
+
                     if ws.is_active {
                         dot.add_css_class("active");
                     }
@@ -72,11 +76,11 @@ impl View<WorkspaceStatus> for WorkspaceDots {
 
 impl WorkspaceView for WorkspaceDots {
     fn on_workspace_clicked(&self, f: Box<dyn Fn(u32) + Send + Sync>) {
-        *self.imp().click_callback.borrow_mut() = Some(Rc::new(f));
+        *self.click_callback.borrow_mut() = Some(Rc::new(f));
     }
 }
 
-fn child_count(container: &WorkspaceDots) -> usize {
+fn child_count(container: &gtk4::Box) -> usize {
     let mut count = 0;
     let mut child = container.first_child();
     while child.is_some() {
@@ -84,31 +88,4 @@ fn child_count(container: &WorkspaceDots) -> usize {
         child = child.and_then(|c| c.next_sibling());
     }
     count
-}
-
-mod imp {
-    use super::*;
-
-    #[derive(Default)]
-    pub struct WorkspaceDots {
-        pub click_callback: RefCell<Option<Rc<Box<dyn Fn(u32) + Send + Sync>>>>,
-    }
-
-    #[glib::object_subclass]
-    impl ObjectSubclass for WorkspaceDots {
-        const NAME: &'static str = "WorkspaceDots";
-        type Type = super::WorkspaceDots;
-        type ParentType = gtk4::Box;
-    }
-
-    impl ObjectImpl for WorkspaceDots {
-        fn constructed(&self) {
-            self.parent_constructed();
-            self.obj().set_spacing(6);
-            self.obj().add_css_class("workspace-dots");
-        }
-    }
-
-    impl WidgetImpl for WorkspaceDots {}
-    impl BoxImpl for WorkspaceDots {}
 }

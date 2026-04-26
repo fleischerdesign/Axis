@@ -19,7 +19,8 @@ use crate::presentation::clock::ClockPresenter;
 use crate::presentation::audio::AudioPresenter;
 use crate::presentation::workspaces::WorkspacePresenter;
 use crate::presentation::auto_hide::{AutoHidePresenter, AutoHideView};
-use crate::presentation::tray::{TrayPresenter, TrayView};
+use crate::presentation::tray::TrayPresenter;
+use crate::presentation::tray::TrayView;
 
 use axis_application::use_cases::popups::TogglePopupUseCase;
 use axis_domain::models::popups::PopupType;
@@ -48,51 +49,48 @@ impl BarWindow {
         toggle_popup_use_case: Arc<TogglePopupUseCase>,
     ) {
         let bar = Bar::new();
-        bar.set_vexpand(true);
+        bar.container.set_vexpand(true);
 
-        // 1. Start Island: Launcher
         let launcher_island = Island::new();
         let launcher_widget = LauncherWidget::new();
-        launcher_island.append(&launcher_widget);
-        
+        launcher_island.container.append(&launcher_widget.container);
+
         let tp = toggle_popup_use_case.clone();
         launcher_island.on_clicked(move || {
             let uc = tp.clone();
             tokio::spawn(async move { let _ = uc.execute(PopupType::Launcher).await; });
         });
-        bar.set_start_widget(Some(&launcher_island));
+        bar.set_start_widget(Some(&launcher_island.container));
 
-        // 2. Center Island: Clock & Workspaces
         let center_island_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
         center_island_box.set_halign(gtk4::Align::Center);
 
         let ws_island = Island::new();
         let ws_dots = WorkspaceDots::new();
-        ws_island.append(&ws_dots);
-        
+        ws_island.container.append(&ws_dots.container);
+
         let tp = toggle_popup_use_case.clone();
         ws_island.on_clicked(move || {
             let uc = tp.clone();
             tokio::spawn(async move { let _ = uc.execute(PopupType::Workspaces).await; });
         });
-        center_island_box.append(&ws_island);
+        center_island_box.append(&ws_island.container);
 
         let clock_island = Island::new();
         let clock_widget = ClockWidget::new();
-        clock_island.append(&clock_widget);
-        
+        clock_island.container.append(&clock_widget.container);
+
         let tp = toggle_popup_use_case.clone();
         clock_island.on_clicked(move || {
             let uc = tp.clone();
             tokio::spawn(async move { let _ = uc.execute(PopupType::Agenda).await; });
         });
-        center_island_box.append(&clock_island);
+        center_island_box.append(&clock_island.container);
 
         bar.set_center_widget(Some(&center_island_box));
 
-        // 3. Tray Island
         let tray_widget = TrayWidget::new();
-        
+
         let tp_activate = tray_presenter.clone();
         let tp_context = tray_presenter.clone();
         let tp_scroll = tray_presenter.clone();
@@ -108,13 +106,12 @@ impl BarWindow {
 
         tray_presenter.add_view(Box::new(tray_widget.clone()));
 
-        // 4. End Island: Status (Audio + Battery)
         let end_island = Island::new();
         let audio_widget = AudioWidget::new();
         let status_bar = StatusBar::new();
-        end_island.append(&audio_widget);
-        end_island.append(&status_bar);
-        
+        end_island.container.append(&audio_widget.container);
+        end_island.container.append(&status_bar.container);
+
         let tp = toggle_popup_use_case.clone();
         end_island.on_clicked(move || {
             let uc = tp.clone();
@@ -122,25 +119,22 @@ impl BarWindow {
         });
 
         let end_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
-        end_box.append(&tray_widget);
-        end_box.append(&end_island);
+        end_box.append(&tray_widget.container);
+        end_box.append(&end_island.container);
         bar.set_end_widget(Some(&end_box));
 
-        // --- Bind Presenters ---
         battery_presenter.add_view(Box::new(status_bar.clone()));
 
         let cp = clock_presenter.clone();
         let cv = Box::new(clock_widget.clone());
         glib::spawn_future_local(async move { cp.bind(cv).await; });
 
-        // Multi-View Presenter (Synchron)
         audio_presenter.add_view(Box::new(audio_widget.clone()));
 
         let wp = workspace_presenter.clone();
         let wv = Box::new(ws_dots.clone());
         glib::spawn_future_local(async move { wp.bind(wv).await; });
 
-        // --- Auto-Hide Setup ---
         let motion = gtk4::EventControllerMotion::new();
         {
             let ahp = auto_hide_presenter.clone();
@@ -155,7 +149,7 @@ impl BarWindow {
         self.add_controller(motion);
 
         self.set_margin(Edge::Bottom, auto_hide_presenter.get_initial_margin(54));
-        self.set_child(Some(&bar));
+        self.set_child(Some(&bar.container));
     }
 }
 

@@ -123,7 +123,7 @@ impl View<BluetoothStatus> for BluetoothPageView {
             let list_box_row = gtk4::ListBoxRow::builder()
                 .selectable(false)
                 .activatable(false)
-                .child(&list_row)
+                .child(&list_row.container)
                 .build();
 
             let pres = self.presenter.clone();
@@ -138,7 +138,7 @@ impl View<BluetoothStatus> for BluetoothPageView {
                     pres.connect_device(device_id.clone());
                 }
             });
-            list_row.add_controller(gesture);
+            list_row.container.add_controller(gesture);
 
             rows.insert(
                 device.id.clone(),

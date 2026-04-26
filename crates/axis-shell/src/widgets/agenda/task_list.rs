@@ -1,75 +1,192 @@
 use libadwaita::prelude::*;
 use libadwaita as adw;
-use libadwaita::subclass::prelude::*;
 use gtk4::glib;
 use axis_domain::models::agenda::AgendaStatus;
 use axis_presentation::View;
 use std::rc::Rc;
 use std::cell::{Cell, RefCell};
 
-glib::wrapper! {
-    pub struct TaskList(ObjectSubclass<imp::TaskList>)
-        @extends gtk4::Widget, gtk4::Box,
-        @implements gtk4::Accessible, gtk4::Buildable, gtk4::ConstraintTarget, gtk4::Orientable;
+#[derive(Clone)]
+pub struct TaskList {
+    pub container: gtk4::Box,
+    list_box: gtk4::ListBox,
+    scrolled: gtk4::ScrolledWindow,
+    spinner: gtk4::Spinner,
+    dropdown: gtk4::DropDown,
+    entry: gtk4::Entry,
+    add_button: gtk4::Button,
+    is_updating_programmatically: Rc<Cell<bool>>,
+    current_task_lists: Rc<RefCell<Vec<axis_domain::models::tasks::TaskList>>>,
+    list_changed_callback: Rc<RefCell<Option<Rc<Box<dyn Fn(String) + 'static>>>>>,
+    task_toggled_callback: Rc<RefCell<Option<Rc<Box<dyn Fn(String, bool) + 'static>>>>>,
+    task_deleted_callback: Rc<RefCell<Option<Rc<Box<dyn Fn(String) + 'static>>>>>,
+    task_created_callback: Rc<RefCell<Option<Rc<Box<dyn Fn(String) + 'static>>>>>,
 }
 
 impl TaskList {
     pub fn new() -> Self {
-        glib::Object::new()
+        let dropdown = gtk4::DropDown::builder()
+            .css_classes(["agenda-list-dropdown"])
+            .valign(gtk4::Align::Center)
+            .build();
+
+        let entry = gtk4::Entry::builder()
+            .placeholder_text("Neue Aufgabe...")
+            .css_classes(["agenda-task-entry"])
+            .hexpand(true)
+            .build();
+
+        let add_button = gtk4::Button::builder()
+            .icon_name("list-add-symbolic")
+            .css_classes(["flat", "agenda-task-add-btn"])
+            .valign(gtk4::Align::Center)
+            .build();
+
+        let list_box = gtk4::ListBox::builder()
+            .selection_mode(gtk4::SelectionMode::None)
+            .build();
+        list_box.add_css_class("background-none");
+
+        let spinner = gtk4::Spinner::builder()
+            .valign(gtk4::Align::Center)
+            .margin_start(8)
+            .build();
+
+        let scrolled = gtk4::ScrolledWindow::builder()
+            .hscrollbar_policy(gtk4::PolicyType::Never)
+            .vscrollbar_policy(gtk4::PolicyType::Automatic)
+            .min_content_height(350)
+            .build();
+        scrolled.set_child(Some(&list_box));
+
+        let header_box = gtk4::Box::builder()
+            .orientation(gtk4::Orientation::Horizontal)
+            .spacing(8)
+            .margin_bottom(8)
+            .build();
+
+        let label = gtk4::Label::builder()
+            .label("Aufgaben")
+            .css_classes(["agenda-section-header"])
+            .halign(gtk4::Align::Start)
+            .hexpand(true)
+            .build();
+        header_box.append(&label);
+        header_box.append(&dropdown);
+        header_box.append(&spinner);
+
+        let input_row = gtk4::Box::builder()
+            .orientation(gtk4::Orientation::Horizontal)
+            .spacing(4)
+            .build();
+        input_row.append(&entry);
+        input_row.append(&add_button);
+
+        let container = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
+        container.set_width_request(280);
+        container.append(&header_box);
+        container.append(&scrolled);
+        container.append(&input_row);
+
+        let tl = Self {
+            container,
+            list_box,
+            scrolled,
+            spinner,
+            dropdown,
+            entry,
+            add_button,
+            is_updating_programmatically: Rc::new(Cell::new(false)),
+            current_task_lists: Rc::new(RefCell::new(Vec::new())),
+            list_changed_callback: Rc::new(RefCell::new(None)),
+            task_toggled_callback: Rc::new(RefCell::new(None)),
+            task_deleted_callback: Rc::new(RefCell::new(None)),
+            task_created_callback: Rc::new(RefCell::new(None)),
+        };
+
+        let tl_c = tl.clone();
+        let entry_c = tl.entry.clone();
+        let on_add = move || {
+            let title = entry_c.text().to_string();
+            if title.is_empty() { return; }
+            if let Some(cb) = tl_c.task_created_callback.borrow().as_ref() {
+                cb(title);
+                entry_c.set_text("");
+            }
+        };
+
+        let on_add_btn = on_add.clone();
+        tl.add_button.connect_clicked(move |_| {
+            on_add_btn();
+        });
+
+        tl.entry.connect_activate(move |_| {
+            on_add();
+        });
+
+        let tl_c = tl.clone();
+        tl.dropdown.connect_selected_notify(move |dd| {
+            if tl_c.is_updating_programmatically.get() {
+                return;
+            }
+            let selected = dd.selected();
+            let lists = tl_c.current_task_lists.borrow();
+            if let Some(list) = lists.get(selected as usize) {
+                if let Some(cb) = tl_c.list_changed_callback.borrow().as_ref() {
+                    cb(list.id.clone());
+                }
+            }
+        });
+
+        tl
     }
 
     pub fn on_list_changed(&self, f: Box<dyn Fn(String) + 'static>) {
-        *self.imp().list_changed_callback.borrow_mut() = Some(Rc::new(f));
+        *self.list_changed_callback.borrow_mut() = Some(Rc::new(f));
     }
 
     pub fn on_task_toggled(&self, f: Box<dyn Fn(String, bool) + 'static>) {
-        *self.imp().task_toggled_callback.borrow_mut() = Some(Rc::new(f));
+        *self.task_toggled_callback.borrow_mut() = Some(Rc::new(f));
     }
 
     pub fn on_task_deleted(&self, f: Box<dyn Fn(String) + 'static>) {
-        *self.imp().task_deleted_callback.borrow_mut() = Some(Rc::new(f));
+        *self.task_deleted_callback.borrow_mut() = Some(Rc::new(f));
     }
 
     pub fn on_task_created(&self, f: Box<dyn Fn(String) + 'static>) {
-        *self.imp().task_created_callback.borrow_mut() = Some(Rc::new(f));
+        *self.task_created_callback.borrow_mut() = Some(Rc::new(f));
     }
 
     pub fn render(&self, status: &AgendaStatus) {
-        let imp = self.imp();
-        
-        // 1. Update Dropdown Model
-        let current_count = imp.dropdown.model().map(|m| m.n_items()).unwrap_or(0);
+        let current_count = self.dropdown.model().map(|m| m.n_items()).unwrap_or(0);
         if current_count != status.task_lists.len() as u32 {
             let list_names: Vec<&str> = status.task_lists.iter().map(|l| l.title.as_str()).collect();
             let new_model = gtk4::StringList::new(&list_names);
-            imp.dropdown.set_model(Some(&new_model));
+            self.dropdown.set_model(Some(&new_model));
         }
 
-        // 2. Update Selection
         if let Some(selected_id) = &status.selected_list_id {
             if let Some(idx) = status.task_lists.iter().position(|l| l.id == *selected_id) {
-                imp.is_updating_programmatically.set(true);
-                imp.dropdown.set_selected(idx as u32);
-                imp.is_updating_programmatically.set(false);
+                self.is_updating_programmatically.set(true);
+                self.dropdown.set_selected(idx as u32);
+                self.is_updating_programmatically.set(false);
             }
         }
 
-        *imp.current_task_lists.borrow_mut() = status.task_lists.clone();
+        *self.current_task_lists.borrow_mut() = status.task_lists.clone();
 
-        // 3. Loading State
         if status.is_loading_tasks {
-            imp.spinner.start();
-            imp.spinner.set_visible(true);
-            imp.list_box.set_opacity(0.5);
+            self.spinner.start();
+            self.spinner.set_visible(true);
+            self.list_box.set_opacity(0.5);
         } else {
-            imp.spinner.stop();
-            imp.spinner.set_visible(false);
-            imp.list_box.set_opacity(1.0);
+            self.spinner.stop();
+            self.spinner.set_visible(false);
+            self.list_box.set_opacity(1.0);
         }
 
-        // 4. Render Tasks
-        while let Some(child) = imp.list_box.first_child() {
-            imp.list_box.remove(&child);
+        while let Some(child) = self.list_box.first_child() {
+            self.list_box.remove(&child);
         }
 
         if status.tasks.is_empty() && !status.is_loading_tasks {
@@ -77,7 +194,7 @@ impl TaskList {
                 .title("Keine Aufgaben")
                 .description("Alles erledigt!")
                 .build();
-            imp.list_box.append(&empty);
+            self.list_box.append(&empty);
         } else {
             for task in &status.tasks {
                 let row = gtk4::Box::builder()
@@ -94,7 +211,7 @@ impl TaskList {
                     .build();
 
                 let task_id = task.id.clone();
-                let callback = imp.task_toggled_callback.borrow().clone();
+                let callback = self.task_toggled_callback.borrow().clone();
                 check.connect_toggled(move |btn| {
                     if let Some(cb) = &callback {
                         cb(task_id.clone(), btn.is_active());
@@ -110,13 +227,13 @@ impl TaskList {
                     .build();
 
                 let task_id_del = task.id.clone();
-                let callback_del = imp.task_deleted_callback.borrow().clone();
+                let callback_del = self.task_deleted_callback.borrow().clone();
                 let delete_btn = gtk4::Button::builder()
                     .icon_name("user-trash-symbolic")
                     .css_classes(["flat", "agenda-task-delete"])
                     .valign(gtk4::Align::Center)
                     .build();
-                
+
                 delete_btn.connect_clicked(move |_| {
                     if let Some(cb) = &callback_del {
                         cb(task_id_del.clone());
@@ -126,7 +243,7 @@ impl TaskList {
                 row.append(&check);
                 row.append(&label);
                 row.append(&delete_btn);
-                imp.list_box.append(&row);
+                self.list_box.append(&row);
             }
         }
     }
@@ -136,156 +253,4 @@ impl View<AgendaStatus> for TaskList {
     fn render(&self, status: &AgendaStatus) {
         self.render(status);
     }
-}
-
-mod imp {
-    use super::*;
-    use axis_domain::models::tasks::TaskList as DomainTaskList;
-
-    pub struct TaskList {
-        pub list_box: gtk4::ListBox,
-        pub header_box: gtk4::Box,
-        pub scrolled: gtk4::ScrolledWindow,
-        pub spinner: gtk4::Spinner,
-        pub dropdown: gtk4::DropDown,
-        pub entry: gtk4::Entry,
-        pub add_button: gtk4::Button,
-        pub is_updating_programmatically: Cell<bool>,
-        pub current_task_lists: RefCell<Vec<DomainTaskList>>,
-        pub list_changed_callback: RefCell<Option<Rc<Box<dyn Fn(String) + 'static>>>>,
-        pub task_toggled_callback: RefCell<Option<Rc<Box<dyn Fn(String, bool) + 'static>>>>,
-        pub task_deleted_callback: RefCell<Option<Rc<Box<dyn Fn(String) + 'static>>>>,
-        pub task_created_callback: RefCell<Option<Rc<Box<dyn Fn(String) + 'static>>>>,
-    }
-
-    impl Default for TaskList {
-        fn default() -> Self {
-            let dropdown = gtk4::DropDown::builder()
-                .css_classes(["agenda-list-dropdown"])
-                .valign(gtk4::Align::Center)
-                .build();
-
-            let entry = gtk4::Entry::builder()
-                .placeholder_text("Neue Aufgabe...")
-                .css_classes(["agenda-task-entry"])
-                .hexpand(true)
-                .build();
-
-            let add_button = gtk4::Button::builder()
-                .icon_name("list-add-symbolic")
-                .css_classes(["flat", "agenda-task-add-btn"])
-                .valign(gtk4::Align::Center)
-                .build();
-
-            Self {
-                list_box: gtk4::ListBox::builder()
-                    .selection_mode(gtk4::SelectionMode::None)
-                    .build(),
-                header_box: gtk4::Box::builder()
-                    .orientation(gtk4::Orientation::Horizontal)
-                    .spacing(8)
-                    .margin_bottom(8)
-                    .build(),
-                scrolled: gtk4::ScrolledWindow::builder()
-                    .hscrollbar_policy(gtk4::PolicyType::Never)
-                    .vscrollbar_policy(gtk4::PolicyType::Automatic)
-                    .min_content_height(350)
-                    .build(),
-                spinner: gtk4::Spinner::builder()
-                    .valign(gtk4::Align::Center)
-                    .margin_start(8)
-                    .build(),
-                dropdown,
-                entry,
-                add_button,
-                is_updating_programmatically: Cell::new(false),
-                current_task_lists: RefCell::new(Vec::new()),
-                list_changed_callback: RefCell::new(None),
-                task_toggled_callback: RefCell::new(None),
-                task_deleted_callback: RefCell::new(None),
-                task_created_callback: RefCell::new(None),
-            }
-        }
-    }
-
-    #[glib::object_subclass]
-    impl ObjectSubclass for TaskList {
-        const NAME: &'static str = "AxisTaskList";
-        type Type = super::TaskList;
-        type ParentType = gtk4::Box;
-    }
-
-    impl ObjectImpl for TaskList {
-        fn constructed(&self) {
-            self.parent_constructed();
-            let obj = self.obj();
-            obj.set_orientation(gtk4::Orientation::Vertical);
-            obj.set_spacing(12);
-            obj.set_width_request(280);
-
-            let label = gtk4::Label::builder()
-                .label("Aufgaben")
-                .css_classes(["agenda-section-header"])
-                .halign(gtk4::Align::Start)
-                .hexpand(true)
-                .build();
-
-            self.header_box.append(&label);
-            self.header_box.append(&self.dropdown);
-            self.header_box.append(&self.spinner);
-            obj.append(&self.header_box);
-
-            self.list_box.add_css_class("background-none");
-            self.scrolled.set_child(Some(&self.list_box));
-            obj.append(&self.scrolled);
-
-            let input_row = gtk4::Box::builder()
-                .orientation(gtk4::Orientation::Horizontal)
-                .spacing(4)
-                .build();
-            input_row.append(&self.entry);
-            input_row.append(&self.add_button);
-            obj.append(&input_row);
-
-            let obj_c = obj.clone();
-            let entry_c = self.entry.clone();
-            let on_add = move || {
-                let title = entry_c.text().to_string();
-                if title.is_empty() { return; }
-                
-                if let Some(cb) = obj_c.imp().task_created_callback.borrow().as_ref() {
-                    cb(title);
-                    entry_c.set_text("");
-                }
-            };
-
-            let on_add_btn = on_add.clone();
-            self.add_button.connect_clicked(move |_| {
-                on_add_btn();
-            });
-
-            self.entry.connect_activate(move |_| {
-                on_add();
-            });
-
-            let obj_c = obj.clone();
-            self.dropdown.connect_selected_notify(move |dd| {
-                let imp = obj_c.imp();
-                if imp.is_updating_programmatically.get() {
-                    return;
-                }
-                
-                let selected = dd.selected();
-                let lists = imp.current_task_lists.borrow();
-                if let Some(list) = lists.get(selected as usize) {
-                    if let Some(cb) = imp.list_changed_callback.borrow().as_ref() {
-                        cb(list.id.clone());
-                    }
-                }
-            });
-        }
-    }
-
-    impl WidgetImpl for TaskList {}
-    impl BoxImpl for TaskList {}
 }

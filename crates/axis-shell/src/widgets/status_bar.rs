@@ -1,19 +1,32 @@
 use libadwaita::prelude::*;
-use libadwaita::subclass::prelude::*;
 use gtk4::glib;
 use axis_presentation::View;
 use crate::presentation::battery::{BatteryView, battery_icon};
 use axis_domain::models::power::PowerStatus;
 
-glib::wrapper! {
-    pub struct StatusBar(ObjectSubclass<imp::StatusBar>)
-        @extends gtk4::Widget, gtk4::Box,
-        @implements gtk4::Accessible, gtk4::Buildable, gtk4::ConstraintTarget, gtk4::Orientable;
+#[derive(Clone)]
+pub struct StatusBar {
+    pub container: gtk4::Box,
+    icon: gtk4::Image,
+    label: gtk4::Label,
 }
 
 impl StatusBar {
     pub fn new() -> Self {
-        glib::Object::new()
+        let icon = gtk4::Image::new();
+        icon.set_pixel_size(20);
+        icon.add_css_class("status-icon");
+
+        let label = gtk4::Label::new(None);
+        label.add_css_class("status-text");
+        label.set_visible(false);
+
+        let container = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
+        container.append(&icon);
+        container.append(&label);
+        container.add_css_class("status-bar");
+
+        Self { container, icon, label }
     }
 }
 
@@ -22,13 +35,11 @@ impl View<PowerStatus> for StatusBar {
         let icon_name = battery_icon(status.battery_percentage, status.is_charging).to_string();
         let percentage_text = format!("{:.0}%", status.battery_percentage);
         let is_charging = status.is_charging;
-        let icon = self.imp().icon.clone();
-        let label = self.imp().label.clone();
-
+        let icon = self.icon.clone();
+        let label = self.label.clone();
         glib::idle_add_local(move || {
             icon.set_icon_name(Some(&icon_name));
             label.set_label(&percentage_text);
-
             if is_charging {
                 icon.add_css_class("charging");
             } else {
@@ -40,37 +51,3 @@ impl View<PowerStatus> for StatusBar {
 }
 
 impl BatteryView for StatusBar {}
-
-pub mod imp {
-    use super::*;
-
-    #[derive(Default)]
-    pub struct StatusBar {
-        pub icon: gtk4::Image,
-        pub label: gtk4::Label,
-    }
-
-    #[glib::object_subclass]
-    impl ObjectSubclass for StatusBar {
-        const NAME: &'static str = "StatusBar";
-        type Type = super::StatusBar;
-        type ParentType = gtk4::Box;
-    }
-
-    impl ObjectImpl for StatusBar {
-        fn constructed(&self) {
-            self.parent_constructed();
-            self.obj().set_spacing(4);
-            self.icon.set_pixel_size(20);
-            self.icon.add_css_class("status-icon");
-            self.label.add_css_class("status-text");
-            self.label.set_visible(false);
-            self.obj().append(&self.icon);
-            self.obj().append(&self.label);
-            self.obj().add_css_class("status-bar");
-        }
-    }
-
-    impl WidgetImpl for StatusBar {}
-    impl BoxImpl for StatusBar {}
-}

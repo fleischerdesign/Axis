@@ -2,26 +2,43 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use libadwaita::prelude::*;
-use libadwaita::subclass::prelude::*;
 use gtk4::glib;
 use axis_presentation::View;
 use crate::presentation::tray::TrayView;
 use crate::widgets::island::Island;
 use axis_domain::models::tray::{TrayItemStatus, TrayStatus};
 
-glib::wrapper! {
-    pub struct TrayWidget(ObjectSubclass<imp::TrayWidget>)
-        @extends gtk4::Widget, gtk4::Box,
-        @implements gtk4::Accessible, gtk4::Buildable, gtk4::ConstraintTarget, gtk4::Orientable;
+#[derive(Clone)]
+pub struct TrayWidget {
+    pub container: gtk4::Box,
+    island: Island,
+    inner_box: gtk4::Box,
+    icons: Rc<RefCell<HashMap<String, gtk4::Image>>>,
+    activate_cb: Rc<RefCell<Option<Rc<dyn Fn(String, i32, i32)>>>>,
+    context_menu_cb: Rc<RefCell<Option<Rc<dyn Fn(String, i32, i32)>>>>,
+    scroll_cb: Rc<RefCell<Option<Rc<dyn Fn(String, i32, String)>>>>,
 }
 
 impl TrayWidget {
     pub fn new() -> Self {
-        glib::Object::new()
-    }
+        let inner_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+        let island = Island::new();
+        island.container.append(&inner_box);
+        island.container.set_visible(false);
 
-    pub fn island(&self) -> &Island {
-        &self.imp().island
+        let container = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+        container.append(&island.container);
+        container.add_css_class("tray-widget");
+
+        Self {
+            container,
+            island,
+            inner_box,
+            icons: Rc::new(RefCell::new(HashMap::new())),
+            activate_cb: Rc::new(RefCell::new(None)),
+            context_menu_cb: Rc::new(RefCell::new(None)),
+            scroll_cb: Rc::new(RefCell::new(None)),
+        }
     }
 
     fn pick_icon(item: &axis_domain::models::tray::TrayItem) -> &str {
@@ -37,13 +54,12 @@ impl TrayWidget {
 
 impl View<TrayStatus> for TrayWidget {
     fn render(&self, status: &TrayStatus) {
-        let imp = self.imp();
-        let container = imp.container.clone();
-        let island = imp.island.clone();
-        let icons = imp.icons.clone();
-        let activate_cb = imp.activate_cb.clone();
-        let context_menu_cb = imp.context_menu_cb.clone();
-        let scroll_cb = imp.scroll_cb.clone();
+        let inner_box = self.inner_box.clone();
+        let island = self.island.clone();
+        let icons = self.icons.clone();
+        let activate_cb = self.activate_cb.clone();
+        let context_menu_cb = self.context_menu_cb.clone();
+        let scroll_cb = self.scroll_cb.clone();
         let items = status.items.clone();
 
         glib::idle_add_local(move || {
@@ -59,7 +75,7 @@ impl View<TrayStatus> for TrayWidget {
 
             for key in to_remove {
                 if let Some(img) = icons.borrow_mut().remove(&key) {
-                    container.remove(&img);
+                    inner_box.remove(&img);
                 }
             }
 
@@ -141,12 +157,12 @@ impl View<TrayStatus> for TrayWidget {
 
                     img.add_controller(scroll_controller);
 
-                    container.append(&img);
+                    inner_box.append(&img);
                     icons.borrow_mut().insert(item.bus_name.clone(), img);
                 }
             }
 
-            island.set_visible(!items.is_empty());
+            island.container.set_visible(!items.is_empty());
 
             glib::ControlFlow::Break
         });
@@ -155,61 +171,14 @@ impl View<TrayStatus> for TrayWidget {
 
 impl TrayView for TrayWidget {
     fn on_activate(&self, f: Box<dyn Fn(String, i32, i32) + 'static>) {
-        *self.imp().activate_cb.borrow_mut() = Some(Rc::new(f));
+        *self.activate_cb.borrow_mut() = Some(Rc::new(f));
     }
 
     fn on_context_menu(&self, f: Box<dyn Fn(String, i32, i32) + 'static>) {
-        *self.imp().context_menu_cb.borrow_mut() = Some(Rc::new(f));
+        *self.context_menu_cb.borrow_mut() = Some(Rc::new(f));
     }
 
     fn on_scroll(&self, f: Box<dyn Fn(String, i32, String) + 'static>) {
-        *self.imp().scroll_cb.borrow_mut() = Some(Rc::new(f));
+        *self.scroll_cb.borrow_mut() = Some(Rc::new(f));
     }
-}
-
-mod imp {
-    use super::*;
-
-    pub struct TrayWidget {
-        pub island: Island,
-        pub container: gtk4::Box,
-        pub icons: RefCell<HashMap<String, gtk4::Image>>,
-        pub activate_cb: RefCell<Option<Rc<dyn Fn(String, i32, i32)>>>,
-        pub context_menu_cb: RefCell<Option<Rc<dyn Fn(String, i32, i32)>>>,
-        pub scroll_cb: RefCell<Option<Rc<dyn Fn(String, i32, String)>>>,
-    }
-
-    impl Default for TrayWidget {
-        fn default() -> Self {
-            Self {
-                island: Island::new(),
-                container: gtk4::Box::new(gtk4::Orientation::Horizontal, 0),
-                icons: RefCell::new(HashMap::new()),
-                activate_cb: RefCell::new(None),
-                context_menu_cb: RefCell::new(None),
-                scroll_cb: RefCell::new(None),
-            }
-        }
-    }
-
-    #[glib::object_subclass]
-    impl ObjectSubclass for TrayWidget {
-        const NAME: &'static str = "TrayWidget";
-        type Type = super::TrayWidget;
-        type ParentType = gtk4::Box;
-    }
-
-    impl ObjectImpl for TrayWidget {
-        fn constructed(&self) {
-            self.parent_constructed();
-            self.container.set_spacing(8);
-            self.island.append(&self.container);
-            self.obj().append(&self.island);
-            self.island.set_visible(false);
-            self.obj().add_css_class("tray-widget");
-        }
-    }
-
-    impl WidgetImpl for TrayWidget {}
-    impl BoxImpl for TrayWidget {}
 }
