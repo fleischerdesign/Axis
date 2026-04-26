@@ -36,7 +36,6 @@ struct GoogleCredential {
 #[derive(Deserialize)]
 struct GoogleUserInfo {
     sub: String,
-    name: String,
     email: String,
 }
 
@@ -182,9 +181,11 @@ impl CloudAuthProvider for GoogleCloudAdapter {
         token.access_token = Some(token_result.access_token().secret().clone());
         token.expires_at = Some(chrono::Utc::now().timestamp() + 3600);
         
+        let access = token.access_token.clone()
+            .ok_or_else(|| AuthError::Failed("No access token after refresh".into()))?;
         self.save_token(&token);
-        
-        Ok(token.access_token.clone().unwrap())
+
+        Ok(access)
     }
 
     async fn is_authenticated(&self) -> bool {

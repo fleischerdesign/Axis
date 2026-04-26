@@ -8,7 +8,6 @@ use axis_domain::models::audio::AudioStatus;
 pub struct AudioWidget {
     pub container: gtk4::Box,
     icon: gtk4::Image,
-    label: gtk4::Label,
 }
 
 impl AudioWidget {
@@ -17,16 +16,11 @@ impl AudioWidget {
         icon.set_pixel_size(20);
         icon.add_css_class("status-icon");
 
-        let label = gtk4::Label::new(None);
-        label.add_css_class("status-text");
-        label.set_visible(false);
-
         let container = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
         container.append(&icon);
-        container.append(&label);
         container.add_css_class("audio-widget");
 
-        Self { container, icon, label }
+        Self { container, icon }
     }
 }
 

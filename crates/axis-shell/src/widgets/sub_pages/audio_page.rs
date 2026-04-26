@@ -99,7 +99,6 @@ impl AudioPage {
         let app_list_c = app_list.clone();
         let empty_box_c = empty_box.clone();
         let is_rebuilding_c = is_rebuilding.clone();
-        let _pres_render = presenter.clone();
 
         let view = Box::new(AudioPageView {
             master_icon: master_icon_c,

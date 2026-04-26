@@ -19,7 +19,6 @@ impl StatusBar {
 
         let label = gtk4::Label::new(None);
         label.add_css_class("status-text");
-        label.set_visible(false);
 
         let container = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
         container.append(&icon);
