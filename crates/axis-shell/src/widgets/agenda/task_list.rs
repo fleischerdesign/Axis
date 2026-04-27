@@ -31,7 +31,7 @@ impl TaskList {
             .build();
 
         let entry = gtk4::Entry::builder()
-            .placeholder_text("Neue Aufgabe...")
+            .placeholder_text("New task...")
             .css_classes(["agenda-task-entry"])
             .hexpand(true)
             .build();
@@ -66,7 +66,7 @@ impl TaskList {
             .build();
 
         let label = gtk4::Label::builder()
-            .label("Aufgaben")
+            .label("Tasks")
             .css_classes(["agenda-section-header"])
             .halign(gtk4::Align::Start)
             .hexpand(true)
@@ -191,8 +191,8 @@ impl TaskList {
 
         if status.tasks.is_empty() && !status.is_loading_tasks {
             let empty = adw::StatusPage::builder()
-                .title("Keine Aufgaben")
-                .description("Alles erledigt!")
+                .title("No tasks")
+                .description("All done!")
                 .build();
             self.list_box.append(&empty);
         } else {

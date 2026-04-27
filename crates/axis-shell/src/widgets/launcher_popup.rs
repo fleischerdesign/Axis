@@ -112,7 +112,7 @@ impl LauncherPopup {
         let container = PopupContainer::new();
 
         let entry = gtk4::Entry::builder()
-            .placeholder_text("Suchen, Finden, Machen...")
+            .placeholder_text("Search, Find, Do...")
             .hexpand(true)
             .css_classes(vec!["qs-entry"])
             .build();

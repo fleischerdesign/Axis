@@ -118,7 +118,7 @@ use presentation::toggle::TogglePresenter;
 use presentation::brightness::BrightnessPresenter;
 use presentation::launcher::LauncherPresenter;
 use presentation::notifications::NotificationPresenter;
-use axis_presentation::{Presenter, View, view::FnView};
+use axis_presentation::{Presenter, view::FnView};
 use axis_domain::ports::layout::LayoutProvider;
 use presentation::network::NetworkPresenter;
 use presentation::bluetooth::BluetoothPresenter;
@@ -315,11 +315,11 @@ fn main() -> glib::ExitCode {
     let network_presenter = Rc::new(NetworkPresenter::new(
         subscribe_network, get_network_status, scan_wifi, connect_to_ap, disconnect_wifi, &rt,
     ));
-    let bluetooth_presenter_sub = Rc::new(BluetoothPresenter::new(
+    let bluetooth_full_presenter = Rc::new(BluetoothPresenter::new(
         subscribe_bluetooth, get_bluetooth_status, bt_connect, bt_disconnect,
         bt_set_powered, bt_start_scan, bt_stop_scan, &rt,
     ));
-    let nightlight_presenter_sub = Rc::new(NightlightPresenter::new(
+    let nightlight_full_presenter = Rc::new(NightlightPresenter::new(
         subscribe_nightlight, get_nightlight_status, nl_set_enabled,
         nl_set_temp_day, nl_set_temp_night, nl_set_schedule, &rt,
     ));
@@ -359,7 +359,7 @@ fn main() -> glib::ExitCode {
     ));
 
     let bt_prov = bluetooth_provider.clone();
-    let bluetooth_presenter = Rc::new(TogglePresenter::new(
+    let bluetooth_toggle_presenter = Rc::new(TogglePresenter::new(
         "Bluetooth",
         "bluetooth-active-symbolic",
         "bluetooth-disabled-symbolic",
@@ -376,7 +376,7 @@ fn main() -> glib::ExitCode {
     ));
 
     let nl_prov = nightlight_provider.clone();
-    let nightlight_presenter = Rc::new(TogglePresenter::new(
+    let nightlight_toggle_presenter = Rc::new(TogglePresenter::new(
         "Nightlight",
         "weather-clear-night-symbolic",
         "weather-clear-night-symbolic",
@@ -454,10 +454,10 @@ fn main() -> glib::ExitCode {
     let np_sync = network_presenter.clone();
     glib::spawn_future_local(async move { np_sync.run_sync().await; });
 
-    let bt_sync = bluetooth_presenter_sub.clone();
+    let bt_sync = bluetooth_full_presenter.clone();
     glib::spawn_future_local(async move { bt_sync.run_sync().await; });
 
-    let nl_sync = nightlight_presenter_sub.clone();
+    let nl_sync = nightlight_full_presenter.clone();
     glib::spawn_future_local(async move { nl_sync.run_sync().await; });
 
     let tray_sync = tray_presenter.clone();
@@ -575,15 +575,15 @@ fn main() -> glib::ExitCode {
         qs_popup.setup_bottom_row(battery_presenter.clone(), power_actions);
 
         qs_popup.setup_toggle(0, 0, wifi_presenter.clone(), Some("wifi"));
-        qs_popup.setup_toggle(0, 1, bluetooth_presenter.clone(), Some("bluetooth"));
-        qs_popup.setup_toggle(1, 0, nightlight_presenter.clone(), Some("nightlight"));
+        qs_popup.setup_toggle(0, 1, bluetooth_toggle_presenter.clone(), Some("bluetooth"));
+        qs_popup.setup_toggle(1, 0, nightlight_toggle_presenter.clone(), Some("nightlight"));
         qs_popup.setup_toggle(1, 1, dnd_presenter.clone(), None);
         qs_popup.setup_toggle(2, 0, airplane_presenter.clone(), None);
 
         qs_popup.setup_wifi_sub_page(network_presenter.clone());
-        qs_popup.setup_bluetooth_sub_page(bluetooth_presenter_sub.clone());
+        qs_popup.setup_bluetooth_sub_page(bluetooth_full_presenter.clone());
         qs_popup.setup_audio_sub_page(audio_presenter.clone());
-        qs_popup.setup_nightlight_sub_page(nightlight_presenter_sub.clone());
+        qs_popup.setup_nightlight_sub_page(nightlight_full_presenter.clone());
 
         let np = notification_presenter.clone();
         let on_close: std::rc::Rc<dyn Fn(u32)> = std::rc::Rc::new(move |id| {

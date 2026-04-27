@@ -9,21 +9,21 @@ pub trait ToggleView: View<bool> {
     fn on_toggled(&self, f: Box<dyn Fn(bool) + 'static>);
 }
 
-pub struct TogglePresenter<T> {
+pub struct TogglePresenter {
     inner: Presenter<bool>,
     label: String,
     icon_active: String,
     icon_inactive: String,
-    toggle: Arc<dyn Fn(bool) -> T + Send + Sync>,
+    toggle: Arc<dyn Fn(bool) + Send + Sync>,
 }
 
-impl<T: 'static> TogglePresenter<T> {
+impl TogglePresenter {
     pub fn new<F, Fut, St, E>(
         label: &str,
         icon_active: &str,
         icon_inactive: &str,
         subscribe: F,
-        toggle: impl Fn(bool) -> T + Send + Sync + 'static,
+        toggle: impl Fn(bool) + Send + Sync + 'static,
     ) -> Self
     where
         F: Fn() -> Fut + Send + Sync + 'static,
@@ -46,7 +46,7 @@ impl<T: 'static> TogglePresenter<T> {
         
         let toggle_fn = self.toggle.clone();
         view.on_toggled(Box::new(move |new_state| {
-            let _ = (toggle_fn)(new_state);
+            (toggle_fn)(new_state);
         }));
 
         let icon_active = self.icon_active.clone();

@@ -11,13 +11,13 @@ fn format_time(timestamp: i64) -> String {
     let diff = now - timestamp;
 
     if diff < 60 {
-        "jetzt".to_string()
+        "now".to_string()
     } else if diff < 3600 {
-        format!("vor {} Min", diff / 60)
+        format!("{} min ago", diff / 60)
     } else if diff < 86400 {
-        format!("vor {} Std", diff / 3600)
+        format!("{} hr ago", diff / 3600)
     } else {
-        format!("vor {} Tg", diff / 86400)
+        format!("{} d ago", diff / 86400)
     }
 }
 

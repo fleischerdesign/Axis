@@ -241,7 +241,7 @@ impl QuickSettingsPopup {
         self.append_power_actions(&power_actions.stack);
     }
 
-    pub fn setup_toggle<T: 'static>(&self, row: i32, col: i32, presenter: Rc<TogglePresenter<T>>, arrow_target: Option<&str>) {
+    pub fn setup_toggle(&self, row: i32, col: i32, presenter: Rc<TogglePresenter>, arrow_target: Option<&str>) {
         let has_arrow = arrow_target.is_some();
         let tile = ToggleTile::new("", "image-missing-symbolic", has_arrow);
         if let Some(target) = arrow_target {
