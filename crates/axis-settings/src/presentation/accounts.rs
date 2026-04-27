@@ -10,6 +10,7 @@ pub struct AccountsPresenter {
     authenticate_uc: Arc<AuthenticateAccountUseCase>,
 }
 
+#[allow(dead_code)]
 pub trait AccountsView: View<CloudStatus> {
     fn on_auth_error(&self, error: String);
 }

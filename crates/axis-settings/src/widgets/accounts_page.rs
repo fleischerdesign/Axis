@@ -8,7 +8,7 @@ use axis_presentation::View;
 pub struct AccountsPage {
     root: adw::ToolbarView,
     accounts_list: gtk4::ListBox,
-    presenter: Rc<AccountsPresenter>,
+    _presenter: Rc<AccountsPresenter>,
 }
 
 impl AccountsPage {
@@ -60,7 +60,7 @@ impl AccountsPage {
         Rc::new(Self {
             root: toolbar_view,
             accounts_list,
-            presenter,
+            _presenter: presenter,
         })
     }
 

@@ -9,7 +9,6 @@ use axis_application::use_cases::bluetooth::start_scan::StartBluetoothScanUseCas
 use axis_application::use_cases::bluetooth::stop_scan::StopBluetoothScanUseCase;
 use std::sync::Arc;
 use std::rc::Rc;
-use gtk4::glib;
 
 pub trait BluetoothView: View<BluetoothStatus> {
     fn on_toggle_power(&self, f: Box<dyn Fn(bool) + 'static>);

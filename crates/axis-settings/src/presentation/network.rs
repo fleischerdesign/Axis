@@ -7,9 +7,9 @@ use axis_application::use_cases::network::connect_to_ap::ConnectToApUseCase;
 use axis_application::use_cases::network::disconnect_wifi::DisconnectWifiUseCase;
 use std::sync::Arc;
 use std::rc::Rc;
-use gtk4::glib;
 
 pub trait NetworkView: View<NetworkStatus> {
+    #[allow(dead_code)]
     fn on_toggle_wifi(&self, f: Box<dyn Fn(bool) + 'static>);
     fn on_scan_requested(&self, f: Box<dyn Fn() + 'static>);
     fn on_connect(&self, f: Box<dyn Fn(String, String) + 'static>);

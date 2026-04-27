@@ -1,13 +1,12 @@
 use libadwaita::prelude::*;
 use libadwaita as adw;
-use gtk4::glib;
 use std::rc::Rc;
 use crate::presentation::navigation::{NavigationState, NavigationView, NavigationPresenter};
 use axis_presentation::View;
 
 pub struct Sidebar {
     list_box: gtk4::ListBox,
-    presenter: Rc<NavigationPresenter>,
+    _presenter: Rc<NavigationPresenter>,
 }
 
 impl Sidebar {
@@ -27,7 +26,7 @@ impl Sidebar {
 
         Rc::new(Self {
             list_box,
-            presenter,
+            _presenter: presenter,
         })
     }
 

@@ -1,7 +1,6 @@
 use axis_presentation::{Presenter, View};
 use serde::{Deserialize, Serialize};
 use std::rc::Rc;
-use std::sync::Arc;
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
 
@@ -23,6 +22,7 @@ pub struct NavigationPresenter {
     state_tx: watch::Sender<NavigationState>,
 }
 
+#[allow(dead_code)]
 pub trait NavigationView: View<NavigationState> {}
 
 impl<T: NavigationView + ?Sized> NavigationView for Rc<T> {}
@@ -65,6 +65,7 @@ impl NavigationPresenter {
         }
     }
 
+    #[allow(dead_code)]
     pub fn register_page(&self, id: &str, title: &str, icon: &str) {
         let mut state = self.state_tx.borrow().clone();
         if !state.pages.iter().any(|p| p.id == id) {

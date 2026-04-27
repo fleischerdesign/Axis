@@ -1,7 +1,7 @@
 /* Axis Settings - Modern Semantic Styling */
 
-/* Wir nutzen die vom ThemeService bereitgestellten Variablen.
-   Das macht die App zu 100% reaktiv. */
+/* We use variables provided by ThemeService.
+   This makes the app fully reactive. */
 
 .accent-button {
     border-radius: 999px;
@@ -16,12 +16,12 @@
     transform: scale(1.1);
 }
 
-/* Wenn ein Button aktiv ist, zeigen wir einen weißen Ring (oder schwarz im Light Mode) */
+/* When a button is active, show a white ring (or black in light mode) */
 .accent-button.active {
     border-color: @window_fg_color;
 }
 
-/* Sidebar Styling konsistent zur Shell */
+/* Sidebar styling consistent with the shell */
 .sidebar-list {
     padding: 8px;
     background-color: transparent;
@@ -34,7 +34,7 @@
     transition: background-color 0.2s ease;
 }
 
-/* Nutze die Akzentfarbe für die markierte Zeile in der Sidebar */
+/* Use accent color for the selected row in the sidebar */
 .sidebar-list row:selected {
     background-color: alpha(@accent_bg_color, 0.2);
     color: @accent_bg_color;

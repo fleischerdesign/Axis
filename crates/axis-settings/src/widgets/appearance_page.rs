@@ -11,7 +11,7 @@ pub struct AppearancePage {
     root: adw::ToolbarView,
     scheme_group: adw::PreferencesGroup,
     accent_group: adw::PreferencesGroup,
-    wallpaper_group: adw::PreferencesGroup,
+    _wallpaper_group: adw::PreferencesGroup,
     wallpaper_row: adw::ActionRow,
     
     scheme_callback: Rc<RefCell<Option<Box<dyn Fn(ColorScheme) + 'static>>>>,
@@ -65,7 +65,7 @@ impl AppearancePage {
             root: toolbar_view,
             scheme_group,
             accent_group,
-            wallpaper_group,
+            _wallpaper_group: wallpaper_group,
             wallpaper_row,
             scheme_callback: Rc::new(RefCell::new(None)),
             accent_callback: Rc::new(RefCell::new(None)),
@@ -151,16 +151,16 @@ impl AppearancePage {
             // Set individual button color
             let provider = gtk4::CssProvider::new();
             provider.load_from_string(&format!("button {{ background-color: {}; }}", hex));
+            // TODO: Replace with gtk::Widget::add_css_provider when available in gtk4-rs
             #[allow(deprecated)]
             btn.style_context().add_provider(&provider, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION);
-let cb = self.accent_callback.clone();
-let color_c = color_type.clone();
 
-btn.connect_clicked(move |_| {
-    if let Some(f) = cb.borrow().as_ref() { f(color_c.clone()); }
-});
+            let cb = self.accent_callback.clone();
+            let color_c = color_type.clone();
 
-
+            btn.connect_clicked(move |_| {
+                if let Some(f) = cb.borrow().as_ref() { f(color_c.clone()); }
+            });
             flow_box.append(&btn);
         }
 
@@ -171,23 +171,23 @@ btn.connect_clicked(move |_| {
         let btn_c = btn.clone();
         let cb = self.wallpaper_callback.clone();
         btn.connect_clicked(move |_| {
-            let chooser = gtk4::FileChooserNative::new(
-                Some("Select Wallpaper"),
-                btn_c.root().and_downcast_ref::<gtk4::Window>(),
-                gtk4::FileChooserAction::Open,
-                Some("Select"),
-                Some("Cancel"),
-            );
+            let dialog = gtk4::FileDialog::builder()
+                .title("Select Wallpaper")
+                .build();
 
             let filter = gtk4::FileFilter::new();
             filter.add_pixbuf_formats();
             filter.set_name(Some("Images"));
-            chooser.add_filter(&filter);
+            let filters = gtk4::gio::ListStore::new::<gtk4::FileFilter>();
+            filters.append(&filter);
+            dialog.set_filters(Some(&filters));
 
             let cb_inner = cb.clone();
-            chooser.connect_response(move |dialog, response| {
-                if response == gtk4::ResponseType::Accept {
-                    if let Some(file) = dialog.file() {
+            dialog.open(
+                btn_c.root().and_downcast_ref::<gtk4::Window>(),
+                None::<&gtk4::gio::Cancellable>,
+                move |result| {
+                    if let Ok(file) = result {
                         if let Some(path) = file.path() {
                             if let Some(path_str) = path.to_str() {
                                 if let Some(f) = cb_inner.borrow().as_ref() {
@@ -196,11 +196,8 @@ btn.connect_clicked(move |_| {
                             }
                         }
                     }
-                }
-                dialog.destroy();
-            });
-
-            chooser.show();
+                },
+            );
         });
     }
 
