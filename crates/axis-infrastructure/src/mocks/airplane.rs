@@ -36,9 +36,11 @@ impl AirplaneProvider for MockAirplaneProvider {
     }
 
     async fn set_enabled(&self, enabled: bool) -> Result<(), AirplaneError> {
-        self.status.lock().unwrap().enabled = enabled;
-        let status = self.status.lock().unwrap().clone();
-        self.status_tx.send_modify(|s| *s = status);
+        let mut status = self.status.lock().unwrap();
+        status.enabled = enabled;
+        let clone = status.clone();
+        drop(status);
+        self.status_tx.send_modify(|s| *s = clone);
         Ok(())
     }
 }

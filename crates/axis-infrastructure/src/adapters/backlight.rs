@@ -22,7 +22,7 @@ impl SysfsBrightnessProvider {
     pub async fn new() -> Result<Arc<Self>, BrightnessError> {
         let device_path = Self::find_device().ok_or_else(|| BrightnessError::ProviderError("No backlight device found".into()))?;
         
-        // INITIALWERT SOFORT LESEN
+        // Read initial value immediately
         let actual = Self::read_u32(&device_path.join("actual_brightness")).unwrap_or(0);
         let max = Self::read_u32(&device_path.join("max_brightness")).unwrap_or(1);
         let initial_pct = (actual as f64 / max as f64) * 100.0;

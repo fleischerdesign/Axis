@@ -1,5 +1,4 @@
 use gtk4::prelude::*;
-use gtk4::glib;
 use axis_domain::models::network::{NetworkStatus, AccessPoint};
 use axis_presentation::View;
 use crate::presentation::network::{NetworkPresenter, NetworkView};
@@ -134,28 +133,18 @@ impl View<NetworkStatus> for WifiPageView {
             let subtitle = ap_subtitle(ap);
 
             if let Some(entry) = rows.get(&ap.id) {
-                let lr = entry.list_row.clone();
-                let icon_s = icon.to_string();
-                let active = ap.is_active;
-                let sub = subtitle.clone();
-                let rev = entry.auth_revealer.clone();
-                let outer = entry.outer.clone();
-                let btn = entry.connect_btn.clone();
-                glib::idle_add_local(move || {
-                    lr.set_icon(&icon_s);
-                    lr.set_active(active);
-                    lr.set_subtitle(sub.as_deref());
-                    if active && rev.reveals_child() {
-                        rev.set_reveal_child(false);
-                        outer.remove_css_class("expanded");
-                    }
-                    if active {
-                        btn.set_child(None::<&gtk4::Widget>);
-                        btn.set_label("Connect");
-                        btn.set_sensitive(true);
-                    }
-                    glib::ControlFlow::Break
-                });
+                entry.list_row.set_icon(icon);
+                entry.list_row.set_active(ap.is_active);
+                entry.list_row.set_subtitle(subtitle.as_deref());
+                if ap.is_active && entry.auth_revealer.reveals_child() {
+                    entry.auth_revealer.set_reveal_child(false);
+                    entry.outer.remove_css_class("expanded");
+                }
+                if ap.is_active {
+                    entry.connect_btn.set_child(None::<&gtk4::Widget>);
+                    entry.connect_btn.set_label("Connect");
+                    entry.connect_btn.set_sensitive(true);
+                }
                 continue;
             }
 

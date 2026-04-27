@@ -1,5 +1,4 @@
 use libadwaita::prelude::*;
-use gtk4::glib;
 use axis_presentation::View;
 use axis_domain::models::clock::TimeStatus;
 
@@ -23,11 +22,7 @@ impl ClockWidget {
 
 impl View<TimeStatus> for ClockWidget {
     fn render(&self, status: &TimeStatus) {
-        let label = self.label.clone();
         let time_str = status.current_time.format("%H:%M:%S").to_string();
-        glib::idle_add_local(move || {
-            label.set_label(&time_str);
-            glib::ControlFlow::Break
-        });
+        self.label.set_label(&time_str);
     }
 }

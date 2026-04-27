@@ -51,8 +51,8 @@ mod imp {
         }
 
         fn measure(&self, _orientation: gtk4::Orientation, _for_size: i32) -> (i32, i32, i32, i32) {
-            // Ein Hintergrund-Widget sollte keinen Platz anfordern (0,0),
-            // aber bereit sein, unendlich viel Platz einzunehmen (-1,-1).
+            // A background widget should not request any space (0,0),
+            // but should be willing to take up unlimited space (-1,-1).
             (0, 0, -1, -1)
         }
     }

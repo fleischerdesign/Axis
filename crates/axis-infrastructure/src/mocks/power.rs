@@ -1,6 +1,7 @@
 use axis_domain::models::power::PowerStatus;
 use axis_domain::ports::power::{PowerProvider, PowerError, PowerStream};
 use async_trait::async_trait;
+use log::info;
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
 
@@ -41,17 +42,17 @@ impl PowerProvider for MockPowerProvider {
     }
 
     async fn suspend(&self) -> Result<(), PowerError> {
-        log::info!("[mock-power] suspend");
+        info!("[mock-power] suspend");
         Ok(())
     }
 
     async fn power_off(&self) -> Result<(), PowerError> {
-        log::info!("[mock-power] power_off");
+        info!("[mock-power] power_off");
         Ok(())
     }
 
     async fn reboot(&self) -> Result<(), PowerError> {
-        log::info!("[mock-power] reboot");
+        info!("[mock-power] reboot");
         Ok(())
     }
 }

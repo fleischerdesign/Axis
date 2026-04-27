@@ -39,7 +39,7 @@ impl ConfigWatcher {
                         }
 
                         let now = Instant::now();
-                        // Debouncing: 50ms (statt 1s), damit schnelles Klicken funktioniert
+                        // Debouncing: 50ms (instead of 1s) so rapid clicking works
                         if now.duration_since(last_reload) < Duration::from_millis(50) {
                             return;
                         }
@@ -49,7 +49,7 @@ impl ConfigWatcher {
                         
                         let on_reload_c = on_reload.clone();
                         std::thread::spawn(move || {
-                            // Kleines Delay, damit der OS-Schreibvorgang sicher fertig ist
+                            // Short delay to ensure OS write operation is complete
                             std::thread::sleep(Duration::from_millis(10));
                             on_reload_c();
                         });

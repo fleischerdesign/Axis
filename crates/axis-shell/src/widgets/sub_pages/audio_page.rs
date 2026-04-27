@@ -165,11 +165,7 @@ struct AudioPageView {
 impl View<AudioStatus> for AudioPageView {
     fn render(&self, status: &AudioStatus) {
         let icon_name = audio_icon(status).to_string();
-        let icon_c = self.master_icon.clone();
-        gtk4::glib::idle_add_local(move || {
-            icon_c.set_icon_name(Some(&icon_name));
-            gtk4::glib::ControlFlow::Break
-        });
+        self.master_icon.set_icon_name(Some(&icon_name));
 
         self.update_combo(&self.sink_model, &self.sink_combo, &status.sinks, &self.sink_user_selecting);
         self.update_combo(&self.source_model, &self.source_combo, &status.sources, &self.source_user_selecting);

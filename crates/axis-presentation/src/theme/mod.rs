@@ -3,7 +3,9 @@ use axis_domain::models::config::AppearanceConfig;
 
 pub mod gtk_service;
 
-pub const LIGHT_THEME_COLORS: &str = "\
+const DEFAULT_ACCENT_RGB: (u8, u8, u8) = (53, 132, 228);
+
+pub(crate) const LIGHT_THEME_COLORS: &str = "\
 @define-color window_bg_color #fafafa;
 @define-color window_fg_color #1c1c1c;
 @define-color card_bg_color #ebebeb;
@@ -21,11 +23,11 @@ pub const LIGHT_THEME_COLORS: &str = "\
 @define-color ws_dot_hover_color rgba(0, 0, 0, 0.45);
 ";
 
-pub fn resolve_accent_hex(accent: &AccentColor) -> String {
+pub(crate) fn resolve_accent_hex(accent: &AccentColor) -> String {
     accent.hex_value().into_owned()
 }
 
-pub fn generate_css(status: &AppearanceConfig, resolved_accent: &str) -> String {
+pub(crate) fn generate_css(status: &AppearanceConfig, resolved_accent: &str) -> String {
     let hover = lighten_hex(resolved_accent, 0.15);
 
     let mut css = format!(
@@ -48,10 +50,10 @@ pub fn generate_css(status: &AppearanceConfig, resolved_accent: &str) -> String 
     css
 }
 
-/// Analysiert Pixeldaten und findet die dominanteste, lebendige Farbe.
-/// Nutzt Histogramm-Clustering für Stabilität gegen Bildrauschen.
-pub fn find_vibrant_accent(pixels: &[u8], width: u32, height: u32, channels: u32, stride: usize) -> Option<String> {
-    // 36 Bins für den Farbkreis (alle 10 Grad ein Bin)
+/// Analyzes pixel data and finds the most dominant, vibrant color.
+/// Uses histogram clustering for stability against image noise.
+pub(crate) fn find_vibrant_accent(pixels: &[u8], width: u32, height: u32, channels: u32, stride: usize) -> Option<String> {
+    // 36 bins for the color wheel (one bin every 10 degrees)
     let mut bins = vec![0f32; 36];
     let mut bin_colors = vec![(0f32, 0f32, 0f32); 36];
 
@@ -65,10 +67,10 @@ pub fn find_vibrant_accent(pixels: &[u8], width: u32, height: u32, channels: u32
 
             let (h, s, l) = rgb_to_hsl(r, g, b);
 
-            // Nur Pixel mit Mindestsättigung und passender Helligkeit beachten
+            // Only consider pixels with minimum saturation and suitable brightness
             if s > 0.15 && l > 0.15 && l < 0.85 {
                 let bin_idx = (h * 35.0) as usize;
-                // Gewichtung: Sättigung kombiniert mit "Helligkeits-Goldilocks-Zone"
+                // Weighting: saturation combined with brightness "goldilocks zone"
                 let weight = s * (1.0 - (l - 0.5).abs() * 2.0);
                 
                 bins[bin_idx] += weight;
@@ -79,32 +81,32 @@ pub fn find_vibrant_accent(pixels: &[u8], width: u32, height: u32, channels: u32
         }
     }
 
-    // Finde den Bin mit der höchsten kumulierten Gewichtung
+    // Find the bin with the highest accumulated weight
     let (winner_idx, &max_weight) = bins.iter().enumerate()
         .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))?;
 
     if max_weight <= 0.0 { return None; }
 
-    // Durchschnittsfarbe des Gewinner-Bins berechnen
+    // Compute average color of the winning bin
     let final_r = (bin_colors[winner_idx].0 / max_weight) as u8;
     let final_g = (bin_colors[winner_idx].1 / max_weight) as u8;
     let final_b = (bin_colors[winner_idx].2 / max_weight) as u8;
 
-    // Normalisierung für UI-Akzente
+    // Normalization for UI accents
     let (h, mut s, mut l) = rgb_to_hsl(final_r, final_g, final_b);
     
-    // Sättigung: Muss knallen (mind. 60%)
+    // Saturation: must pop (at least 60%)
     s = s.max(0.60);
-    // Helligkeit: Nicht zu finster, nicht zu grell (Bereich 0.45 - 0.65)
+    // Lightness: not too dark, not too bright (range 0.45 - 0.65)
     l = l.clamp(0.45, 0.65);
 
     let (r, g, b) = hsl_to_rgb(h, s, l);
     Some(format!("#{:02x}{:02x}{:02x}", r, g, b))
 }
 
-// --- Hilfsfunktionen ---
+// --- Helper functions ---
 
-pub fn rgb_to_hsl(r: u8, g: u8, b: u8) -> (f32, f32, f32) {
+pub(crate) fn rgb_to_hsl(r: u8, g: u8, b: u8) -> (f32, f32, f32) {
     let r = r as f32 / 255.0;
     let g = g as f32 / 255.0;
     let b = b as f32 / 255.0;
@@ -120,7 +122,7 @@ pub fn rgb_to_hsl(r: u8, g: u8, b: u8) -> (f32, f32, f32) {
     (h / 6.0, s, l)
 }
 
-pub fn hsl_to_rgb(h: f32, s: f32, l: f32) -> (u8, u8, u8) {
+pub(crate) fn hsl_to_rgb(h: f32, s: f32, l: f32) -> (u8, u8, u8) {
     let (r, g, b) = if s == 0.0 { (l, l, l) } else {
         let q = if l < 0.5 { l * (1.0 + s) } else { l + s - l * s };
         let p = 2.0 * l - q;
@@ -155,6 +157,6 @@ fn hex_to_rgb(hex: &str) -> (u8, u8, u8) {
         let b = u8::from_str_radix(&hex[4..6], 16).unwrap_or(0);
         (r, g, b)
     } else {
-        (53, 132, 228)
+        DEFAULT_ACCENT_RGB
     }
 }

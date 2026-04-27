@@ -1,5 +1,4 @@
 use libadwaita::prelude::*;
-use gtk4::glib;
 use crate::presentation::workspaces::WorkspaceView;
 use axis_domain::models::workspaces::WorkspaceStatus;
 use axis_presentation::View;
@@ -9,7 +8,7 @@ use std::rc::Rc;
 #[derive(Clone)]
 pub struct WorkspaceDots {
     pub container: gtk4::Box,
-    click_callback: RefCell<Option<Rc<Box<dyn Fn(u32) + Send + Sync>>>>,
+    click_callback: RefCell<Option<Rc<dyn Fn(u32) + Send + Sync>>>,
 }
 
 impl WorkspaceDots {
@@ -27,50 +26,45 @@ impl View<WorkspaceStatus> for WorkspaceDots {
     fn render(&self, status: &WorkspaceStatus) {
         let mut workspaces = status.workspaces.clone();
         workspaces.sort_by_key(|w| w.id);
-        let container = self.container.clone();
-        let callback = self.click_callback.borrow().clone();
 
-        glib::idle_add_local(move || {
-            let target = workspaces.len();
+        let target = workspaces.len();
 
-            while child_count(&container) > target {
-                if let Some(last) = container.last_child() {
-                    container.remove(&last);
-                }
+        while child_count(&self.container) > target {
+            if let Some(last) = self.container.last_child() {
+                self.container.remove(&last);
             }
+        }
 
-            let mut child = container.first_child();
-            for ws in workspaces.iter() {
-                if let Some(existing_dot) = child {
-                    if ws.is_active {
-                        existing_dot.add_css_class("active");
-                    } else {
-                        existing_dot.remove_css_class("active");
-                    }
-                    child = existing_dot.next_sibling();
+        let mut child = self.container.first_child();
+        for ws in workspaces.iter() {
+            if let Some(existing_dot) = child {
+                if ws.is_active {
+                    existing_dot.add_css_class("active");
                 } else {
-                    let dot = gtk4::Button::builder()
-                        .css_classes(["ws-dot"])
-                        .valign(gtk4::Align::Center)
-                        .build();
-
-                    if ws.is_active {
-                        dot.add_css_class("active");
-                    }
-
-                    if let Some(cb) = &callback {
-                        let ws_id = ws.id;
-                        let cb_clone = cb.clone();
-                        dot.connect_clicked(move |_| {
-                            cb_clone(ws_id);
-                        });
-                    }
-
-                    container.append(&dot);
+                    existing_dot.remove_css_class("active");
                 }
+                child = existing_dot.next_sibling();
+            } else {
+                let dot = gtk4::Button::builder()
+                    .css_classes(["ws-dot"])
+                    .valign(gtk4::Align::Center)
+                    .build();
+
+                if ws.is_active {
+                    dot.add_css_class("active");
+                }
+
+                if let Some(cb) = self.click_callback.borrow().as_ref() {
+                    let ws_id = ws.id;
+                    let cb_clone = cb.clone();
+                    dot.connect_clicked(move |_| {
+                        cb_clone(ws_id);
+                    });
+                }
+
+                self.container.append(&dot);
             }
-            glib::ControlFlow::Break
-        });
+        }
     }
 }
 

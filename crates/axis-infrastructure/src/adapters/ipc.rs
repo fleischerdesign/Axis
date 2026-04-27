@@ -1,6 +1,7 @@
 use axis_domain::models::ipc::IpcCommand;
 use axis_domain::ports::ipc::{IpcError, IpcProvider};
 use async_trait::async_trait;
+use log::info;
 use std::sync::Arc;
 use zbus::connection;
 
@@ -45,7 +46,7 @@ impl IpcProvider for ZbusIpcProvider {
             .await
             .map_err(|e| IpcError::ProviderError(e.to_string()))?;
 
-        log::info!("[ipc] D-Bus server started on org.axis.Shell");
+        info!("[ipc] D-Bus server started on org.axis.Shell");
 
         std::future::pending::<()>().await;
         Ok(())

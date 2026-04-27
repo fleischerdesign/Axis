@@ -2,6 +2,7 @@ use axis_domain::models::tasks::{Task, TaskList};
 use axis_domain::ports::tasks::{TaskProvider, TaskError};
 use axis_domain::ports::cloud_auth::CloudAuthProvider;
 use async_trait::async_trait;
+use log::debug;
 use serde::Deserialize;
 use std::sync::Arc;
 
@@ -67,7 +68,7 @@ impl TaskProvider for GoogleTasksAdapter {
             title: l.title,
         }).collect();
 
-        log::debug!("[google-tasks] Fetched {} task lists", lists.len());
+        debug!("[google-tasks] Fetched {} task lists", lists.len());
         Ok(lists)
     }
 
@@ -91,7 +92,7 @@ impl TaskProvider for GoogleTasksAdapter {
             list_id: list_id.to_string(),
         }).collect();
 
-        log::debug!("[google-tasks] Fetched {} tasks from list {}", tasks.len(), list_id);
+        debug!("[google-tasks] Fetched {} tasks from list {}", tasks.len(), list_id);
         Ok(tasks)
     }
 
@@ -112,7 +113,7 @@ impl TaskProvider for GoogleTasksAdapter {
             return Err(TaskError::ProviderError(format!("API error: {}", resp.status())));
         }
 
-        log::debug!("[google-tasks] Toggled task {} in list {} to done={}", task_id, list_id, done);
+        debug!("[google-tasks] Toggled task {} in list {} to done={}", task_id, list_id, done);
         Ok(())
     }
 
@@ -130,7 +131,7 @@ impl TaskProvider for GoogleTasksAdapter {
             return Err(TaskError::ProviderError(format!("API error: {}", resp.status())));
         }
 
-        log::debug!("[google-tasks] Deleted task {} from list {}", task_id, list_id);
+        debug!("[google-tasks] Deleted task {} from list {}", task_id, list_id);
         Ok(())
     }
 
@@ -152,7 +153,7 @@ impl TaskProvider for GoogleTasksAdapter {
         let google_task: GoogleTaskItem = resp.json().await
             .map_err(|e| TaskError::ProviderError(e.to_string()))?;
 
-        log::debug!("[google-tasks] Created task '{}' in list {}", title, list_id);
+        debug!("[google-tasks] Created task '{}' in list {}", title, list_id);
         
         Ok(Task {
             id: google_task.id,

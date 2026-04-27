@@ -1,6 +1,7 @@
 use axis_domain::models::notifications::{Notification, NotificationAction, NotificationStatus};
 use axis_domain::ports::notifications::{NotificationError, NotificationProvider, NotificationStream};
 use async_trait::async_trait;
+use log::info;
 use tokio::sync::{watch, mpsc};
 use tokio_stream::wrappers::WatchStream;
 use std::sync::{Arc, atomic::{AtomicU32, Ordering}};
@@ -128,7 +129,7 @@ impl ZbusNotificationProvider {
             .await
             .map_err(|e| NotificationError::ProviderError(e.to_string()))?;
 
-        log::info!("[notifications] D-Bus service registered on org.freedesktop.Notifications");
+        info!("[notifications] D-Bus service registered on org.freedesktop.Notifications");
 
         let iface_ref: zbus::object_server::InterfaceRef<NotificationsIface> = conn
             .object_server()
@@ -145,7 +146,7 @@ impl ZbusNotificationProvider {
             while let Some(cmd) = cmd_rx.recv().await {
                 match cmd {
                     Cmd::Show(n) => {
-                        log::info!("[notifications] {} - {}", n.app_name, n.summary);
+                        info!("[notifications] {} - {}", n.app_name, n.summary);
                         let id = n.id;
                         let timeout = n.timeout;
                         if let Some(pos) = history.iter().position(|x| x.id == id) {
@@ -170,7 +171,7 @@ impl ZbusNotificationProvider {
                         }
                     }
                     Cmd::Close(id) => {
-                        log::info!("[notifications] Notification {id} closed");
+                        info!("[notifications] Notification {id} closed");
                         history.retain(|n| n.id != id);
                         let _ = status_tx_bg.send(NotificationStatus {
                             notifications: history.clone(),
@@ -181,7 +182,7 @@ impl ZbusNotificationProvider {
                         let _ = NotificationsIface::notification_closed(emitter, id, 2).await;
                     }
                     Cmd::Action(id, key) => {
-                        log::info!("[notifications] Notification {id} action: {key}");
+                        info!("[notifications] Notification {id} action: {key}");
                         let emitter = iface_ref.signal_emitter();
                         let _ = NotificationsIface::action_invoked(emitter, id, &key).await;
                         let _ = NotificationsIface::notification_closed(emitter, id, 2).await;

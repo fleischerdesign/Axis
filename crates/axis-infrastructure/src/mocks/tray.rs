@@ -1,6 +1,7 @@
 use axis_domain::models::tray::{TrayItem, TrayItemStatus, TrayStatus};
 use axis_domain::ports::tray::{TrayError, TrayProvider, TrayStream};
 use async_trait::async_trait;
+use log::info;
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
 
@@ -51,22 +52,22 @@ impl TrayProvider for MockTrayProvider {
     }
 
     async fn activate(&self, bus_name: &str, _x: i32, _y: i32) -> Result<(), TrayError> {
-        log::info!("[tray-mock] activate: {bus_name}");
+        info!("[tray-mock] activate: {bus_name}");
         Ok(())
     }
 
     async fn context_menu(&self, bus_name: &str, _x: i32, _y: i32) -> Result<(), TrayError> {
-        log::info!("[tray-mock] context_menu: {bus_name}");
+        info!("[tray-mock] context_menu: {bus_name}");
         Ok(())
     }
 
     async fn secondary_activate(&self, bus_name: &str, _x: i32, _y: i32) -> Result<(), TrayError> {
-        log::info!("[tray-mock] secondary_activate: {bus_name}");
+        info!("[tray-mock] secondary_activate: {bus_name}");
         Ok(())
     }
 
     async fn scroll(&self, bus_name: &str, _delta: i32, _orientation: &str) -> Result<(), TrayError> {
-        log::info!("[tray-mock] scroll: {bus_name}");
+        info!("[tray-mock] scroll: {bus_name}");
         Ok(())
     }
 }

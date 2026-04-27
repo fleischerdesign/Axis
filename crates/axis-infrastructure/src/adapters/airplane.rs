@@ -67,6 +67,9 @@ fn write_rfkill_change_all(rfkill_type: u8, blocked: bool) -> std::io::Result<()
         hard: 0,
     };
 
+    // SAFETY: RfkillEvent is #[repr(C, packed)] with only integer fields,
+    // so it has no padding bytes and no invalid bit patterns. The byte slice
+    // is created from a valid reference with the correct size.
     let bytes: &[u8] = unsafe {
         std::slice::from_raw_parts(
             &event as *const _ as *const u8,
@@ -136,6 +139,9 @@ impl ConfigAirplaneProvider {
             loop {
                 match rfkill_fd.read_exact(&mut buf) {
                     Ok(()) => {
+                        // SAFETY: RfkillEvent is #[repr(C, packed)] with only integer
+                        // fields and no invalid bit patterns. buf was filled by
+                        // read_exact with exactly size_of::<RfkillEvent>() bytes.
                         let event: RfkillEvent =
                             unsafe { std::ptr::read(buf.as_ptr() as *const _) };
 

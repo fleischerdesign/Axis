@@ -2,6 +2,7 @@ use axis_domain::models::calendar::CalendarEvent;
 use axis_domain::ports::calendar::{CalendarProvider, CalendarError};
 use axis_domain::ports::cloud_auth::CloudAuthProvider;
 use async_trait::async_trait;
+use log::{debug, info, warn};
 use serde::Deserialize;
 use std::sync::Arc;
 
@@ -138,14 +139,14 @@ impl CalendarProvider for GoogleCalendarAdapter {
         for (idx, res) in results.into_iter().enumerate() {
             match res {
                 Ok(events) => {
-                    log::debug!("[google-calendar] Fetched {} events from calendar {}", events.len(), idx);
+                    debug!("[google-calendar] Fetched {} events from calendar {}", events.len(), idx);
                     all_events.extend(events);
                 }
-                Err(e) => log::warn!("[google-calendar] Failed to fetch events from calendar {}: {}", idx, e),
+                Err(e) => warn!("[google-calendar] Failed to fetch events from calendar {}: {}", idx, e),
             }
         }
 
-        log::info!("[google-calendar] Total events fetched: {} (Parallel)", all_events.len());
+        info!("[google-calendar] Total events fetched: {} (Parallel)", all_events.len());
         all_events.sort_by(|a, b| a.start.cmp(&b.start));
         Ok(all_events)
     }

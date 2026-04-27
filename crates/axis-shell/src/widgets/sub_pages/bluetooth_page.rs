@@ -1,5 +1,4 @@
 use gtk4::prelude::*;
-use gtk4::glib;
 use axis_domain::models::bluetooth::BluetoothStatus;
 use axis_presentation::View;
 use crate::presentation::bluetooth::{BluetoothPresenter, BluetoothView};
@@ -102,14 +101,8 @@ impl View<BluetoothStatus> for BluetoothPageView {
             };
 
             if let Some(entry) = rows.get(&device.id) {
-                let lr = entry.list_row.clone();
-                let sub = sublabel.map(|s| s.to_string());
-                let connected = device.connected;
-                glib::idle_add_local(move || {
-                    lr.set_subtitle(sub.as_deref());
-                    lr.set_active(connected);
-                    glib::ControlFlow::Break
-                });
+                entry.list_row.set_subtitle(sublabel);
+                entry.list_row.set_active(device.connected);
                 continue;
             }
 

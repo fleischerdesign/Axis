@@ -3,6 +3,7 @@ use axis_domain::models::nightlight::NightlightStatus;
 use axis_domain::ports::config::ConfigProvider;
 use axis_domain::ports::nightlight::{NightlightError, NightlightProvider, NightlightStream};
 use async_trait::async_trait;
+use log::{error, info, warn};
 use tokio::sync::{mpsc, watch};
 use tokio_stream::wrappers::WatchStream;
 use std::process::{Child, Command, Stdio};
@@ -62,14 +63,14 @@ impl ConfigNightlightProvider {
                         if let Some(ref mut c) = child {
                             match c.try_wait() {
                                 Ok(Some(_)) => {
-                                    log::warn!("[nightlight] wlsunset exited");
+                                    warn!("[nightlight] wlsunset exited");
                                     child = None;
                                     let _ = status_tx_bg.send(
                                         with_enabled(Self::config_to_status(&current_config, available), false),
                                     );
                                 }
                                 Err(e) => {
-                                    log::error!("[nightlight] Error checking wlsunset: {e}");
+                                    error!("[nightlight] Error checking wlsunset: {e}");
                                     child = None;
                                     let _ = status_tx_bg.send(
                                         with_enabled(Self::config_to_status(&current_config, available), false),
@@ -162,7 +163,7 @@ impl ConfigNightlightProvider {
 
         match cmd.spawn() {
             Ok(c) => {
-                log::info!(
+                info!(
                     "[nightlight] wlsunset started (day={}K, night={}K)",
                     config.temp_day,
                     config.temp_night
@@ -170,7 +171,7 @@ impl ConfigNightlightProvider {
                 Some(c)
             }
             Err(e) => {
-                log::error!("[nightlight] Failed to start wlsunset: {e}");
+                error!("[nightlight] Failed to start wlsunset: {e}");
                 None
             }
         }

@@ -41,7 +41,7 @@ impl WebSearchProvider {
         Some(LauncherItem {
             id: "web-google".to_string(),
             title: format!("Google: {trimmed}"),
-            description: Some("Im Web suchen".into()),
+            description: Some("Search the web".into()),
             icon_name: "web-browser-symbolic".into(),
             action: LauncherAction::OpenUrl(url),
             score: 80,

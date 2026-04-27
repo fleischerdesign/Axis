@@ -399,10 +399,8 @@ version = "0.1.0"
 dependencies = [
  "async-stream",
  "axis-domain",
- "chrono",
  "futures-util",
  "gtk4",
- "image",
  "libadwaita",
  "log",
 ]

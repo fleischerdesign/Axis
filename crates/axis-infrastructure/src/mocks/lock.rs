@@ -1,6 +1,7 @@
 use axis_domain::models::lock::LockStatus;
 use axis_domain::ports::lock::{LockProvider, LockError, LockStream};
 use async_trait::async_trait;
+use log::info;
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
 use std::sync::Arc;
@@ -31,7 +32,7 @@ impl LockProvider for MockLockProvider {
             is_locked: true,
             is_supported: true,
         });
-        log::info!("[mock-lock] lock_session");
+        info!("[mock-lock] lock_session");
         Ok(())
     }
 
@@ -40,7 +41,7 @@ impl LockProvider for MockLockProvider {
             is_locked: false,
             is_supported: true,
         });
-        log::info!("[mock-lock] unlock_session");
+        info!("[mock-lock] unlock_session");
         Ok(())
     }
 

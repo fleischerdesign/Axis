@@ -401,12 +401,8 @@ impl PopupView for LauncherPopup {
     fn popup_window(&self) -> gtk4::ApplicationWindow { self.window.clone().upcast() }
 
     fn show(&self) {
-        let popup = self.clone();
-        glib::idle_add_local(move || {
-            popup.popup_container().animate_show(&popup.popup_window());
-            popup.clear_and_focus();
-            glib::ControlFlow::Break
-        });
+        self.popup_container().animate_show(&self.popup_window());
+        self.clear_and_focus();
     }
 }
 

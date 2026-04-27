@@ -5,8 +5,8 @@ use std::time::Instant;
 pub struct SlideAnimator;
 
 impl SlideAnimator {
-    /// Ein manueller, zeitbasierter Animator mit Easing-Kurve.
-    /// Unabhängig vom GTK-Frame-Clock, daher perfekt für Layer-Shell Fenster.
+    /// A manual, time-based animator with easing curve.
+    /// Independent of the GTK frame clock, making it ideal for Layer-Shell windows.
     pub fn slide_margin<W: IsA<gtk4::Window> + LayerShell + Clone + 'static>(
         window: &W,
         edge: Edge,

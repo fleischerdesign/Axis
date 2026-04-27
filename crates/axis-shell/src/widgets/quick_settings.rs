@@ -351,13 +351,9 @@ impl View<AudioStatus> for QuickSettingsPopup {
         if let Some(slider) = self.volume_slider.get() {
             let icon_name = audio_icon(status).to_string();
             let is_full = status.volume >= 0.99;
-            let slider_c = slider.clone();
-            glib::idle_add_local(move || {
-                slider_c.set_icon(&icon_name);
-                if is_full { slider_c.scale().remove_css_class("highlight-partial"); }
-                else { slider_c.scale().add_css_class("highlight-partial"); }
-                glib::ControlFlow::Break
-            });
+            slider.set_icon(&icon_name);
+            if is_full { slider.scale().remove_css_class("highlight-partial"); }
+            else { slider.scale().add_css_class("highlight-partial"); }
 
             let scale = slider.scale();
             if (scale.value() - status.volume).abs() > 0.01 {
@@ -382,12 +378,7 @@ impl AudioView for QuickSettingsPopup {
 impl View<BrightnessStatus> for QuickSettingsPopup {
     fn render(&self, status: &BrightnessStatus) {
         if let Some(slider) = self.brightness_slider.get() {
-            let icon_name = "display-brightness-symbolic".to_string();
-            let slider_c = slider.clone();
-            glib::idle_add_local(move || {
-                slider_c.set_icon(&icon_name);
-                glib::ControlFlow::Break
-            });
+            slider.set_icon("display-brightness-symbolic");
 
             if !self.is_bright_dragging.get() {
                 let scale = slider.scale();

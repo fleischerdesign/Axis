@@ -9,6 +9,4 @@ async-stream.workspace = true
 futures-util.workspace = true
 gtk4.workspace = true
 libadwaita.workspace = true
-chrono.workspace = true
-image = "0.25"
 log.workspace = true

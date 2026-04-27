@@ -6,6 +6,7 @@ pub mod util;
 use axis_domain::models::launcher::LauncherItem;
 use axis_domain::ports::launcher::{LauncherError, LauncherSearchProvider};
 use async_trait::async_trait;
+use log::warn;
 use std::sync::Arc;
 
 use self::apps::AppSearchProvider;
@@ -36,7 +37,7 @@ impl LauncherSearchProvider for CompositeLauncherProvider {
             for p in &self.providers {
                 match p.search("").await {
                     Ok(results) => all.extend(results),
-                    Err(e) => log::warn!("[launcher] Provider error: {e}"),
+                    Err(e) => warn!("[launcher] Provider error: {e}"),
                 }
             }
             all.sort_by(|a, b| {
@@ -56,8 +57,8 @@ impl LauncherSearchProvider for CompositeLauncherProvider {
         for handle in handles {
             match handle.await {
                 Ok(Ok(results)) => all_results.extend(results),
-                Ok(Err(e)) => log::warn!("[launcher] Provider error: {e}"),
-                Err(e) => log::warn!("[launcher] Provider task panicked: {e}"),
+                Ok(Err(e)) => warn!("[launcher] Provider error: {e}"),
+                Err(e) => warn!("[launcher] Provider task panicked: {e}"),
             }
         }
 

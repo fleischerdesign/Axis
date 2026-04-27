@@ -106,7 +106,7 @@ impl LockScreenFactory {
             battery_row.set_visible(status.has_battery);
             if status.has_battery {
                 battery_label.set_text(&format!("{:.0}%", status.battery_percentage));
-                battery_icon.set_icon_name(Some(Self::battery_icon_name(
+                battery_icon.set_icon_name(Some(crate::presentation::battery::battery_icon(
                     status.battery_percentage,
                     status.is_charging,
                 )));
@@ -296,22 +296,6 @@ impl LockScreenFactory {
 
     fn format_date() -> String {
         Local::now().format("%A, %B %-d").to_string()
-    }
-
-    fn battery_icon_name(percentage: f64, charging: bool) -> &'static str {
-        if charging {
-            if percentage < 10.0 { "battery-empty-charging-symbolic" }
-            else if percentage < 25.0 { "battery-caution-charging-symbolic" }
-            else if percentage < 50.0 { "battery-low-charging-symbolic" }
-            else if percentage < 75.0 { "battery-good-charging-symbolic" }
-            else { "battery-full-charging-symbolic" }
-        } else {
-            if percentage < 10.0 { "battery-empty-symbolic" }
-            else if percentage < 25.0 { "battery-caution-symbolic" }
-            else if percentage < 50.0 { "battery-low-symbolic" }
-            else if percentage < 75.0 { "battery-good-symbolic" }
-            else { "battery-full-symbolic" }
-        }
     }
 }
 

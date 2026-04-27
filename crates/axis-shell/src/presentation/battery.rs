@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use axis_application::use_cases::power::subscribe::SubscribeToPowerUpdatesUseCase;
 use axis_domain::models::power::PowerStatus;
-use super::{Presenter, View};
+use axis_presentation::{Presenter, View};
 
 pub trait BatteryView: View<PowerStatus> {}
 

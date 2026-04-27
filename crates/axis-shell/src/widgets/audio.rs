@@ -1,5 +1,4 @@
 use libadwaita::prelude::*;
-use gtk4::glib;
 use axis_presentation::View;
 use crate::presentation::audio::{AudioView, audio_icon};
 use axis_domain::models::audio::AudioStatus;
@@ -27,11 +26,7 @@ impl AudioWidget {
 impl View<AudioStatus> for AudioWidget {
     fn render(&self, status: &AudioStatus) {
         let icon_name = audio_icon(status).to_string();
-        let icon = self.icon.clone();
-        glib::idle_add_local(move || {
-            icon.set_icon_name(Some(&icon_name));
-            glib::ControlFlow::Break
-        });
+        self.icon.set_icon_name(Some(&icon_name));
     }
 }
 

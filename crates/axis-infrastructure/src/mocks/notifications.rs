@@ -45,12 +45,9 @@ impl NotificationProvider for MockNotificationService {
     }
 
     async fn close_notification(&self, id: u32) -> Result<(), NotificationError> {
-        let mut status = self.status_tx.borrow().clone();
-        status.notifications.retain(|n| n.id != id);
         self.status_tx.send_modify(|s| {
             s.notifications.retain(|n| n.id != id);
         });
-        let _ = status;
         Ok(())
     }
 

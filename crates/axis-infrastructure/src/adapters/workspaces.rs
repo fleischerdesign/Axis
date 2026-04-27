@@ -42,7 +42,7 @@ impl NiriWorkspaceProvider {
                                     let _ = provider_clone.status_tx.send(status);
                                 }
                                 Event::WorkspaceActivated { .. } => {
-                                    // Bei Aktivierung fragen wir den Status über einen neuen Socket ab
+                                    // On activation, query status via a new socket
                                     if let Ok(mut query_sock) = Socket::connect() {
                                         if let Ok(Ok(Response::Workspaces(ws_list))) = query_sock.send(Request::Workspaces) {
                                             let status = WorkspaceStatus {

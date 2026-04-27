@@ -1,5 +1,4 @@
 use libadwaita::prelude::*;
-use gtk4::glib;
 use axis_presentation::View;
 use crate::presentation::battery::{BatteryView, battery_icon};
 use axis_domain::models::power::PowerStatus;
@@ -33,19 +32,13 @@ impl View<PowerStatus> for StatusBar {
     fn render(&self, status: &PowerStatus) {
         let icon_name = battery_icon(status.battery_percentage, status.is_charging).to_string();
         let percentage_text = format!("{:.0}%", status.battery_percentage);
-        let is_charging = status.is_charging;
-        let icon = self.icon.clone();
-        let label = self.label.clone();
-        glib::idle_add_local(move || {
-            icon.set_icon_name(Some(&icon_name));
-            label.set_label(&percentage_text);
-            if is_charging {
-                icon.add_css_class("charging");
-            } else {
-                icon.remove_css_class("charging");
-            }
-            glib::ControlFlow::Break
-        });
+        self.icon.set_icon_name(Some(&icon_name));
+        self.label.set_label(&percentage_text);
+        if status.is_charging {
+            self.icon.add_css_class("charging");
+        } else {
+            self.icon.remove_css_class("charging");
+        }
     }
 }
 

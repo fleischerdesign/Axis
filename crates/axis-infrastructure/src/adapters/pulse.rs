@@ -88,6 +88,10 @@ impl PulseAudioProvider {
             let ml_ptr: *mut Mainloop = &mut mainloop;
             let ctx_ptr: *mut Context = &mut context;
             unsafe {
+                // SAFETY: ml_ptr and ctx_ptr are raw pointers to local variables
+                // (mainloop and context) that outlive this closure. The closure
+                // is moved into set_state_callback and remains alive as long as
+                // the context is. The mainloop is only signaled, not re-entered.
                 (*ctx_ptr).set_state_callback(Some(Box::new(move || {
                     let state = (*ctx_ptr).get_state();
                     match state {

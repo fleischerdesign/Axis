@@ -2,6 +2,7 @@ use axis_domain::models::launcher::{LauncherAction, LauncherItem, SearchPriority
 use axis_domain::ports::launcher::{LauncherError, LauncherSearchProvider};
 use crate::adapters::launcher::util::scored_match;
 use async_trait::async_trait;
+use log::info;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
@@ -79,7 +80,7 @@ impl AppSearchProvider {
 
         let mut apps = self.scan_apps();
         apps.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-        log::info!("[launcher] Found {} apps", apps.len());
+        info!("[launcher] Found {} apps", apps.len());
         let dir_mtimes = self.get_dir_mtimes();
         *self.cache.write().unwrap() = Some(Cache { apps: apps.clone(), dir_mtimes });
         apps
