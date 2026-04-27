@@ -57,6 +57,7 @@ use axis_application::use_cases::tray::scroll::ScrollTrayItemUseCase;
 
 use axis_domain::models::appearance::{AccentColor, ColorScheme};
 use axis_domain::models::config::AxisConfig;
+use axis_domain::ports::config::ConfigProvider;
 
 use axis_infrastructure::mocks::clock::MockClockProvider;
 use axis_infrastructure::adapters::power::LogindPowerProvider;
@@ -490,6 +491,8 @@ fn main() -> glib::ExitCode {
         }
     });
 
+    let show_labels = config_provider.get().expect("config get failed").bar.show_labels;
+
     let lock_gtk_handle_for_activate = lock_gtk_handle;
     app.connect_activate(move |app| {
         let theme_svc = Rc::new(ThemeService::new(theme_provider.get().expect("theme provider not initialized").clone()));
@@ -563,6 +566,7 @@ fn main() -> glib::ExitCode {
             battery_presenter.clone(), clock_presenter.clone(), audio_presenter.clone(),
             workspace_presenter.clone(), auto_hide_presenter.clone(), tray_presenter.clone(),
             toggle_popup.clone(),
+            show_labels,
         );
 
         let qs_popup = QuickSettingsPopup::new(app);

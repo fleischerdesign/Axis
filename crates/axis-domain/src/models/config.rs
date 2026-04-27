@@ -121,6 +121,8 @@ pub struct BarConfig {
     pub autohide: bool,
     #[serde(default)]
     pub islands: IslandVisibility,
+    #[serde(default)]
+    pub show_labels: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

@@ -141,6 +141,7 @@ impl FileConfigProvider {
             position: if cli.position != default.position { cli.position.clone() } else { file.position.clone() },
             autohide: if cli.autohide != default.autohide { cli.autohide } else { file.autohide },
             islands: Self::merge_islands(&cli.islands, &file.islands),
+            show_labels: if cli.show_labels { true } else { file.show_labels },
         }
     }
 

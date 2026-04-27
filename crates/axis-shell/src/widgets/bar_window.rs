@@ -47,6 +47,7 @@ impl BarWindow {
         auto_hide_presenter: Arc<AutoHidePresenter>,
         tray_presenter: Rc<TrayPresenter>,
         toggle_popup_use_case: Arc<TogglePopupUseCase>,
+        show_labels: bool,
     ) {
         let bar = Bar::new();
         bar.container.set_vexpand(true);
@@ -107,8 +108,8 @@ impl BarWindow {
         tray_presenter.add_view(Box::new(tray_widget.clone()));
 
         let end_island = Island::new();
-        let audio_widget = AudioWidget::new();
-        let status_bar = StatusBar::new();
+        let audio_widget = AudioWidget::new(show_labels);
+        let status_bar = StatusBar::new(show_labels);
         end_island.container.append(&audio_widget.container);
         end_island.container.append(&status_bar.container);
 
