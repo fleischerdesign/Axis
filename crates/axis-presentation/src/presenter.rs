@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -39,6 +40,26 @@ where
             current_status: Rc::new(RefCell::new(None)),
             subscribe: Arc::new(subscribe),
         }
+    }
+
+    pub fn from_subscribe<F, Fut, St, E>(factory: F) -> Self
+    where
+        F: Fn() -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<St, E>> + Send + 'static,
+        St: Stream<Item = S> + Send + 'static,
+        E: Send + 'static,
+    {
+        Self::new(move || {
+            let fut = factory();
+            Box::pin(async_stream::stream! {
+                if let Ok(stream) = fut.await {
+                    let mut stream = Box::pin(stream);
+                    while let Some(item) = stream.next().await {
+                        yield item;
+                    }
+                }
+            })
+        })
     }
 
     pub fn with_initial_status(self, status: S) -> Self {

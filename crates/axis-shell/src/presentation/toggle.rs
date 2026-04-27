@@ -1,4 +1,4 @@
-use std::pin::Pin;
+use std::future::Future;
 use std::sync::Arc;
 use futures_util::Stream;
 use axis_presentation::{Presenter, View, view::FnView};
@@ -18,14 +18,20 @@ pub struct TogglePresenter<T> {
 }
 
 impl<T: 'static> TogglePresenter<T> {
-    pub fn new(
+    pub fn new<F, Fut, St, E>(
         label: &str,
         icon_active: &str,
         icon_inactive: &str,
-        subscribe: impl Fn() -> Pin<Box<dyn Stream<Item = bool> + Send>> + Send + Sync + 'static,
+        subscribe: F,
         toggle: impl Fn(bool) -> T + Send + Sync + 'static,
-    ) -> Self {
-        let inner = Presenter::new(subscribe);
+    ) -> Self
+    where
+        F: Fn() -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<St, E>> + Send + 'static,
+        St: Stream<Item = bool> + Send + 'static,
+        E: Send + 'static,
+    {
+        let inner = Presenter::from_subscribe(subscribe);
         Self {
             inner,
             label: label.to_string(),

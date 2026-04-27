@@ -18,16 +18,12 @@ impl WorkspacePresenter {
         subscribe_use_case: Arc<SubscribeToWorkspaceUpdatesUseCase>,
         focus_use_case: Arc<FocusWorkspaceUseCase>
     ) -> Self {
-        let uc = subscribe_use_case.clone();
-        let inner = Presenter::new(move || {
-            let uc = uc.clone();
-            Box::pin(async_stream::stream! {
-                if let Ok(mut stream) = uc.execute().await {
-                    while let Some(status) = futures_util::StreamExt::next(&mut stream).await {
-                        yield status;
-                    }
-                }
-            })
+        let inner = Presenter::from_subscribe({
+            let uc = subscribe_use_case.clone();
+            move || {
+                let uc = uc.clone();
+                async move { uc.execute().await }
+            }
         });
 
         Self { inner, focus_use_case }

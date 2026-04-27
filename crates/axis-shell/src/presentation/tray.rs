@@ -45,16 +45,12 @@ impl TrayPresenter {
             get_status_use_case.execute().await.unwrap_or_default()
         });
 
-        let uc = subscribe_use_case.clone();
-        let inner = Presenter::new(move || {
-            let uc = uc.clone();
-            Box::pin(async_stream::stream! {
-                if let Ok(mut stream) = uc.execute().await {
-                    while let Some(item) = futures_util::StreamExt::next(&mut stream).await {
-                        yield item;
-                    }
-                }
-            })
+        let inner = Presenter::from_subscribe({
+            let uc = subscribe_use_case.clone();
+            move || {
+                let uc = uc.clone();
+                async move { uc.execute().await }
+            }
         })
         .with_initial_status(initial_status);
 

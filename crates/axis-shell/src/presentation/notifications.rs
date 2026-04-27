@@ -18,16 +18,12 @@ pub trait NotificationPopupAware {
 
 impl NotificationPresenter {
     pub fn new(service: Arc<dyn NotificationProvider>) -> Self {
-        let svc = service.clone();
-        let inner = Presenter::new(move || {
-            let svc = svc.clone();
-            Box::pin(async_stream::stream! {
-                if let Ok(mut stream) = svc.subscribe().await {
-                    while let Some(item) = futures_util::StreamExt::next(&mut stream).await {
-                        yield item;
-                    }
-                }
-            })
+        let inner = Presenter::from_subscribe({
+            let svc = service.clone();
+            move || {
+                let svc = svc.clone();
+                async move { svc.subscribe().await }
+            }
         });
 
         Self {

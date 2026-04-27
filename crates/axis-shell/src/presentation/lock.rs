@@ -39,15 +39,12 @@ impl LockPresenter {
         unlock_uc: Arc<UnlockSessionUseCase>,
         authenticate_uc: Arc<AuthenticateUseCase>,
     ) -> Self {
-        let inner = Presenter::new(move || {
-            let uc = subscribe_uc.clone();
-            Box::pin(async_stream::stream! {
-                if let Ok(mut stream) = uc.execute().await {
-                    while let Some(status) = futures_util::StreamExt::next(&mut stream).await {
-                        yield status;
-                    }
-                }
-            })
+        let inner = Presenter::from_subscribe({
+            let subscribe_uc = subscribe_uc.clone();
+            move || {
+                let uc = subscribe_uc.clone();
+                async move { uc.execute().await }
+            }
         });
 
         Self {

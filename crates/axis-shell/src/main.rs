@@ -341,15 +341,14 @@ fn main() -> glib::ExitCode {
         "Wi-Fi",
         "network-wireless-signal-excellent-symbolic",
         "network-wireless-offline-symbolic",
-        move || {
+        {
             let net = net_prov.clone();
-            Box::pin(async_stream::stream! {
-                if let Ok(mut stream) = net.subscribe().await {
-                    while let Some(status) = futures_util::StreamExt::next(&mut stream).await {
-                        yield status.is_wifi_enabled;
-                    }
+            move || {
+                let net = net.clone();
+                async move {
+                    net.subscribe().await.map(|s| s.map(|status| status.is_wifi_enabled))
                 }
-            })
+            }
         },
         move |enabled| {
             let net = network_provider.clone();
@@ -364,15 +363,14 @@ fn main() -> glib::ExitCode {
         "Bluetooth",
         "bluetooth-active-symbolic",
         "bluetooth-disabled-symbolic",
-        move || {
+        {
             let bt = bt_prov.clone();
-            Box::pin(async_stream::stream! {
-                if let Ok(mut stream) = bt.subscribe().await {
-                    while let Some(status) = futures_util::StreamExt::next(&mut stream).await {
-                        yield status.powered;
-                    }
+            move || {
+                let bt = bt.clone();
+                async move {
+                    bt.subscribe().await.map(|s| s.map(|status| status.powered))
                 }
-            })
+            }
         },
         move |_enabled| {},
     ));
@@ -382,15 +380,14 @@ fn main() -> glib::ExitCode {
         "Nightlight",
         "weather-clear-night-symbolic",
         "weather-clear-night-symbolic",
-        move || {
+        {
             let nl = nl_prov.clone();
-            Box::pin(async_stream::stream! {
-                if let Ok(mut stream) = nl.subscribe().await {
-                    while let Some(status) = futures_util::StreamExt::next(&mut stream).await {
-                        yield status.enabled;
-                    }
+            move || {
+                let nl = nl.clone();
+                async move {
+                    nl.subscribe().await.map(|s| s.map(|status| status.enabled))
                 }
-            })
+            }
         },
         move |enabled| {
             let nl = nightlight_provider.clone();
@@ -406,15 +403,14 @@ fn main() -> glib::ExitCode {
         "DND",
         "preferences-system-notifications-symbolic",
         "notifications-disabled-symbolic",
-        move || {
+        {
             let dnd = dnd_prov.clone();
-            Box::pin(async_stream::stream! {
-                if let Ok(mut stream) = dnd.subscribe().await {
-                    while let Some(status) = futures_util::StreamExt::next(&mut stream).await {
-                        yield status.enabled;
-                    }
+            move || {
+                let dnd = dnd.clone();
+                async move {
+                    dnd.subscribe().await.map(|s| s.map(|status| status.enabled))
                 }
-            })
+            }
         },
         move |enabled| {
             let dnd = dnd_provider.clone();
@@ -429,15 +425,14 @@ fn main() -> glib::ExitCode {
         "Airplane",
         "airplane-mode-symbolic",
         "airplane-mode-symbolic",
-        move || {
+        {
             let ap = ap_prov.clone();
-            Box::pin(async_stream::stream! {
-                if let Ok(mut stream) = ap.subscribe().await {
-                    while let Some(status) = futures_util::StreamExt::next(&mut stream).await {
-                        yield status.enabled;
-                    }
+            move || {
+                let ap = ap.clone();
+                async move {
+                    ap.subscribe().await.map(|s| s.map(|status| status.enabled))
                 }
-            })
+            }
         },
         move |enabled| {
             let ap = airplane_provider.clone();
@@ -605,15 +600,12 @@ fn main() -> glib::ExitCode {
 
         {
             let dnd_prov_c = dnd_for_toast.clone();
-            let dnd_presenter: Rc<Presenter<DndStatus>> = Rc::new(Presenter::new(move || {
+            let dnd_presenter: Rc<Presenter<DndStatus>> = Rc::new(Presenter::from_subscribe({
                 let dnd = dnd_prov_c.clone();
-                Box::pin(async_stream::stream! {
-                    if let Ok(mut stream) = dnd.subscribe().await {
-                        while let Some(status) = stream.next().await {
-                            yield status;
-                        }
-                    }
-                })
+                move || {
+                    let dnd = dnd.clone();
+                    async move { dnd.subscribe().await }
+                }
             }));
             dnd_presenter.add_view(Box::new(toast.clone()));
             let dp = dnd_presenter.clone();
