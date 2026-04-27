@@ -19,9 +19,9 @@ pub struct ConfigNightlightProvider {
 }
 
 impl ConfigNightlightProvider {
-    pub fn new(config_provider: Arc<dyn ConfigProvider>) -> Arc<Self> {
+    pub async fn new(config_provider: Arc<dyn ConfigProvider>) -> Arc<Self> {
         let available = Self::check_available();
-        let initial_config = config_provider.get().nightlight.clone();
+        let initial_config = config_provider.get().expect("config get failed").nightlight.clone();
         let initial_status = Self::config_to_status(&initial_config, available);
 
         let (status_tx, _) = watch::channel(initial_status.clone());
@@ -97,7 +97,7 @@ impl ConfigNightlightProvider {
         let cmd_tx_bg = provider.cmd_tx.clone();
         let mut last_config = initial_config;
         tokio::spawn(async move {
-            let mut stream = config_provider.subscribe();
+            let mut stream = config_provider.subscribe().expect("config subscribe failed");
             while let Some(config) = futures_util::StreamExt::next(&mut stream).await {
                 let nl = config.nightlight.clone();
                 if nl != last_config {
@@ -195,20 +195,20 @@ impl NightlightProvider for ConfigNightlightProvider {
 
     async fn set_enabled(&self, enabled: bool) -> Result<(), NightlightError> {
         self.config_provider
-            .update(Box::new(move |cfg| cfg.nightlight.enabled = enabled));
-        Ok(())
+            .update(Box::new(move |cfg| cfg.nightlight.enabled = enabled))
+            .map_err(|e| NightlightError::ProviderError(e.to_string()))
     }
 
     async fn set_temp_day(&self, temp: u32) -> Result<(), NightlightError> {
         self.config_provider
-            .update(Box::new(move |cfg| cfg.nightlight.temp_day = temp));
-        Ok(())
+            .update(Box::new(move |cfg| cfg.nightlight.temp_day = temp))
+            .map_err(|e| NightlightError::ProviderError(e.to_string()))
     }
 
     async fn set_temp_night(&self, temp: u32) -> Result<(), NightlightError> {
         self.config_provider
-            .update(Box::new(move |cfg| cfg.nightlight.temp_night = temp));
-        Ok(())
+            .update(Box::new(move |cfg| cfg.nightlight.temp_night = temp))
+            .map_err(|e| NightlightError::ProviderError(e.to_string()))
     }
 
     async fn set_schedule(&self, sunrise: &str, sunset: &str) -> Result<(), NightlightError> {
@@ -218,7 +218,7 @@ impl NightlightProvider for ConfigNightlightProvider {
             .update(Box::new(move |cfg| {
                 cfg.nightlight.sunrise = sunrise;
                 cfg.nightlight.sunset = sunset;
-            }));
-        Ok(())
+            }))
+            .map_err(|e| NightlightError::ProviderError(e.to_string()))
     }
 }

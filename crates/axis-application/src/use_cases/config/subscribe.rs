@@ -1,4 +1,4 @@
-use axis_domain::ports::config::{ConfigProvider, ConfigStream};
+use axis_domain::ports::config::{ConfigError, ConfigProvider, ConfigStream};
 use std::sync::Arc;
 
 pub struct SubscribeToConfigUseCase {
@@ -10,7 +10,7 @@ impl SubscribeToConfigUseCase {
         Self { provider }
     }
 
-    pub fn execute(&self) -> ConfigStream {
+    pub async fn execute(&self) -> Result<ConfigStream, ConfigError> {
         self.provider.subscribe()
     }
 }

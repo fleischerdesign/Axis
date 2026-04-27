@@ -4,3 +4,9 @@ use serde::{Deserialize, Serialize};
 pub struct DndStatus {
     pub enabled: bool,
 }
+
+impl Default for DndStatus {
+    fn default() -> Self {
+        Self { enabled: false }
+    }
+}

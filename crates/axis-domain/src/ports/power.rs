@@ -1,8 +1,7 @@
 use crate::models::power::PowerStatus;
 use async_trait::async_trait;
 use thiserror::Error;
-use futures_util::Stream;
-use std::pin::Pin;
+use super::StatusStream;
 
 #[derive(Error, Debug)]
 pub enum PowerError {
@@ -10,7 +9,7 @@ pub enum PowerError {
     ProviderError(String),
 }
 
-pub type PowerStream = Pin<Box<dyn Stream<Item = PowerStatus> + Send>>;
+pub type PowerStream = StatusStream<PowerStatus>;
 
 #[async_trait]
 pub trait PowerProvider: Send + Sync {

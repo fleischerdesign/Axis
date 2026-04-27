@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use thiserror::Error;
+use crate::models::cloud::CloudAccount;
 
 #[derive(Error, Debug)]
 pub enum AuthError {
@@ -10,8 +11,6 @@ pub enum AuthError {
     #[error("User cancelled")]
     Cancelled,
 }
-
-use crate::models::cloud::CloudAccount;
 
 #[async_trait]
 pub trait CloudAuthProvider: Send + Sync {

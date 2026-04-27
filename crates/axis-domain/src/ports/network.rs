@@ -1,8 +1,7 @@
 use crate::models::network::NetworkStatus;
 use async_trait::async_trait;
 use thiserror::Error;
-use futures_util::Stream;
-use std::pin::Pin;
+use super::StatusStream;
 
 #[derive(Error, Debug)]
 pub enum NetworkError {
@@ -14,7 +13,7 @@ pub enum NetworkError {
     AuthFailed,
 }
 
-pub type NetworkStream = Pin<Box<dyn Stream<Item = NetworkStatus> + Send>>;
+pub type NetworkStream = StatusStream<NetworkStatus>;
 
 #[async_trait]
 pub trait NetworkProvider: Send + Sync {

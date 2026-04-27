@@ -2,29 +2,6 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct AppearanceStatus {
-    #[serde(default)]
-    pub wallpaper: Option<String>,
-    #[serde(default)]
-    pub accent_color: AccentColor,
-    #[serde(default)]
-    pub color_scheme: ColorScheme,
-    #[serde(default)]
-    pub font: Option<String>,
-}
-
-impl Default for AppearanceStatus {
-    fn default() -> Self {
-        Self {
-            wallpaper: None,
-            accent_color: AccentColor::default(),
-            color_scheme: ColorScheme::default(),
-            font: None,
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum AccentColor {
     Blue,
     Teal,

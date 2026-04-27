@@ -1,8 +1,7 @@
 use crate::models::audio::AudioStatus;
 use async_trait::async_trait;
 use thiserror::Error;
-use futures_util::Stream;
-use std::pin::Pin;
+use super::StatusStream;
 
 #[derive(Error, Debug)]
 pub enum AudioError {
@@ -10,7 +9,7 @@ pub enum AudioError {
     ProviderError(String),
 }
 
-pub type AudioStream = Pin<Box<dyn Stream<Item = AudioStatus> + Send>>;
+pub type AudioStream = StatusStream<AudioStatus>;
 
 #[async_trait]
 pub trait AudioProvider: Send + Sync {

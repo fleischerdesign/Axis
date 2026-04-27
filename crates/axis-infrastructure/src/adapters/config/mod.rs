@@ -1,7 +1,7 @@
 mod watcher;
 
 use axis_domain::models::config::AxisConfig;
-use axis_domain::ports::config::{ConfigProvider, ConfigStream};
+use axis_domain::ports::config::{ConfigError, ConfigProvider, ConfigStream};
 use log::{info, warn};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -244,22 +244,24 @@ impl FileConfigProvider {
 }
 
 impl ConfigProvider for FileConfigProvider {
-    fn get(&self) -> AxisConfig {
-        self.resolved()
+    fn get(&self) -> Result<AxisConfig, ConfigError> {
+        Ok(self.resolved())
     }
 
-    fn subscribe(&self) -> ConfigStream {
+    fn subscribe(&self) -> Result<ConfigStream, ConfigError> {
         let rx = self.status_tx.subscribe();
-        Box::pin(WatchStream::new(rx))
+        Ok(Box::pin(WatchStream::new(rx)))
     }
 
-    fn update(&self, apply: Box<dyn FnOnce(&mut AxisConfig) + Send + 'static>) {
-        let mut base = self.base.lock().expect("config lock").clone();
-        apply(&mut base);
-        Self::save(&base);
-        *self.base.lock().expect("config lock") = base;
+    fn update(&self, apply: Box<dyn FnOnce(&mut AxisConfig) + Send + 'static>) -> Result<(), ConfigError> {
+        let mut config = self.base.lock().expect("config lock").clone();
+        apply(&mut config);
+        FileConfigProvider::save(&config);
+        *self.base.lock().expect("config lock") = config;
         self.suppress_reload.store(true, Ordering::SeqCst);
-        let resolved = self.resolved();
+        let base_val = self.base.lock().expect("config lock").clone();
+        let resolved = FileConfigProvider::merge(&self.cli_override, &base_val);
         self.status_tx.send_modify(|s| *s = resolved);
+        Ok(())
     }
 }

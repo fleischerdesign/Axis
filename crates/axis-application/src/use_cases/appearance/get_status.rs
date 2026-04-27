@@ -1,4 +1,4 @@
-use axis_domain::models::appearance::AppearanceStatus;
+use axis_domain::models::config::AppearanceConfig;
 use axis_domain::ports::appearance::{AppearanceError, AppearanceProvider};
 use std::sync::Arc;
 
@@ -11,7 +11,7 @@ impl GetAppearanceStatusUseCase {
         Self { provider }
     }
 
-    pub async fn execute(&self) -> Result<AppearanceStatus, AppearanceError> {
+    pub async fn execute(&self) -> Result<AppearanceConfig, AppearanceError> {
         self.provider.get_status().await
     }
 }

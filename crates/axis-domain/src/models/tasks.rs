@@ -13,10 +13,3 @@ pub struct TaskList {
     pub id: String,
     pub title: String,
 }
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum AuthStatus {
-    Authenticated,
-    NeedsAuth { url: String },
-    Failed(String),
-}

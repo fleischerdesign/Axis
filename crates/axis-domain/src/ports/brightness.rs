@@ -1,8 +1,7 @@
 use crate::models::brightness::BrightnessStatus;
 use async_trait::async_trait;
 use thiserror::Error;
-use futures_util::Stream;
-use std::pin::Pin;
+use super::StatusStream;
 
 #[derive(Error, Debug)]
 pub enum BrightnessError {
@@ -10,7 +9,7 @@ pub enum BrightnessError {
     ProviderError(String),
 }
 
-pub type BrightnessStream = Pin<Box<dyn Stream<Item = BrightnessStatus> + Send>>;
+pub type BrightnessStream = StatusStream<BrightnessStatus>;
 
 #[async_trait]
 pub trait BrightnessProvider: Send + Sync {

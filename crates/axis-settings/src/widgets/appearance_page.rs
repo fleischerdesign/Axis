@@ -2,7 +2,8 @@ use libadwaita::prelude::*;
 use libadwaita as adw;
 use std::rc::Rc;
 use std::cell::RefCell;
-use axis_domain::models::appearance::{AccentColor, AppearanceStatus, ColorScheme};
+use axis_domain::models::appearance::{AccentColor, ColorScheme};
+use axis_domain::models::config::AppearanceConfig;
 use crate::presentation::appearance::{AppearanceView, AppearancePresenter};
 use axis_presentation::View;
 
@@ -208,8 +209,8 @@ btn.connect_clicked(move |_| {
     }
 }
 
-impl View<AppearanceStatus> for AppearancePage {
-    fn render(&self, status: &AppearanceStatus) {
+impl View<AppearanceConfig> for AppearancePage {
+    fn render(&self, status: &AppearanceConfig) {
         if let Some(ref path) = status.wallpaper {
             self.wallpaper_row.set_subtitle(path);
         } else {

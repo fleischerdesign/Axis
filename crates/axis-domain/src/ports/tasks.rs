@@ -1,4 +1,5 @@
-use crate::models::tasks::{Task, TaskList, AuthStatus};
+use crate::models::tasks::{Task, TaskList};
+use crate::models::cloud::AuthStatus;
 use async_trait::async_trait;
 use thiserror::Error;
 

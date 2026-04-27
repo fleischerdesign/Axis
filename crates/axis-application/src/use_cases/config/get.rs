@@ -1,5 +1,5 @@
 use axis_domain::models::config::AxisConfig;
-use axis_domain::ports::config::ConfigProvider;
+use axis_domain::ports::config::{ConfigError, ConfigProvider};
 use std::sync::Arc;
 
 pub struct GetConfigUseCase {
@@ -11,7 +11,7 @@ impl GetConfigUseCase {
         Self { provider }
     }
 
-    pub fn execute(&self) -> AxisConfig {
+    pub async fn execute(&self) -> Result<AxisConfig, ConfigError> {
         self.provider.get()
     }
 }

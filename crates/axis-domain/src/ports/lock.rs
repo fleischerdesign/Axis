@@ -1,8 +1,7 @@
 use crate::models::lock::LockStatus;
 use async_trait::async_trait;
 use thiserror::Error;
-use futures_util::Stream;
-use std::pin::Pin;
+use super::StatusStream;
 
 #[derive(Error, Debug)]
 pub enum LockError {
@@ -12,7 +11,7 @@ pub enum LockError {
     NotSupported,
 }
 
-pub type LockStream = Pin<Box<dyn Stream<Item = LockStatus> + Send>>;
+pub type LockStream = StatusStream<LockStatus>;
 
 #[async_trait]
 pub trait LockProvider: Send + Sync {

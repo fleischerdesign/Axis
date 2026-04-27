@@ -22,5 +22,5 @@ pub enum ContinuityMessage {
     Hello { device_id: String, device_name: String },
     Heartbeat,
     ClipboardUpdate { content: Vec<u8>, mime_type: String },
-    // Wir können hier später weitere Typen aus dem Backup hinzufügen (Input, etc.)
+    // Additional types from the backup can be added here later (Input, etc.)
 }

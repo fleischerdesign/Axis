@@ -1,8 +1,7 @@
 use crate::models::nightlight::NightlightStatus;
 use async_trait::async_trait;
 use thiserror::Error;
-use futures_util::Stream;
-use std::pin::Pin;
+use super::StatusStream;
 
 #[derive(Error, Debug)]
 pub enum NightlightError {
@@ -10,7 +9,7 @@ pub enum NightlightError {
     ProviderError(String),
 }
 
-pub type NightlightStream = Pin<Box<dyn Stream<Item = NightlightStatus> + Send>>;
+pub type NightlightStream = StatusStream<NightlightStatus>;
 
 #[async_trait]
 pub trait NightlightProvider: Send + Sync {

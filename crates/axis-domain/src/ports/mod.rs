@@ -1,3 +1,5 @@
+pub type StatusStream<T> = std::pin::Pin<Box<dyn futures_util::Stream<Item = T> + Send>>;
+
 pub mod airplane;
 pub mod appearance;
 pub mod audio;

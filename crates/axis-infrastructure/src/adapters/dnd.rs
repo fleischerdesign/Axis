@@ -13,8 +13,8 @@ pub struct ConfigDndProvider {
 }
 
 impl ConfigDndProvider {
-    pub fn new(config_provider: Arc<dyn ConfigProvider>) -> Arc<Self> {
-        let initial = Self::config_to_status(&config_provider.get());
+    pub async fn new(config_provider: Arc<dyn ConfigProvider>) -> Arc<Self> {
+        let initial = Self::config_to_status(&config_provider.get().expect("config get failed"));
         let (status_tx, _) = watch::channel(initial.clone());
 
         let provider = Arc::new(Self {
@@ -25,7 +25,7 @@ impl ConfigDndProvider {
         let status_tx_bg = provider.status_tx.clone();
         let mut last = initial;
         tokio::spawn(async move {
-            let mut stream = config_provider.subscribe();
+            let mut stream = config_provider.subscribe().expect("config subscribe failed");
             while let Some(config) = futures_util::StreamExt::next(&mut stream).await {
                 let status = Self::config_to_status(&config);
                 if status != last {
@@ -48,7 +48,9 @@ impl ConfigDndProvider {
 #[async_trait]
 impl DndProvider for ConfigDndProvider {
     async fn get_status(&self) -> Result<DndStatus, DndError> {
-        Ok(Self::config_to_status(&self.config_provider.get()))
+        let config = self.config_provider.get()
+            .map_err(|e| DndError::ProviderError(e.to_string()))?;
+        Ok(Self::config_to_status(&config))
     }
 
     async fn subscribe(&self) -> Result<DndStream, DndError> {
@@ -58,7 +60,7 @@ impl DndProvider for ConfigDndProvider {
 
     async fn set_enabled(&self, enabled: bool) -> Result<(), DndError> {
         self.config_provider
-            .update(Box::new(move |cfg| cfg.dnd.enabled = enabled));
-        Ok(())
+            .update(Box::new(move |cfg| cfg.dnd.enabled = enabled))
+            .map_err(|e| DndError::ProviderError(e.to_string()))
     }
 }

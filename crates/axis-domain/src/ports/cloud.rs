@@ -1,8 +1,7 @@
 use crate::models::cloud::{CloudStatus, CloudAccount};
 use async_trait::async_trait;
 use thiserror::Error;
-use futures_util::Stream;
-use std::pin::Pin;
+use super::StatusStream;
 
 #[derive(Error, Debug)]
 pub enum CloudError {
@@ -12,7 +11,7 @@ pub enum CloudError {
     AuthError(String),
 }
 
-pub type CloudStream = Pin<Box<dyn Stream<Item = CloudStatus> + Send>>;
+pub type CloudStream = StatusStream<CloudStatus>;
 
 #[async_trait]
 pub trait CloudProvider: Send + Sync {

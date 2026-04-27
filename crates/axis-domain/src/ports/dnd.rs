@@ -1,8 +1,7 @@
 use crate::models::dnd::DndStatus;
 use async_trait::async_trait;
 use thiserror::Error;
-use futures_util::Stream;
-use std::pin::Pin;
+use super::StatusStream;
 
 #[derive(Error, Debug)]
 pub enum DndError {
@@ -10,7 +9,7 @@ pub enum DndError {
     ProviderError(String),
 }
 
-pub type DndStream = Pin<Box<dyn Stream<Item = DndStatus> + Send>>;
+pub type DndStream = StatusStream<DndStatus>;
 
 #[async_trait]
 pub trait DndProvider: Send + Sync {

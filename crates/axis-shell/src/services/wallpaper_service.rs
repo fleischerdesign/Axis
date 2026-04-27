@@ -5,7 +5,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use axis_presentation::View;
-use axis_domain::models::appearance::AppearanceStatus;
+use axis_domain::models::config::AppearanceConfig;
 
 type TextureCallback = dyn Fn(Option<gtk4::gdk::Texture>);
 
@@ -105,8 +105,8 @@ impl WallpaperService {
     }
 }
 
-impl View<AppearanceStatus> for WallpaperService {
-    fn render(&self, status: &AppearanceStatus) {
+impl View<AppearanceConfig> for WallpaperService {
+    fn render(&self, status: &AppearanceConfig) {
         let new_path = status.wallpaper.as_deref();
         let last = self.last_path.borrow().clone();
 

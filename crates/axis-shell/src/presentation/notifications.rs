@@ -2,12 +2,12 @@ use std::sync::Arc;
 use std::cell::RefCell;
 use std::rc::Rc;
 use axis_domain::models::notifications::NotificationStatus;
-use axis_domain::ports::notifications::NotificationService;
+use axis_domain::ports::notifications::NotificationProvider;
 use axis_presentation::{Presenter, View};
 
 pub struct NotificationPresenter {
     inner: Presenter<NotificationStatus>,
-    service: Arc<dyn NotificationService>,
+    service: Arc<dyn NotificationProvider>,
     toast_view: RefCell<Option<Rc<dyn NotificationPopupAware>>>,
     archive_view: RefCell<Option<Rc<dyn NotificationPopupAware>>>,
 }
@@ -17,7 +17,7 @@ pub trait NotificationPopupAware {
 }
 
 impl NotificationPresenter {
-    pub fn new(service: Arc<dyn NotificationService>) -> Self {
+    pub fn new(service: Arc<dyn NotificationProvider>) -> Self {
         let svc = service.clone();
         let inner = Presenter::new(move || {
             let svc = svc.clone();

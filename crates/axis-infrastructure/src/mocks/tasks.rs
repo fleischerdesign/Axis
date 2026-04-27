@@ -1,4 +1,5 @@
-use axis_domain::models::tasks::{Task, TaskList, AuthStatus};
+use axis_domain::models::tasks::{Task, TaskList};
+use axis_domain::models::cloud::AuthStatus;
 use axis_domain::ports::tasks::{TaskProvider, TaskError};
 use async_trait::async_trait;
 

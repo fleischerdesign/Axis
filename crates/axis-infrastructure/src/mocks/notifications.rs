@@ -1,5 +1,5 @@
 use axis_domain::models::notifications::{Notification, NotificationStatus};
-use axis_domain::ports::notifications::{NotificationService, NotificationError, NotificationStream};
+use axis_domain::ports::notifications::{NotificationProvider, NotificationError, NotificationStream};
 use async_trait::async_trait;
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
@@ -35,7 +35,7 @@ impl MockNotificationService {
 }
 
 #[async_trait]
-impl NotificationService for MockNotificationService {
+impl NotificationProvider for MockNotificationService {
     async fn get_status(&self) -> Result<NotificationStatus, NotificationError> {
         Ok(self.status_tx.borrow().clone())
     }

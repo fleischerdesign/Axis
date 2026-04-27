@@ -99,7 +99,7 @@ fn build_ui(app: &adw::Application, theme_css: Rc<gtk4::CssProvider>, rt: &tokio
     let config_provider = FileConfigProvider::new(AxisConfig::default());
     let cloud_provider = Arc::new(LocalCloudProvider::new(config_dir.clone()));
     let google_auth = Arc::new(GoogleCloudAdapter::new(config_dir.clone()));
-    let appearance_provider = ConfigAppearanceProvider::new(config_provider.clone());
+    let appearance_provider = rt.block_on(ConfigAppearanceProvider::new(config_provider.clone()));
     let niri_layout_provider = NiriLayoutProvider::new(config_dir.clone());
     
     let network_provider = rt.block_on(async {

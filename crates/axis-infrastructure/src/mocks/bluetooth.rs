@@ -1,5 +1,5 @@
 use axis_domain::models::bluetooth::{BluetoothDevice, BluetoothStatus};
-use axis_domain::ports::bluetooth::{BluetoothStatusStream, BluetoothProvider, BluetoothError};
+use axis_domain::ports::bluetooth::{BluetoothStream, BluetoothProvider, BluetoothError};
 use async_trait::async_trait;
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
@@ -46,7 +46,7 @@ impl BluetoothProvider for MockBluetoothProvider {
         Ok(self.status.lock().unwrap().clone())
     }
 
-    async fn subscribe(&self) -> Result<BluetoothStatusStream, BluetoothError> {
+    async fn subscribe(&self) -> Result<BluetoothStream, BluetoothError> {
         Ok(Box::pin(WatchStream::new(self.status_tx.subscribe())))
     }
 

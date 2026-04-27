@@ -102,9 +102,9 @@ pub struct ConfigAirplaneProvider {
 }
 
 impl ConfigAirplaneProvider {
-    pub fn new(config_provider: Arc<dyn ConfigProvider>) -> Arc<Self> {
+    pub async fn new(config_provider: Arc<dyn ConfigProvider>) -> Arc<Self> {
         let available = std::fs::File::open("/dev/rfkill").is_ok();
-        let initial_enabled = config_provider.get().airplane.enabled;
+        let initial_enabled = config_provider.get().expect("config get failed").airplane.enabled;
 
         let initial_status = AirplaneStatus {
             enabled: initial_enabled,
@@ -200,7 +200,7 @@ impl ConfigAirplaneProvider {
         let cmd_tx_bg = provider.cmd_tx.clone();
         let mut last_enabled = initial_enabled;
         tokio::spawn(async move {
-            let mut stream = config_provider.subscribe();
+            let mut stream = config_provider.subscribe().expect("config subscribe failed");
             while let Some(config) = futures_util::StreamExt::next(&mut stream).await {
                 let desired = config.airplane.enabled;
                 if desired != last_enabled {
@@ -227,7 +227,7 @@ impl AirplaneProvider for ConfigAirplaneProvider {
 
     async fn set_enabled(&self, enabled: bool) -> Result<(), AirplaneError> {
         self.config_provider
-            .update(Box::new(move |cfg| cfg.airplane.enabled = enabled));
-        Ok(())
+            .update(Box::new(move |cfg| cfg.airplane.enabled = enabled))
+            .map_err(|e| AirplaneError::ProviderError(e.to_string()))
     }
 }

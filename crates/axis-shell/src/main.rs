@@ -83,7 +83,7 @@ use axis_domain::ports::nightlight::NightlightProvider;
 use axis_domain::ports::dnd::DndProvider;
 use axis_domain::ports::airplane::AirplaneProvider;
 use axis_domain::ports::ipc::IpcProvider;
-use axis_domain::ports::notifications::NotificationService;
+use axis_domain::ports::notifications::NotificationProvider;
 use axis_domain::ports::popups::PopupProvider;
 use axis_domain::models::ipc::IpcCommand;
 use axis_domain::models::dnd::DndStatus;
@@ -202,10 +202,10 @@ fn main() -> glib::ExitCode {
         }
     });
     let config_provider = FileConfigProvider::new(cli_config);
-    let nightlight_provider: Arc<dyn NightlightProvider> = ConfigNightlightProvider::new(config_provider.clone());
-    let airplane_provider: Arc<dyn AirplaneProvider> = ConfigAirplaneProvider::new(config_provider.clone());
-    let appearance_provider = ConfigAppearanceProvider::new(config_provider.clone());
-    let dnd_provider = ConfigDndProvider::new(config_provider.clone());
+    let nightlight_provider: Arc<dyn NightlightProvider> = rt.block_on(ConfigNightlightProvider::new(config_provider.clone()));
+    let airplane_provider: Arc<dyn AirplaneProvider> = rt.block_on(ConfigAirplaneProvider::new(config_provider.clone()));
+    let appearance_provider = rt.block_on(ConfigAppearanceProvider::new(config_provider.clone()));
+    let dnd_provider = rt.block_on(ConfigDndProvider::new(config_provider.clone()));
     let clock_provider = Arc::new(MockClockProvider::new());
     let popup_provider = LocalPopupProvider::new();
     let launcher_provider = CompositeLauncherProvider::new();
@@ -213,9 +213,9 @@ fn main() -> glib::ExitCode {
     let config_dir = dirs::config_dir().unwrap_or(PathBuf::from(".")).join("axis");
     let google_auth = Arc::new(GoogleCloudAdapter::new(config_dir.clone()));
 
-    let notification_provider: Arc<dyn NotificationService> = rt.block_on(async {
+    let notification_provider: Arc<dyn NotificationProvider> = rt.block_on(async {
         match ZbusNotificationProvider::new().await {
-            Ok(p) => p as Arc<dyn NotificationService>,
+            Ok(p) => p as Arc<dyn NotificationProvider>,
             Err(e) => {
                 log::warn!("[notifications] Failed to register D-Bus service: {e}, using mock");
                 Arc::new(axis_infrastructure::mocks::notifications::MockNotificationService::new())
@@ -516,7 +516,7 @@ fn main() -> glib::ExitCode {
         
         // Sync manual color choices (non-Auto)
         let niri_manual = niri_layout.clone();
-        appearance_presenter.add_view(Box::new(FnView::new(move |status: &axis_domain::models::appearance::AppearanceStatus| {
+        appearance_presenter.add_view(Box::new(FnView::new(move |status: &axis_domain::models::config::AppearanceConfig| {
             if let axis_domain::models::appearance::AccentColor::Custom(hex) = &status.accent_color {
                 let niri = niri_manual.clone();
                 let hex_c = hex.clone();

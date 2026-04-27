@@ -1,4 +1,4 @@
-use axis_domain::ports::bluetooth::{BluetoothProvider, BluetoothError, BluetoothStatusStream};
+use axis_domain::ports::bluetooth::{BluetoothProvider, BluetoothError, BluetoothStream};
 use std::sync::Arc;
 
 pub struct SubscribeToBluetoothUpdatesUseCase {
@@ -10,7 +10,7 @@ impl SubscribeToBluetoothUpdatesUseCase {
         Self { provider }
     }
 
-    pub async fn execute(&self) -> Result<BluetoothStatusStream, BluetoothError> {
+    pub async fn execute(&self) -> Result<BluetoothStream, BluetoothError> {
         self.provider.subscribe().await
     }
 }

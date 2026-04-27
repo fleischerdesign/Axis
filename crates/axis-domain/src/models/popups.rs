@@ -12,3 +12,11 @@ pub enum PopupType {
 pub struct PopupStatus {
     pub active_popup: Option<PopupType>,
 }
+
+impl Default for PopupStatus {
+    fn default() -> Self {
+        Self {
+            active_popup: None,
+        }
+    }
+}

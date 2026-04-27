@@ -1,8 +1,7 @@
 use crate::models::popups::{PopupType, PopupStatus};
 use async_trait::async_trait;
 use thiserror::Error;
-use futures_util::Stream;
-use std::pin::Pin;
+use super::StatusStream;
 
 #[derive(Error, Debug)]
 pub enum PopupError {
@@ -10,7 +9,7 @@ pub enum PopupError {
     ProviderError(String),
 }
 
-pub type PopupStream = Pin<Box<dyn Stream<Item = PopupStatus> + Send>>;
+pub type PopupStream = StatusStream<PopupStatus>;
 
 #[async_trait]
 pub trait PopupProvider: Send + Sync {

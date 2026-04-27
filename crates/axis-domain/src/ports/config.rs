@@ -1,11 +1,17 @@
 use crate::models::config::AxisConfig;
-use futures_util::Stream;
-use std::pin::Pin;
+use super::StatusStream;
+use thiserror::Error;
 
-pub type ConfigStream = Pin<Box<dyn Stream<Item = AxisConfig> + Send>>;
+#[derive(Error, Debug)]
+pub enum ConfigError {
+    #[error("Config provider error: {0}")]
+    ProviderError(String),
+}
+
+pub type ConfigStream = StatusStream<AxisConfig>;
 
 pub trait ConfigProvider: Send + Sync {
-    fn get(&self) -> AxisConfig;
-    fn subscribe(&self) -> ConfigStream;
-    fn update(&self, apply: Box<dyn FnOnce(&mut AxisConfig) + Send + 'static>);
+    fn get(&self) -> Result<AxisConfig, ConfigError>;
+    fn subscribe(&self) -> Result<ConfigStream, ConfigError>;
+    fn update(&self, apply: Box<dyn FnOnce(&mut AxisConfig) + Send + 'static>) -> Result<(), ConfigError>;
 }

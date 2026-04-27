@@ -1,5 +1,5 @@
 use axis_domain::models::notifications::{Notification, NotificationAction, NotificationStatus};
-use axis_domain::ports::notifications::{NotificationError, NotificationService, NotificationStream};
+use axis_domain::ports::notifications::{NotificationError, NotificationProvider, NotificationStream};
 use async_trait::async_trait;
 use tokio::sync::{watch, mpsc};
 use tokio_stream::wrappers::WatchStream;
@@ -119,14 +119,14 @@ impl ZbusNotificationProvider {
         };
 
         let conn = connection::Builder::session()
-            .map_err(|e| NotificationError::ServiceError(e.to_string()))?
+            .map_err(|e| NotificationError::ProviderError(e.to_string()))?
             .name("org.freedesktop.Notifications")
-            .map_err(|e| NotificationError::ServiceError(e.to_string()))?
+            .map_err(|e| NotificationError::ProviderError(e.to_string()))?
             .serve_at("/org/freedesktop/Notifications", server)
-            .map_err(|e| NotificationError::ServiceError(e.to_string()))?
+            .map_err(|e| NotificationError::ProviderError(e.to_string()))?
             .build()
             .await
-            .map_err(|e| NotificationError::ServiceError(e.to_string()))?;
+            .map_err(|e| NotificationError::ProviderError(e.to_string()))?;
 
         log::info!("[notifications] D-Bus service registered on org.freedesktop.Notifications");
 
@@ -134,7 +134,7 @@ impl ZbusNotificationProvider {
             .object_server()
             .interface("/org/freedesktop/Notifications")
             .await
-            .map_err(|e| NotificationError::ServiceError(e.to_string()))?;
+            .map_err(|e| NotificationError::ProviderError(e.to_string()))?;
 
         let status_tx_bg = status_tx.clone();
         let cmd_tx_bg = cmd_tx.clone();
@@ -203,7 +203,7 @@ impl ZbusNotificationProvider {
 }
 
 #[async_trait]
-impl NotificationService for ZbusNotificationProvider {
+impl NotificationProvider for ZbusNotificationProvider {
     async fn get_status(&self) -> Result<NotificationStatus, NotificationError> {
         Ok(self.status_tx.borrow().clone())
     }
@@ -216,13 +216,13 @@ impl NotificationService for ZbusNotificationProvider {
         self.cmd_tx
             .send(Cmd::Close(id))
             .await
-            .map_err(|e| NotificationError::ServiceError(e.to_string()))
+            .map_err(|e| NotificationError::ProviderError(e.to_string()))
     }
 
     async fn invoke_action(&self, id: u32, action_key: &str) -> Result<(), NotificationError> {
         self.cmd_tx
             .send(Cmd::Action(id, action_key.to_string()))
             .await
-            .map_err(|e| NotificationError::ServiceError(e.to_string()))
+            .map_err(|e| NotificationError::ProviderError(e.to_string()))
     }
 }

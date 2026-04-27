@@ -2,12 +2,12 @@ use std::sync::Arc;
 
 use axis_application::use_cases::appearance::get_status::GetAppearanceStatusUseCase;
 use axis_application::use_cases::appearance::subscribe::SubscribeToAppearanceUseCase;
-use axis_domain::models::appearance::AppearanceStatus;
+use axis_domain::models::config::AppearanceConfig;
 
 use axis_presentation::{Presenter, View};
 
 pub struct AppearancePresenter {
-    inner: Presenter<AppearanceStatus>,
+    inner: Presenter<AppearanceConfig>,
 }
 
 impl AppearancePresenter {
@@ -35,7 +35,7 @@ impl AppearancePresenter {
         Self { inner }
     }
 
-    pub fn add_view(&self, view: Box<dyn View<AppearanceStatus>>) {
+    pub fn add_view(&self, view: Box<dyn View<AppearanceConfig>>) {
         self.inner.add_view(view);
     }
 

@@ -1,8 +1,7 @@
 use crate::models::clock::TimeStatus;
 use async_trait::async_trait;
 use thiserror::Error;
-use futures_util::Stream;
-use std::pin::Pin;
+use super::StatusStream;
 
 #[derive(Error, Debug)]
 pub enum ClockError {
@@ -10,7 +9,7 @@ pub enum ClockError {
     ProviderError(String),
 }
 
-pub type ClockStream = Pin<Box<dyn Stream<Item = TimeStatus> + Send>>;
+pub type ClockStream = StatusStream<TimeStatus>;
 
 #[async_trait]
 pub trait ClockProvider: Send + Sync {

@@ -1,4 +1,5 @@
-use axis_domain::models::appearance::{AccentColor, AppearanceStatus, ColorScheme};
+use axis_domain::models::appearance::{AccentColor, ColorScheme};
+use axis_domain::models::config::AppearanceConfig;
 
 pub mod gtk_service;
 
@@ -24,7 +25,7 @@ pub fn resolve_accent_hex(accent: &AccentColor) -> String {
     accent.hex_value().into_owned()
 }
 
-pub fn generate_css(status: &AppearanceStatus, resolved_accent: &str) -> String {
+pub fn generate_css(status: &AppearanceConfig, resolved_accent: &str) -> String {
     let hover = lighten_hex(resolved_accent, 0.15);
 
     let mut css = format!(

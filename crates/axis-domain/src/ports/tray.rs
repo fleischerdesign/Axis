@@ -1,8 +1,7 @@
 use crate::models::tray::TrayStatus;
 use async_trait::async_trait;
 use thiserror::Error;
-use futures_util::Stream;
-use std::pin::Pin;
+use super::StatusStream;
 
 #[derive(Error, Debug)]
 pub enum TrayError {
@@ -10,7 +9,7 @@ pub enum TrayError {
     ProviderError(String),
 }
 
-pub type TrayStream = Pin<Box<dyn Stream<Item = TrayStatus> + Send>>;
+pub type TrayStream = StatusStream<TrayStatus>;
 
 #[async_trait]
 pub trait TrayProvider: Send + Sync {

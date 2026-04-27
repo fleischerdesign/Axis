@@ -13,3 +13,11 @@ pub struct Workspace {
 pub struct WorkspaceStatus {
     pub workspaces: Vec<Workspace>,
 }
+
+impl Default for WorkspaceStatus {
+    fn default() -> Self {
+        Self {
+            workspaces: vec![],
+        }
+    }
+}

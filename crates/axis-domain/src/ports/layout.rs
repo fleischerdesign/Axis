@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use thiserror::Error;
 
-#[derive(Error, Debug, Clone)]
+#[derive(Error, Debug)]
 pub enum LayoutError {
     #[error("Provider error: {0}")]
     ProviderError(String),

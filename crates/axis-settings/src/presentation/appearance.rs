@@ -1,4 +1,5 @@
-use axis_domain::models::appearance::{AccentColor, AppearanceStatus, ColorScheme};
+use axis_domain::models::appearance::{AccentColor, ColorScheme};
+use axis_domain::models::config::AppearanceConfig;
 use axis_presentation::{Presenter, View};
 use axis_application::use_cases::appearance::subscribe::SubscribeToAppearanceUseCase;
 use axis_application::use_cases::appearance::set_accent::SetAccentColorUseCase;
@@ -7,7 +8,7 @@ use axis_application::use_cases::appearance::set_wallpaper::SetWallpaperUseCase;
 use std::sync::Arc;
 use std::rc::Rc;
 
-pub trait AppearanceView: View<AppearanceStatus> {
+pub trait AppearanceView: View<AppearanceConfig> {
     fn on_scheme_changed(&self, f: Box<dyn Fn(ColorScheme) + 'static>);
     fn on_accent_changed(&self, f: Box<dyn Fn(AccentColor) + 'static>);
     fn on_wallpaper_selected(&self, f: Box<dyn Fn(String) + 'static>);
@@ -26,7 +27,7 @@ impl<T: AppearanceView + ?Sized> AppearanceView for Rc<T> {
 }
 
 pub struct AppearancePresenter {
-    inner: Presenter<AppearanceStatus>,
+    inner: Presenter<AppearanceConfig>,
     set_accent_uc: Arc<SetAccentColorUseCase>,
     set_scheme_uc: Arc<SetColorSchemeUseCase>,
     set_wallpaper_uc: Arc<SetWallpaperUseCase>,
@@ -59,7 +60,7 @@ impl AppearancePresenter {
         }
     }
 
-    pub fn add_view(&self, view: Box<dyn View<AppearanceStatus>>) {
+    pub fn add_view(&self, view: Box<dyn View<AppearanceConfig>>) {
         self.inner.add_view(view);
     }
 

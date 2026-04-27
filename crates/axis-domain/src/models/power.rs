@@ -7,3 +7,14 @@ pub struct PowerStatus {
     pub power_profile: String,
     pub has_battery: bool,
 }
+
+impl Default for PowerStatus {
+    fn default() -> Self {
+        Self {
+            battery_percentage: 100.0,
+            is_charging: false,
+            power_profile: String::from("balanced"),
+            has_battery: true,
+        }
+    }
+}

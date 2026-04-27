@@ -1,4 +1,5 @@
-use axis_domain::models::appearance::{AccentColor, AppearanceStatus, ColorScheme};
+use axis_domain::models::appearance::{AccentColor, ColorScheme};
+use axis_domain::models::config::AppearanceConfig;
 use crate::view::View;
 use super::{generate_css, resolve_accent_hex, find_vibrant_accent};
 use libadwaita as adw;
@@ -56,7 +57,7 @@ impl GtkThemeService {
         }
     }
 
-    fn apply_theme(&self, status: &AppearanceStatus, accent_hex: &str) {
+    fn apply_theme(&self, status: &AppearanceConfig, accent_hex: &str) {
         let css = generate_css(status, accent_hex);
         self.provider.load_from_string(&css);
         Self::apply_color_scheme(&status.color_scheme);
@@ -64,8 +65,8 @@ impl GtkThemeService {
     }
 }
 
-impl View<AppearanceStatus> for GtkThemeService {
-    fn render(&self, status: &AppearanceStatus) {
+impl View<AppearanceConfig> for GtkThemeService {
+    fn render(&self, status: &AppearanceConfig) {
         match &status.accent_color {
             AccentColor::Auto => {
                 if let Some(ref path) = status.wallpaper {

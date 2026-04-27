@@ -1,14 +1,14 @@
 use axis_domain::models::notifications::NotificationStatus;
-use axis_domain::ports::notifications::{NotificationService, NotificationError};
+use axis_domain::ports::notifications::{NotificationProvider, NotificationError};
 use std::sync::Arc;
 use log::debug;
 
 pub struct GetNotificationsUseCase {
-    service: Arc<dyn NotificationService>,
+    service: Arc<dyn NotificationProvider>,
 }
 
 impl GetNotificationsUseCase {
-    pub fn new(service: Arc<dyn NotificationService>) -> Self {
+    pub fn new(service: Arc<dyn NotificationProvider>) -> Self {
         Self { service }
     }
 
