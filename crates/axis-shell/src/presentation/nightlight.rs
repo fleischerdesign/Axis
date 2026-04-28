@@ -8,28 +8,6 @@ use axis_application::use_cases::nightlight::set_schedule::SetNightlightSchedule
 use axis_domain::models::nightlight::NightlightStatus;
 use axis_presentation::{Presenter, View};
 
-pub trait NightlightView: View<NightlightStatus> {
-    fn on_set_enabled(&self, f: Box<dyn Fn(bool) + 'static>);
-    fn on_set_temp_day(&self, f: Box<dyn Fn(u32) + 'static>);
-    fn on_set_temp_night(&self, f: Box<dyn Fn(u32) + 'static>);
-    fn on_set_schedule(&self, f: Box<dyn Fn(String, String) + 'static>);
-}
-
-impl<T: NightlightView + ?Sized> NightlightView for std::rc::Rc<T> {
-    fn on_set_enabled(&self, f: Box<dyn Fn(bool) + 'static>) {
-        (**self).on_set_enabled(f);
-    }
-    fn on_set_temp_day(&self, f: Box<dyn Fn(u32) + 'static>) {
-        (**self).on_set_temp_day(f);
-    }
-    fn on_set_temp_night(&self, f: Box<dyn Fn(u32) + 'static>) {
-        (**self).on_set_temp_night(f);
-    }
-    fn on_set_schedule(&self, f: Box<dyn Fn(String, String) + 'static>) {
-        (**self).on_set_schedule(f);
-    }
-}
-
 pub struct NightlightPresenter {
     inner: Presenter<NightlightStatus>,
     set_enabled_use_case: Arc<SetNightlightEnabledUseCase>,

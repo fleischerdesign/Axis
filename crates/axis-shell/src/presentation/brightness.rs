@@ -10,16 +10,6 @@ use axis_presentation::{Presenter, View};
 const FEEDBACK_SUPPRESS_SECS: f64 = 0.5;
 const FEEDBACK_TOLERANCE: f64 = 2.0;
 
-pub trait BrightnessView: View<BrightnessStatus> {
-    fn on_brightness_changed(&self, f: Box<dyn Fn(f64) + 'static>);
-}
-
-impl<T: BrightnessView + ?Sized> BrightnessView for std::rc::Rc<T> {
-    fn on_brightness_changed(&self, f: Box<dyn Fn(f64) + 'static>) {
-        (**self).on_brightness_changed(f);
-    }
-}
-
 pub struct BrightnessPresenter {
     inner: Presenter<BrightnessStatus>,
     set_use_case: Arc<SetBrightnessUseCase>,

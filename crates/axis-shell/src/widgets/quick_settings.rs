@@ -13,9 +13,9 @@ use crate::widgets::components::power_actions::PowerActionStack;
 use crate::presentation::notifications::NotificationPresenter;
 use axis_presentation::View;
 use crate::presentation::popups::PopupView;
-use crate::presentation::audio::{AudioPresenter, AudioView, audio_icon};
+use crate::presentation::audio::{AudioPresenter, audio_icon};
 use crate::presentation::toggle::TogglePresenter;
-use crate::presentation::brightness::{BrightnessPresenter, BrightnessView};
+use crate::presentation::brightness::BrightnessPresenter;
 use crate::presentation::network::NetworkPresenter;
 use crate::presentation::bluetooth::BluetoothPresenter;
 use crate::presentation::nightlight::NightlightPresenter;
@@ -310,10 +310,6 @@ impl QuickSettingsPopup {
         self.qs_stack.get().expect("stack not initialized").add_named(&page.container, Some("nightlight"));
     }
 
-    pub fn navigate_to(&self, page_name: &str) {
-        self.qs_stack.get().expect("stack not initialized").set_visible_child_name(page_name);
-    }
-
     pub fn reset_to_main(&self) {
         self.qs_stack.get().expect("stack not initialized").set_visible_child_name("main");
         if let Some(pa) = self.power_actions.get() {
@@ -365,16 +361,6 @@ impl View<AudioStatus> for QuickSettingsPopup {
     }
 }
 
-impl AudioView for QuickSettingsPopup {
-    fn on_volume_changed(&self, f: Box<dyn Fn(f64) + 'static>) {
-        self.on_volume_changed(f);
-    }
-
-    fn on_set_default_sink(&self, _f: Box<dyn Fn(u32) + 'static>) {}
-    fn on_set_default_source(&self, _f: Box<dyn Fn(u32) + 'static>) {}
-    fn on_set_sink_input_volume(&self, _f: Box<dyn Fn(u32, f64) + 'static>) {}
-}
-
 impl View<BrightnessStatus> for QuickSettingsPopup {
     fn render(&self, status: &BrightnessStatus) {
         if let Some(slider) = self.brightness_slider.get() {
@@ -389,12 +375,6 @@ impl View<BrightnessStatus> for QuickSettingsPopup {
                 }
             }
         }
-    }
-}
-
-impl BrightnessView for QuickSettingsPopup {
-    fn on_brightness_changed(&self, f: Box<dyn Fn(f64) + 'static>) {
-        self.on_brightness_changed(f);
     }
 }
 

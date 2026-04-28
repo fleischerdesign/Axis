@@ -3,14 +3,6 @@ use axis_application::use_cases::power::subscribe::SubscribeToPowerUpdatesUseCas
 use axis_domain::models::power::PowerStatus;
 use axis_presentation::{Presenter, View};
 
-pub trait BatteryView: View<PowerStatus> {}
-
-impl<T: BatteryView + ?Sized> BatteryView for std::rc::Rc<T> {
-}
-
-impl<T: BatteryView + ?Sized> BatteryView for std::sync::Arc<T> {
-}
-
 pub(crate) fn battery_icon(percentage: f64, charging: bool) -> &'static str {
     let level = ((percentage / 10.0).round() * 10.0) as u32;
     let level = level.min(100);

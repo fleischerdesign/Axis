@@ -2,8 +2,7 @@ use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use axis_domain::models::audio::AudioStatus;
 use axis_domain::models::brightness::BrightnessStatus;
-use crate::presentation::audio::{AudioView, audio_icon};
-use crate::presentation::brightness::BrightnessView;
+use crate::presentation::audio::audio_icon;
 use axis_presentation::View;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -228,13 +227,3 @@ impl View<BrightnessStatus> for OsdManager {
     }
 }
 
-impl AudioView for OsdManager {
-    fn on_volume_changed(&self, _f: Box<dyn Fn(f64) + 'static>) {}
-    fn on_set_default_sink(&self, _f: Box<dyn Fn(u32) + 'static>) {}
-    fn on_set_default_source(&self, _f: Box<dyn Fn(u32) + 'static>) {}
-    fn on_set_sink_input_volume(&self, _f: Box<dyn Fn(u32, f64) + 'static>) {}
-}
-
-impl BrightnessView for OsdManager {
-    fn on_brightness_changed(&self, _f: Box<dyn Fn(f64) + 'static>) {}
-}

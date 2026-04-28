@@ -1,5 +1,3 @@
-pub use axis_presentation::{Presenter, View};
-
 pub mod appearance;
 pub mod agenda;
 pub mod battery;

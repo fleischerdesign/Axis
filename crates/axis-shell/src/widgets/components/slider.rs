@@ -1,10 +1,9 @@
 use libadwaita::prelude::*;
-use gtk4::glib;
 
 #[derive(Clone, Debug)]
 pub struct QuickSlider {
     pub container: gtk4::Box,
-    overlay: gtk4::Overlay,
+    _overlay: gtk4::Overlay,
     icon: gtk4::Image,
     scale: gtk4::Scale,
     arrow_btn: gtk4::Button,
@@ -56,7 +55,7 @@ impl QuickSlider {
         container.append(&overlay);
         container.append(&arrow_btn);
 
-        let slider = Self { container, overlay, icon, scale, arrow_btn };
+        let slider = Self { container, _overlay: overlay, icon, scale, arrow_btn };
         slider.set_icon(icon_name);
         slider
     }

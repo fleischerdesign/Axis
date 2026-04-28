@@ -27,7 +27,6 @@ use axis_application::use_cases::launcher::search::SearchLauncherUseCase;
 
 use axis_application::use_cases::network::subscribe::SubscribeToNetworkUpdatesUseCase;
 use axis_application::use_cases::network::get_status::GetNetworkStatusUseCase;
-use axis_application::use_cases::network::scan_wifi::ScanWifiUseCase;
 use axis_application::use_cases::network::connect_to_ap::ConnectToApUseCase;
 use axis_application::use_cases::network::disconnect_wifi::DisconnectWifiUseCase;
 
@@ -257,7 +256,6 @@ fn main() -> glib::ExitCode {
 
     let subscribe_network = Arc::new(SubscribeToNetworkUpdatesUseCase::new(network_provider.clone()));
     let get_network_status = Arc::new(GetNetworkStatusUseCase::new(network_provider.clone()));
-    let scan_wifi = Arc::new(ScanWifiUseCase::new(network_provider.clone()));
     let connect_to_ap = Arc::new(ConnectToApUseCase::new(network_provider.clone()));
     let disconnect_wifi = Arc::new(DisconnectWifiUseCase::new(network_provider.clone()));
 
@@ -310,15 +308,15 @@ fn main() -> glib::ExitCode {
     
     let agenda_presenter = Rc::new(AgendaPresenter::new(sync_calendar_uc, sync_tasks_uc, toggle_task_uc, delete_task_uc, create_task_uc));
 
-    let launcher_presenter = LauncherPresenter::new(search_launcher);
+    let launcher_presenter = Rc::new(LauncherPresenter::new(search_launcher));
     let notification_presenter = Rc::new(NotificationPresenter::new(notification_provider.clone()));
 
     let network_presenter = Rc::new(NetworkPresenter::new(
-        subscribe_network, get_network_status, scan_wifi, connect_to_ap, disconnect_wifi, &rt,
+        subscribe_network, get_network_status, connect_to_ap, disconnect_wifi, &rt,
     ));
     let bluetooth_full_presenter = Rc::new(BluetoothPresenter::new(
         subscribe_bluetooth, get_bluetooth_status, bt_connect, bt_disconnect,
-        bt_set_powered, bt_start_scan, bt_stop_scan, &rt,
+        bt_start_scan, bt_stop_scan, &rt,
     ));
     let nightlight_full_presenter = Rc::new(NightlightPresenter::new(
         subscribe_nightlight, get_nightlight_status, nl_set_enabled,
@@ -373,7 +371,15 @@ fn main() -> glib::ExitCode {
                 }
             }
         },
-        move |_enabled| {},
+        {
+            let uc = bt_set_powered.clone();
+            move |enabled| {
+                let uc = uc.clone();
+                tokio::spawn(async move {
+                    let _ = uc.execute(enabled).await;
+                });
+            }
+        },
     ));
 
     let nl_prov = nightlight_provider.clone();
@@ -555,6 +561,7 @@ fn main() -> glib::ExitCode {
         }));
 
         lock_presenter.add_view(Box::new(lock_factory.clone()));
+        battery_presenter.add_view(Box::new(lock_factory.clone()));
 
         let lf = lock_factory.clone();
         lock_gtk_handle_for_activate.set_content_factory(Box::new(move || {

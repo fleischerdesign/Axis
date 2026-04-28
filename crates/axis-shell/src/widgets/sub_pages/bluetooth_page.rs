@@ -1,7 +1,7 @@
 use gtk4::prelude::*;
 use axis_domain::models::bluetooth::BluetoothStatus;
 use axis_presentation::View;
-use crate::presentation::bluetooth::{BluetoothPresenter, BluetoothView};
+use crate::presentation::bluetooth::BluetoothPresenter;
 use crate::widgets::components::list_row::ListRow;
 use crate::widgets::components::popup_header::PopupHeader;
 use std::cell::RefCell;
@@ -74,22 +74,10 @@ impl View<BluetoothStatus> for BluetoothPageView {
     fn render(&self, status: &BluetoothStatus) {
         let mut rows = self.rows.borrow_mut();
 
-        let new_ids: std::collections::HashSet<&str> = status
-            .devices
-            .iter()
-            .map(|d| d.id.as_str())
-            .collect();
-
-        let stale: Vec<String> = rows
-            .keys()
-            .filter(|id| !new_ids.contains(id.as_str()))
-            .cloned()
-            .collect();
-        for id in stale {
-            if let Some(entry) = rows.remove(&id) {
-                self.list.remove(&entry.list_box_row);
-            }
-        }
+        let ids: Vec<&str> = status.devices.iter().map(|d| d.id.as_str()).collect();
+        crate::utils::reconcile::reconcile(&mut rows, &ids, |_, entry| {
+            self.list.remove(&entry.list_box_row);
+        });
 
         for device in &status.devices {
             let sublabel = if device.connected {
@@ -145,10 +133,3 @@ impl View<BluetoothStatus> for BluetoothPageView {
     }
 }
 
-impl BluetoothView for BluetoothPageView {
-    fn on_connect_device(&self, _f: Box<dyn Fn(String) + 'static>) {}
-    fn on_disconnect_device(&self, _f: Box<dyn Fn(String) + 'static>) {}
-    fn on_set_powered(&self, _f: Box<dyn Fn(bool) + 'static>) {}
-    fn on_start_scan(&self, _f: Box<dyn Fn() + 'static>) {}
-    fn on_stop_scan(&self, _f: Box<dyn Fn() + 'static>) {}
-}

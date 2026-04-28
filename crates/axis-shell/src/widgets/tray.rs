@@ -56,20 +56,12 @@ impl View<TrayStatus> for TrayWidget {
     fn render(&self, status: &TrayStatus) {
         let items = &status.items;
 
-        let to_remove: Vec<String> = {
-            let icons_ref = self.icons.borrow();
-            let new_keys: Vec<&str> = items.iter().map(|i| i.bus_name.as_str()).collect();
-            icons_ref
-                .keys()
-                .filter(|k| !new_keys.iter().any(|n| *n == k.as_str()))
-                .cloned()
-                .collect()
-        };
-
-        for key in to_remove {
-            if let Some(img) = self.icons.borrow_mut().remove(&key) {
+        let keys: Vec<&str> = items.iter().map(|i| i.bus_name.as_str()).collect();
+        {
+            let mut icons = self.icons.borrow_mut();
+            crate::utils::reconcile::reconcile(&mut icons, &keys, |_, img| {
                 self.inner_box.remove(&img);
-            }
+            });
         }
 
         for item in items {

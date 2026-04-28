@@ -4,11 +4,11 @@ use gtk4::prelude::*;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use crate::presentation::lock::LockView;
 use axis_presentation::View;
 use crate::widgets::components::blurred_picture::BlurredPicture;
 use axis_domain::models::lock::LockStatus;
 use axis_domain::models::power::PowerStatus;
+use crate::presentation::battery::battery_icon;
 
 type AuthCallback = dyn Fn(&str);
 
@@ -20,6 +20,9 @@ pub struct LockScreenFactory {
     backgrounds: RefCell<Vec<BlurredPicture>>,
     password_entries: RefCell<Vec<gtk4::PasswordEntry>>,
     error_labels: RefCell<Vec<gtk4::Label>>,
+    battery_icons: RefCell<Vec<gtk4::Image>>,
+    battery_labels: RefCell<Vec<gtk4::Label>>,
+    battery_rows: RefCell<Vec<gtk4::Box>>,
     power_status: RefCell<Option<PowerStatus>>,
 }
 
@@ -33,6 +36,9 @@ impl LockScreenFactory {
             backgrounds: RefCell::new(Vec::new()),
             password_entries: RefCell::new(Vec::new()),
             error_labels: RefCell::new(Vec::new()),
+            battery_icons: RefCell::new(Vec::new()),
+            battery_labels: RefCell::new(Vec::new()),
+            battery_rows: RefCell::new(Vec::new()),
             power_status: RefCell::new(None),
         })
     }
@@ -116,6 +122,12 @@ impl LockScreenFactory {
         }
 
         content.append(&battery_row);
+
+        self.content_boxes.borrow_mut().push(content.clone());
+
+        self.battery_icons.borrow_mut().push(battery_icon);
+        self.battery_labels.borrow_mut().push(battery_label);
+        self.battery_rows.borrow_mut().push(battery_row);
 
         let pw_box = gtk4::Box::builder()
             .orientation(gtk4::Orientation::Vertical)
@@ -280,10 +292,6 @@ impl LockScreenFactory {
         }
     }
 
-    pub fn update_battery(&self, status: &PowerStatus) {
-        *self.power_status.borrow_mut() = Some(status.clone());
-    }
-
     fn current_user() -> String {
         std::env::var("USER")
             .or_else(|_| std::env::var("LOGNAME"))
@@ -309,8 +317,22 @@ impl View<LockStatus> for LockScreenFactory {
     }
 }
 
-impl LockView for LockScreenFactory {
-    fn on_auth_result(&self, success: bool) {
-        self.on_auth_result(success);
+impl View<PowerStatus> for LockScreenFactory {
+    fn render(&self, status: &PowerStatus) {
+        *self.power_status.borrow_mut() = Some(status.clone());
+
+        let icons = self.battery_icons.borrow();
+        let labels = self.battery_labels.borrow();
+        let rows = self.battery_rows.borrow();
+        for i in 0..icons.len() {
+            rows[i].set_visible(status.has_battery);
+            if status.has_battery {
+                labels[i].set_text(&format!("{:.0}%", status.battery_percentage));
+                icons[i].set_icon_name(Some(battery_icon(
+                    status.battery_percentage,
+                    status.is_charging,
+                )));
+            }
+        }
     }
 }

@@ -1,5 +1,4 @@
 use libadwaita::prelude::*;
-use gtk4::glib;
 use axis_presentation::View;
 
 #[derive(Clone)]

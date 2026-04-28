@@ -16,12 +16,16 @@ use futures_util::StreamExt;
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
 
-pub trait AgendaView: View<AgendaStatus> {
+pub trait AgendaCallbacks {
     fn on_list_changed(&self, f: Box<dyn Fn(String) + 'static>);
     fn on_task_toggled(&self, f: Box<dyn Fn(String, bool) + 'static>);
     fn on_task_deleted(&self, f: Box<dyn Fn(String) + 'static>);
     fn on_task_created(&self, f: Box<dyn Fn(String) + 'static>);
 }
+
+pub trait AgendaView: View<AgendaStatus> + AgendaCallbacks {}
+
+impl<T: View<AgendaStatus> + AgendaCallbacks> AgendaView for T {}
 
 pub struct AgendaPresenter {
     inner: Presenter<AgendaStatus>,
@@ -64,10 +68,6 @@ impl AgendaPresenter {
             is_syncing_events: Rc::new(Cell::new(false)),
             is_syncing_tasks: Rc::new(Cell::new(false)),
         }
-    }
-
-    pub fn add_view(&self, view: Box<dyn View<AgendaStatus>>) {
-        self.inner.add_view(view);
     }
 
     pub async fn bind(&self, view: Box<dyn AgendaView>) {

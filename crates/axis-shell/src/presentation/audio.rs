@@ -8,28 +8,6 @@ use axis_application::use_cases::audio::set_sink_input_volume::SetSinkInputVolum
 use axis_domain::models::audio::AudioStatus;
 use axis_presentation::{Presenter, View};
 
-pub trait AudioView: View<AudioStatus> {
-    fn on_volume_changed(&self, f: Box<dyn Fn(f64) + 'static>);
-    fn on_set_default_sink(&self, f: Box<dyn Fn(u32) + 'static>);
-    fn on_set_default_source(&self, f: Box<dyn Fn(u32) + 'static>);
-    fn on_set_sink_input_volume(&self, f: Box<dyn Fn(u32, f64) + 'static>);
-}
-
-impl<T: AudioView + ?Sized> AudioView for std::rc::Rc<T> {
-    fn on_volume_changed(&self, f: Box<dyn Fn(f64) + 'static>) {
-        (**self).on_volume_changed(f);
-    }
-    fn on_set_default_sink(&self, f: Box<dyn Fn(u32) + 'static>) {
-        (**self).on_set_default_sink(f);
-    }
-    fn on_set_default_source(&self, f: Box<dyn Fn(u32) + 'static>) {
-        (**self).on_set_default_source(f);
-    }
-    fn on_set_sink_input_volume(&self, f: Box<dyn Fn(u32, f64) + 'static>) {
-        (**self).on_set_sink_input_volume(f);
-    }
-}
-
 pub(crate) fn audio_icon(status: &AudioStatus) -> &'static str {
     if status.is_muted || status.volume <= 0.01 {
         "audio-volume-muted-symbolic"

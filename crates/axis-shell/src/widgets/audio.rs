@@ -1,6 +1,6 @@
 use libadwaita::prelude::*;
 use axis_presentation::View;
-use crate::presentation::audio::{AudioView, audio_icon};
+use crate::presentation::audio::audio_icon;
 use axis_domain::models::audio::AudioStatus;
 
 #[derive(Clone)]
@@ -39,9 +39,3 @@ impl View<AudioStatus> for AudioWidget {
     }
 }
 
-impl AudioView for AudioWidget {
-    fn on_volume_changed(&self, _f: Box<dyn Fn(f64) + 'static>) {}
-    fn on_set_default_sink(&self, _f: Box<dyn Fn(u32) + 'static>) {}
-    fn on_set_default_source(&self, _f: Box<dyn Fn(u32) + 'static>) {}
-    fn on_set_sink_input_volume(&self, _f: Box<dyn Fn(u32, f64) + 'static>) {}
-}

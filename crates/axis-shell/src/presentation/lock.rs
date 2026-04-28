@@ -9,22 +9,6 @@ use axis_application::use_cases::lock::authenticate::AuthenticateUseCase;
 use axis_application::use_cases::lock::subscribe::SubscribeToLockUpdatesUseCase;
 use axis_domain::models::lock::LockStatus;
 
-pub trait LockView: View<LockStatus> {
-    fn on_auth_result(&self, success: bool);
-}
-
-impl<T: LockView + ?Sized> LockView for Rc<T> {
-    fn on_auth_result(&self, success: bool) {
-        (**self).on_auth_result(success);
-    }
-}
-
-impl<T: LockView + ?Sized> LockView for Arc<T> {
-    fn on_auth_result(&self, success: bool) {
-        (**self).on_auth_result(success);
-    }
-}
-
 pub struct LockPresenter {
     inner: Presenter<LockStatus>,
     lock_uc: Arc<LockSessionUseCase>,

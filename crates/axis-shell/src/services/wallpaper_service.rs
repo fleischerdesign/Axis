@@ -100,9 +100,6 @@ impl WallpaperService {
         *self.texture.borrow_mut() = None;
     }
 
-    pub fn texture(&self) -> Option<gtk4::gdk::Texture> {
-        self.texture.borrow().clone()
-    }
 }
 
 impl View<AppearanceConfig> for WallpaperService {

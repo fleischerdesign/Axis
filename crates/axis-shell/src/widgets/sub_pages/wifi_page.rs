@@ -1,7 +1,7 @@
 use gtk4::prelude::*;
 use axis_domain::models::network::{NetworkStatus, AccessPoint};
 use axis_presentation::View;
-use crate::presentation::network::{NetworkPresenter, NetworkView};
+use crate::presentation::network::NetworkPresenter;
 use crate::widgets::components::list_row::ListRow;
 use crate::widgets::components::popup_header::PopupHeader;
 use std::cell::RefCell;
@@ -111,22 +111,10 @@ impl View<NetworkStatus> for WifiPageView {
 
         let mut rows = self.rows.borrow_mut();
 
-        let new_ids: std::collections::HashSet<&str> = status
-            .access_points
-            .iter()
-            .map(|ap| ap.id.as_str())
-            .collect();
-
-        let stale: Vec<String> = rows
-            .keys()
-            .filter(|id| !new_ids.contains(id.as_str()))
-            .cloned()
-            .collect();
-        for id in stale {
-            if let Some(entry) = rows.remove(&id) {
-                self.list.remove(&entry.list_box_row);
-            }
-        }
+        let ids: Vec<&str> = status.access_points.iter().map(|ap| ap.id.as_str()).collect();
+        crate::utils::reconcile::reconcile(&mut rows, &ids, |_, entry| {
+            self.list.remove(&entry.list_box_row);
+        });
 
         for ap in &status.access_points {
             let icon = ap_icon(ap);
@@ -248,8 +236,3 @@ impl View<NetworkStatus> for WifiPageView {
     }
 }
 
-impl NetworkView for WifiPageView {
-    fn on_scan_requested(&self, _f: Box<dyn Fn() + 'static>) {}
-    fn on_connect_to_ap(&self, _f: Box<dyn Fn(String, Option<String>) + 'static>) {}
-    fn on_disconnect_wifi(&self, _f: Box<dyn Fn() + 'static>) {}
-}

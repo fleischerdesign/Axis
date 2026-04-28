@@ -6,8 +6,6 @@ pub struct ListRow {
     icon: gtk4::Image,
     title: gtk4::Label,
     subtitle: gtk4::Label,
-    checkmark: gtk4::Image,
-    trailing: gtk4::Box,
 }
 
 impl ListRow {
@@ -29,14 +27,6 @@ impl ListRow {
             .visible(false)
             .build();
 
-        let checkmark = gtk4::Image::from_icon_name("object-select-symbolic");
-        checkmark.set_halign(gtk4::Align::End);
-        checkmark.set_valign(gtk4::Align::Center);
-        checkmark.set_visible(false);
-
-        let trailing = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
-        trailing.set_visible(false);
-
         let label_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
         label_box.set_hexpand(true);
         label_box.append(&title_label);
@@ -50,10 +40,8 @@ impl ListRow {
         container.add_css_class("list-row");
         container.append(&icon);
         container.append(&label_box);
-        container.append(&trailing);
-        container.append(&checkmark);
 
-        let row = Self { container, icon, title: title_label, subtitle, checkmark, trailing };
+        let row = Self { container, icon, title: title_label, subtitle };
         row.set_title(title);
         row.set_icon(icon_name);
         row
@@ -84,19 +72,4 @@ impl ListRow {
         }
     }
 
-    pub fn set_show_checkmark(&self, show: bool) {
-        self.checkmark.set_visible(show);
-    }
-
-    pub fn set_trailing(&self, widget: Option<&gtk4::Widget>) {
-        if let Some(w) = widget {
-            self.trailing.append(w);
-            self.trailing.set_visible(true);
-        } else {
-            while let Some(child) = self.trailing.first_child() {
-                self.trailing.remove(&child);
-            }
-            self.trailing.set_visible(false);
-        }
-    }
 }

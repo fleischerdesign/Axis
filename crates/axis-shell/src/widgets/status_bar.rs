@@ -1,6 +1,6 @@
 use libadwaita::prelude::*;
 use axis_presentation::View;
-use crate::presentation::battery::{BatteryView, battery_icon};
+use crate::presentation::battery::battery_icon;
 use axis_domain::models::power::PowerStatus;
 
 #[derive(Clone)]
@@ -43,5 +43,3 @@ impl View<PowerStatus> for StatusBar {
         }
     }
 }
-
-impl BatteryView for StatusBar {}

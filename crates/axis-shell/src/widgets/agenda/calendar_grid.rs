@@ -1,5 +1,4 @@
 use libadwaita::prelude::*;
-use gtk4::glib;
 use axis_domain::models::agenda::AgendaStatus;
 use axis_domain::models::calendar::CalendarEvent;
 use axis_presentation::View;

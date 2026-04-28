@@ -9,7 +9,6 @@ use axis_domain::models::popups::PopupStatus;
 use crate::widgets::popup_base::PopupContainer;
 use crate::widgets::components::list_row::ListRow;
 use crate::presentation::popups::PopupView;
-use crate::presentation::launcher::LauncherView;
 use axis_presentation::View;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -275,18 +274,10 @@ impl LauncherPopup {
     pub fn update_results(&self, results: &[LauncherItem], selected_index: Option<usize>) {
         let mut rows = self.rows.borrow_mut();
 
-        let new_ids: std::collections::HashSet<&str> = results.iter().map(|r| r.id.as_str()).collect();
-
-        let stale: Vec<String> = rows
-            .keys()
-            .filter(|id| !new_ids.contains(id.as_str()))
-            .cloned()
-            .collect();
-        for id in stale {
-            if let Some(entry) = rows.remove(&id) {
-                self.list.remove(&entry.list_box_row);
-            }
-        }
+        let ids: Vec<&str> = results.iter().map(|r| r.id.as_str()).collect();
+        crate::utils::reconcile::reconcile(&mut rows, &ids, |_, entry| {
+            self.list.remove(&entry.list_box_row);
+        });
 
         for (idx, item) in results.iter().enumerate() {
             if let Some(entry) = rows.get(&item.id) {
@@ -409,11 +400,5 @@ impl PopupView for LauncherPopup {
 impl View<LauncherStatus> for LauncherPopup {
     fn render(&self, status: &LauncherStatus) {
         self.update_results(&status.results, status.selected_index);
-    }
-}
-
-impl LauncherView for LauncherPopup {
-    fn clear_and_focus(&self) {
-        self.clear_and_focus();
     }
 }

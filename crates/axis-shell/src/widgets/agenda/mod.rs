@@ -6,7 +6,7 @@ use axis_domain::models::popups::{PopupType, PopupStatus};
 use axis_domain::models::agenda::AgendaStatus;
 use crate::widgets::popup_base::PopupContainer;
 use crate::presentation::popups::PopupView;
-use crate::presentation::agenda::AgendaView;
+use crate::presentation::agenda::AgendaCallbacks;
 use axis_presentation::View;
 
 mod calendar_grid;
@@ -118,7 +118,7 @@ impl View<AgendaStatus> for AgendaPopup {
     }
 }
 
-impl AgendaView for AgendaPopup {
+impl AgendaCallbacks for AgendaPopup {
     fn on_list_changed(&self, f: Box<dyn Fn(String) + 'static>) {
         self.task_list.on_list_changed(f);
     }

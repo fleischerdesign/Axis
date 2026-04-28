@@ -1,7 +1,7 @@
 use gtk4::prelude::*;
 use libadwaita::prelude::*;
 use axis_domain::models::audio::{AudioStatus, AudioDevice};
-use crate::presentation::audio::{AudioPresenter, AudioView, audio_icon};
+use crate::presentation::audio::{AudioPresenter, audio_icon};
 use axis_presentation::View;
 use crate::widgets::components::popup_header::PopupHeader;
 use std::cell::{Cell, RefCell};
@@ -256,9 +256,3 @@ impl AudioPageView {
     }
 }
 
-impl AudioView for AudioPageView {
-    fn on_volume_changed(&self, _f: Box<dyn Fn(f64) + 'static>) {}
-    fn on_set_default_sink(&self, _f: Box<dyn Fn(u32) + 'static>) {}
-    fn on_set_default_source(&self, _f: Box<dyn Fn(u32) + 'static>) {}
-    fn on_set_sink_input_volume(&self, _f: Box<dyn Fn(u32, f64) + 'static>) {}
-}

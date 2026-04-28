@@ -1,7 +1,7 @@
 use gtk4::prelude::*;
 use axis_domain::models::nightlight::NightlightStatus;
 use axis_presentation::View;
-use crate::presentation::nightlight::{NightlightPresenter, NightlightView};
+use crate::presentation::nightlight::NightlightPresenter;
 use crate::widgets::components::popup_header::PopupHeader;
 use std::cell::Cell;
 use std::rc::Rc;
@@ -196,9 +196,3 @@ impl View<NightlightStatus> for NightlightPageView {
     }
 }
 
-impl NightlightView for NightlightPageView {
-    fn on_set_enabled(&self, _f: Box<dyn Fn(bool) + 'static>) {}
-    fn on_set_temp_day(&self, _f: Box<dyn Fn(u32) + 'static>) {}
-    fn on_set_temp_night(&self, _f: Box<dyn Fn(u32) + 'static>) {}
-    fn on_set_schedule(&self, _f: Box<dyn Fn(String, String) + 'static>) {}
-}

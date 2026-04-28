@@ -1,6 +1,5 @@
 use libadwaita::prelude::*;
 use libadwaita as adw;
-use gtk4::glib;
 use axis_domain::models::agenda::AgendaStatus;
 use axis_presentation::View;
 use std::rc::Rc;
@@ -10,7 +9,7 @@ use std::cell::{Cell, RefCell};
 pub struct TaskList {
     pub container: gtk4::Box,
     list_box: gtk4::ListBox,
-    scrolled: gtk4::ScrolledWindow,
+    _scrolled: gtk4::ScrolledWindow,
     spinner: gtk4::Spinner,
     dropdown: gtk4::DropDown,
     entry: gtk4::Entry,
@@ -91,7 +90,7 @@ impl TaskList {
         let tl = Self {
             container,
             list_box,
-            scrolled,
+            _scrolled: scrolled,
             spinner,
             dropdown,
             entry,

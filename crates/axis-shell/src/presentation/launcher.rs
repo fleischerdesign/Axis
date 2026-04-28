@@ -1,17 +1,12 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use axis_application::use_cases::launcher::search::SearchLauncherUseCase;
-use axis_domain::models::launcher::{LauncherAction, LauncherItem, LauncherStatus};
+use axis_domain::models::launcher::{LauncherAction, LauncherStatus};
 use axis_presentation::{Presenter, View};
 use std::rc::Rc;
 use std::cell::RefCell;
 use gtk4::glib;
 use std::os::unix::process::CommandExt;
-
-pub trait LauncherView: View<LauncherStatus> {
-    #[allow(dead_code)]
-    fn clear_and_focus(&self);
-}
 
 pub struct LauncherPresenter {
     inner: Presenter<LauncherStatus>,
@@ -21,21 +16,21 @@ pub struct LauncherPresenter {
 }
 
 impl LauncherPresenter {
-    pub fn new(search_use_case: Arc<SearchLauncherUseCase>) -> Rc<Self> {
+    pub fn new(search_use_case: Arc<SearchLauncherUseCase>) -> Self {
         let inner = Presenter::new(|| {
             // Launcher doesn't have an external status stream, it's driven by the presenter
             Box::pin(futures_util::stream::pending())
         }).with_initial_status(LauncherStatus::default());
 
-        Rc::new(Self {
+        Self {
             inner,
             search_use_case,
             cancel_flag: Rc::new(RefCell::new(Arc::new(AtomicBool::new(false)))),
             on_close: Rc::new(RefCell::new(None)),
-        })
+        }
     }
 
-    pub fn add_view(&self, view: Box<dyn LauncherView>) {
+    pub fn add_view(&self, view: Box<dyn View<LauncherStatus>>) {
         self.inner.add_view(view);
     }
 

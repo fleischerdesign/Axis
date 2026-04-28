@@ -34,10 +34,6 @@ impl PopupContainer {
         self.container.prepend(widget);
     }
 
-    pub fn set_reveal(&self, reveal: bool) {
-        self.revealer.set_reveal_child(reveal);
-    }
-
     pub fn set_width_request(&self, width: i32) {
         self.container.set_width_request(width);
     }
