@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use thiserror::Error;
 use super::StatusStream;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone, PartialEq)]
 pub enum PopupError {
     #[error("Popup provider error: {0}")]
     ProviderError(String),
@@ -19,3 +19,5 @@ pub trait PopupProvider: Send + Sync {
     async fn close_popup(&self) -> Result<(), PopupError>;
     async fn toggle_popup(&self, popup_type: PopupType) -> Result<(), PopupError>;
 }
+
+crate::status_provider!(PopupProvider, PopupStatus, PopupError);

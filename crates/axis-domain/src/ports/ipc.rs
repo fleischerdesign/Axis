@@ -2,9 +2,9 @@ use crate::models::ipc::IpcCommand;
 use async_trait::async_trait;
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone, PartialEq)]
 pub enum IpcError {
-    #[error("IPC error: {0}")]
+    #[error("IPC provider error: {0}")]
     ProviderError(String),
 }
 

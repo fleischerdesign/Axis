@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use thiserror::Error;
 use super::StatusStream;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone, PartialEq)]
 pub enum NotificationError {
     #[error("Notification provider error: {0}")]
     ProviderError(String),
@@ -18,3 +18,5 @@ pub trait NotificationProvider: Send + Sync {
     async fn close_notification(&self, id: u32) -> Result<(), NotificationError>;
     async fn invoke_action(&self, id: u32, action_key: &str) -> Result<(), NotificationError>;
 }
+
+crate::status_provider!(NotificationProvider, NotificationStatus, NotificationError);

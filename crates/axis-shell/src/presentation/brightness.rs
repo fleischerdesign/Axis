@@ -2,9 +2,10 @@ use std::sync::Arc;
 use std::rc::Rc;
 use std::time::Instant;
 use std::cell::RefCell;
-use axis_application::use_cases::brightness::subscribe::SubscribeToBrightnessUpdatesUseCase;
+use axis_application::use_cases::generic::SubscribeUseCase;
 use axis_application::use_cases::brightness::set::SetBrightnessUseCase;
 use axis_domain::models::brightness::BrightnessStatus;
+use axis_domain::ports::brightness::BrightnessProvider;
 use axis_presentation::{Presenter, View};
 
 const FEEDBACK_SUPPRESS_SECS: f64 = 0.5;
@@ -18,7 +19,7 @@ pub struct BrightnessPresenter {
 
 impl BrightnessPresenter {
     pub fn new(
-        subscribe_use_case: Arc<SubscribeToBrightnessUpdatesUseCase>,
+        subscribe_use_case: Arc<SubscribeUseCase<dyn BrightnessProvider, BrightnessStatus>>,
         set_use_case: Arc<SetBrightnessUseCase>,
     ) -> Self {
         let inner = Presenter::from_subscribe({

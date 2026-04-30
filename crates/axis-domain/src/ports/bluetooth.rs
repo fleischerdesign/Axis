@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use thiserror::Error;
 use super::StatusStream;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone, PartialEq)]
 pub enum BluetoothError {
     #[error("Bluetooth provider error: {0}")]
     ProviderError(String),
@@ -25,3 +25,5 @@ pub trait BluetoothProvider: Send + Sync {
     async fn start_scan(&self) -> Result<(), BluetoothError>;
     async fn stop_scan(&self) -> Result<(), BluetoothError>;
 }
+
+crate::status_provider!(BluetoothProvider, BluetoothStatus, BluetoothError);

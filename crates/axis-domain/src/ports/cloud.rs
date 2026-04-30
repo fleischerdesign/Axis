@@ -3,12 +3,12 @@ use async_trait::async_trait;
 use thiserror::Error;
 use super::StatusStream;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone, PartialEq)]
 pub enum CloudError {
     #[error("Cloud provider error: {0}")]
     ProviderError(String),
     #[error("Authentication failed: {0}")]
-    AuthError(String),
+    AuthFailed(String),
 }
 
 pub type CloudStream = StatusStream<CloudStatus>;
@@ -20,3 +20,5 @@ pub trait CloudProvider: Send + Sync {
     async fn add_account(&self, account: CloudAccount) -> Result<(), CloudError>;
     async fn remove_account(&self, account_id: &str) -> Result<(), CloudError>;
 }
+
+crate::status_provider!(CloudProvider, CloudStatus, CloudError);

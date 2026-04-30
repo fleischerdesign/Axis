@@ -97,10 +97,12 @@ impl BrightnessProvider for SysfsBrightnessProvider {
     async fn get_status(&self) -> Result<BrightnessStatus, BrightnessError> {
         Ok(self.status_tx.borrow().clone())
     }
+
     async fn subscribe(&self) -> Result<BrightnessStream, BrightnessError> {
         let rx = self.status_tx.subscribe();
         Ok(Box::pin(WatchStream::new(rx)))
     }
+
     async fn set_brightness(&self, percentage: f64) -> Result<(), BrightnessError> {
         let _ = self.cmd_tx.send(percentage).await;
         Ok(())

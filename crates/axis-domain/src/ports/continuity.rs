@@ -2,12 +2,14 @@ use crate::models::continuity::{Peer, ContinuityMessage};
 use async_trait::async_trait;
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone, PartialEq)]
 pub enum ContinuityError {
-    #[error("Discovery error: {0}")]
-    DiscoveryError(String),
-    #[error("Connection error: {0}")]
-    ConnectionError(String),
+    #[error("Continuity provider error: {0}")]
+    ProviderError(String),
+    #[error("Discovery failed: {0}")]
+    DiscoveryFailed(String),
+    #[error("Connection failed: {0}")]
+    ConnectionFailed(String),
 }
 
 #[async_trait]

@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use thiserror::Error;
 use super::StatusStream;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone, PartialEq)]
 pub enum NetworkError {
     #[error("Network provider error: {0}")]
     ProviderError(String),
@@ -24,3 +24,5 @@ pub trait NetworkProvider: Send + Sync {
     async fn connect_to_ap(&self, id: &str, password: Option<&str>) -> Result<(), NetworkError>;
     async fn disconnect_wifi(&self) -> Result<(), NetworkError>;
 }
+
+crate::status_provider!(NetworkProvider, NetworkStatus, NetworkError);

@@ -3,11 +3,12 @@ use std::sync::Arc;
 
 use gtk4::glib;
 use axis_presentation::{Presenter, View};
+use axis_application::use_cases::generic::SubscribeUseCase;
 use axis_application::use_cases::lock::lock::LockSessionUseCase;
 use axis_application::use_cases::lock::unlock::UnlockSessionUseCase;
 use axis_application::use_cases::lock::authenticate::AuthenticateUseCase;
-use axis_application::use_cases::lock::subscribe::SubscribeToLockUpdatesUseCase;
 use axis_domain::models::lock::LockStatus;
+use axis_domain::ports::lock::LockProvider;
 
 pub struct LockPresenter {
     inner: Presenter<LockStatus>,
@@ -18,7 +19,7 @@ pub struct LockPresenter {
 
 impl LockPresenter {
     pub fn new(
-        subscribe_uc: Arc<SubscribeToLockUpdatesUseCase>,
+        subscribe_uc: Arc<SubscribeUseCase<dyn LockProvider, LockStatus>>,
         lock_uc: Arc<LockSessionUseCase>,
         unlock_uc: Arc<UnlockSessionUseCase>,
         authenticate_uc: Arc<AuthenticateUseCase>,

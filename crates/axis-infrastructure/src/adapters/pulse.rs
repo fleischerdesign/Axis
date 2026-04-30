@@ -273,6 +273,10 @@ impl AudioProvider for PulseAudioProvider {
         Ok(self.status_tx.borrow().clone())
     }
 
+    async fn subscribe(&self) -> Result<AudioStream, AudioError> {
+        Ok(Box::pin(WatchStream::new(self.status_tx.subscribe())))
+    }
+
     async fn set_volume(&self, volume: f64) -> Result<(), AudioError> {
         let _ = self.cmd_tx.send(PulseCmd::SetVolume(volume)).await;
         Ok(())
@@ -281,10 +285,6 @@ impl AudioProvider for PulseAudioProvider {
     async fn set_muted(&self, muted: bool) -> Result<(), AudioError> {
         let _ = self.cmd_tx.send(PulseCmd::SetMute(muted)).await;
         Ok(())
-    }
-
-    async fn subscribe(&self) -> Result<AudioStream, AudioError> {
-        Ok(Box::pin(WatchStream::new(self.status_tx.subscribe())))
     }
 
     async fn set_default_sink(&self, id: u32) -> Result<(), AudioError> {

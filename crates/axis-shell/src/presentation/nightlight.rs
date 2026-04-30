@@ -1,11 +1,11 @@
 use std::sync::Arc;
-use axis_application::use_cases::nightlight::subscribe::SubscribeToNightlightUpdatesUseCase;
-use axis_application::use_cases::nightlight::get_status::GetNightlightStatusUseCase;
+use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
 use axis_application::use_cases::nightlight::set_enabled::SetNightlightEnabledUseCase;
 use axis_application::use_cases::nightlight::set_temp_day::SetNightlightTempDayUseCase;
 use axis_application::use_cases::nightlight::set_temp_night::SetNightlightTempNightUseCase;
 use axis_application::use_cases::nightlight::set_schedule::SetNightlightScheduleUseCase;
 use axis_domain::models::nightlight::NightlightStatus;
+use axis_domain::ports::nightlight::NightlightProvider;
 use axis_presentation::{Presenter, View};
 
 pub struct NightlightPresenter {
@@ -18,8 +18,8 @@ pub struct NightlightPresenter {
 
 impl NightlightPresenter {
     pub fn new(
-        subscribe_use_case: Arc<SubscribeToNightlightUpdatesUseCase>,
-        get_status_use_case: Arc<GetNightlightStatusUseCase>,
+        subscribe_use_case: Arc<SubscribeUseCase<dyn NightlightProvider, NightlightStatus>>,
+        get_status_use_case: Arc<GetStatusUseCase<dyn NightlightProvider, NightlightStatus>>,
         set_enabled_use_case: Arc<SetNightlightEnabledUseCase>,
         set_temp_day_use_case: Arc<SetNightlightTempDayUseCase>,
         set_temp_night_use_case: Arc<SetNightlightTempNightUseCase>,

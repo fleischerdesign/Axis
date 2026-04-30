@@ -1,11 +1,11 @@
 use std::sync::Arc;
-use axis_application::use_cases::audio::subscribe::SubscribeToAudioUpdatesUseCase;
-use axis_application::use_cases::audio::get_status::GetAudioStatusUseCase;
+use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
 use axis_application::use_cases::audio::set_volume::SetVolumeUseCase;
 use axis_application::use_cases::audio::set_default_sink::SetDefaultSinkUseCase;
 use axis_application::use_cases::audio::set_default_source::SetDefaultSourceUseCase;
 use axis_application::use_cases::audio::set_sink_input_volume::SetSinkInputVolumeUseCase;
 use axis_domain::models::audio::AudioStatus;
+use axis_domain::ports::audio::AudioProvider;
 use axis_presentation::{Presenter, View};
 
 pub(crate) fn audio_icon(status: &AudioStatus) -> &'static str {
@@ -30,8 +30,8 @@ pub struct AudioPresenter {
 
 impl AudioPresenter {
     pub fn new(
-        subscribe_use_case: Arc<SubscribeToAudioUpdatesUseCase>,
-        get_status_use_case: Arc<GetAudioStatusUseCase>,
+        subscribe_use_case: Arc<SubscribeUseCase<dyn AudioProvider, AudioStatus>>,
+        get_status_use_case: Arc<GetStatusUseCase<dyn AudioProvider, AudioStatus>>,
         set_volume_use_case: Arc<SetVolumeUseCase>,
         set_default_sink_use_case: Arc<SetDefaultSinkUseCase>,
         set_default_source_use_case: Arc<SetDefaultSourceUseCase>,

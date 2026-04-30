@@ -1,9 +1,9 @@
 use std::sync::Arc;
-use axis_application::use_cases::network::subscribe::SubscribeToNetworkUpdatesUseCase;
-use axis_application::use_cases::network::get_status::GetNetworkStatusUseCase;
+use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
 use axis_application::use_cases::network::connect_to_ap::ConnectToApUseCase;
 use axis_application::use_cases::network::disconnect_wifi::DisconnectWifiUseCase;
 use axis_domain::models::network::NetworkStatus;
+use axis_domain::ports::network::NetworkProvider;
 use axis_presentation::{Presenter, View};
 
 pub struct NetworkPresenter {
@@ -14,8 +14,8 @@ pub struct NetworkPresenter {
 
 impl NetworkPresenter {
     pub fn new(
-        subscribe_use_case: Arc<SubscribeToNetworkUpdatesUseCase>,
-        get_status_use_case: Arc<GetNetworkStatusUseCase>,
+        subscribe_use_case: Arc<SubscribeUseCase<dyn NetworkProvider, NetworkStatus>>,
+        get_status_use_case: Arc<GetStatusUseCase<dyn NetworkProvider, NetworkStatus>>,
         connect_use_case: Arc<ConnectToApUseCase>,
         disconnect_use_case: Arc<DisconnectWifiUseCase>,
         rt: &tokio::runtime::Runtime,

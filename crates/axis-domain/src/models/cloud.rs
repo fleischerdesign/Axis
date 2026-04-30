@@ -29,7 +29,7 @@ impl Default for CloudStatus {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AuthStatus {
     Authenticated,
     NeedsAuth { url: String },

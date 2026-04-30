@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use thiserror::Error;
 use super::StatusStream;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone, PartialEq)]
 pub enum TrayError {
     #[error("Tray provider error: {0}")]
     ProviderError(String),
@@ -20,3 +20,5 @@ pub trait TrayProvider: Send + Sync {
     async fn secondary_activate(&self, bus_name: &str, x: i32, y: i32) -> Result<(), TrayError>;
     async fn scroll(&self, bus_name: &str, delta: i32, orientation: &str) -> Result<(), TrayError>;
 }
+
+crate::status_provider!(TrayProvider, TrayStatus, TrayError);

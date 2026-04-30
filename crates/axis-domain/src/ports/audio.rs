@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use thiserror::Error;
 use super::StatusStream;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone, PartialEq)]
 pub enum AudioError {
     #[error("Audio provider error: {0}")]
     ProviderError(String),
@@ -21,3 +21,5 @@ pub trait AudioProvider: Send + Sync {
     async fn set_default_source(&self, id: u32) -> Result<(), AudioError>;
     async fn set_sink_input_volume(&self, id: u32, volume: f64) -> Result<(), AudioError>;
 }
+
+crate::status_provider!(AudioProvider, AudioStatus, AudioError);

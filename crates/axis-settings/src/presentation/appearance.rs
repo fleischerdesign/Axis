@@ -1,7 +1,8 @@
 use axis_domain::models::appearance::{AccentColor, ColorScheme};
 use axis_domain::models::config::AppearanceConfig;
+use axis_domain::ports::appearance::AppearanceProvider;
 use axis_presentation::{Presenter, View};
-use axis_application::use_cases::appearance::subscribe::SubscribeToAppearanceUseCase;
+use axis_application::use_cases::generic::SubscribeUseCase;
 use axis_application::use_cases::appearance::set_accent::SetAccentColorUseCase;
 use axis_application::use_cases::appearance::set_scheme::SetColorSchemeUseCase;
 use axis_application::use_cases::appearance::set_wallpaper::SetWallpaperUseCase;
@@ -35,7 +36,7 @@ pub struct AppearancePresenter {
 
 impl AppearancePresenter {
     pub fn new(
-        subscribe_uc: Arc<SubscribeToAppearanceUseCase>,
+        subscribe_uc: Arc<SubscribeUseCase<dyn AppearanceProvider, AppearanceConfig>>,
         set_accent_uc: Arc<SetAccentColorUseCase>,
         set_scheme_uc: Arc<SetColorSchemeUseCase>,
         set_wallpaper_uc: Arc<SetWallpaperUseCase>,

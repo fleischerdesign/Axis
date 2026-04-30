@@ -2,12 +2,12 @@ use async_trait::async_trait;
 use thiserror::Error;
 use crate::models::cloud::CloudAccount;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone, PartialEq)]
 pub enum AuthError {
-    #[error("Authentication failed: {0}")]
-    Failed(String),
+    #[error("Authentication provider error: {0}")]
+    ProviderError(String),
     #[error("Network error: {0}")]
-    Network(String),
+    NetworkFailed(String),
     #[error("User cancelled")]
     Cancelled,
 }
@@ -16,5 +16,5 @@ pub enum AuthError {
 pub trait CloudAuthProvider: Send + Sync {
     async fn authenticate(&self, scopes: &[String]) -> Result<CloudAccount, AuthError>;
     async fn get_token(&self, scopes: &[String]) -> Result<String, AuthError>;
-    async fn is_authenticated(&self) -> bool;
+    async fn is_authenticated(&self) -> Result<bool, AuthError>;
 }

@@ -3,7 +3,7 @@ use crate::models::cloud::AuthStatus;
 use async_trait::async_trait;
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone, PartialEq)]
 pub enum TaskError {
     #[error("Task provider error: {0}")]
     ProviderError(String),

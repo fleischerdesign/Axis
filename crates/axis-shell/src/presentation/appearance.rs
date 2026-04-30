@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use axis_application::use_cases::appearance::get_status::GetAppearanceStatusUseCase;
-use axis_application::use_cases::appearance::subscribe::SubscribeToAppearanceUseCase;
+use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
 use axis_domain::models::config::AppearanceConfig;
+use axis_domain::ports::appearance::AppearanceProvider;
 
 use axis_presentation::{Presenter, View};
 
@@ -12,8 +12,8 @@ pub struct AppearancePresenter {
 
 impl AppearancePresenter {
     pub fn new(
-        subscribe_use_case: Arc<SubscribeToAppearanceUseCase>,
-        get_status_use_case: Arc<GetAppearanceStatusUseCase>,
+        subscribe_use_case: Arc<SubscribeUseCase<dyn AppearanceProvider, AppearanceConfig>>,
+        get_status_use_case: Arc<GetStatusUseCase<dyn AppearanceProvider, AppearanceConfig>>,
         rt: &tokio::runtime::Runtime,
     ) -> Self {
         let initial_status = rt

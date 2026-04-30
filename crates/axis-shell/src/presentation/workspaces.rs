@@ -1,7 +1,8 @@
 use std::sync::Arc;
-use axis_application::use_cases::workspaces::subscribe::SubscribeToWorkspaceUpdatesUseCase;
+use axis_application::use_cases::generic::SubscribeUseCase;
 use axis_application::use_cases::workspaces::focus::FocusWorkspaceUseCase;
 use axis_domain::models::workspaces::WorkspaceStatus;
+use axis_domain::ports::workspaces::WorkspaceProvider;
 use axis_presentation::{Presenter, View};
 
 pub trait WorkspaceView: View<WorkspaceStatus> {
@@ -15,7 +16,7 @@ pub struct WorkspacePresenter {
 
 impl WorkspacePresenter {
     pub fn new(
-        subscribe_use_case: Arc<SubscribeToWorkspaceUpdatesUseCase>,
+        subscribe_use_case: Arc<SubscribeUseCase<dyn WorkspaceProvider, WorkspaceStatus>>,
         focus_use_case: Arc<FocusWorkspaceUseCase>
     ) -> Self {
         let inner = Presenter::from_subscribe({

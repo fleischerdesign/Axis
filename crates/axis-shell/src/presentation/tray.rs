@@ -1,10 +1,10 @@
 use std::sync::Arc;
-use axis_application::use_cases::tray::subscribe::SubscribeToTrayUpdatesUseCase;
-use axis_application::use_cases::tray::get_status::GetTrayStatusUseCase;
+use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
 use axis_application::use_cases::tray::activate::ActivateTrayItemUseCase;
 use axis_application::use_cases::tray::context_menu::ContextMenuTrayItemUseCase;
 use axis_application::use_cases::tray::scroll::ScrollTrayItemUseCase;
 use axis_domain::models::tray::TrayStatus;
+use axis_domain::ports::tray::TrayProvider;
 use axis_presentation::{Presenter, View};
 
 pub trait TrayView: View<TrayStatus> {
@@ -34,8 +34,8 @@ pub struct TrayPresenter {
 
 impl TrayPresenter {
     pub fn new(
-        subscribe_use_case: Arc<SubscribeToTrayUpdatesUseCase>,
-        get_status_use_case: Arc<GetTrayStatusUseCase>,
+        subscribe_use_case: Arc<SubscribeUseCase<dyn TrayProvider, TrayStatus>>,
+        get_status_use_case: Arc<GetStatusUseCase<dyn TrayProvider, TrayStatus>>,
         activate_use_case: Arc<ActivateTrayItemUseCase>,
         context_menu_use_case: Arc<ContextMenuTrayItemUseCase>,
         scroll_use_case: Arc<ScrollTrayItemUseCase>,

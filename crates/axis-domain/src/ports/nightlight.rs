@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use thiserror::Error;
 use super::StatusStream;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone, PartialEq)]
 pub enum NightlightError {
     #[error("Nightlight provider error: {0}")]
     ProviderError(String),
@@ -20,3 +20,5 @@ pub trait NightlightProvider: Send + Sync {
     async fn set_temp_night(&self, temp: u32) -> Result<(), NightlightError>;
     async fn set_schedule(&self, sunrise: &str, sunset: &str) -> Result<(), NightlightError>;
 }
+
+crate::status_provider!(NightlightProvider, NightlightStatus, NightlightError);

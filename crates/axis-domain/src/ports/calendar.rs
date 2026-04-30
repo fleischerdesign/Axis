@@ -2,7 +2,7 @@ use crate::models::calendar::CalendarEvent;
 use async_trait::async_trait;
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone, PartialEq)]
 pub enum CalendarError {
     #[error("Calendar provider error: {0}")]
     ProviderError(String),

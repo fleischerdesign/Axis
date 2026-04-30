@@ -6,7 +6,5 @@ edition = "2024"
 [dependencies]
 axis-domain.workspace = true
 async-trait.workspace = true
-thiserror.workspace = true
 chrono.workspace = true
-serde.workspace = true
 log.workspace = true

@@ -33,7 +33,7 @@ impl MockClockProvider {
 
 #[async_trait]
 impl ClockProvider for MockClockProvider {
-    async fn get_time(&self) -> Result<TimeStatus, ClockError> {
+    async fn get_status(&self) -> Result<TimeStatus, ClockError> {
         Ok(self.status_tx.borrow().clone())
     }
 

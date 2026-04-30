@@ -3,53 +3,32 @@ use futures_util::StreamExt;
 use gtk4::{glib, gdk};
 use clap::Parser;
 
-use axis_application::use_cases::power::subscribe::SubscribeToPowerUpdatesUseCase;
+use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
 use axis_application::use_cases::power::suspend::SuspendUseCase;
 use axis_application::use_cases::power::power_off::PowerOffUseCase;
 use axis_application::use_cases::power::reboot::RebootUseCase;
 use axis_application::use_cases::lock::lock::LockSessionUseCase;
 use axis_application::use_cases::lock::unlock::UnlockSessionUseCase;
 use axis_application::use_cases::lock::authenticate::AuthenticateUseCase;
-use axis_application::use_cases::lock::subscribe::SubscribeToLockUpdatesUseCase;
-use axis_application::use_cases::clock::subscribe::SubscribeToClockUpdatesUseCase;
-use axis_application::use_cases::audio::subscribe::SubscribeToAudioUpdatesUseCase;
-use axis_application::use_cases::audio::get_status::GetAudioStatusUseCase;
 use axis_application::use_cases::audio::set_volume::SetVolumeUseCase;
 use axis_application::use_cases::audio::set_default_sink::SetDefaultSinkUseCase;
 use axis_application::use_cases::audio::set_default_source::SetDefaultSourceUseCase;
 use axis_application::use_cases::audio::set_sink_input_volume::SetSinkInputVolumeUseCase;
-use axis_application::use_cases::workspaces::subscribe::SubscribeToWorkspaceUpdatesUseCase;
 use axis_application::use_cases::workspaces::focus::FocusWorkspaceUseCase;
-use axis_application::use_cases::popups::{SubscribeToPopupUpdatesUseCase, TogglePopupUseCase};
-use axis_application::use_cases::brightness::subscribe::SubscribeToBrightnessUpdatesUseCase;
+use axis_application::use_cases::popups::TogglePopupUseCase;
 use axis_application::use_cases::brightness::set::SetBrightnessUseCase;
 use axis_application::use_cases::launcher::search::SearchLauncherUseCase;
-
-use axis_application::use_cases::network::subscribe::SubscribeToNetworkUpdatesUseCase;
-use axis_application::use_cases::network::get_status::GetNetworkStatusUseCase;
 use axis_application::use_cases::network::connect_to_ap::ConnectToApUseCase;
 use axis_application::use_cases::network::disconnect_wifi::DisconnectWifiUseCase;
-
-use axis_application::use_cases::bluetooth::subscribe::SubscribeToBluetoothUpdatesUseCase;
-use axis_application::use_cases::bluetooth::get_status::GetBluetoothStatusUseCase;
 use axis_application::use_cases::bluetooth::connect::ConnectBluetoothDeviceUseCase;
 use axis_application::use_cases::bluetooth::disconnect::DisconnectBluetoothDeviceUseCase;
 use axis_application::use_cases::bluetooth::set_powered::SetBluetoothPoweredUseCase;
 use axis_application::use_cases::bluetooth::start_scan::StartBluetoothScanUseCase;
 use axis_application::use_cases::bluetooth::stop_scan::StopBluetoothScanUseCase;
-
-use axis_application::use_cases::nightlight::subscribe::SubscribeToNightlightUpdatesUseCase;
-use axis_application::use_cases::nightlight::get_status::GetNightlightStatusUseCase;
 use axis_application::use_cases::nightlight::set_enabled::SetNightlightEnabledUseCase;
 use axis_application::use_cases::nightlight::set_temp_day::SetNightlightTempDayUseCase;
 use axis_application::use_cases::nightlight::set_temp_night::SetNightlightTempNightUseCase;
 use axis_application::use_cases::nightlight::set_schedule::SetNightlightScheduleUseCase;
-
-use axis_application::use_cases::appearance::subscribe::SubscribeToAppearanceUseCase;
-use axis_application::use_cases::appearance::get_status::GetAppearanceStatusUseCase;
-
-use axis_application::use_cases::tray::subscribe::SubscribeToTrayUpdatesUseCase;
-use axis_application::use_cases::tray::get_status::GetTrayStatusUseCase;
 use axis_application::use_cases::tray::activate::ActivateTrayItemUseCase;
 use axis_application::use_cases::tray::context_menu::ContextMenuTrayItemUseCase;
 use axis_application::use_cases::tray::scroll::ScrollTrayItemUseCase;
@@ -57,7 +36,27 @@ use axis_application::use_cases::tray::scroll::ScrollTrayItemUseCase;
 use axis_domain::models::appearance::{AccentColor, ColorScheme};
 use axis_domain::models::config::AxisConfig;
 use axis_domain::ports::config::ConfigProvider;
+use axis_domain::ports::network::NetworkProvider;
+use axis_domain::ports::lock::LockProvider;
+use axis_domain::ports::nightlight::NightlightProvider;
+use axis_domain::ports::dnd::DndProvider;
+use axis_domain::ports::airplane::AirplaneProvider;
+use axis_domain::ports::power::PowerProvider;
+use axis_domain::ports::audio::AudioProvider;
+use axis_domain::ports::workspaces::WorkspaceProvider;
+use axis_domain::ports::brightness::BrightnessProvider;
+use axis_domain::ports::appearance::AppearanceProvider;
+use axis_domain::ports::clock::ClockProvider;
+use axis_domain::ports::bluetooth::BluetoothProvider;
+use axis_domain::ports::popups::PopupProvider;
+use axis_domain::ports::notifications::NotificationProvider;
+use axis_domain::ports::layout::LayoutProvider;
+use axis_domain::ports::ipc::IpcProvider;
+use axis_domain::ports::tray::TrayProvider;
+use axis_domain::models::ipc::IpcCommand;
+use axis_domain::models::dnd::DndStatus;
 
+use axis_infrastructure::adapters::google_auth::GoogleCloudAdapter;
 use axis_infrastructure::mocks::clock::MockClockProvider;
 use axis_infrastructure::adapters::power::LogindPowerProvider;
 use axis_infrastructure::adapters::workspaces::NiriWorkspaceProvider;
@@ -76,19 +75,6 @@ use axis_infrastructure::adapters::config::FileConfigProvider;
 use axis_infrastructure::adapters::airplane::ConfigAirplaneProvider;
 use axis_infrastructure::adapters::tray::StatusNotifierAdapter;
 use axis_infrastructure::adapters::niri_layout::NiriLayoutProvider;
-
-use axis_domain::ports::network::NetworkProvider;
-use axis_domain::ports::lock::LockProvider;
-use axis_domain::ports::nightlight::NightlightProvider;
-use axis_domain::ports::dnd::DndProvider;
-use axis_domain::ports::airplane::AirplaneProvider;
-use axis_domain::ports::ipc::IpcProvider;
-use axis_domain::ports::notifications::NotificationProvider;
-use axis_domain::ports::popups::PopupProvider;
-use axis_domain::models::ipc::IpcCommand;
-use axis_domain::models::dnd::DndStatus;
-
-use axis_infrastructure::adapters::google_auth::GoogleCloudAdapter;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::rc::Rc;
@@ -119,7 +105,6 @@ use presentation::brightness::BrightnessPresenter;
 use presentation::launcher::LauncherPresenter;
 use presentation::notifications::NotificationPresenter;
 use axis_presentation::{Presenter, view::FnView};
-use axis_domain::ports::layout::LayoutProvider;
 use presentation::network::NetworkPresenter;
 use presentation::bluetooth::BluetoothPresenter;
 use presentation::nightlight::NightlightPresenter;
@@ -177,24 +162,24 @@ fn main() -> glib::ExitCode {
         let _ = theme_provider_for_startup.set(theme_css);
     });
 
-    let power_provider = rt.block_on(async {
+    let power_provider: Arc<dyn PowerProvider> = rt.block_on(async {
         LogindPowerProvider::new().await.expect("Failed to connect to UPower/login1")
     });
-    let audio_provider = rt.block_on(async {
+    let audio_provider: Arc<dyn AudioProvider> = rt.block_on(async {
         PulseAudioProvider::new().await.expect("Failed to connect to PulseAudio")
     });
-    let workspace_provider = rt.block_on(async {
+    let workspace_provider: Arc<dyn WorkspaceProvider> = rt.block_on(async {
         NiriWorkspaceProvider::new().await.expect("Failed to connect to Niri IPC")
     });
-    let brightness_provider = rt.block_on(async {
+    let brightness_provider: Arc<dyn BrightnessProvider> = rt.block_on(async {
         SysfsBrightnessProvider::new().await.expect("Failed to connect to Brightness")
     });
-    let network_provider = rt.block_on(async {
+    let network_provider: Arc<dyn NetworkProvider> = rt.block_on(async {
         NetworkManagerProvider::new().await.expect("Failed to connect to NetworkManager")
     });
-    let bluetooth_provider: Arc<dyn axis_domain::ports::bluetooth::BluetoothProvider> = rt.block_on(async {
+    let bluetooth_provider: Arc<dyn BluetoothProvider> = rt.block_on(async {
         match BlueZProvider::new().await {
-            Ok(p) => p as Arc<dyn axis_domain::ports::bluetooth::BluetoothProvider>,
+            Ok(p) => p as Arc<dyn BluetoothProvider>,
             Err(_) => {
                 log::warn!("[bluetooth] BlueZ not available, using empty provider");
                 Arc::new(axis_infrastructure::mocks::bluetooth::MockBluetoothProvider::new())
@@ -204,10 +189,10 @@ fn main() -> glib::ExitCode {
     let config_provider = FileConfigProvider::new(cli_config);
     let nightlight_provider: Arc<dyn NightlightProvider> = rt.block_on(ConfigNightlightProvider::new(config_provider.clone()));
     let airplane_provider: Arc<dyn AirplaneProvider> = rt.block_on(ConfigAirplaneProvider::new(config_provider.clone()));
-    let appearance_provider = rt.block_on(ConfigAppearanceProvider::new(config_provider.clone()));
-    let dnd_provider = rt.block_on(ConfigDndProvider::new(config_provider.clone()));
-    let clock_provider = Arc::new(MockClockProvider::new());
-    let popup_provider = LocalPopupProvider::new();
+    let appearance_provider: Arc<dyn AppearanceProvider> = rt.block_on(ConfigAppearanceProvider::new(config_provider.clone()));
+    let dnd_provider: Arc<dyn DndProvider> = rt.block_on(ConfigDndProvider::new(config_provider.clone()));
+    let clock_provider: Arc<dyn ClockProvider> = Arc::new(MockClockProvider::new());
+    let popup_provider: Arc<dyn PopupProvider> = LocalPopupProvider::new();
     let launcher_provider = CompositeLauncherProvider::new();
     let ipc_provider = ZbusIpcProvider::new();
     let config_dir = dirs::config_dir().unwrap_or(PathBuf::from(".")).join("axis");
@@ -222,9 +207,9 @@ fn main() -> glib::ExitCode {
             }
         }
     });
-    let tray_provider: Arc<dyn axis_domain::ports::tray::TrayProvider> = rt.block_on(async {
+    let tray_provider: Arc<dyn TrayProvider> = rt.block_on(async {
         match StatusNotifierAdapter::new().await {
-            Ok(p) => p as Arc<dyn axis_domain::ports::tray::TrayProvider>,
+            Ok(p) => p as Arc<dyn TrayProvider>,
             Err(e) => {
                 log::warn!("[tray] Failed to register StatusNotifierWatcher: {e}, using mock");
                 Arc::new(axis_infrastructure::mocks::tray::MockTrayProvider::new())
@@ -232,53 +217,53 @@ fn main() -> glib::ExitCode {
         }
     });
 
-    let subscribe_power = Arc::new(SubscribeToPowerUpdatesUseCase::new(power_provider.clone()));
+    let subscribe_power = Arc::new(SubscribeUseCase::new(power_provider.clone()));
     let suspend_uc = Arc::new(SuspendUseCase::new(power_provider.clone()));
     let power_off_uc = Arc::new(PowerOffUseCase::new(power_provider.clone()));
     let reboot_uc = Arc::new(RebootUseCase::new(power_provider.clone()));
     let (lock_provider_arc, lock_gtk_handle) = SessionLockProvider::new();
     let lock_provider: Arc<dyn LockProvider> = lock_provider_arc;
-    let subscribe_lock = Arc::new(SubscribeToLockUpdatesUseCase::new(lock_provider.clone()));
+    let subscribe_lock = Arc::new(SubscribeUseCase::new(lock_provider.clone()));
     let lock_session_uc = Arc::new(LockSessionUseCase::new(lock_provider.clone()));
     let unlock_session_uc = Arc::new(UnlockSessionUseCase::new(lock_provider.clone()));
     let authenticate_uc = Arc::new(AuthenticateUseCase::new(lock_provider.clone()));
-    let subscribe_clock = Arc::new(SubscribeToClockUpdatesUseCase::new(clock_provider.clone()));
-    let subscribe_audio = Arc::new(SubscribeToAudioUpdatesUseCase::new(audio_provider.clone()));
-    let get_audio_status = Arc::new(GetAudioStatusUseCase::new(audio_provider.clone()));
+    let subscribe_clock = Arc::new(SubscribeUseCase::new(clock_provider.clone()));
+    let subscribe_audio = Arc::new(SubscribeUseCase::new(audio_provider.clone()));
+    let get_audio_status = Arc::new(GetStatusUseCase::new(audio_provider.clone()));
     let set_volume = Arc::new(SetVolumeUseCase::new(audio_provider.clone()));
-    let subscribe_ws = Arc::new(SubscribeToWorkspaceUpdatesUseCase::new(workspace_provider.clone()));
+    let subscribe_ws = Arc::new(SubscribeUseCase::new(workspace_provider.clone()));
     let focus_ws = Arc::new(FocusWorkspaceUseCase::new(workspace_provider.clone()));
-    let subscribe_popups = Arc::new(SubscribeToPopupUpdatesUseCase::new(popup_provider.clone()));
+    let subscribe_popups = Arc::new(SubscribeUseCase::new(popup_provider.clone()));
     let toggle_popup = Arc::new(TogglePopupUseCase::new(popup_provider.clone()));
-    let subscribe_brightness = Arc::new(SubscribeToBrightnessUpdatesUseCase::new(brightness_provider.clone()));
+    let subscribe_brightness = Arc::new(SubscribeUseCase::new(brightness_provider.clone()));
     let set_brightness = Arc::new(SetBrightnessUseCase::new(brightness_provider.clone()));
     let search_launcher = Arc::new(SearchLauncherUseCase::new(launcher_provider.clone()));
 
-    let subscribe_network = Arc::new(SubscribeToNetworkUpdatesUseCase::new(network_provider.clone()));
-    let get_network_status = Arc::new(GetNetworkStatusUseCase::new(network_provider.clone()));
+    let subscribe_network = Arc::new(SubscribeUseCase::new(network_provider.clone()));
+    let get_network_status = Arc::new(GetStatusUseCase::new(network_provider.clone()));
     let connect_to_ap = Arc::new(ConnectToApUseCase::new(network_provider.clone()));
     let disconnect_wifi = Arc::new(DisconnectWifiUseCase::new(network_provider.clone()));
 
-    let subscribe_bluetooth = Arc::new(SubscribeToBluetoothUpdatesUseCase::new(bluetooth_provider.clone()));
-    let get_bluetooth_status = Arc::new(GetBluetoothStatusUseCase::new(bluetooth_provider.clone()));
+    let subscribe_bluetooth = Arc::new(SubscribeUseCase::new(bluetooth_provider.clone()));
+    let get_bluetooth_status = Arc::new(GetStatusUseCase::new(bluetooth_provider.clone()));
     let bt_connect = Arc::new(ConnectBluetoothDeviceUseCase::new(bluetooth_provider.clone()));
     let bt_disconnect = Arc::new(DisconnectBluetoothDeviceUseCase::new(bluetooth_provider.clone()));
     let bt_set_powered = Arc::new(SetBluetoothPoweredUseCase::new(bluetooth_provider.clone()));
     let bt_start_scan = Arc::new(StartBluetoothScanUseCase::new(bluetooth_provider.clone()));
     let bt_stop_scan = Arc::new(StopBluetoothScanUseCase::new(bluetooth_provider.clone()));
 
-    let subscribe_nightlight = Arc::new(SubscribeToNightlightUpdatesUseCase::new(nightlight_provider.clone()));
-    let get_nightlight_status = Arc::new(GetNightlightStatusUseCase::new(nightlight_provider.clone()));
+    let subscribe_nightlight = Arc::new(SubscribeUseCase::new(nightlight_provider.clone()));
+    let get_nightlight_status = Arc::new(GetStatusUseCase::new(nightlight_provider.clone()));
     let nl_set_enabled = Arc::new(SetNightlightEnabledUseCase::new(nightlight_provider.clone()));
     let nl_set_temp_day = Arc::new(SetNightlightTempDayUseCase::new(nightlight_provider.clone()));
     let nl_set_temp_night = Arc::new(SetNightlightTempNightUseCase::new(nightlight_provider.clone()));
     let nl_set_schedule = Arc::new(SetNightlightScheduleUseCase::new(nightlight_provider.clone()));
 
-    let subscribe_appearance = Arc::new(SubscribeToAppearanceUseCase::new(appearance_provider.clone()));
-    let get_appearance_status = Arc::new(GetAppearanceStatusUseCase::new(appearance_provider.clone()));
+    let subscribe_appearance = Arc::new(SubscribeUseCase::new(appearance_provider.clone()));
+    let get_appearance_status = Arc::new(GetStatusUseCase::new(appearance_provider.clone()));
 
-    let subscribe_tray = Arc::new(SubscribeToTrayUpdatesUseCase::new(tray_provider.clone()));
-    let get_tray_status = Arc::new(GetTrayStatusUseCase::new(tray_provider.clone()));
+    let subscribe_tray = Arc::new(SubscribeUseCase::new(tray_provider.clone()));
+    let get_tray_status = Arc::new(GetStatusUseCase::new(tray_provider.clone()));
     let tray_activate = Arc::new(ActivateTrayItemUseCase::new(tray_provider.clone()));
     let tray_context_menu = Arc::new(ContextMenuTrayItemUseCase::new(tray_provider.clone()));
     let tray_scroll = Arc::new(ScrollTrayItemUseCase::new(tray_provider.clone()));

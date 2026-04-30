@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use super::StatusStream;
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone, PartialEq)]
 pub enum AppearanceError {
     #[error("Appearance provider error: {0}")]
     ProviderError(String),
@@ -21,3 +21,5 @@ pub trait AppearanceProvider: Send + Sync {
     async fn set_color_scheme(&self, scheme: ColorScheme) -> Result<(), AppearanceError>;
     async fn set_font(&self, font: Option<String>) -> Result<(), AppearanceError>;
 }
+
+crate::status_provider!(AppearanceProvider, AppearanceConfig, AppearanceError);

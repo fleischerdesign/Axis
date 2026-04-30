@@ -1,6 +1,7 @@
 use std::sync::Arc;
-use axis_application::use_cases::clock::subscribe::SubscribeToClockUpdatesUseCase;
+use axis_application::use_cases::generic::SubscribeUseCase;
 use axis_domain::models::clock::TimeStatus;
+use axis_domain::ports::clock::ClockProvider;
 use axis_presentation::{Presenter, View};
 
 pub struct ClockPresenter {
@@ -8,7 +9,7 @@ pub struct ClockPresenter {
 }
 
 impl ClockPresenter {
-    pub fn new(use_case: Arc<SubscribeToClockUpdatesUseCase>) -> Self {
+    pub fn new(use_case: Arc<SubscribeUseCase<dyn ClockProvider, TimeStatus>>) -> Self {
         let inner = Presenter::from_subscribe({
             let uc = use_case.clone();
             move || {

@@ -83,6 +83,10 @@ impl SessionLockProvider {
 
 #[async_trait]
 impl LockProvider for SessionLockProvider {
+    async fn get_status(&self) -> Result<LockStatus, LockError> {
+        Ok(self.status_tx.borrow().clone())
+    }
+
     async fn is_supported(&self) -> Result<bool, LockError> {
         Ok(self.status_tx.borrow().is_supported)
     }

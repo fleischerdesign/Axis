@@ -1,7 +1,7 @@
 use axis_domain::models::bluetooth::BluetoothStatus;
+use axis_domain::ports::bluetooth::BluetoothProvider;
 use axis_presentation::{Presenter, View};
-use axis_application::use_cases::bluetooth::subscribe::SubscribeToBluetoothUpdatesUseCase;
-use axis_application::use_cases::bluetooth::get_status::GetBluetoothStatusUseCase;
+use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
 use axis_application::use_cases::bluetooth::connect::ConnectBluetoothDeviceUseCase;
 use axis_application::use_cases::bluetooth::disconnect::DisconnectBluetoothDeviceUseCase;
 use axis_application::use_cases::bluetooth::set_powered::SetBluetoothPoweredUseCase;
@@ -43,8 +43,8 @@ pub struct BluetoothPresenter {
 
 impl BluetoothPresenter {
     pub fn new(
-        subscribe_uc: Arc<SubscribeToBluetoothUpdatesUseCase>,
-        get_status_uc: Arc<GetBluetoothStatusUseCase>,
+        subscribe_uc: Arc<SubscribeUseCase<dyn BluetoothProvider, BluetoothStatus>>,
+        get_status_uc: Arc<GetStatusUseCase<dyn BluetoothProvider, BluetoothStatus>>,
         connect_uc: Arc<ConnectBluetoothDeviceUseCase>,
         disconnect_uc: Arc<DisconnectBluetoothDeviceUseCase>,
         set_powered_uc: Arc<SetBluetoothPoweredUseCase>,

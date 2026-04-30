@@ -164,10 +164,10 @@ impl TaskProvider for GoogleTasksAdapter {
     }
 
     async fn get_auth_status(&self) -> Result<axis_domain::models::cloud::AuthStatus, TaskError> {
-        if self.auth_provider.is_authenticated().await {
-            Ok(axis_domain::models::cloud::AuthStatus::Authenticated)
-        } else {
-            Ok(axis_domain::models::cloud::AuthStatus::Failed("Not authenticated".into()))
+        match self.auth_provider.is_authenticated().await {
+            Ok(true) => Ok(axis_domain::models::cloud::AuthStatus::Authenticated),
+            Ok(false) => Ok(axis_domain::models::cloud::AuthStatus::Failed("Not authenticated".into())),
+            Err(e) => Ok(axis_domain::models::cloud::AuthStatus::Failed(e.to_string())),
         }
     }
 }

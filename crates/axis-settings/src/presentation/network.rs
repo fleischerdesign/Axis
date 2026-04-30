@@ -1,7 +1,7 @@
 use axis_domain::models::network::NetworkStatus;
+use axis_domain::ports::network::NetworkProvider;
 use axis_presentation::{Presenter, View};
-use axis_application::use_cases::network::subscribe::SubscribeToNetworkUpdatesUseCase;
-use axis_application::use_cases::network::get_status::GetNetworkStatusUseCase;
+use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
 use axis_application::use_cases::network::scan_wifi::ScanWifiUseCase;
 use axis_application::use_cases::network::connect_to_ap::ConnectToApUseCase;
 use axis_application::use_cases::network::disconnect_wifi::DisconnectWifiUseCase;
@@ -42,8 +42,8 @@ pub struct NetworkPresenter {
 
 impl NetworkPresenter {
     pub fn new(
-        subscribe_uc: Arc<SubscribeToNetworkUpdatesUseCase>,
-        get_status_uc: Arc<GetNetworkStatusUseCase>,
+        subscribe_uc: Arc<SubscribeUseCase<dyn NetworkProvider, NetworkStatus>>,
+        get_status_uc: Arc<GetStatusUseCase<dyn NetworkProvider, NetworkStatus>>,
         scan_uc: Arc<ScanWifiUseCase>,
         connect_uc: Arc<ConnectToApUseCase>,
         disconnect_uc: Arc<DisconnectWifiUseCase>,

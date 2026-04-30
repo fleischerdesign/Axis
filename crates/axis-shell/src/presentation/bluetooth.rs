@@ -1,11 +1,11 @@
 use std::sync::Arc;
-use axis_application::use_cases::bluetooth::subscribe::SubscribeToBluetoothUpdatesUseCase;
-use axis_application::use_cases::bluetooth::get_status::GetBluetoothStatusUseCase;
+use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
 use axis_application::use_cases::bluetooth::connect::ConnectBluetoothDeviceUseCase;
 use axis_application::use_cases::bluetooth::disconnect::DisconnectBluetoothDeviceUseCase;
 use axis_application::use_cases::bluetooth::start_scan::StartBluetoothScanUseCase;
 use axis_application::use_cases::bluetooth::stop_scan::StopBluetoothScanUseCase;
 use axis_domain::models::bluetooth::BluetoothStatus;
+use axis_domain::ports::bluetooth::BluetoothProvider;
 use axis_presentation::{Presenter, View};
 
 pub struct BluetoothPresenter {
@@ -18,8 +18,8 @@ pub struct BluetoothPresenter {
 
 impl BluetoothPresenter {
     pub fn new(
-        subscribe_use_case: Arc<SubscribeToBluetoothUpdatesUseCase>,
-        get_status_use_case: Arc<GetBluetoothStatusUseCase>,
+        subscribe_use_case: Arc<SubscribeUseCase<dyn BluetoothProvider, BluetoothStatus>>,
+        get_status_use_case: Arc<GetStatusUseCase<dyn BluetoothProvider, BluetoothStatus>>,
         connect_use_case: Arc<ConnectBluetoothDeviceUseCase>,
         disconnect_use_case: Arc<DisconnectBluetoothDeviceUseCase>,
         start_scan_use_case: Arc<StartBluetoothScanUseCase>,

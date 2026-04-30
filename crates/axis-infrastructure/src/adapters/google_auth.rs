@@ -76,7 +76,7 @@ impl GoogleCloudAdapter {
 #[async_trait]
 impl CloudAuthProvider for GoogleCloudAdapter {
     async fn authenticate(&self, scopes: &[String]) -> Result<CloudAccount, AuthError> {
-        let cred = self.credentials.as_ref().ok_or_else(|| AuthError::Failed("Missing google_credentials.json".into()))?;
+        let cred = self.credentials.as_ref().ok_or_else(|| AuthError::ProviderError("Missing google_credentials.json".into()))?;
 
         let client = BasicClient::new(ClientId::new(cred.client_id.clone()))
             .set_client_secret(ClientSecret::new(cred.client_secret.clone()))
@@ -95,7 +95,7 @@ impl CloudAuthProvider for GoogleCloudAdapter {
         let _ = open::that(auth_url.as_str());
 
         let listener = TcpListener::bind(format!("127.0.0.1:{}", REDIRECT_PORT)).await
-            .map_err(|e| AuthError::Failed(format!("Failed to bind port: {}", e)))?;
+            .map_err(|e| AuthError::ProviderError(format!("Failed to bind port: {}", e)))?;
 
         let (tx, mut rx) = tokio::sync::mpsc::channel(1);
 
@@ -125,7 +125,7 @@ impl CloudAuthProvider for GoogleCloudAdapter {
             .exchange_code(AuthorizationCode::new(code))
             .set_pkce_verifier(pkce_verifier)
             .request_async(&http_client).await
-            .map_err(|e| AuthError::Failed(format!("Token exchange failed: {}", e)))?;
+            .map_err(|e| AuthError::ProviderError(format!("Token exchange failed: {}", e)))?;
 
         let access_token = token_result.access_token().secret().clone();
         
@@ -133,9 +133,9 @@ impl CloudAuthProvider for GoogleCloudAdapter {
         let user_info: GoogleUserInfo = http_client.get(GOOGLE_USERINFO_URL)
             .bearer_auth(&access_token)
             .send().await
-            .map_err(|e| AuthError::Network(e.to_string()))?
+            .map_err(|e| AuthError::NetworkFailed(e.to_string()))?
             .json().await
-            .map_err(|e| AuthError::Failed(format!("Failed to parse userinfo: {}", e)))?;
+            .map_err(|e| AuthError::ProviderError(format!("Failed to parse userinfo: {}", e)))?;
 
         let mut token = self.token.lock().await;
         token.access_token = Some(access_token);
@@ -164,8 +164,8 @@ impl CloudAuthProvider for GoogleCloudAdapter {
             }
         }
 
-        let cred = self.credentials.as_ref().ok_or_else(|| AuthError::Failed("No credentials".into()))?;
-        let refresh_token = token.refresh_token.as_ref().ok_or(AuthError::Failed("No refresh token".into()))?;
+        let cred = self.credentials.as_ref().ok_or_else(|| AuthError::ProviderError("No credentials".into()))?;
+        let refresh_token = token.refresh_token.as_ref().ok_or(AuthError::ProviderError("No refresh token".into()))?;
 
         let http_client = reqwest::Client::new();
         let client = BasicClient::new(ClientId::new(cred.client_id.clone()))
@@ -176,19 +176,19 @@ impl CloudAuthProvider for GoogleCloudAdapter {
         let token_result = client
             .exchange_refresh_token(&oauth2::RefreshToken::new(refresh_token.clone()))
             .request_async(&http_client).await
-            .map_err(|e| AuthError::Failed(format!("Token refresh failed: {}", e)))?;
+            .map_err(|e| AuthError::ProviderError(format!("Token refresh failed: {}", e)))?;
 
         token.access_token = Some(token_result.access_token().secret().clone());
         token.expires_at = Some(chrono::Utc::now().timestamp() + 3600);
         
         let access = token.access_token.clone()
-            .ok_or_else(|| AuthError::Failed("No access token after refresh".into()))?;
+            .ok_or_else(|| AuthError::ProviderError("No access token after refresh".into()))?;
         self.save_token(&token);
 
         Ok(access)
     }
 
-    async fn is_authenticated(&self) -> bool {
-        self.token.lock().await.refresh_token.is_some()
+    async fn is_authenticated(&self) -> Result<bool, AuthError> {
+        Ok(self.token.lock().await.refresh_token.is_some())
     }
 }

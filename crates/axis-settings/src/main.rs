@@ -22,21 +22,16 @@ use widgets::bluetooth_page::BluetoothPage;
 use widgets::sidebar::Sidebar;
 use widgets::window::SettingsWindow;
 
-use axis_application::use_cases::cloud::subscribe::SubscribeToCloudUpdatesUseCase;
+use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
 use axis_application::use_cases::cloud::authenticate::AuthenticateAccountUseCase;
-use axis_application::use_cases::appearance::subscribe::SubscribeToAppearanceUseCase;
 use axis_application::use_cases::appearance::set_accent::SetAccentColorUseCase;
 use axis_application::use_cases::appearance::set_scheme::SetColorSchemeUseCase;
 use axis_application::use_cases::appearance::set_wallpaper::SetWallpaperUseCase;
 
-use axis_application::use_cases::network::subscribe::SubscribeToNetworkUpdatesUseCase;
-use axis_application::use_cases::network::get_status::GetNetworkStatusUseCase;
 use axis_application::use_cases::network::scan_wifi::ScanWifiUseCase;
 use axis_application::use_cases::network::connect_to_ap::ConnectToApUseCase;
 use axis_application::use_cases::network::disconnect_wifi::DisconnectWifiUseCase;
 
-use axis_application::use_cases::bluetooth::subscribe::SubscribeToBluetoothUpdatesUseCase;
-use axis_application::use_cases::bluetooth::get_status::GetBluetoothStatusUseCase;
 use axis_application::use_cases::bluetooth::connect::ConnectBluetoothDeviceUseCase;
 use axis_application::use_cases::bluetooth::disconnect::DisconnectBluetoothDeviceUseCase;
 use axis_application::use_cases::bluetooth::set_powered::SetBluetoothPoweredUseCase;
@@ -52,6 +47,11 @@ use axis_infrastructure::adapters::bluetooth::BlueZProvider;
 use axis_infrastructure::adapters::niri_layout::NiriLayoutProvider;
 
 use axis_domain::models::config::AxisConfig;
+use axis_domain::ports::cloud::CloudProvider;
+use axis_domain::ports::appearance::AppearanceProvider;
+use axis_domain::ports::network::NetworkProvider;
+use axis_domain::ports::bluetooth::BluetoothProvider;
+use axis_domain::ports::layout::LayoutProvider;
 use axis_presentation::ThemeService;
 
 fn main() -> glib::ExitCode {
@@ -97,35 +97,35 @@ fn build_ui(app: &adw::Application, theme_css: Rc<gtk4::CssProvider>, rt: &tokio
 
     // 1. Infrastructure
     let config_provider = FileConfigProvider::new(AxisConfig::default());
-    let cloud_provider = Arc::new(LocalCloudProvider::new(config_dir.clone()));
+    let cloud_provider: Arc<dyn CloudProvider> = Arc::new(LocalCloudProvider::new(config_dir.clone()));
     let google_auth = Arc::new(GoogleCloudAdapter::new(config_dir.clone()));
-    let appearance_provider = rt.block_on(ConfigAppearanceProvider::new(config_provider.clone()));
-    let niri_layout_provider = NiriLayoutProvider::new(config_dir.clone());
+    let appearance_provider: Arc<dyn AppearanceProvider> = rt.block_on(ConfigAppearanceProvider::new(config_provider.clone()));
+    let niri_layout_provider: Arc<dyn LayoutProvider> = NiriLayoutProvider::new(config_dir.clone());
     
-    let network_provider = rt.block_on(async {
+    let network_provider: Arc<dyn NetworkProvider> = rt.block_on(async {
         NetworkManagerProvider::new().await.expect("Failed to connect to NetworkManager")
     });
-    let bluetooth_provider = rt.block_on(async {
+    let bluetooth_provider: Arc<dyn BluetoothProvider> = rt.block_on(async {
         BlueZProvider::new().await.expect("Failed to connect to BlueZ")
     });
 
     // 2. Use Cases
-    let subscribe_cloud = Arc::new(SubscribeToCloudUpdatesUseCase::new(cloud_provider.clone()));
+    let subscribe_cloud = Arc::new(SubscribeUseCase::new(cloud_provider.clone()));
     let authenticate_cloud = Arc::new(AuthenticateAccountUseCase::new(google_auth.clone(), cloud_provider.clone()));
     
-    let subscribe_appearance = Arc::new(SubscribeToAppearanceUseCase::new(appearance_provider.clone()));
+    let subscribe_appearance = Arc::new(SubscribeUseCase::new(appearance_provider.clone()));
     let set_accent = Arc::new(SetAccentColorUseCase::new(appearance_provider.clone(), niri_layout_provider));
     let set_scheme = Arc::new(SetColorSchemeUseCase::new(appearance_provider.clone()));
     let set_wallpaper = Arc::new(SetWallpaperUseCase::new(appearance_provider.clone()));
 
-    let subscribe_network = Arc::new(SubscribeToNetworkUpdatesUseCase::new(network_provider.clone()));
-    let get_network_status = Arc::new(GetNetworkStatusUseCase::new(network_provider.clone()));
+    let subscribe_network = Arc::new(SubscribeUseCase::new(network_provider.clone()));
+    let get_network_status = Arc::new(GetStatusUseCase::new(network_provider.clone()));
     let scan_wifi = Arc::new(ScanWifiUseCase::new(network_provider.clone()));
     let connect_to_ap = Arc::new(ConnectToApUseCase::new(network_provider.clone()));
     let disconnect_wifi = Arc::new(DisconnectWifiUseCase::new(network_provider.clone()));
 
-    let subscribe_bluetooth = Arc::new(SubscribeToBluetoothUpdatesUseCase::new(bluetooth_provider.clone()));
-    let get_bluetooth_status = Arc::new(GetBluetoothStatusUseCase::new(bluetooth_provider.clone()));
+    let subscribe_bluetooth = Arc::new(SubscribeUseCase::new(bluetooth_provider.clone()));
+    let get_bluetooth_status = Arc::new(GetStatusUseCase::new(bluetooth_provider.clone()));
     let bt_connect = Arc::new(ConnectBluetoothDeviceUseCase::new(bluetooth_provider.clone()));
     let bt_disconnect = Arc::new(DisconnectBluetoothDeviceUseCase::new(bluetooth_provider.clone()));
     let bt_set_powered = Arc::new(SetBluetoothPoweredUseCase::new(bluetooth_provider.clone()));

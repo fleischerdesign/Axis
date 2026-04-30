@@ -34,7 +34,7 @@ impl AuthenticateAccountUseCase {
             .map_err(|e| {
                 let err_msg = format!("Failed to store account: {}", e);
                 error!("[use-case] {}", err_msg);
-                AuthError::Failed(err_msg)
+                AuthError::ProviderError(err_msg)
             })?;
             
         Ok(())

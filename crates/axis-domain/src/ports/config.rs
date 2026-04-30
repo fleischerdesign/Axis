@@ -2,7 +2,7 @@ use crate::models::config::AxisConfig;
 use super::StatusStream;
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone, PartialEq)]
 pub enum ConfigError {
     #[error("Config provider error: {0}")]
     ProviderError(String),

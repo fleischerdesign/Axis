@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use thiserror::Error;
 use super::StatusStream;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone, PartialEq)]
 pub enum DndError {
     #[error("DND provider error: {0}")]
     ProviderError(String),
@@ -17,3 +17,5 @@ pub trait DndProvider: Send + Sync {
     async fn subscribe(&self) -> Result<DndStream, DndError>;
     async fn set_enabled(&self, enabled: bool) -> Result<(), DndError>;
 }
+
+crate::status_provider!(DndProvider, DndStatus, DndError);

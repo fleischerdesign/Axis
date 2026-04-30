@@ -17,10 +17,9 @@ pub enum PeerStatus {
     Pairing,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ContinuityMessage {
     Hello { device_id: String, device_name: String },
     Heartbeat,
     ClipboardUpdate { content: Vec<u8>, mime_type: String },
-    // Additional types from the backup can be added here later (Input, etc.)
 }

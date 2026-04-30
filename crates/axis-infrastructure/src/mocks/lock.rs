@@ -23,6 +23,10 @@ impl MockLockProvider {
 
 #[async_trait]
 impl LockProvider for MockLockProvider {
+    async fn get_status(&self) -> Result<LockStatus, LockError> {
+        Ok(self.status_tx.borrow().clone())
+    }
+
     async fn is_supported(&self) -> Result<bool, LockError> {
         Ok(true)
     }

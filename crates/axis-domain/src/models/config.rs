@@ -79,27 +79,34 @@ pub struct NightlightConfig {
     pub longitude: String,
 }
 
+impl NightlightConfig {
+    pub const DEFAULT_TEMP_DAY: u32 = 6500;
+    pub const DEFAULT_TEMP_NIGHT: u32 = 4500;
+    pub const DEFAULT_SUNRISE: &'static str = "07:00";
+    pub const DEFAULT_SUNSET: &'static str = "20:00";
+}
+
 fn default_temp_day() -> u32 {
-    6500
+    NightlightConfig::DEFAULT_TEMP_DAY
 }
 fn default_temp_night() -> u32 {
-    4500
+    NightlightConfig::DEFAULT_TEMP_NIGHT
 }
 fn default_sunrise() -> String {
-    "07:00".into()
+    NightlightConfig::DEFAULT_SUNRISE.into()
 }
 fn default_sunset() -> String {
-    "20:00".into()
+    NightlightConfig::DEFAULT_SUNSET.into()
 }
 
 impl Default for NightlightConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            temp_day: 6500,
-            temp_night: 4500,
-            sunrise: "07:00".into(),
-            sunset: "20:00".into(),
+            temp_day: Self::DEFAULT_TEMP_DAY,
+            temp_night: Self::DEFAULT_TEMP_NIGHT,
+            sunrise: Self::DEFAULT_SUNRISE.into(),
+            sunset: Self::DEFAULT_SUNSET.into(),
             auto_schedule: false,
             latitude: String::new(),
             longitude: String::new(),
@@ -147,10 +154,10 @@ pub struct IslandVisibility {
 impl Default for IslandVisibility {
     fn default() -> Self {
         Self {
-            launcher: true,
-            clock: true,
-            status: true,
-            workspace: true,
+            launcher: default_true(),
+            clock: default_true(),
+            status: default_true(),
+            workspace: default_true(),
         }
     }
 }
@@ -172,25 +179,32 @@ pub struct ShortcutsConfig {
 }
 
 fn default_shortcut_launcher() -> String {
-    "<Super>space".into()
+    ShortcutsConfig::DEFAULT_LAUNCHER.into()
 }
 fn default_shortcut_qs() -> String {
-    "<Super>s".into()
+    ShortcutsConfig::DEFAULT_QUICK_SETTINGS.into()
 }
 fn default_shortcut_ws() -> String {
-    "<Super>w".into()
+    ShortcutsConfig::DEFAULT_WORKSPACES.into()
 }
 fn default_shortcut_lock() -> String {
-    "<Super>l".into()
+    ShortcutsConfig::DEFAULT_LOCK.into()
+}
+
+impl ShortcutsConfig {
+    pub const DEFAULT_LAUNCHER: &'static str = "<Super>space";
+    pub const DEFAULT_QUICK_SETTINGS: &'static str = "<Super>s";
+    pub const DEFAULT_WORKSPACES: &'static str = "<Super>w";
+    pub const DEFAULT_LOCK: &'static str = "<Super>l";
 }
 
 impl Default for ShortcutsConfig {
     fn default() -> Self {
         Self {
-            launcher: "<Super>space".into(),
-            quick_settings: "<Super>s".into(),
-            workspaces: "<Super>w".into(),
-            lock: "<Super>l".into(),
+            launcher: Self::DEFAULT_LAUNCHER.into(),
+            quick_settings: Self::DEFAULT_QUICK_SETTINGS.into(),
+            workspaces: Self::DEFAULT_WORKSPACES.into(),
+            lock: Self::DEFAULT_LOCK.into(),
         }
     }
 }
