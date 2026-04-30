@@ -3,6 +3,7 @@ use axis_domain::ports::cloud::{CloudProvider, CloudError, CloudStream};
 use async_trait::async_trait;
 use tokio::sync::watch;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tokio_stream::wrappers::WatchStream;
 
 pub struct LocalCloudProvider {
@@ -11,7 +12,7 @@ pub struct LocalCloudProvider {
 }
 
 impl LocalCloudProvider {
-    pub fn new(config_dir: PathBuf) -> Self {
+    pub fn new(config_dir: PathBuf) -> Arc<Self> {
         let accounts_path = config_dir.join("cloud_accounts.json");
         let accounts = std::fs::read_to_string(accounts_path)
             .ok()
@@ -20,10 +21,10 @@ impl LocalCloudProvider {
 
         let (status_tx, _) = watch::channel(CloudStatus { accounts });
 
-        Self {
+        Arc::new(Self {
             status_tx,
             config_dir,
-        }
+        })
     }
 
     fn save_accounts(&self, accounts: &[CloudAccount]) {

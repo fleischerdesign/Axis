@@ -103,7 +103,7 @@ fn build_ui(app: &adw::Application, theme_css: Rc<gtk4::CssProvider>, rt: &tokio
 
     // 1. Infrastructure
     let config_provider = FileConfigProvider::new(AxisConfig::default());
-    let cloud_provider: Arc<dyn CloudProvider> = Arc::new(LocalCloudProvider::new(config_dir.clone()));
+    let cloud_provider: Arc<dyn CloudProvider> = LocalCloudProvider::new(config_dir.clone());
     let google_auth = Arc::new(GoogleCloudAdapter::new(config_dir.clone()));
     let appearance_provider: Arc<dyn AppearanceProvider> = rt.block_on(ConfigAppearanceProvider::new(config_provider.clone()));
     let niri_layout_provider: Arc<dyn LayoutProvider> = NiriLayoutProvider::new(config_dir.clone());
