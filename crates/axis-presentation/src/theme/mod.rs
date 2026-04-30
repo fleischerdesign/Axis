@@ -1,6 +1,7 @@
 use axis_domain::models::appearance::{AccentColor, ColorScheme};
 use axis_domain::models::config::AppearanceConfig;
 
+#[cfg(feature = "gtk")]
 pub mod gtk_service;
 
 const DEFAULT_ACCENT_RGB: (u8, u8, u8) = (53, 132, 228);

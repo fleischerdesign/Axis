@@ -3,10 +3,14 @@ name = "axis-presentation"
 edition = "2024"
 version.workspace = true
 
+[features]
+default = ["gtk"]
+gtk = ["dep:gtk4", "dep:libadwaita"]
+
 [dependencies]
 axis-domain.workspace = true
 async-stream.workspace = true
 futures-util.workspace = true
-gtk4.workspace = true
-libadwaita.workspace = true
+gtk4 = { workspace = true, optional = true }
+libadwaita = { workspace = true, optional = true }
 log.workspace = true
