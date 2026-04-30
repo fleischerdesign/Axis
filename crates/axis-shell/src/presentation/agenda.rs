@@ -97,7 +97,13 @@ impl AgendaPresenter {
     pub async fn run_sync(&self, popup_provider: Arc<dyn PopupProvider>) {
         self.refresh(true, true).await;
 
-        let mut stream = popup_provider.subscribe().await.unwrap_or_else(|_| Box::pin(futures_util::stream::pending()));
+        let mut stream = match popup_provider.subscribe().await {
+            Ok(s) => s,
+            Err(e) => {
+                log::error!("[agenda] Popup subscription failed: {e}");
+                Box::pin(futures_util::stream::pending())
+            }
+        };
         let this = self.clone();
         
         glib::spawn_future_local(async move {

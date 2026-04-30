@@ -193,7 +193,9 @@ impl LockAdapterInner {
             return Err(LockError::ProviderError("Failed to acquire lock".to_string()));
         }
 
-        let display = gtk4::gdk::Display::default().expect("No display available");
+        let Some(display) = gtk4::gdk::Display::default() else {
+            return Err(LockError::ProviderError("No display available".to_string()));
+        };
         let monitors = display.monitors();
 
         {

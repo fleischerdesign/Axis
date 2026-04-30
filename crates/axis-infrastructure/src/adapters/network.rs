@@ -160,11 +160,11 @@ impl NetworkManagerProvider {
                 let mut last_scan_stream = None;
 
                 if let Some(ref wp) = wifi_device_path {
-                    if let Ok(wifi_proxy) = WirelessDeviceProxy::builder(&conn)
-                        .path(wp.clone())
-                        .expect("invalid wifi path")
-                        .build()
-                        .await
+                    let Ok(builder) = WirelessDeviceProxy::builder(&conn).path(wp.clone()) else {
+                        log::warn!("[network] invalid wifi path: {wp}");
+                        continue;
+                    };
+                    if let Ok(wifi_proxy) = builder.build().await
                     {
                         ap_added_stream = wifi_proxy.receive_access_point_added().await.ok();
                         ap_removed_stream = wifi_proxy.receive_access_point_removed().await.ok();
@@ -208,11 +208,11 @@ impl NetworkManagerProvider {
     ) -> Option<OwnedObjectPath> {
         let devices = nm_proxy.get_devices().await.ok()?;
         for path in devices {
-            if let Ok(dev_proxy) = DeviceProxy::builder(conn)
-                .path(path.clone())
-                .expect("invalid device path")
-                .build()
-                .await
+            let Ok(builder) = DeviceProxy::builder(conn).path(path.clone()) else {
+                log::warn!("[network] invalid device path: {path}");
+                continue;
+            };
+            if let Ok(dev_proxy) = builder.build().await
             {
                 if let Ok(2) = dev_proxy.device_type().await {
                     info!("[network] WiFi device found: {path}");
@@ -240,31 +240,32 @@ impl NetworkManagerProvider {
         let mut aps = Vec::new();
 
         if let Some(path) = wifi_path {
-            if let Ok(wifi_proxy) = WirelessDeviceProxy::builder(conn)
-                .path(path)
-                .expect("invalid wifi path")
-                .build()
-                .await
+            let Ok(wifi_builder) = WirelessDeviceProxy::builder(conn).path(path) else {
+                log::warn!("[network] invalid wifi path: {path}");
+                return NetworkStatus::default();
+            };
+            if let Ok(wifi_proxy) = wifi_builder.build().await
             {
                 if let Ok(ap_path) = wifi_proxy.active_access_point().await {
-                    active_ap_path = ap_path.to_string();
-                    if let Ok(ap_proxy) = AccessPointProxy::builder(conn)
-                        .path(ap_path)
-                        .expect("invalid ap path")
-                        .build()
-                        .await
-                    {
-                        active_strength = ap_proxy.strength().await.unwrap_or(0);
-                    }
+                        active_ap_path = ap_path.to_string();
+                        let ap_path_str = active_ap_path.clone();
+                        match AccessPointProxy::builder(conn).path(ap_path) {
+                            Ok(builder) => {
+                                if let Ok(ap_proxy) = builder.build().await {
+                                    active_strength = ap_proxy.strength().await.unwrap_or(0);
+                                }
+                            }
+                            Err(e) => log::warn!("[network] invalid ap path {ap_path_str}: {e}"),
+                        }
                 }
 
                 if let Ok(ap_paths) = wifi_proxy.get_access_points().await {
                     for ap_path in ap_paths.into_iter().take(MAX_ACCESS_POINTS) {
-                        if let Ok(ap_proxy) = AccessPointProxy::builder(conn)
-                            .path(ap_path.clone())
-                            .expect("invalid ap path")
-                            .build()
-                            .await
+                        let Ok(ap_builder) = AccessPointProxy::builder(conn).path(ap_path.clone()) else {
+                            log::warn!("[network] invalid ap path: {ap_path}");
+                            continue;
+                        };
+                        if let Ok(ap_proxy) = ap_builder.build().await
                         {
                             if let Ok(ssid_bytes) = ap_proxy.ssid().await {
                                 let ssid = String::from_utf8_lossy(&ssid_bytes).to_string();

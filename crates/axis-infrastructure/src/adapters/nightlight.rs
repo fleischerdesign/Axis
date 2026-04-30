@@ -1,4 +1,4 @@
-use axis_domain::models::config::NightlightConfig;
+use axis_domain::models::config::{AxisConfig, NightlightConfig};
 use axis_domain::models::nightlight::NightlightStatus;
 use axis_domain::ports::config::ConfigProvider;
 use axis_domain::ports::nightlight::{NightlightError, NightlightProvider, NightlightStream};
@@ -22,7 +22,11 @@ pub struct ConfigNightlightProvider {
 impl ConfigNightlightProvider {
     pub async fn new(config_provider: Arc<dyn ConfigProvider>) -> Arc<Self> {
         let available = Self::check_available();
-        let initial_config = config_provider.get().expect("config get failed").nightlight.clone();
+        let config = config_provider.get().unwrap_or_else(|e| {
+            log::error!("[nightlight] config get failed: {e}");
+            AxisConfig::default()
+        });
+        let initial_config = config.nightlight.clone();
         let initial_status = Self::config_to_status(&initial_config, available);
 
         let (status_tx, _) = watch::channel(initial_status.clone());
@@ -98,7 +102,13 @@ impl ConfigNightlightProvider {
         let cmd_tx_bg = provider.cmd_tx.clone();
         let mut last_config = initial_config;
         tokio::spawn(async move {
-            let mut stream = config_provider.subscribe().expect("config subscribe failed");
+            let mut stream = match config_provider.subscribe() {
+                Ok(s) => s,
+                Err(e) => {
+                    log::warn!("[nightlight] config subscribe failed: {e}");
+                    return;
+                }
+            };
             while let Some(config) = futures_util::StreamExt::next(&mut stream).await {
                 let nl = config.nightlight.clone();
                 if nl != last_config {

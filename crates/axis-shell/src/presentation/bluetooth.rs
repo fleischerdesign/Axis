@@ -27,7 +27,13 @@ impl BluetoothPresenter {
         rt: &tokio::runtime::Runtime,
     ) -> Self {
         let initial_status = rt.block_on(async {
-            get_status_use_case.execute().await.unwrap_or_default()
+            match get_status_use_case.execute().await {
+                Ok(s) => s,
+                Err(e) => {
+                    log::error!("[bluetooth] Failed to get initial status: {e}");
+                    Default::default()
+                }
+            }
         });
 
         let inner = Presenter::from_subscribe({
@@ -58,28 +64,36 @@ impl BluetoothPresenter {
     pub fn connect_device(&self, id: String) {
         let uc = self.connect_use_case.clone();
         tokio::spawn(async move {
-            let _ = uc.execute(&id).await;
+            if let Err(e) = uc.execute(&id).await {
+                log::error!("[bluetooth] connect_device failed: {e}");
+            }
         });
     }
 
     pub fn disconnect_device(&self, id: String) {
         let uc = self.disconnect_use_case.clone();
         tokio::spawn(async move {
-            let _ = uc.execute(&id).await;
+            if let Err(e) = uc.execute(&id).await {
+                log::error!("[bluetooth] disconnect_device failed: {e}");
+            }
         });
     }
 
     pub fn start_scan(&self) {
         let uc = self.start_scan_use_case.clone();
         tokio::spawn(async move {
-            let _ = uc.execute().await;
+            if let Err(e) = uc.execute().await {
+                log::error!("[bluetooth] start_scan failed: {e}");
+            }
         });
     }
 
     pub fn stop_scan(&self) {
         let uc = self.stop_scan_use_case.clone();
         tokio::spawn(async move {
-            let _ = uc.execute().await;
+            if let Err(e) = uc.execute().await {
+                log::error!("[bluetooth] stop_scan failed: {e}");
+            }
         });
     }
 }

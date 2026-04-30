@@ -278,27 +278,27 @@ impl AudioProvider for PulseAudioProvider {
     }
 
     async fn set_volume(&self, volume: f64) -> Result<(), AudioError> {
-        let _ = self.cmd_tx.send(PulseCmd::SetVolume(volume)).await;
-        Ok(())
+        self.cmd_tx.send(PulseCmd::SetVolume(volume)).await
+            .map_err(|e| AudioError::ProviderError(format!("Audio channel closed: {e}")))
     }
 
     async fn set_muted(&self, muted: bool) -> Result<(), AudioError> {
-        let _ = self.cmd_tx.send(PulseCmd::SetMute(muted)).await;
-        Ok(())
+        self.cmd_tx.send(PulseCmd::SetMute(muted)).await
+            .map_err(|e| AudioError::ProviderError(format!("Audio channel closed: {e}")))
     }
 
     async fn set_default_sink(&self, id: u32) -> Result<(), AudioError> {
-        let _ = self.cmd_tx.send(PulseCmd::SetDefaultSink(id)).await;
-        Ok(())
+        self.cmd_tx.send(PulseCmd::SetDefaultSink(id)).await
+            .map_err(|e| AudioError::ProviderError(format!("Audio channel closed: {e}")))
     }
 
     async fn set_default_source(&self, id: u32) -> Result<(), AudioError> {
-        let _ = self.cmd_tx.send(PulseCmd::SetDefaultSource(id)).await;
-        Ok(())
+        self.cmd_tx.send(PulseCmd::SetDefaultSource(id)).await
+            .map_err(|e| AudioError::ProviderError(format!("Audio channel closed: {e}")))
     }
 
     async fn set_sink_input_volume(&self, id: u32, volume: f64) -> Result<(), AudioError> {
-        let _ = self.cmd_tx.send(PulseCmd::SetSinkInputVolume(id, volume)).await;
-        Ok(())
+        self.cmd_tx.send(PulseCmd::SetSinkInputVolume(id, volume)).await
+            .map_err(|e| AudioError::ProviderError(format!("Audio channel closed: {e}")))
     }
 }

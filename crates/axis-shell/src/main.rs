@@ -337,7 +337,9 @@ fn main() -> glib::ExitCode {
         move |enabled| {
             let net = network_provider.clone();
             tokio::spawn(async move {
-                let _ = net.set_wifi_enabled(enabled).await;
+                if let Err(e) = net.set_wifi_enabled(enabled).await {
+                    log::error!("[toggle] wifi set_enabled failed: {e}");
+                }
             });
         },
     ));
@@ -361,7 +363,9 @@ fn main() -> glib::ExitCode {
             move |enabled| {
                 let uc = uc.clone();
                 tokio::spawn(async move {
-                    let _ = uc.execute(enabled).await;
+                    if let Err(e) = uc.execute(enabled).await {
+                        log::error!("[toggle] bluetooth set_powered failed: {e}");
+                    }
                 });
             }
         },
@@ -384,7 +388,9 @@ fn main() -> glib::ExitCode {
         move |enabled| {
             let nl = nightlight_provider.clone();
             tokio::spawn(async move {
-                let _ = nl.set_enabled(enabled).await;
+                if let Err(e) = nl.set_enabled(enabled).await {
+                    log::error!("[toggle] nightlight set_enabled failed: {e}");
+                }
             });
         },
     ));
@@ -407,7 +413,9 @@ fn main() -> glib::ExitCode {
         move |enabled| {
             let dnd = dnd_provider.clone();
             tokio::spawn(async move {
-                let _ = dnd.set_enabled(enabled).await;
+                if let Err(e) = dnd.set_enabled(enabled).await {
+                    log::error!("[toggle] dnd set_enabled failed: {e}");
+                }
             });
         },
     ));
@@ -429,7 +437,9 @@ fn main() -> glib::ExitCode {
         move |enabled| {
             let ap = airplane_provider.clone();
             tokio::spawn(async move {
-                let _ = ap.set_enabled(enabled).await;
+                if let Err(e) = ap.set_enabled(enabled).await {
+                    log::error!("[toggle] airplane set_enabled failed: {e}");
+                }
             });
         },
     ));
@@ -467,13 +477,17 @@ fn main() -> glib::ExitCode {
                 IpcCommand::ToggleLauncher => {
                     let tp = ipc_tp.clone();
                     tokio::spawn(async move {
-                        let _ = tp.execute(axis_domain::models::popups::PopupType::Launcher).await;
+                        if let Err(e) = tp.execute(axis_domain::models::popups::PopupType::Launcher).await {
+                            log::error!("[ipc] toggle launcher failed: {e}");
+                        }
                     });
                 }
                 IpcCommand::Lock => {
                     let uc = ipc_lock_uc.clone();
                     tokio::spawn(async move {
-                        let _ = uc.execute().await;
+                        if let Err(e) = uc.execute().await {
+                            log::error!("[ipc] lock failed: {e}");
+                        }
                     });
                 }
             }
@@ -482,11 +496,15 @@ fn main() -> glib::ExitCode {
         }
     });
 
-    let show_labels = config_provider.get().expect("config get failed").bar.show_labels;
+    let show_labels = config_provider.get().map(|c| c.bar.show_labels).unwrap_or(true);
 
     let lock_gtk_handle_for_activate = lock_gtk_handle;
     app.connect_activate(move |app| {
-        let theme_svc = Rc::new(ThemeService::new(theme_provider.get().expect("theme provider not initialized").clone()));
+        let theme_css = theme_provider.get().cloned().unwrap_or_else(|| {
+            log::error!("theme provider not initialized, falling back to empty CSS");
+            Rc::new(gtk4::CssProvider::new())
+        });
+        let theme_svc = Rc::new(ThemeService::new(theme_css));
         let wallpaper_svc = Rc::new(WallpaperService::new(app));
         let config_dir = dirs::config_dir().unwrap_or(PathBuf::from(".")).join("axis");
         let niri_layout = NiriLayoutProvider::new(config_dir);
@@ -496,7 +514,9 @@ fn main() -> glib::ExitCode {
         theme_svc.on_color_extracted(move |hex| {
             let niri = niri_auto.clone();
             tokio::spawn(async move {
-                let _ = niri.set_active_border_color(hex).await;
+                if let Err(e) = niri.set_active_border_color(hex).await {
+                    log::error!("[theme] border color sync failed: {e}");
+                }
             });
         });
 
@@ -651,7 +671,9 @@ fn main() -> glib::ExitCode {
         lp.on_close(Box::new(move || {
             let tp = tp_close.clone();
             tokio::spawn(async move {
-                let _ = tp.execute(axis_domain::models::popups::PopupType::Launcher).await;
+                if let Err(e) = tp.execute(axis_domain::models::popups::PopupType::Launcher).await {
+                    log::error!("[popup] launcher close failed: {e}");
+                }
             });
         }));
 
@@ -659,7 +681,9 @@ fn main() -> glib::ExitCode {
         launcher_popup.on_escape(Box::new(move || {
             let tp = tp_esc.clone();
             tokio::spawn(async move {
-                let _ = tp.execute(axis_domain::models::popups::PopupType::Launcher).await;
+                if let Err(e) = tp.execute(axis_domain::models::popups::PopupType::Launcher).await {
+                    log::error!("[popup] launcher escape failed: {e}");
+                }
             });
         }));
 
@@ -667,7 +691,9 @@ fn main() -> glib::ExitCode {
         qs_popup.on_escape(Box::new(move || {
             let tp = tp_esc_qs.clone();
             tokio::spawn(async move {
-                let _ = tp.execute(axis_domain::models::popups::PopupType::QuickSettings).await;
+                if let Err(e) = tp.execute(axis_domain::models::popups::PopupType::QuickSettings).await {
+                    log::error!("[popup] QS escape failed: {e}");
+                }
             });
         }));
 

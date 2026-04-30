@@ -72,7 +72,9 @@ impl BrightnessPresenter {
 
         let uc = self.set_use_case.clone();
         tokio::spawn(async move {
-            let _ = uc.execute(new_pct).await;
+            if let Err(e) = uc.execute(new_pct).await {
+                log::error!("[brightness] set_brightness failed: {e}");
+            }
         });
     }
 }

@@ -35,7 +35,9 @@ impl WorkspacePresenter {
         view.on_workspace_clicked(Box::new(move |id| {
             let uc = focus_uc.clone();
             tokio::spawn(async move {
-                let _ = uc.execute(id).await;
+                if let Err(e) = uc.execute(id).await {
+                    log::error!("[workspaces] focus failed: {e}");
+                }
             });
         }));
 

@@ -42,7 +42,13 @@ impl TrayPresenter {
         rt: &tokio::runtime::Runtime,
     ) -> Self {
         let initial_status = rt.block_on(async {
-            get_status_use_case.execute().await.unwrap_or_default()
+            match get_status_use_case.execute().await {
+                Ok(s) => s,
+                Err(e) => {
+                    log::error!("[tray] Failed to get initial status: {e}");
+                    Default::default()
+                }
+            }
         });
 
         let inner = Presenter::from_subscribe({
@@ -73,21 +79,27 @@ impl TrayPresenter {
     pub fn activate(&self, bus_name: String, x: i32, y: i32) {
         let uc = self.activate_use_case.clone();
         tokio::spawn(async move {
-            let _ = uc.execute(&bus_name, x, y).await;
+            if let Err(e) = uc.execute(&bus_name, x, y).await {
+                log::error!("[tray] activate failed: {e}");
+            }
         });
     }
 
     pub fn context_menu(&self, bus_name: String, x: i32, y: i32) {
         let uc = self.context_menu_use_case.clone();
         tokio::spawn(async move {
-            let _ = uc.execute(&bus_name, x, y).await;
+            if let Err(e) = uc.execute(&bus_name, x, y).await {
+                log::error!("[tray] context_menu failed: {e}");
+            }
         });
     }
 
     pub fn scroll(&self, bus_name: String, delta: i32, orientation: String) {
         let uc = self.scroll_use_case.clone();
         tokio::spawn(async move {
-            let _ = uc.execute(&bus_name, delta, &orientation).await;
+            if let Err(e) = uc.execute(&bus_name, delta, &orientation).await {
+                log::error!("[tray] scroll failed: {e}");
+            }
         });
     }
 }

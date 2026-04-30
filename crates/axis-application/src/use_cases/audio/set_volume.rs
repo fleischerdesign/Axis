@@ -19,7 +19,9 @@ impl SetVolumeUseCase {
             if let Ok(status) = self.provider.get_status().await {
                 if status.is_muted {
                     info!("[use-case] Auto-unmuting system");
-                    let _ = self.provider.set_muted(false).await;
+                    if let Err(e) = self.provider.set_muted(false).await {
+                        log::warn!("[use-case] Auto-unmute failed: {e}");
+                    }
                 }
             }
         }

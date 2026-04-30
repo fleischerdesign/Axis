@@ -96,33 +96,38 @@ impl AppearancePresenter {
 
         let uc = self.set_scheme_uc.clone();
         tokio::spawn(async move {
-            let _ = uc.execute(scheme).await;
+            if let Err(e) = uc.execute(scheme).await {
+                log::error!("[settings-appearance] set_scheme failed: {e}");
+            }
         });
     }
 
     pub fn set_accent(&self, accent: AccentColor) {
-        // Optimistic UI Update: Use inner.current()
         let mut status = self.inner.current().unwrap_or_default();
         status.accent_color = accent.clone();
         self.inner.update(status);
 
         let uc = self.set_accent_uc.clone();
         tokio::spawn(async move {
-            let _ = uc.execute(accent).await;
+            if let Err(e) = uc.execute(accent).await {
+                log::error!("[settings-appearance] set_accent failed: {e}");
+            }
         });
     }
 
     pub fn set_wallpaper(&self, path: String) {
-        // Optimistic UI Update: Use inner.current()
         let mut status = self.inner.current().unwrap_or_default();
         status.wallpaper = Some(path.clone());
         self.inner.update(status);
 
         let uc = self.set_wallpaper_uc.clone();
         tokio::spawn(async move {
-            let _ = uc.execute(path).await;
+            if let Err(e) = uc.execute(path).await {
+                log::error!("[settings-appearance] set_wallpaper failed: {e}");
+            }
         });
     }
+
 }
 
 impl Clone for AppearancePresenter {

@@ -1,4 +1,5 @@
 use axis_domain::models::airplane::AirplaneStatus;
+use axis_domain::models::config::AxisConfig;
 use axis_domain::ports::airplane::{AirplaneError, AirplaneProvider, AirplaneStream};
 use axis_domain::ports::config::ConfigProvider;
 use async_trait::async_trait;
@@ -107,7 +108,11 @@ pub struct ConfigAirplaneProvider {
 impl ConfigAirplaneProvider {
     pub async fn new(config_provider: Arc<dyn ConfigProvider>) -> Arc<Self> {
         let available = std::fs::File::open("/dev/rfkill").is_ok();
-        let initial_enabled = config_provider.get().expect("config get failed").airplane.enabled;
+        let config = config_provider.get().unwrap_or_else(|e| {
+            log::error!("[airplane] config get failed: {e}");
+            AxisConfig::default()
+        });
+        let initial_enabled = config.airplane.enabled;
 
         let initial_status = AirplaneStatus {
             enabled: initial_enabled,
@@ -206,7 +211,13 @@ impl ConfigAirplaneProvider {
         let cmd_tx_bg = provider.cmd_tx.clone();
         let mut last_enabled = initial_enabled;
         tokio::spawn(async move {
-            let mut stream = config_provider.subscribe().expect("config subscribe failed");
+            let mut stream = match config_provider.subscribe() {
+                Ok(s) => s,
+                Err(e) => {
+                    log::warn!("[airplane] config subscribe failed: {e}");
+                    return;
+                }
+            };
             while let Some(config) = futures_util::StreamExt::next(&mut stream).await {
                 let desired = config.airplane.enabled;
                 if desired != last_enabled {

@@ -15,7 +15,11 @@ pub struct ConfigAppearanceProvider {
 
 impl ConfigAppearanceProvider {
     pub async fn new(config_provider: Arc<dyn ConfigProvider>) -> Arc<Self> {
-        let initial = Self::config_to_status(&config_provider.get().expect("config get failed"));
+        let config = config_provider.get().unwrap_or_else(|e| {
+            log::error!("[appearance] config get failed: {e}");
+            AxisConfig::default()
+        });
+        let initial = Self::config_to_status(&config);
         let (status_tx, _) = watch::channel(initial.clone());
 
         let provider = Arc::new(Self {
@@ -26,7 +30,13 @@ impl ConfigAppearanceProvider {
         let status_tx_bg = provider.status_tx.clone();
         let mut last = initial;
         tokio::spawn(async move {
-            let mut stream = config_provider.subscribe().expect("config subscribe failed");
+            let mut stream = match config_provider.subscribe() {
+                Ok(s) => s,
+                Err(e) => {
+                    log::warn!("[appearance] config subscribe failed: {e}");
+                    return;
+                }
+            };
             while let Some(config) = futures_util::StreamExt::next(&mut stream).await {
                 let status = Self::config_to_status(&config);
                 if status != last {

@@ -104,7 +104,7 @@ impl BrightnessProvider for SysfsBrightnessProvider {
     }
 
     async fn set_brightness(&self, percentage: f64) -> Result<(), BrightnessError> {
-        let _ = self.cmd_tx.send(percentage).await;
-        Ok(())
+        self.cmd_tx.send(percentage).await
+            .map_err(|e| BrightnessError::ProviderError(format!("Backlight channel closed: {e}")))
     }
 }

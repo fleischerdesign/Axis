@@ -16,8 +16,15 @@ impl AppearancePresenter {
         get_status_use_case: Arc<GetStatusUseCase<dyn AppearanceProvider, AppearanceConfig>>,
         rt: &tokio::runtime::Runtime,
     ) -> Self {
-        let initial_status = rt
-            .block_on(async { get_status_use_case.execute().await.unwrap_or_default() });
+        let initial_status = rt.block_on(async {
+            match get_status_use_case.execute().await {
+                Ok(s) => s,
+                Err(e) => {
+                    log::error!("[appearance] Failed to get initial status: {e}");
+                    Default::default()
+                }
+            }
+        });
 
         let inner = Presenter::from_subscribe({
             let uc = subscribe_use_case.clone();

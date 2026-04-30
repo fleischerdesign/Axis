@@ -44,7 +44,13 @@ impl FileConfigProvider {
                 let reloaded = Self::load();
                 let merged = Self::merge(&cli_for_watcher, &reloaded);
 
-                let mut guard = base_for_watcher.lock().expect("config lock");
+                let mut guard = match base_for_watcher.lock() {
+                    Ok(g) => g,
+                    Err(e) => {
+                        log::error!("[config] lock poisoned: {e}");
+                        return;
+                    }
+                };
                 if *guard == reloaded {
                     return;
                 }
@@ -181,7 +187,13 @@ impl FileConfigProvider {
     }
 
     fn resolved(&self) -> AxisConfig {
-        let base = self.base.lock().expect("config lock").clone();
+        let base = match self.base.lock() {
+            Ok(b) => b.clone(),
+            Err(e) => {
+                log::error!("[config] lock poisoned: {e}");
+                return self.cli_override.clone();
+            }
+        };
         Self::merge(&self.cli_override, &base)
     }
 
@@ -255,13 +267,14 @@ impl ConfigProvider for FileConfigProvider {
     }
 
     fn update(&self, apply: Box<dyn FnOnce(&mut AxisConfig) + Send + 'static>) -> Result<(), ConfigError> {
-        let mut config = self.base.lock().expect("config lock").clone();
-        apply(&mut config);
-        FileConfigProvider::save(&config);
-        *self.base.lock().expect("config lock") = config;
+        let mut guard = self.base.lock().map_err(|e| {
+            ConfigError::ProviderError(format!("Lock poisoned: {e}"))
+        })?;
+        apply(&mut *guard);
+        FileConfigProvider::save(&guard);
         self.suppress_reload.store(true, Ordering::SeqCst);
-        let base_val = self.base.lock().expect("config lock").clone();
-        let resolved = FileConfigProvider::merge(&self.cli_override, &base_val);
+        let resolved = Self::merge(&self.cli_override, &guard);
+        drop(guard);
         self.status_tx.send_modify(|s| *s = resolved);
         Ok(())
     }

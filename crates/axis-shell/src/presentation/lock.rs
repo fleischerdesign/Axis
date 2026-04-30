@@ -51,14 +51,18 @@ impl LockPresenter {
     pub fn lock(&self) {
         let uc = self.lock_uc.clone();
         tokio::spawn(async move {
-            let _ = uc.execute().await;
+            if let Err(e) = uc.execute().await {
+                log::error!("[lock] lock failed: {e}");
+            }
         });
     }
 
     pub fn unlock(&self) {
         let uc = self.unlock_uc.clone();
         tokio::spawn(async move {
-            let _ = uc.execute().await;
+            if let Err(e) = uc.execute().await {
+                log::error!("[lock] unlock failed: {e}");
+            }
         });
     }
 

@@ -27,7 +27,13 @@ impl NightlightPresenter {
         rt: &tokio::runtime::Runtime,
     ) -> Self {
         let initial_status = rt.block_on(async {
-            get_status_use_case.execute().await.unwrap_or_default()
+            match get_status_use_case.execute().await {
+                Ok(s) => s,
+                Err(e) => {
+                    log::error!("[nightlight] Failed to get initial status: {e}");
+                    Default::default()
+                }
+            }
         });
 
         let inner = Presenter::from_subscribe({
@@ -58,28 +64,36 @@ impl NightlightPresenter {
     pub fn set_enabled(&self, enabled: bool) {
         let uc = self.set_enabled_use_case.clone();
         tokio::spawn(async move {
-            let _ = uc.execute(enabled).await;
+            if let Err(e) = uc.execute(enabled).await {
+                log::error!("[nightlight] set_enabled failed: {e}");
+            }
         });
     }
 
     pub fn set_temp_day(&self, temp: u32) {
         let uc = self.set_temp_day_use_case.clone();
         tokio::spawn(async move {
-            let _ = uc.execute(temp).await;
+            if let Err(e) = uc.execute(temp).await {
+                log::error!("[nightlight] set_temp_day failed: {e}");
+            }
         });
     }
 
     pub fn set_temp_night(&self, temp: u32) {
         let uc = self.set_temp_night_use_case.clone();
         tokio::spawn(async move {
-            let _ = uc.execute(temp).await;
+            if let Err(e) = uc.execute(temp).await {
+                log::error!("[nightlight] set_temp_night failed: {e}");
+            }
         });
     }
 
     pub fn set_schedule(&self, sunrise: String, sunset: String) {
         let uc = self.set_schedule_use_case.clone();
         tokio::spawn(async move {
-            let _ = uc.execute(&sunrise, &sunset).await;
+            if let Err(e) = uc.execute(&sunrise, &sunset).await {
+                log::error!("[nightlight] set_schedule failed: {e}");
+            }
         });
     }
 }

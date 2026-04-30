@@ -21,7 +21,13 @@ impl NetworkPresenter {
         rt: &tokio::runtime::Runtime,
     ) -> Self {
         let initial_status = rt.block_on(async {
-            get_status_use_case.execute().await.unwrap_or_default()
+            match get_status_use_case.execute().await {
+                Ok(s) => s,
+                Err(e) => {
+                    log::error!("[network] Failed to get initial status: {e}");
+                    Default::default()
+                }
+            }
         });
 
         let inner = Presenter::from_subscribe({
@@ -46,14 +52,18 @@ impl NetworkPresenter {
     pub fn connect_to_ap(&self, id: String, password: Option<String>) {
         let uc = self.connect_use_case.clone();
         tokio::spawn(async move {
-            let _ = uc.execute(&id, password.as_deref()).await;
+            if let Err(e) = uc.execute(&id, password.as_deref()).await {
+                log::error!("[network] connect_to_ap failed: {e}");
+            }
         });
     }
 
     pub fn disconnect_wifi(&self) {
         let uc = self.disconnect_use_case.clone();
         tokio::spawn(async move {
-            let _ = uc.execute().await;
+            if let Err(e) = uc.execute().await {
+                log::error!("[network] disconnect_wifi failed: {e}");
+            }
         });
     }
 }

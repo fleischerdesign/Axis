@@ -53,7 +53,13 @@ impl BluetoothPresenter {
         rt: &tokio::runtime::Runtime,
     ) -> Self {
         let initial_status = rt.block_on(async {
-            get_status_uc.execute().await.unwrap_or_default()
+            match get_status_uc.execute().await {
+                Ok(s) => s,
+                Err(e) => {
+                    log::error!("[settings-bluetooth] Failed to get initial status: {e}");
+                    Default::default()
+                }
+            }
         });
 
         let sub = subscribe_uc.clone();
@@ -84,7 +90,9 @@ impl BluetoothPresenter {
         view.on_toggle_power(Box::new(move |powered| {
             let uc = this.set_powered_uc.clone();
             tokio::spawn(async move {
-                let _ = uc.execute(powered).await;
+                if let Err(e) = uc.execute(powered).await {
+                    log::error!("[settings-bluetooth] set_powered failed: {e}");
+                }
             });
         }));
 
@@ -94,9 +102,11 @@ impl BluetoothPresenter {
             let stop = this_scan.stop_scan_uc.clone();
             tokio::spawn(async move {
                 if scanning {
-                    let _ = start.execute().await;
-                } else {
-                    let _ = stop.execute().await;
+                    if let Err(e) = start.execute().await {
+                        log::error!("[settings-bluetooth] start_scan failed: {e}");
+                    }
+                } else if let Err(e) = stop.execute().await {
+                    log::error!("[settings-bluetooth] stop_scan failed: {e}");
                 }
             });
         }));
@@ -105,7 +115,9 @@ impl BluetoothPresenter {
         view.on_device_connect(Box::new(move |id| {
             let uc = this_c.connect_uc.clone();
             tokio::spawn(async move {
-                let _ = uc.execute(&id).await;
+                if let Err(e) = uc.execute(&id).await {
+                    log::error!("[settings-bluetooth] connect failed: {e}");
+                }
             });
         }));
 
@@ -113,7 +125,9 @@ impl BluetoothPresenter {
         view.on_device_disconnect(Box::new(move |id| {
             let uc = this_d.disconnect_uc.clone();
             tokio::spawn(async move {
-                let _ = uc.execute(&id).await;
+                if let Err(e) = uc.execute(&id).await {
+                    log::error!("[settings-bluetooth] disconnect failed: {e}");
+                }
             });
         }));
 

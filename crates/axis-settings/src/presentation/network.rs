@@ -50,7 +50,13 @@ impl NetworkPresenter {
         rt: &tokio::runtime::Runtime,
     ) -> Self {
         let initial_status = rt.block_on(async {
-            get_status_uc.execute().await.unwrap_or_default()
+            match get_status_uc.execute().await {
+                Ok(s) => s,
+                Err(e) => {
+                    log::error!("[settings-network] Failed to get initial status: {e}");
+                    Default::default()
+                }
+            }
         });
 
         let sub = subscribe_uc.clone();
@@ -79,7 +85,9 @@ impl NetworkPresenter {
         view.on_scan_requested(Box::new(move || {
             let uc = this.scan_uc.clone();
             tokio::spawn(async move {
-                let _ = uc.execute().await;
+                if let Err(e) = uc.execute().await {
+                    log::error!("[settings-network] scan failed: {e}");
+                }
             });
         }));
 
@@ -87,7 +95,9 @@ impl NetworkPresenter {
         view.on_connect(Box::new(move |ssid, password| {
             let uc = this_c.connect_uc.clone();
             tokio::spawn(async move {
-                let _ = uc.execute(&ssid, Some(&password)).await;
+                if let Err(e) = uc.execute(&ssid, Some(&password)).await {
+                    log::error!("[settings-network] connect failed: {e}");
+                }
             });
         }));
 
@@ -95,7 +105,9 @@ impl NetworkPresenter {
         view.on_disconnect(Box::new(move || {
             let uc = this_d.disconnect_uc.clone();
             tokio::spawn(async move {
-                let _ = uc.execute().await;
+                if let Err(e) = uc.execute().await {
+                    log::error!("[settings-network] disconnect failed: {e}");
+                }
             });
         }));
 

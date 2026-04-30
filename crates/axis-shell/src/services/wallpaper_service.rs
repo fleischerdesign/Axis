@@ -46,7 +46,10 @@ impl WallpaperService {
 
         self.close_all();
 
-        let display = gtk4::gdk::Display::default().expect("No display available");
+        let Some(display) = gtk4::gdk::Display::default() else {
+            log::error!("[wallpaper] No display available");
+            return None;
+        };
         let monitors = display.monitors();
         let mut windows = Vec::new();
 

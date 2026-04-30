@@ -179,11 +179,12 @@ impl BlueZProvider {
 
         for (path, interfaces) in objects {
             if interfaces.contains_key("org.bluez.Adapter1") {
-                if let Ok(proxy) = Adapter1Proxy::builder(conn)
-                    .path(path)
-                    .expect("invalid path")
-                    .build()
-                    .await
+                let path_str = path.to_string();
+                let Ok(builder) = Adapter1Proxy::builder(conn).path(path) else {
+                    log::warn!("[bluetooth] invalid adapter path: {path_str}");
+                    continue;
+                };
+                if let Ok(proxy) = builder.build().await
                 {
                     return proxy.powered().await.unwrap_or(false);
                 }
@@ -216,12 +217,11 @@ impl BlueZProvider {
                 continue;
             }
 
-            let Ok(proxy) = BluetoothDevice1Proxy::builder(conn)
-                .path(path.clone())
-                .expect("invalid path")
-                .build()
-                .await
-            else {
+            let Ok(builder) = BluetoothDevice1Proxy::builder(conn).path(path.clone()) else {
+                log::warn!("[bluetooth] invalid device path: {path}");
+                continue;
+            };
+            let Ok(proxy) = builder.build().await else {
                 continue;
             };
 

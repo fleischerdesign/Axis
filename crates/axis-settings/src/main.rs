@@ -85,7 +85,11 @@ fn main() -> glib::ExitCode {
     });
 
     app.connect_activate(move |app| {
-        build_ui(app, theme_provider.get().expect("theme provider not initialized").clone(), &rt);
+        let theme_css = theme_provider.get().cloned().unwrap_or_else(|| {
+            log::error!("theme provider not initialized, falling back to empty CSS");
+            Rc::new(gtk4::CssProvider::new())
+        });
+        build_ui(app, theme_css, &rt);
     });
     
     app.run()
@@ -93,7 +97,9 @@ fn main() -> glib::ExitCode {
 
 fn build_ui(app: &adw::Application, theme_css: Rc<gtk4::CssProvider>, rt: &tokio::runtime::Runtime) {
     let config_dir = dirs::config_dir().unwrap_or(PathBuf::from(".")).join("axis");
-    let _ = std::fs::create_dir_all(&config_dir);
+    if let Err(e) = std::fs::create_dir_all(&config_dir) {
+        log::warn!("[settings] Failed to create config dir: {e}");
+    }
 
     // 1. Infrastructure
     let config_provider = FileConfigProvider::new(AxisConfig::default());

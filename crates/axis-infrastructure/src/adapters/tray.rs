@@ -239,14 +239,17 @@ impl StatusNotifierAdapter {
             }
         };
 
-        let proxy = match StatusNotifierItemProxy::builder(conn)
+        let builder = match StatusNotifierItemProxy::builder(conn)
             .destination(dest)
-            .expect("invalid destination")
-            .path(obj_path)
-            .expect("invalid path")
-            .build()
-            .await
+            .and_then(|b| b.path(obj_path))
         {
+            Ok(b) => b,
+            Err(e) => {
+                warn!("[tray] Invalid address for {destination}: {e}");
+                return None;
+            }
+        };
+        let proxy = match builder.build().await {
             Ok(p) => p,
             Err(e) => {
                 warn!("[tray] Failed to create proxy for {destination}: {e}");

@@ -52,8 +52,12 @@ impl GtkThemeService {
 
         for gtk_ver in &["gtk-4.0", "gtk-3.0"] {
             let dir = format!("{config_dir}/{gtk_ver}");
-            let _ = std::fs::create_dir_all(&dir);
-            let _ = std::fs::write(format!("{dir}/gtk.css"), &css);
+            if let Err(e) = std::fs::create_dir_all(&dir) {
+                log::warn!("[theme] Failed to create {dir}: {e}");
+            }
+            if let Err(e) = std::fs::write(format!("{dir}/gtk.css"), &css) {
+                log::warn!("[theme] Failed to write {dir}/gtk.css: {e}");
+            }
         }
     }
 
