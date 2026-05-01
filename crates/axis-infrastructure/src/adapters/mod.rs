@@ -19,4 +19,5 @@ pub mod lock;
 pub mod notifications;
 pub mod config;
 pub mod airplane;
+pub mod continuity;
 pub mod tray;

@@ -35,6 +35,7 @@ use axis_application::use_cases::tray::scroll::ScrollTrayItemUseCase;
 use axis_application::use_cases::notifications::close_notification::CloseNotificationUseCase;
 use axis_application::use_cases::notifications::invoke_action::InvokeNotificationActionUseCase;
 use axis_application::use_cases::layout::set_border::SetBorderColorUseCase;
+use axis_application::use_cases::continuity::set_enabled::SetContinuityEnabledUseCase;
 
 use axis_domain::models::appearance::{AccentColor, ColorScheme};
 use axis_domain::models::config::AxisConfig;
@@ -54,6 +55,7 @@ use axis_domain::ports::popups::PopupProvider;
 use axis_domain::ports::notifications::NotificationProvider;
 use axis_domain::ports::ipc::IpcProvider;
 use axis_domain::ports::tray::TrayProvider;
+use axis_domain::ports::continuity::ContinuityProvider;
 use axis_domain::models::ipc::IpcCommand;
 use axis_domain::models::dnd::DndStatus;
 
@@ -76,6 +78,7 @@ use axis_infrastructure::adapters::config::FileConfigProvider;
 use axis_infrastructure::adapters::airplane::ConfigAirplaneProvider;
 use axis_infrastructure::adapters::tray::StatusNotifierTrayProvider;
 use axis_infrastructure::adapters::niri_layout::NiriLayoutProvider;
+use axis_infrastructure::adapters::continuity::ContinuityService;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::rc::Rc;
@@ -111,6 +114,7 @@ use presentation::bluetooth::BluetoothPresenter;
 use presentation::nightlight::NightlightPresenter;
 use presentation::appearance::AppearancePresenter;
 use presentation::lock::LockPresenter;
+use presentation::continuity::ContinuityPresenter;
 use presentation::tray::TrayPresenter;
 
 use services::theme_service::ThemeService;
@@ -248,6 +252,8 @@ fn main() -> glib::ExitCode {
         }
     });
 
+    let continuity_provider: Arc<dyn ContinuityProvider> = ContinuityService::new();
+
     let subscribe_power = Arc::new(SubscribeUseCase::new(power_provider.clone()));
     let suspend_uc = Arc::new(SuspendUseCase::new(power_provider.clone()));
     let power_off_uc = Arc::new(PowerOffUseCase::new(power_provider.clone()));
@@ -300,6 +306,11 @@ fn main() -> glib::ExitCode {
     let dnd_set_enabled_uc = Arc::new(axis_application::use_cases::dnd::set_enabled::SetDndEnabledUseCase::new(dnd_provider.clone()));
     let subscribe_airplane = Arc::new(SubscribeUseCase::new(airplane_provider.clone()));
     let ap_set_enabled_uc = Arc::new(axis_application::use_cases::airplane::set_enabled::SetAirplaneModeUseCase::new(airplane_provider.clone()));
+
+    let subscribe_continuity = Arc::new(SubscribeUseCase::new(continuity_provider.clone()));
+    let subscribe_continuity_for_toggle = subscribe_continuity.clone();
+    let get_continuity_status = Arc::new(GetStatusUseCase::new(continuity_provider.clone()));
+    let continuity_set_enabled = Arc::new(SetContinuityEnabledUseCase::new(continuity_provider.clone()));
 
     let subscribe_appearance = Arc::new(SubscribeUseCase::new(appearance_provider.clone()));
     let get_appearance_status = Arc::new(GetStatusUseCase::new(appearance_provider.clone()));
@@ -370,6 +381,10 @@ fn main() -> glib::ExitCode {
 
     let lock_presenter = Rc::new(LockPresenter::new(
         subscribe_lock, lock_session_uc.clone(), unlock_session_uc.clone(), authenticate_uc.clone(),
+    ));
+
+    let continuity_presenter = Rc::new(ContinuityPresenter::new(
+        subscribe_continuity, get_continuity_status, &rt,
     ));
 
     let wifi_presenter = Rc::new(TogglePresenter::new(
@@ -502,6 +517,32 @@ fn main() -> glib::ExitCode {
         },
     ));
 
+    let continuity_toggle_presenter = Rc::new(TogglePresenter::new(
+        "Continuity",
+        "phone-symbolic",
+        "phone-disabled-symbolic",
+        {
+            let uc = subscribe_continuity_for_toggle.clone();
+            move || {
+                let uc = uc.clone();
+                async move {
+                    uc.execute().await.map(|s| s.map(|status| status.enabled))
+                }
+            }
+        },
+        {
+            let uc = continuity_set_enabled.clone();
+            move |enabled| {
+                let uc = uc.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = uc.execute(enabled).await {
+                        log::error!("[toggle] continuity set_enabled failed: {e}");
+                    }
+                });
+            }
+        },
+    ));
+
     let ap_sync = audio_presenter.clone();
     glib::spawn_future_local(async move { ap_sync.run_sync().await; });
 
@@ -525,6 +566,9 @@ fn main() -> glib::ExitCode {
 
     let lock_sync = lock_presenter.clone();
     glib::spawn_future_local(async move { lock_sync.run_sync().await; });
+
+    let cont_sync = continuity_presenter.clone();
+    glib::spawn_future_local(async move { cont_sync.run_sync().await; });
 
     let ipc_tp = toggle_popup.clone();
     let ipc_lock_uc = lock_session_uc.clone();
@@ -655,6 +699,7 @@ fn main() -> glib::ExitCode {
         qs_popup.setup_toggle(1, 0, nightlight_toggle_presenter.clone(), Some("nightlight"));
         qs_popup.setup_toggle(1, 1, dnd_presenter.clone(), None);
         qs_popup.setup_toggle(2, 0, airplane_presenter.clone(), None);
+        qs_popup.setup_toggle(2, 1, continuity_toggle_presenter.clone(), None);
 
         qs_popup.setup_wifi_sub_page(network_presenter.clone());
         qs_popup.setup_bluetooth_sub_page(bluetooth_full_presenter.clone());
@@ -790,8 +835,8 @@ fn main() -> glib::ExitCode {
                 while let Some(status) = futures_util::StreamExt::next(&mut stream).await {
                     ahp.set_force_visible(&bar_win, status.active_popup.is_some());
                 }
-            }
-        });
+        }
+    });
 
         bar_window.present();
 

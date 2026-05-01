@@ -28,3 +28,7 @@ reqwest.workspace = true
 open.workspace = true
 urlencoding = "2"
 url = "2"
+async-channel.workspace = true
+evdev.workspace = true
+uuid.workspace = true
+rand.workspace = true

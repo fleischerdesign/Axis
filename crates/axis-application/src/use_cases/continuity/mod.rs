@@ -1,1 +1,13 @@
-pub mod discover_peers;
+pub mod connect_to_peer;
+pub mod confirm_pin;
+pub mod reject_pin;
+pub mod disconnect;
+pub mod cancel_reconnect;
+pub mod unpair;
+pub mod set_enabled;
+pub mod start_sharing;
+pub mod stop_sharing;
+pub mod send_input;
+pub mod force_local;
+pub mod set_peer_arrangement;
+pub mod update_peer_configs;

@@ -1,0 +1,98 @@
+use std::io;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use axis_domain::models::continuity::Message;
+
+pub const PROTOCOL_VERSION: u32 = 1;
+pub const MAGIC: &[u8; 4] = b"AXIS";
+pub const MAX_MESSAGE_SIZE: usize = 10 * 1024 * 1024;
+
+// ── Framing: length-prefixed JSON ──────────────────────────────────────
+// Wire format: [4 bytes magic][4 bytes version][4 bytes length][JSON payload]
+
+pub async fn write_message<W: AsyncWriteExt + Unpin>(
+    writer: &mut W,
+    msg: &Message,
+) -> io::Result<()> {
+    let payload = serde_json::to_vec(msg)?;
+    let len = payload.len() as u32;
+
+    let mut wire = Vec::with_capacity(12 + payload.len());
+    wire.extend_from_slice(MAGIC);
+    wire.extend_from_slice(&PROTOCOL_VERSION.to_be_bytes());
+    wire.extend_from_slice(&len.to_be_bytes());
+    wire.extend_from_slice(&payload);
+
+    log::trace!(
+        "[continuity:protocol] TX {} bytes: {:02x?}",
+        wire.len(),
+        &wire[..wire.len().min(24)]
+    );
+
+    writer.write_all(&wire).await?;
+    writer.flush().await?;
+    Ok(())
+}
+
+pub async fn read_message<R: AsyncReadExt + Unpin>(
+    reader: &mut R,
+) -> io::Result<Message> {
+    log::trace!("[continuity:protocol] read_message started");
+
+    let mut magic = [0u8; 4];
+    reader.read_exact(&mut magic).await?;
+
+    log::debug!(
+        "[continuity:protocol] RX magic: {:02x?} (expect {:02x?})",
+        magic,
+        MAGIC
+    );
+
+    if &magic != MAGIC {
+        // Read remaining header bytes for debugging
+        let mut ver = [0u8; 4];
+        let mut len_bytes = [0u8; 4];
+        let _ = reader.read_exact(&mut ver).await;
+        let _ = reader.read_exact(&mut len_bytes).await;
+
+        log::debug!(
+            "[continuity:protocol] RX BAD: magic={magic:02x?} ver={ver:02x?} len={len_bytes:02x?}"
+        );
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "invalid magic bytes",
+        ));
+    }
+
+    // Read version and length
+    let mut ver_bytes = [0u8; 4];
+    let mut len_bytes = [0u8; 4];
+    reader.read_exact(&mut ver_bytes).await?;
+    reader.read_exact(&mut len_bytes).await?;
+
+    let version = u32::from_be_bytes(ver_bytes);
+    let len = u32::from_be_bytes(len_bytes) as usize;
+
+    log::debug!(
+        "[continuity:protocol] RX header: ver={version} len={len}"
+    );
+
+    if version != PROTOCOL_VERSION {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("unsupported protocol version: {version}"),
+        ));
+    }
+
+    if len > MAX_MESSAGE_SIZE {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "message too large",
+        ));
+    }
+
+    let mut payload = vec![0u8; len];
+    reader.read_exact(&mut payload).await?;
+
+    serde_json::from_slice(&payload)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+}

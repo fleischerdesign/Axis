@@ -15,3 +15,4 @@ pub mod bluetooth;
 pub mod nightlight;
 pub mod lock;
 pub mod tray;
+pub mod continuity;
