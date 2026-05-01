@@ -123,12 +123,12 @@ enum ItemEvent {
     Disconnected(String),
 }
 
-pub struct StatusNotifierAdapter {
+pub struct StatusNotifierTrayProvider {
     status_tx: watch::Sender<TrayStatus>,
     connection: Connection,
 }
 
-impl StatusNotifierAdapter {
+impl StatusNotifierTrayProvider {
     pub async fn new() -> Result<Arc<Self>, TrayError> {
         let (status_tx, _) = watch::channel(TrayStatus::default());
         let (reg_tx, reg_rx) = mpsc::channel::<String>(64);
@@ -464,7 +464,7 @@ impl StatusNotifierAdapter {
 }
 
 #[async_trait]
-impl TrayProvider for StatusNotifierAdapter {
+impl TrayProvider for StatusNotifierTrayProvider {
     async fn get_status(&self) -> Result<TrayStatus, TrayError> {
         Ok(self.status_tx.borrow().clone())
     }

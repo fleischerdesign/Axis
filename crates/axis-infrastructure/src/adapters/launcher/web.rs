@@ -1,6 +1,7 @@
 use axis_domain::models::launcher::{LauncherAction, LauncherItem, SearchPriority};
 use axis_domain::ports::launcher::{LauncherError, LauncherSearchProvider};
 use async_trait::async_trait;
+use std::sync::Arc;
 
 fn url_encode(query: &str) -> String {
     query
@@ -23,8 +24,8 @@ fn url_encode(query: &str) -> String {
 pub struct WebSearchProvider;
 
 impl WebSearchProvider {
-    pub fn new() -> Self {
-        Self
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self)
     }
 
     fn build_result(&self, query: &str) -> Option<LauncherItem> {

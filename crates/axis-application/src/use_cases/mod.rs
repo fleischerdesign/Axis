@@ -17,5 +17,6 @@ pub mod power;
 pub mod tasks;
 pub mod workspaces;
 pub mod launcher;
+pub mod layout;
 pub mod lock;
 pub mod tray;

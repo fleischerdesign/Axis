@@ -28,10 +28,10 @@ pub struct AppSearchProvider {
 }
 
 impl AppSearchProvider {
-    pub fn new() -> Self {
-        Self {
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self {
             cache: Arc::new(RwLock::new(None)),
-        }
+        })
     }
 
     fn do_search(apps: &[AppEntry], query: &str) -> Vec<LauncherItem> {

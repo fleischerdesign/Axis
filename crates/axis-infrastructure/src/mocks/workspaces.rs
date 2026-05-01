@@ -3,14 +3,14 @@ use axis_domain::ports::workspaces::{WorkspaceProvider, WorkspaceError, Workspac
 use async_trait::async_trait;
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
-
+use std::sync::Arc;
 
 pub struct MockWorkspaceProvider {
     status_tx: watch::Sender<WorkspaceStatus>,
 }
 
 impl MockWorkspaceProvider {
-    pub fn new() -> Self {
+    pub fn new() -> Arc<Self> {
         let (tx, _) = watch::channel(WorkspaceStatus {
             workspaces: vec![
                 Workspace { id: 1, name: "1".to_string(), is_active: true, is_empty: false, index: 1 },
@@ -21,7 +21,7 @@ impl MockWorkspaceProvider {
             ],
         });
 
-        Self { status_tx: tx }
+        Arc::new(Self { status_tx: tx })
     }
 
     pub fn simulate_active(&self, active_id: u32) {

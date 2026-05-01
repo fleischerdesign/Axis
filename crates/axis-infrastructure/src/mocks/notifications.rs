@@ -3,13 +3,14 @@ use axis_domain::ports::notifications::{NotificationProvider, NotificationError,
 use async_trait::async_trait;
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
+use std::sync::Arc;
 
-pub struct MockNotificationService {
+pub struct MockNotificationProvider {
     status_tx: watch::Sender<NotificationStatus>,
 }
 
-impl MockNotificationService {
-    pub fn new() -> Self {
+impl MockNotificationProvider {
+    pub fn new() -> Arc<Self> {
         let initial = NotificationStatus {
             notifications: vec![Notification {
                 id: 1,
@@ -30,12 +31,12 @@ impl MockNotificationService {
             last_id: 1,
         };
         let (status_tx, _) = watch::channel(initial);
-        Self { status_tx }
+        Arc::new(Self { status_tx })
     }
 }
 
 #[async_trait]
-impl NotificationProvider for MockNotificationService {
+impl NotificationProvider for MockNotificationProvider {
     async fn get_status(&self) -> Result<NotificationStatus, NotificationError> {
         Ok(self.status_tx.borrow().clone())
     }

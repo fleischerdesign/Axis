@@ -4,14 +4,14 @@ use async_trait::async_trait;
 use log::info;
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
-
+use std::sync::Arc;
 
 pub struct MockPowerProvider {
     status_tx: watch::Sender<PowerStatus>,
 }
 
 impl MockPowerProvider {
-    pub fn new() -> Self {
+    pub fn new() -> Arc<Self> {
         let (tx, _) = watch::channel(PowerStatus {
             battery_percentage: 75.5,
             is_charging: false,
@@ -19,7 +19,7 @@ impl MockPowerProvider {
             has_battery: true,
         });
 
-        Self { status_tx: tx }
+        Arc::new(Self { status_tx: tx })
     }
 
     pub fn simulate_change(&self, percentage: f64, charging: bool) {

@@ -1,7 +1,7 @@
 use axis_domain::models::airplane::AirplaneStatus;
 use axis_domain::ports::airplane::{AirplaneError, AirplaneProvider, AirplaneStream};
 use async_trait::async_trait;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
 
@@ -11,16 +11,16 @@ pub struct MockAirplaneProvider {
 }
 
 impl MockAirplaneProvider {
-    pub fn new() -> Self {
+    pub fn new() -> Arc<Self> {
         let status = AirplaneStatus {
             enabled: false,
             available: true,
         };
         let (status_tx, _) = watch::channel(status.clone());
-        Self {
+        Arc::new(Self {
             status: Mutex::new(status),
             status_tx,
-        }
+        })
     }
 }
 

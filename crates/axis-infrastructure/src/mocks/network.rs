@@ -3,7 +3,7 @@ use axis_domain::ports::network::{NetworkProvider, NetworkError, NetworkStream};
 use async_trait::async_trait;
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 pub struct MockNetworkProvider {
     status: Mutex<NetworkStatus>,
@@ -11,7 +11,7 @@ pub struct MockNetworkProvider {
 }
 
 impl MockNetworkProvider {
-    pub fn new() -> Self {
+    pub fn new() -> Arc<Self> {
         let initial = NetworkStatus {
             is_wifi_connected: true,
             is_ethernet_connected: false,
@@ -36,10 +36,10 @@ impl MockNetworkProvider {
             ],
         };
         let (tx, _) = watch::channel(initial.clone());
-        Self {
+        Arc::new(Self {
             status: Mutex::new(initial),
             status_tx: tx,
-        }
+        })
     }
 }
 

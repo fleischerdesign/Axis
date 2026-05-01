@@ -20,9 +20,9 @@ pub struct CompositeLauncherProvider {
 impl CompositeLauncherProvider {
     pub fn new() -> Arc<Self> {
         let providers: Vec<Arc<dyn LauncherSearchProvider>> = vec![
-            Arc::new(AppSearchProvider::new()),
+            AppSearchProvider::new(),
             Arc::new(FileSearchProvider),
-            Arc::new(WebSearchProvider::new()),
+            WebSearchProvider::new(),
         ];
         Arc::new(Self { providers })
     }

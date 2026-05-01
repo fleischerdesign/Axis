@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
 use chrono::Local;
+use std::sync::Arc;
 use std::time::Duration;
 
 pub struct MockClockProvider {
@@ -11,7 +12,7 @@ pub struct MockClockProvider {
 }
 
 impl MockClockProvider {
-    pub fn new() -> Self {
+    pub fn new() -> Arc<Self> {
         let (tx, _) = watch::channel(TimeStatus {
             current_time: Local::now(),
         });
@@ -27,7 +28,7 @@ impl MockClockProvider {
             }
         });
 
-        Self { status_tx: tx }
+        Arc::new(Self { status_tx: tx })
     }
 }
 

@@ -18,7 +18,7 @@ pub struct NavigationState {
 }
 
 pub struct NavigationPresenter {
-    presenter: Presenter<NavigationState>,
+    inner: Presenter<NavigationState>,
     state_tx: watch::Sender<NavigationState>,
 }
 
@@ -38,23 +38,23 @@ impl NavigationPresenter {
         let (state_tx, _) = watch::channel(initial_state);
         let state_tx_c = state_tx.clone();
 
-        let presenter = Presenter::new(move || {
+        let inner = Presenter::new(move || {
             let rx = state_tx_c.subscribe();
             Box::pin(WatchStream::new(rx))
         });
 
         Self {
-            presenter,
+            inner,
             state_tx,
         }
     }
 
     pub fn add_view(&self, view: Box<dyn View<NavigationState>>) {
-        self.presenter.add_view(view);
+        self.inner.add_view(view);
     }
 
     pub async fn run(&self) {
-        self.presenter.run_sync().await;
+        self.inner.run_sync().await;
     }
 
     pub fn select_page(&self, id: &str) {

@@ -3,7 +3,7 @@ use axis_domain::ports::bluetooth::{BluetoothStream, BluetoothProvider, Bluetoot
 use async_trait::async_trait;
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 pub struct MockBluetoothProvider {
     status: Mutex<BluetoothStatus>,
@@ -11,7 +11,7 @@ pub struct MockBluetoothProvider {
 }
 
 impl MockBluetoothProvider {
-    pub fn new() -> Self {
+    pub fn new() -> Arc<Self> {
         let initial = BluetoothStatus {
             powered: true,
             is_scanning: false,
@@ -33,10 +33,10 @@ impl MockBluetoothProvider {
             ],
         };
         let (tx, _) = watch::channel(initial.clone());
-        Self {
+        Arc::new(Self {
             status: Mutex::new(initial),
             status_tx: tx,
-        }
+        })
     }
 }
 

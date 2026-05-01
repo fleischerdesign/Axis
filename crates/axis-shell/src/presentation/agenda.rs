@@ -1,7 +1,8 @@
 use std::sync::Arc;
 use axis_domain::models::agenda::AgendaStatus;
-use axis_domain::models::popups::PopupType;
+use axis_domain::models::popups::{PopupStatus, PopupType};
 use axis_domain::ports::popups::PopupProvider;
+use axis_application::use_cases::generic::SubscribeUseCase;
 use axis_presentation::{Presenter, View};
 use axis_application::use_cases::cloud::sync_calendar::SyncCalendarUseCase;
 use axis_application::use_cases::cloud::sync_tasks::SyncTasksUseCase;
@@ -94,10 +95,10 @@ impl AgendaPresenter {
         self.inner.add_view(view);
     }
 
-    pub async fn run_sync(&self, popup_provider: Arc<dyn PopupProvider>) {
+    pub async fn run_sync(&self, subscribe_popups: Arc<SubscribeUseCase<dyn PopupProvider, PopupStatus>>) {
         self.refresh(true, true).await;
 
-        let mut stream = match popup_provider.subscribe().await {
+        let mut stream = match subscribe_popups.execute().await {
             Ok(s) => s,
             Err(e) => {
                 log::error!("[agenda] Popup subscription failed: {e}");

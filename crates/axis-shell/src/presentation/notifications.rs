@@ -1,13 +1,17 @@
 use std::sync::Arc;
 use std::cell::RefCell;
 use std::rc::Rc;
+use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
+use axis_application::use_cases::notifications::close_notification::CloseNotificationUseCase;
+use axis_application::use_cases::notifications::invoke_action::InvokeNotificationActionUseCase;
 use axis_domain::models::notifications::NotificationStatus;
 use axis_domain::ports::notifications::NotificationProvider;
 use axis_presentation::{Presenter, View};
 
 pub struct NotificationPresenter {
     inner: Presenter<NotificationStatus>,
-    service: Arc<dyn NotificationProvider>,
+    close_use_case: Arc<CloseNotificationUseCase>,
+    invoke_action_use_case: Arc<InvokeNotificationActionUseCase>,
     toast_view: RefCell<Option<Rc<dyn NotificationPopupAware>>>,
     archive_view: RefCell<Option<Rc<dyn NotificationPopupAware>>>,
 }
@@ -17,18 +21,35 @@ pub trait NotificationPopupAware {
 }
 
 impl NotificationPresenter {
-    pub fn new(service: Arc<dyn NotificationProvider>) -> Self {
-        let inner = Presenter::from_subscribe({
-            let svc = service.clone();
-            move || {
-                let svc = svc.clone();
-                async move { svc.subscribe().await }
+    pub fn new(
+        subscribe_use_case: Arc<SubscribeUseCase<dyn NotificationProvider, NotificationStatus>>,
+        get_status_use_case: Arc<GetStatusUseCase<dyn NotificationProvider, NotificationStatus>>,
+        close_use_case: Arc<CloseNotificationUseCase>,
+        invoke_action_use_case: Arc<InvokeNotificationActionUseCase>,
+        rt: &tokio::runtime::Runtime,
+    ) -> Self {
+        let initial_status = rt.block_on(async {
+            match get_status_use_case.execute().await {
+                Ok(s) => s,
+                Err(e) => {
+                    log::error!("[notifications] Failed to get initial status: {e}");
+                    Default::default()
+                }
             }
         });
 
+        let inner = Presenter::from_subscribe({
+            let uc = subscribe_use_case.clone();
+            move || {
+                let uc = uc.clone();
+                async move { uc.execute().await }
+            }
+        }).with_initial_status(initial_status);
+
         Self {
             inner,
-            service,
+            close_use_case,
+            invoke_action_use_case,
             toast_view: RefCell::new(None),
             archive_view: RefCell::new(None),
         }
@@ -51,16 +72,20 @@ impl NotificationPresenter {
     }
 
     pub fn close_notification(&self, id: u32) {
-        let svc = self.service.clone();
+        let uc = self.close_use_case.clone();
         tokio::spawn(async move {
-            let _ = svc.close_notification(id).await;
+            if let Err(e) = uc.execute(id).await {
+                log::error!("[notifications] close_notification failed: {e}");
+            }
         });
     }
 
     pub fn invoke_action(&self, id: u32, action_key: String) {
-        let svc = self.service.clone();
+        let uc = self.invoke_action_use_case.clone();
         tokio::spawn(async move {
-            let _ = svc.invoke_action(id, &action_key).await;
+            if let Err(e) = uc.execute(id, &action_key).await {
+                log::error!("[notifications] invoke_action failed: {e}");
+            }
         });
     }
 

@@ -3,13 +3,14 @@ use axis_domain::ports::audio::{AudioProvider, AudioError, AudioStream};
 use async_trait::async_trait;
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
+use std::sync::Arc;
 
 pub struct MockAudioProvider {
     status_tx: watch::Sender<AudioStatus>,
 }
 
 impl MockAudioProvider {
-    pub fn new() -> Self {
+    pub fn new() -> Arc<Self> {
         let (tx, _) = watch::channel(AudioStatus {
             volume: 0.5,
             is_muted: false,
@@ -43,7 +44,7 @@ impl MockAudioProvider {
                 }
             ],
         });
-        Self { status_tx: tx }
+        Arc::new(Self { status_tx: tx })
     }
 }
 

@@ -1,7 +1,7 @@
 use axis_domain::models::continuity::{Peer, PeerStatus, ContinuityMessage};
 use axis_domain::ports::continuity::{PeerDiscovery, PeerConnection, ContinuityError};
 use async_trait::async_trait;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 
 pub struct MockContinuityProvider {
@@ -9,8 +9,8 @@ pub struct MockContinuityProvider {
 }
 
 impl MockContinuityProvider {
-    pub fn new() -> Self {
-        Self {
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self {
             peers: Mutex::new(vec![
                 Peer {
                     id: "peer-1".to_string(),
@@ -25,7 +25,7 @@ impl MockContinuityProvider {
                     status: PeerStatus::Connected,
                 },
             ]),
-        }
+        })
     }
 }
 

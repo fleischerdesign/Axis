@@ -47,20 +47,20 @@ struct GoogleEventDateTime {
     date: Option<String>,
 }
 
-pub struct GoogleCalendarAdapter {
+pub struct GoogleCalendarProvider {
     auth_provider: Arc<dyn CloudAuthProvider>,
     http_client: reqwest::Client,
 }
 
-impl GoogleCalendarAdapter {
-    pub fn new(auth_provider: Arc<dyn CloudAuthProvider>) -> Self {
-        Self { 
+impl GoogleCalendarProvider {
+    pub fn new(auth_provider: Arc<dyn CloudAuthProvider>) -> Arc<Self> {
+        Arc::new(Self { 
             auth_provider,
             http_client: reqwest::Client::builder()
                 .tcp_keepalive(std::time::Duration::from_secs(60))
                 .build()
                 .unwrap_or_default(),
-        }
+        })
     }
 
     async fn fetch_events_from_calendar(&self, calendar_id: &str, start: &str, end: &str, token: &str) -> Result<Vec<CalendarEvent>, CalendarError> {
@@ -106,7 +106,7 @@ impl GoogleCalendarAdapter {
 }
 
 #[async_trait]
-impl CalendarProvider for GoogleCalendarAdapter {
+impl CalendarProvider for GoogleCalendarProvider {
     async fn get_events(&self, start: &str, end: &str) -> Result<Vec<CalendarEvent>, CalendarError> {
         let scopes = vec!["https://www.googleapis.com/auth/calendar.readonly".to_string()];
         let token = self.auth_provider.get_token(&scopes).await

@@ -70,7 +70,13 @@ impl LockPresenter {
         let uc = self.authenticate_uc.clone();
         let password = password.to_string();
         glib::spawn_future_local(async move {
-            let success = uc.execute(&password).await.unwrap_or(false);
+            let success = match uc.execute(&password).await {
+                Ok(s) => s,
+                Err(e) => {
+                    log::error!("[lock] authenticate failed: {e}");
+                    false
+                }
+            };
             on_result(success);
         });
     }

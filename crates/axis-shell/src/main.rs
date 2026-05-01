@@ -32,10 +32,12 @@ use axis_application::use_cases::nightlight::set_schedule::SetNightlightSchedule
 use axis_application::use_cases::tray::activate::ActivateTrayItemUseCase;
 use axis_application::use_cases::tray::context_menu::ContextMenuTrayItemUseCase;
 use axis_application::use_cases::tray::scroll::ScrollTrayItemUseCase;
+use axis_application::use_cases::notifications::close_notification::CloseNotificationUseCase;
+use axis_application::use_cases::notifications::invoke_action::InvokeNotificationActionUseCase;
+use axis_application::use_cases::layout::set_border::SetBorderColorUseCase;
 
 use axis_domain::models::appearance::{AccentColor, ColorScheme};
 use axis_domain::models::config::AxisConfig;
-use axis_domain::ports::config::ConfigProvider;
 use axis_domain::ports::network::NetworkProvider;
 use axis_domain::ports::lock::LockProvider;
 use axis_domain::ports::nightlight::NightlightProvider;
@@ -50,13 +52,12 @@ use axis_domain::ports::clock::ClockProvider;
 use axis_domain::ports::bluetooth::BluetoothProvider;
 use axis_domain::ports::popups::PopupProvider;
 use axis_domain::ports::notifications::NotificationProvider;
-use axis_domain::ports::layout::LayoutProvider;
 use axis_domain::ports::ipc::IpcProvider;
 use axis_domain::ports::tray::TrayProvider;
 use axis_domain::models::ipc::IpcCommand;
 use axis_domain::models::dnd::DndStatus;
 
-use axis_infrastructure::adapters::google_auth::GoogleCloudAdapter;
+use axis_infrastructure::adapters::google_auth::GoogleCloudAuthProvider;
 use axis_infrastructure::mocks::clock::MockClockProvider;
 use axis_infrastructure::adapters::power::LogindPowerProvider;
 use axis_infrastructure::adapters::workspaces::NiriWorkspaceProvider;
@@ -73,7 +74,7 @@ use axis_infrastructure::adapters::notifications::ZbusNotificationProvider;
 use axis_infrastructure::adapters::appearance::ConfigAppearanceProvider;
 use axis_infrastructure::adapters::config::FileConfigProvider;
 use axis_infrastructure::adapters::airplane::ConfigAirplaneProvider;
-use axis_infrastructure::adapters::tray::StatusNotifierAdapter;
+use axis_infrastructure::adapters::tray::StatusNotifierTrayProvider;
 use axis_infrastructure::adapters::niri_layout::NiriLayoutProvider;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -163,26 +164,56 @@ fn main() -> glib::ExitCode {
     });
 
     let power_provider: Arc<dyn PowerProvider> = rt.block_on(async {
-        LogindPowerProvider::new().await.expect("Failed to connect to UPower/login1")
+        match LogindPowerProvider::new().await {
+            Ok(p) => p as Arc<dyn PowerProvider>,
+            Err(_) => {
+                log::warn!("[power] logind/UPower not available, using empty provider");
+                axis_infrastructure::mocks::power::MockPowerProvider::new()
+            }
+        }
     });
     let audio_provider: Arc<dyn AudioProvider> = rt.block_on(async {
-        PulseAudioProvider::new().await.expect("Failed to connect to PulseAudio")
+        match PulseAudioProvider::new().await {
+            Ok(p) => p as Arc<dyn AudioProvider>,
+            Err(_) => {
+                log::warn!("[audio] PulseAudio not available, using empty provider");
+                axis_infrastructure::mocks::audio::MockAudioProvider::new()
+            }
+        }
     });
     let workspace_provider: Arc<dyn WorkspaceProvider> = rt.block_on(async {
-        NiriWorkspaceProvider::new().await.expect("Failed to connect to Niri IPC")
+        match NiriWorkspaceProvider::new().await {
+            Ok(p) => p as Arc<dyn WorkspaceProvider>,
+            Err(_) => {
+                log::warn!("[workspaces] Niri IPC not available, using empty provider");
+                axis_infrastructure::mocks::workspaces::MockWorkspaceProvider::new()
+            }
+        }
     });
     let brightness_provider: Arc<dyn BrightnessProvider> = rt.block_on(async {
-        SysfsBrightnessProvider::new().await.expect("Failed to connect to Brightness")
+        match SysfsBrightnessProvider::new().await {
+            Ok(p) => p as Arc<dyn BrightnessProvider>,
+            Err(_) => {
+                log::warn!("[brightness] sysfs backlight not available, using empty provider");
+                axis_infrastructure::mocks::brightness::MockBrightnessProvider::new()
+            }
+        }
     });
     let network_provider: Arc<dyn NetworkProvider> = rt.block_on(async {
-        NetworkManagerProvider::new().await.expect("Failed to connect to NetworkManager")
+        match NetworkManagerProvider::new().await {
+            Ok(p) => p as Arc<dyn NetworkProvider>,
+            Err(_) => {
+                log::warn!("[network] NetworkManager not available, using empty provider");
+                axis_infrastructure::mocks::network::MockNetworkProvider::new()
+            }
+        }
     });
     let bluetooth_provider: Arc<dyn BluetoothProvider> = rt.block_on(async {
         match BlueZProvider::new().await {
             Ok(p) => p as Arc<dyn BluetoothProvider>,
             Err(_) => {
                 log::warn!("[bluetooth] BlueZ not available, using empty provider");
-                Arc::new(axis_infrastructure::mocks::bluetooth::MockBluetoothProvider::new())
+                axis_infrastructure::mocks::bluetooth::MockBluetoothProvider::new()
             }
         }
     });
@@ -191,28 +222,28 @@ fn main() -> glib::ExitCode {
     let airplane_provider: Arc<dyn AirplaneProvider> = rt.block_on(ConfigAirplaneProvider::new(config_provider.clone()));
     let appearance_provider: Arc<dyn AppearanceProvider> = rt.block_on(ConfigAppearanceProvider::new(config_provider.clone()));
     let dnd_provider: Arc<dyn DndProvider> = rt.block_on(ConfigDndProvider::new(config_provider.clone()));
-    let clock_provider: Arc<dyn ClockProvider> = Arc::new(MockClockProvider::new());
+    let clock_provider: Arc<dyn ClockProvider> = MockClockProvider::new();
     let popup_provider: Arc<dyn PopupProvider> = LocalPopupProvider::new();
     let launcher_provider = CompositeLauncherProvider::new();
     let ipc_provider = ZbusIpcProvider::new();
     let config_dir = dirs::config_dir().unwrap_or(PathBuf::from(".")).join("axis");
-    let google_auth = Arc::new(GoogleCloudAdapter::new(config_dir.clone()));
+    let google_auth = GoogleCloudAuthProvider::new(config_dir.clone());
 
     let notification_provider: Arc<dyn NotificationProvider> = rt.block_on(async {
         match ZbusNotificationProvider::new().await {
             Ok(p) => p as Arc<dyn NotificationProvider>,
             Err(e) => {
                 log::warn!("[notifications] Failed to register D-Bus service: {e}, using mock");
-                Arc::new(axis_infrastructure::mocks::notifications::MockNotificationService::new())
+                axis_infrastructure::mocks::notifications::MockNotificationProvider::new()
             }
         }
     });
     let tray_provider: Arc<dyn TrayProvider> = rt.block_on(async {
-        match StatusNotifierAdapter::new().await {
+        match StatusNotifierTrayProvider::new().await {
             Ok(p) => p as Arc<dyn TrayProvider>,
             Err(e) => {
                 log::warn!("[tray] Failed to register StatusNotifierWatcher: {e}, using mock");
-                Arc::new(axis_infrastructure::mocks::tray::MockTrayProvider::new())
+                axis_infrastructure::mocks::tray::MockTrayProvider::new()
             }
         }
     });
@@ -234,17 +265,21 @@ fn main() -> glib::ExitCode {
     let subscribe_ws = Arc::new(SubscribeUseCase::new(workspace_provider.clone()));
     let focus_ws = Arc::new(FocusWorkspaceUseCase::new(workspace_provider.clone()));
     let subscribe_popups = Arc::new(SubscribeUseCase::new(popup_provider.clone()));
+    let subscribe_popups_for_presenter = subscribe_popups.clone();
     let toggle_popup = Arc::new(TogglePopupUseCase::new(popup_provider.clone()));
     let subscribe_brightness = Arc::new(SubscribeUseCase::new(brightness_provider.clone()));
     let set_brightness = Arc::new(SetBrightnessUseCase::new(brightness_provider.clone()));
     let search_launcher = Arc::new(SearchLauncherUseCase::new(launcher_provider.clone()));
 
     let subscribe_network = Arc::new(SubscribeUseCase::new(network_provider.clone()));
+    let subscribe_network_for_toggle = subscribe_network.clone();
     let get_network_status = Arc::new(GetStatusUseCase::new(network_provider.clone()));
     let connect_to_ap = Arc::new(ConnectToApUseCase::new(network_provider.clone()));
     let disconnect_wifi = Arc::new(DisconnectWifiUseCase::new(network_provider.clone()));
+    let set_wifi = Arc::new(axis_application::use_cases::network::set_wifi::SetWifiEnabledUseCase::new(network_provider.clone()));
 
     let subscribe_bluetooth = Arc::new(SubscribeUseCase::new(bluetooth_provider.clone()));
+    let subscribe_bluetooth_for_toggle = subscribe_bluetooth.clone();
     let get_bluetooth_status = Arc::new(GetStatusUseCase::new(bluetooth_provider.clone()));
     let bt_connect = Arc::new(ConnectBluetoothDeviceUseCase::new(bluetooth_provider.clone()));
     let bt_disconnect = Arc::new(DisconnectBluetoothDeviceUseCase::new(bluetooth_provider.clone()));
@@ -253,14 +288,23 @@ fn main() -> glib::ExitCode {
     let bt_stop_scan = Arc::new(StopBluetoothScanUseCase::new(bluetooth_provider.clone()));
 
     let subscribe_nightlight = Arc::new(SubscribeUseCase::new(nightlight_provider.clone()));
+    let subscribe_nightlight_for_toggle = subscribe_nightlight.clone();
     let get_nightlight_status = Arc::new(GetStatusUseCase::new(nightlight_provider.clone()));
     let nl_set_enabled = Arc::new(SetNightlightEnabledUseCase::new(nightlight_provider.clone()));
+    let nl_set_enabled_for_toggle = nl_set_enabled.clone();
     let nl_set_temp_day = Arc::new(SetNightlightTempDayUseCase::new(nightlight_provider.clone()));
     let nl_set_temp_night = Arc::new(SetNightlightTempNightUseCase::new(nightlight_provider.clone()));
     let nl_set_schedule = Arc::new(SetNightlightScheduleUseCase::new(nightlight_provider.clone()));
 
+    let subscribe_dnd = Arc::new(SubscribeUseCase::new(dnd_provider.clone()));
+    let dnd_set_enabled_uc = Arc::new(axis_application::use_cases::dnd::set_enabled::SetDndEnabledUseCase::new(dnd_provider.clone()));
+    let subscribe_airplane = Arc::new(SubscribeUseCase::new(airplane_provider.clone()));
+    let ap_set_enabled_uc = Arc::new(axis_application::use_cases::airplane::set_enabled::SetAirplaneModeUseCase::new(airplane_provider.clone()));
+
     let subscribe_appearance = Arc::new(SubscribeUseCase::new(appearance_provider.clone()));
     let get_appearance_status = Arc::new(GetStatusUseCase::new(appearance_provider.clone()));
+
+    let get_config_uc = Arc::new(axis_application::use_cases::config::get::GetConfigUseCase::new(config_provider.clone()));
 
     let subscribe_tray = Arc::new(SubscribeUseCase::new(tray_provider.clone()));
     let get_tray_status = Arc::new(GetStatusUseCase::new(tray_provider.clone()));
@@ -271,7 +315,7 @@ fn main() -> glib::ExitCode {
     let battery_presenter = Arc::new(BatteryPresenter::new(subscribe_power));
     let clock_presenter = Arc::new(ClockPresenter::new(subscribe_clock));
     let workspace_presenter = Arc::new(WorkspacePresenter::new(subscribe_ws, focus_ws));
-    let popup_presenter = Arc::new(PopupPresenter::new(subscribe_popups));
+    let popup_presenter = Arc::new(PopupPresenter::new(subscribe_popups_for_presenter));
     let auto_hide_presenter = Arc::new(AutoHidePresenter::new(1, 500));
     let audio_presenter = Rc::new(AudioPresenter::new(
         subscribe_audio, get_audio_status, set_volume,
@@ -282,8 +326,8 @@ fn main() -> glib::ExitCode {
     ));
     let brightness_presenter = Rc::new(BrightnessPresenter::new(subscribe_brightness, set_brightness));
     
-    let google_calendar = Arc::new(axis_infrastructure::adapters::google_calendar::GoogleCalendarAdapter::new(google_auth.clone()));
-    let google_tasks = Arc::new(axis_infrastructure::adapters::google_tasks::GoogleTasksAdapter::new(google_auth.clone()));
+    let google_calendar = axis_infrastructure::adapters::google_calendar::GoogleCalendarProvider::new(google_auth.clone());
+    let google_tasks = axis_infrastructure::adapters::google_tasks::GoogleTasksProvider::new(google_auth.clone());
     
     let sync_calendar_uc = Arc::new(axis_application::use_cases::cloud::sync_calendar::SyncCalendarUseCase::new(google_calendar));
     let sync_tasks_uc = Arc::new(axis_application::use_cases::cloud::sync_tasks::SyncTasksUseCase::new(google_tasks.clone()));
@@ -293,8 +337,16 @@ fn main() -> glib::ExitCode {
     
     let agenda_presenter = Rc::new(AgendaPresenter::new(sync_calendar_uc, sync_tasks_uc, toggle_task_uc, delete_task_uc, create_task_uc));
 
+    let subscribe_notifications = Arc::new(SubscribeUseCase::new(notification_provider.clone()));
+    let get_notifications_status = Arc::new(GetStatusUseCase::new(notification_provider.clone()));
+    let close_notification_uc = Arc::new(CloseNotificationUseCase::new(notification_provider.clone()));
+    let invoke_notification_action_uc = Arc::new(InvokeNotificationActionUseCase::new(notification_provider.clone()));
+
     let launcher_presenter = Rc::new(LauncherPresenter::new(search_launcher));
-    let notification_presenter = Rc::new(NotificationPresenter::new(notification_provider.clone()));
+    let notification_presenter = Rc::new(NotificationPresenter::new(
+        subscribe_notifications, get_notifications_status,
+        close_notification_uc, invoke_notification_action_uc, &rt,
+    ));
 
     let network_presenter = Rc::new(NetworkPresenter::new(
         subscribe_network, get_network_status, connect_to_ap, disconnect_wifi, &rt,
@@ -320,41 +372,42 @@ fn main() -> glib::ExitCode {
         subscribe_lock, lock_session_uc.clone(), unlock_session_uc.clone(), authenticate_uc.clone(),
     ));
 
-    let net_prov = network_provider.clone();
     let wifi_presenter = Rc::new(TogglePresenter::new(
         "Wi-Fi",
         "network-wireless-signal-excellent-symbolic",
         "network-wireless-offline-symbolic",
         {
-            let net = net_prov.clone();
+            let uc = subscribe_network_for_toggle.clone();
             move || {
-                let net = net.clone();
+                let uc = uc.clone();
                 async move {
-                    net.subscribe().await.map(|s| s.map(|status| status.is_wifi_enabled))
+                    uc.execute().await.map(|s| s.map(|status| status.is_wifi_enabled))
                 }
             }
         },
-        move |enabled| {
-            let net = network_provider.clone();
-            tokio::spawn(async move {
-                if let Err(e) = net.set_wifi_enabled(enabled).await {
-                    log::error!("[toggle] wifi set_enabled failed: {e}");
-                }
-            });
+        {
+            let uc = set_wifi.clone();
+            move |enabled| {
+                let uc = uc.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = uc.execute(enabled).await {
+                        log::error!("[toggle] wifi set_enabled failed: {e}");
+                    }
+                });
+            }
         },
     ));
 
-    let bt_prov = bluetooth_provider.clone();
     let bluetooth_toggle_presenter = Rc::new(TogglePresenter::new(
         "Bluetooth",
         "bluetooth-active-symbolic",
         "bluetooth-disabled-symbolic",
         {
-            let bt = bt_prov.clone();
+            let uc = subscribe_bluetooth_for_toggle.clone();
             move || {
-                let bt = bt.clone();
+                let uc = uc.clone();
                 async move {
-                    bt.subscribe().await.map(|s| s.map(|status| status.powered))
+                    uc.execute().await.map(|s| s.map(|status| status.powered))
                 }
             }
         },
@@ -371,76 +424,81 @@ fn main() -> glib::ExitCode {
         },
     ));
 
-    let nl_prov = nightlight_provider.clone();
     let nightlight_toggle_presenter = Rc::new(TogglePresenter::new(
         "Nightlight",
         "weather-clear-night-symbolic",
         "weather-clear-night-symbolic",
         {
-            let nl = nl_prov.clone();
+            let uc = subscribe_nightlight_for_toggle.clone();
             move || {
-                let nl = nl.clone();
+                let uc = uc.clone();
                 async move {
-                    nl.subscribe().await.map(|s| s.map(|status| status.enabled))
+                    uc.execute().await.map(|s| s.map(|status| status.enabled))
                 }
             }
         },
-        move |enabled| {
-            let nl = nightlight_provider.clone();
-            tokio::spawn(async move {
-                if let Err(e) = nl.set_enabled(enabled).await {
-                    log::error!("[toggle] nightlight set_enabled failed: {e}");
-                }
-            });
+        {
+            let uc = nl_set_enabled_for_toggle.clone();
+            move |enabled| {
+                let uc = uc.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = uc.execute(enabled).await {
+                        log::error!("[toggle] nightlight set_enabled failed: {e}");
+                    }
+                });
+            }
         },
     ));
 
-    let dnd_prov = dnd_provider.clone();
-    let dnd_for_toast = dnd_provider.clone();
     let dnd_presenter = Rc::new(TogglePresenter::new(
         "DND",
         "preferences-system-notifications-symbolic",
         "notifications-disabled-symbolic",
         {
-            let dnd = dnd_prov.clone();
+            let uc = subscribe_dnd.clone();
             move || {
-                let dnd = dnd.clone();
+                let uc = uc.clone();
                 async move {
-                    dnd.subscribe().await.map(|s| s.map(|status| status.enabled))
+                    uc.execute().await.map(|s| s.map(|status| status.enabled))
                 }
             }
         },
-        move |enabled| {
-            let dnd = dnd_provider.clone();
-            tokio::spawn(async move {
-                if let Err(e) = dnd.set_enabled(enabled).await {
-                    log::error!("[toggle] dnd set_enabled failed: {e}");
-                }
-            });
+        {
+            let uc = dnd_set_enabled_uc.clone();
+            move |enabled| {
+                let uc = uc.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = uc.execute(enabled).await {
+                        log::error!("[toggle] dnd set_enabled failed: {e}");
+                    }
+                });
+            }
         },
     ));
 
-    let ap_prov = airplane_provider.clone();
     let airplane_presenter = Rc::new(TogglePresenter::new(
         "Airplane",
         "airplane-mode-symbolic",
         "airplane-mode-symbolic",
         {
-            let ap = ap_prov.clone();
+            let uc = subscribe_airplane.clone();
             move || {
-                let ap = ap.clone();
+                let uc = uc.clone();
                 async move {
-                    ap.subscribe().await.map(|s| s.map(|status| status.enabled))
+                    uc.execute().await.map(|s| s.map(|status| status.enabled))
                 }
             }
         },
-        move |enabled| {
-            let ap = airplane_provider.clone();
-            tokio::spawn(async move {
-                if let Err(e) = ap.set_enabled(enabled).await {
-                    log::error!("[toggle] airplane set_enabled failed: {e}");
-                }
-            });
+        {
+            let uc = ap_set_enabled_uc.clone();
+            move |enabled| {
+                let uc = uc.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = uc.execute(enabled).await {
+                        log::error!("[toggle] airplane set_enabled failed: {e}");
+                    }
+                });
+            }
         },
     ));
 
@@ -496,7 +554,7 @@ fn main() -> glib::ExitCode {
         }
     });
 
-    let show_labels = config_provider.get().map(|c| c.bar.show_labels).unwrap_or(true);
+    let show_labels = get_config_uc.execute().map(|c| c.bar.show_labels).unwrap_or(true);
 
     let lock_gtk_handle_for_activate = lock_gtk_handle;
     app.connect_activate(move |app| {
@@ -508,13 +566,13 @@ fn main() -> glib::ExitCode {
         let wallpaper_svc = Rc::new(WallpaperService::new(app));
         let config_dir = dirs::config_dir().unwrap_or(PathBuf::from(".")).join("axis");
         let niri_layout = NiriLayoutProvider::new(config_dir);
+        let set_border_color = Arc::new(SetBorderColorUseCase::new(niri_layout.clone()));
 
-        // Sync auto-extracted colors
-        let niri_auto = niri_layout.clone();
+        let border_auto = set_border_color.clone();
         theme_svc.on_color_extracted(move |hex| {
-            let niri = niri_auto.clone();
+            let uc = border_auto.clone();
             tokio::spawn(async move {
-                if let Err(e) = niri.set_active_border_color(hex).await {
+                if let Err(e) = uc.execute(hex).await {
                     log::error!("[theme] border color sync failed: {e}");
                 }
             });
@@ -522,22 +580,24 @@ fn main() -> glib::ExitCode {
 
         appearance_presenter.add_view(Box::new(theme_svc));
         appearance_presenter.add_view(Box::new(wallpaper_svc.clone()));
-        
-        // Sync manual color choices (non-Auto)
-        let niri_manual = niri_layout.clone();
+
+        let border_manual = set_border_color.clone();
         appearance_presenter.add_view(Box::new(FnView::new(move |status: &axis_domain::models::config::AppearanceConfig| {
             if let axis_domain::models::appearance::AccentColor::Custom(hex) = &status.accent_color {
-                let niri = niri_manual.clone();
+                let uc = border_manual.clone();
                 let hex_c = hex.clone();
                 tokio::spawn(async move {
-                    let _ = niri.set_active_border_color(hex_c).await;
+                    if let Err(e) = uc.execute(hex_c).await {
+                        log::error!("[appearance] border color custom sync failed: {e}");
+                    }
                 });
             } else if status.accent_color != axis_domain::models::appearance::AccentColor::Auto {
-                // Handle Presets (Blue, Teal etc)
-                let niri = niri_manual.clone();
+                let uc = border_manual.clone();
                 let hex = status.accent_color.hex_value().to_string();
                 tokio::spawn(async move {
-                    let _ = niri.set_active_border_color(hex).await;
+                    if let Err(e) = uc.execute(hex).await {
+                        log::error!("[appearance] border color preset sync failed: {e}");
+                    }
                 });
             }
         })));
@@ -615,12 +675,12 @@ fn main() -> glib::ExitCode {
         notification_presenter.add_view(Box::new(toast.clone()));
 
         {
-            let dnd_prov_c = dnd_for_toast.clone();
+            let subscribe_dnd_clone = subscribe_dnd.clone();
             let dnd_presenter: Rc<Presenter<DndStatus>> = Rc::new(Presenter::from_subscribe({
-                let dnd = dnd_prov_c.clone();
+                let uc = subscribe_dnd_clone.clone();
                 move || {
-                    let dnd = dnd.clone();
-                    async move { dnd.subscribe().await }
+                    let uc = uc.clone();
+                    async move { uc.execute().await }
                 }
             }));
             dnd_presenter.add_view(Box::new(toast.clone()));
@@ -700,16 +760,16 @@ fn main() -> glib::ExitCode {
         let agenda_popup = AgendaPopup::new(app);
         let ap = agenda_presenter.clone();
         let agenda_popup_c = agenda_popup.clone();
-        let pp_prov = popup_provider.clone();
-        
+        let subscribe_popups_clone = subscribe_popups.clone();
+
         let ap_bind = ap.clone();
         glib::spawn_future_local(async move {
             ap_bind.bind(Box::new(agenda_popup_c)).await;
         });
-        
+
         let ap_sync = ap.clone();
         glib::spawn_future_local(async move {
-            ap_sync.run_sync(pp_prov).await;
+            ap_sync.run_sync(subscribe_popups_clone).await;
         });
 
         let pp = popup_presenter.clone();
@@ -724,9 +784,9 @@ fn main() -> glib::ExitCode {
 
         let ahp = auto_hide_presenter.clone();
         let bar_win = bar_window.clone();
-        let pp_prov = popup_provider.clone();
+        let subscribe_popups_clone2 = subscribe_popups.clone();
         glib::spawn_future_local(async move {
-            if let Ok(mut stream) = pp_prov.subscribe().await {
+            if let Ok(mut stream) = subscribe_popups_clone2.execute().await {
                 while let Some(status) = futures_util::StreamExt::next(&mut stream).await {
                     ahp.set_force_visible(&bar_win, status.active_popup.is_some());
                 }

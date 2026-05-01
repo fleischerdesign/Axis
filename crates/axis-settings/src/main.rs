@@ -39,7 +39,7 @@ use axis_application::use_cases::bluetooth::start_scan::StartBluetoothScanUseCas
 use axis_application::use_cases::bluetooth::stop_scan::StopBluetoothScanUseCase;
 
 use axis_infrastructure::adapters::cloud::LocalCloudProvider;
-use axis_infrastructure::adapters::google_auth::GoogleCloudAdapter;
+use axis_infrastructure::adapters::google_auth::GoogleCloudAuthProvider;
 use axis_infrastructure::adapters::appearance::ConfigAppearanceProvider;
 use axis_infrastructure::adapters::config::FileConfigProvider;
 use axis_infrastructure::adapters::network::NetworkManagerProvider;
@@ -104,15 +104,27 @@ fn build_ui(app: &adw::Application, theme_css: Rc<gtk4::CssProvider>, rt: &tokio
     // 1. Infrastructure
     let config_provider = FileConfigProvider::new(AxisConfig::default());
     let cloud_provider: Arc<dyn CloudProvider> = LocalCloudProvider::new(config_dir.clone());
-    let google_auth = Arc::new(GoogleCloudAdapter::new(config_dir.clone()));
+    let google_auth = GoogleCloudAuthProvider::new(config_dir.clone());
     let appearance_provider: Arc<dyn AppearanceProvider> = rt.block_on(ConfigAppearanceProvider::new(config_provider.clone()));
     let niri_layout_provider: Arc<dyn LayoutProvider> = NiriLayoutProvider::new(config_dir.clone());
     
     let network_provider: Arc<dyn NetworkProvider> = rt.block_on(async {
-        NetworkManagerProvider::new().await.expect("Failed to connect to NetworkManager")
+        match NetworkManagerProvider::new().await {
+            Ok(p) => p as Arc<dyn NetworkProvider>,
+            Err(_) => {
+                log::warn!("[settings] NetworkManager not available, using empty provider");
+                axis_infrastructure::mocks::network::MockNetworkProvider::new()
+            }
+        }
     });
     let bluetooth_provider: Arc<dyn BluetoothProvider> = rt.block_on(async {
-        BlueZProvider::new().await.expect("Failed to connect to BlueZ")
+        match BlueZProvider::new().await {
+            Ok(p) => p as Arc<dyn BluetoothProvider>,
+            Err(_) => {
+                log::warn!("[settings] BlueZ not available, using empty provider");
+                axis_infrastructure::mocks::bluetooth::MockBluetoothProvider::new()
+            }
+        }
     });
 
     // 2. Use Cases

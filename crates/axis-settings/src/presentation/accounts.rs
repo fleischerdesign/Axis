@@ -7,7 +7,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 pub struct AccountsPresenter {
-    presenter: Presenter<CloudStatus>,
+    inner: Presenter<CloudStatus>,
     authenticate_uc: Arc<AuthenticateAccountUseCase>,
 }
 
@@ -28,7 +28,7 @@ impl AccountsPresenter {
         authenticate_uc: Arc<AuthenticateAccountUseCase>,
     ) -> Self {
         let sub = subscribe_uc.clone();
-        let presenter = Presenter::new(move || {
+        let inner = Presenter::new(move || {
             let sub = sub.clone();
             Box::pin(async_stream::stream! {
                 if let Ok(mut stream) = sub.execute().await {
@@ -40,17 +40,17 @@ impl AccountsPresenter {
         });
 
         Self {
-            presenter,
+            inner,
             authenticate_uc,
         }
     }
 
     pub fn add_view(&self, view: Box<dyn View<CloudStatus>>) {
-        self.presenter.add_view(view);
+        self.inner.add_view(view);
     }
 
     pub async fn run(&self) {
-        self.presenter.run_sync().await;
+        self.inner.run_sync().await;
     }
 
     pub fn add_google_account(&self) {

@@ -57,7 +57,13 @@ impl LauncherPresenter {
         let query = query.to_string();
 
         glib::spawn_future_local(async move {
-            let results = uc.execute(&query).await.unwrap_or_default();
+            let results = match uc.execute(&query).await {
+                Ok(r) => r,
+                Err(e) => {
+                    log::error!("[launcher] search failed: {e}");
+                    Default::default()
+                }
+            };
             if flag.load(Ordering::SeqCst) { return; }
 
             let mut s = presenter.current().unwrap_or_default();

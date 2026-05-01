@@ -31,25 +31,25 @@ struct GoogleTaskItem {
     status: String,
 }
 
-pub struct GoogleTasksAdapter {
+pub struct GoogleTasksProvider {
     auth_provider: Arc<dyn CloudAuthProvider>,
     http_client: reqwest::Client,
 }
 
-impl GoogleTasksAdapter {
-    pub fn new(auth_provider: Arc<dyn CloudAuthProvider>) -> Self {
-        Self { 
+impl GoogleTasksProvider {
+    pub fn new(auth_provider: Arc<dyn CloudAuthProvider>) -> Arc<Self> {
+        Arc::new(Self { 
             auth_provider,
             http_client: reqwest::Client::builder()
                 .tcp_keepalive(std::time::Duration::from_secs(60))
                 .build()
                 .unwrap_or_default(),
-        }
+        })
     }
 }
 
 #[async_trait]
-impl TaskProvider for GoogleTasksAdapter {
+impl TaskProvider for GoogleTasksProvider {
     async fn get_lists(&self) -> Result<Vec<TaskList>, TaskError> {
         let scopes = vec!["https://www.googleapis.com/auth/tasks".to_string()];
         let token = self.auth_provider.get_token(&scopes).await

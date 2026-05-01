@@ -3,18 +3,19 @@ use axis_domain::ports::brightness::{BrightnessProvider, BrightnessError, Bright
 use async_trait::async_trait;
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
+use std::sync::Arc;
 
 pub struct MockBrightnessProvider {
     status_tx: watch::Sender<BrightnessStatus>,
 }
 
 impl MockBrightnessProvider {
-    pub fn new() -> Self {
+    pub fn new() -> Arc<Self> {
         let (tx, _) = watch::channel(BrightnessStatus {
             percentage: 60.0,
             has_backlight: true,
         });
-        Self { status_tx: tx }
+        Arc::new(Self { status_tx: tx })
     }
 }
 

@@ -4,13 +4,14 @@ use async_trait::async_trait;
 use log::info;
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
+use std::sync::Arc;
 
 pub struct MockTrayProvider {
     status_tx: watch::Sender<TrayStatus>,
 }
 
 impl MockTrayProvider {
-    pub fn new() -> Self {
+    pub fn new() -> Arc<Self> {
         let (tx, _) = watch::channel(TrayStatus {
             items: vec![
                 TrayItem {
@@ -37,7 +38,7 @@ impl MockTrayProvider {
                 },
             ],
         });
-        Self { status_tx: tx }
+        Arc::new(Self { status_tx: tx })
     }
 }
 

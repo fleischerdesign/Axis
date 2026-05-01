@@ -39,14 +39,14 @@ struct GoogleUserInfo {
     email: String,
 }
 
-pub struct GoogleCloudAdapter {
+pub struct GoogleCloudAuthProvider {
     config_dir: PathBuf,
     token: Arc<Mutex<StoredToken>>,
     credentials: Option<GoogleCredential>,
 }
 
-impl GoogleCloudAdapter {
-    pub fn new(config_dir: PathBuf) -> Self {
+impl GoogleCloudAuthProvider {
+    pub fn new(config_dir: PathBuf) -> Arc<Self> {
         let cred_path = config_dir.join("google_credentials.json");
         let credentials = std::fs::read_to_string(cred_path)
             .ok()
@@ -58,11 +58,11 @@ impl GoogleCloudAdapter {
             .and_then(|json| serde_json::from_str::<StoredToken>(&json).ok())
             .unwrap_or_default();
 
-        Self {
+        Arc::new(Self {
             config_dir,
             token: Arc::new(Mutex::new(token_data)),
             credentials,
-        }
+        })
     }
 
     fn save_token(&self, token: &StoredToken) {
@@ -74,7 +74,7 @@ impl GoogleCloudAdapter {
 }
 
 #[async_trait]
-impl CloudAuthProvider for GoogleCloudAdapter {
+impl CloudAuthProvider for GoogleCloudAuthProvider {
     async fn authenticate(&self, scopes: &[String]) -> Result<CloudAccount, AuthError> {
         let cred = self.credentials.as_ref().ok_or_else(|| AuthError::ProviderError("Missing google_credentials.json".into()))?;
 
