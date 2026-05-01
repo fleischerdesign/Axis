@@ -4,3 +4,4 @@ pub mod sidebar;
 pub mod window;
 pub mod network_page;
 pub mod bluetooth_page;
+pub mod continuity_page;
