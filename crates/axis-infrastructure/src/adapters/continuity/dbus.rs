@@ -136,13 +136,13 @@ pub fn build_snapshot(status: &ContinuityStatus) -> ContinuityStateSnapshot {
 
 pub struct ContinuityDbusServer {
     pub cmd_tx: Sender<ContinuityCmd>,
-    state_rx: watch::Receiver<ContinuityStateSnapshot>,
+    state_rx: watch::Receiver<ContinuityStatus>,
 }
 
 impl ContinuityDbusServer {
     pub fn new(
         cmd_tx: Sender<ContinuityCmd>,
-        state_rx: watch::Receiver<ContinuityStateSnapshot>,
+        state_rx: watch::Receiver<ContinuityStatus>,
     ) -> Self {
         Self { cmd_tx, state_rx }
     }
