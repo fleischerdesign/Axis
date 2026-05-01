@@ -2,14 +2,19 @@ use libadwaita::prelude::*;
 use libadwaita as adw;
 use std::rc::Rc;
 use std::cell::RefCell;
-use axis_domain::models::continuity::{ContinuityStatus, PeerArrangement, Side};
+use axis_domain::models::continuity::{ContinuityStatus, PeerArrangement, PeerConfig};
 use crate::presentation::continuity::{ContinuitySettingsView, ContinuitySettingsPresenter};
+use crate::widgets::arrangement_grid::ArrangementGrid;
+use crate::widgets::peer_detail_page::PeerDetailPage;
 use axis_presentation::View;
 
 pub struct ContinuitySettingsPage {
     root: adw::ToolbarView,
+    nav_view: adw::NavigationView,
     enable_switch: adw::SwitchRow,
     peer_list: gtk4::ListBox,
+    grid: Rc<ArrangementGrid>,
+    current_peer_page: RefCell<Option<Rc<PeerDetailPage>>>,
 
     toggle_cb: Rc<RefCell<Option<Box<dyn Fn(bool) + 'static>>>>,
     connect_cb: Rc<RefCell<Option<Box<dyn Fn(String) + 'static>>>>,
@@ -19,7 +24,7 @@ pub struct ContinuitySettingsPage {
     cancel_reconnect_cb: Rc<RefCell<Option<Box<dyn Fn() + 'static>>>>,
     unpair_cb: Rc<RefCell<Option<Box<dyn Fn(String) + 'static>>>>,
     arrangement_cb: Rc<RefCell<Option<Box<dyn Fn(PeerArrangement) + 'static>>>>,
-    edge_buttons: RefCell<Vec<(gtk4::ToggleButton, Side)>>,
+    config_cb: Rc<RefCell<Option<Box<dyn Fn(String, PeerConfig) + 'static>>>>,
 }
 
 impl ContinuitySettingsPage {
@@ -49,28 +54,19 @@ impl ContinuitySettingsPage {
         main_group.add(&enable_switch);
 
         let arrangement_group = adw::PreferencesGroup::builder()
-            .title("Transition Edge")
-            .description("Choose which screen edge allows cursor transition")
+            .title("Display Arrangement")
+            .description("Drag the peer device to position it relative to your screen")
             .build();
         main_page.add(&arrangement_group);
 
-        let edge_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
-        edge_box.set_homogeneous(true);
-        arrangement_group.add(&edge_box);
-
-        let sides = [
-            ("Left", Side::Left),
-            ("Top", Side::Top),
-            ("Bottom", Side::Bottom),
-            ("Right", Side::Right),
-        ];
-
-        let mut edge_buttons = Vec::new();
-        for (label, side) in sides {
-            let btn = gtk4::ToggleButton::with_label(label);
-            edge_box.append(&btn);
-            edge_buttons.push((btn, side));
-        }
+        let grid_cb: Rc<RefCell<Option<Box<dyn Fn(PeerArrangement) + 'static>>>> = Rc::new(RefCell::new(None));
+        let grid_cb_closure = grid_cb.clone();
+        let grid = ArrangementGrid::new(move |arr| {
+            if let Some(f) = grid_cb_closure.borrow().as_ref() {
+                f(arr);
+            }
+        });
+        arrangement_group.add(grid.widget());
 
         let peers_group = adw::PreferencesGroup::builder()
             .title("Devices")
@@ -85,8 +81,11 @@ impl ContinuitySettingsPage {
 
         let page = Rc::new(Self {
             root: toolbar_view,
+            nav_view,
             enable_switch,
             peer_list,
+            grid: grid.clone(),
+            current_peer_page: RefCell::new(None),
             toggle_cb: Rc::new(RefCell::new(None)),
             connect_cb: Rc::new(RefCell::new(None)),
             disconnect_cb: Rc::new(RefCell::new(None)),
@@ -94,8 +93,8 @@ impl ContinuitySettingsPage {
             reject_pin_cb: Rc::new(RefCell::new(None)),
             cancel_reconnect_cb: Rc::new(RefCell::new(None)),
             unpair_cb: Rc::new(RefCell::new(None)),
-            arrangement_cb: Rc::new(RefCell::new(None)),
-            edge_buttons: RefCell::new(edge_buttons),
+            arrangement_cb: grid_cb,
+            config_cb: Rc::new(RefCell::new(None)),
         });
 
         let cb = page.toggle_cb.clone();
@@ -104,18 +103,6 @@ impl ContinuitySettingsPage {
                 f(row.is_active());
             }
         });
-
-        for (btn, side) in page.edge_buttons.borrow().iter() {
-            let cb_c = page.arrangement_cb.clone();
-            let side_c = *side;
-            btn.connect_toggled(move |b| {
-                if b.is_active() {
-                    if let Some(f) = cb_c.borrow().as_ref() {
-                        f(PeerArrangement { side: side_c, offset: 0 });
-                    }
-                }
-            });
-        }
 
         page
     }
@@ -234,6 +221,44 @@ impl ContinuitySettingsPage {
                 row.add_suffix(&connect_btn);
             }
 
+            let peer_id = peer.device_id.clone();
+            let peer_name = peer.device_name.clone();
+            let nav_view = self.nav_view.clone();
+            let config_cb = self.config_cb.clone();
+            let disconnect_cb_r = self.disconnect_cb.clone();
+            let unpair_cb_r = self.unpair_cb.clone();
+            let current_peer_page = self.current_peer_page.clone();
+            let gesture = gtk4::GestureClick::new();
+            gesture.connect_released(move |_, _, _, _| {
+                let detail_page = PeerDetailPage::new(peer_id.clone(), peer_name.clone());
+
+                detail_page.set_on_disconnect({
+                    let cb = disconnect_cb_r.clone();
+                    Box::new(move || {
+                        if let Some(f) = cb.borrow().as_ref() { f(); }
+                    })
+                });
+
+                detail_page.set_on_unpair({
+                    let cb = unpair_cb_r.clone();
+                    Box::new(move |id| {
+                        if let Some(f) = cb.borrow().as_ref() { f(id); }
+                    })
+                });
+
+                detail_page.set_on_config({
+                    let cb = config_cb.clone();
+                    Box::new(move |id, config| {
+                        if let Some(f) = cb.borrow().as_ref() { f(id, config); }
+                    })
+                });
+
+                let nav_page = adw::NavigationPage::new(detail_page.widget(), &peer_name);
+                nav_view.push(&nav_page);
+                *current_peer_page.borrow_mut() = Some(detail_page);
+            });
+            row.add_controller(gesture);
+
             self.peer_list.append(&row);
         }
     }
@@ -241,18 +266,11 @@ impl ContinuitySettingsPage {
 
 impl View<ContinuityStatus> for ContinuitySettingsPage {
     fn render(&self, status: &ContinuityStatus) {
-        let enabled = status.enabled;
-        self.enable_switch.set_active(enabled);
-
-        if let Some(config) = status.active_connection.as_ref()
-            .and_then(|c| status.peer_configs.get(&c.peer_id))
-        {
-            let current_side = config.arrangement.side;
-            for (btn, side) in self.edge_buttons.borrow().iter() {
-                btn.set_active(*side == current_side);
-            }
+        self.enable_switch.set_active(status.enabled);
+        self.grid.update_status(status);
+        if let Some(ref pp) = *self.current_peer_page.borrow() {
+            pp.update_status(status);
         }
-
         self.rebuild_peer_list(status);
     }
 }
@@ -266,4 +284,5 @@ impl ContinuitySettingsView for ContinuitySettingsPage {
     fn on_cancel_reconnect(&self, f: Box<dyn Fn() + 'static>) { *self.cancel_reconnect_cb.borrow_mut() = Some(f); }
     fn on_unpair(&self, f: Box<dyn Fn(String) + 'static>) { *self.unpair_cb.borrow_mut() = Some(f); }
     fn on_set_arrangement(&self, f: Box<dyn Fn(PeerArrangement) + 'static>) { *self.arrangement_cb.borrow_mut() = Some(f); }
+    fn on_update_peer_config(&self, f: Box<dyn Fn(String, PeerConfig) + 'static>) { *self.config_cb.borrow_mut() = Some(f); }
 }

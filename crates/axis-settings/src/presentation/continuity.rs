@@ -1,4 +1,4 @@
-use axis_domain::models::continuity::{ContinuityStatus, PeerArrangement};
+use axis_domain::models::continuity::{ContinuityStatus, PeerArrangement, PeerConfig};
 use axis_domain::ports::continuity::ContinuityProvider;
 use axis_presentation::{Presenter, View};
 use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
@@ -11,6 +11,7 @@ use axis_application::use_cases::continuity::unpair::UnpairUseCase;
 use axis_application::use_cases::continuity::cancel_reconnect::CancelReconnectUseCase;
 use axis_application::use_cases::continuity::set_peer_arrangement::SetPeerArrangementUseCase;
 use axis_application::use_cases::continuity::update_peer_configs::UpdatePeerConfigsUseCase;
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -23,6 +24,7 @@ pub trait ContinuitySettingsView: View<ContinuityStatus> {
     fn on_cancel_reconnect(&self, f: Box<dyn Fn() + 'static>);
     fn on_unpair(&self, f: Box<dyn Fn(String) + 'static>);
     fn on_set_arrangement(&self, f: Box<dyn Fn(PeerArrangement) + 'static>);
+    fn on_update_peer_config(&self, f: Box<dyn Fn(String, PeerConfig) + 'static>);
 }
 
 impl<T: ContinuitySettingsView + ?Sized> ContinuitySettingsView for Rc<T> {
@@ -34,6 +36,7 @@ impl<T: ContinuitySettingsView + ?Sized> ContinuitySettingsView for Rc<T> {
     fn on_cancel_reconnect(&self, f: Box<dyn Fn() + 'static>) { (**self).on_cancel_reconnect(f); }
     fn on_unpair(&self, f: Box<dyn Fn(String) + 'static>) { (**self).on_unpair(f); }
     fn on_set_arrangement(&self, f: Box<dyn Fn(PeerArrangement) + 'static>) { (**self).on_set_arrangement(f); }
+    fn on_update_peer_config(&self, f: Box<dyn Fn(String, PeerConfig) + 'static>) { (**self).on_update_peer_config(f); }
 }
 
 pub struct ContinuitySettingsPresenter {
@@ -177,6 +180,18 @@ impl ContinuitySettingsPresenter {
             tokio::spawn(async move {
                 if let Err(e) = uc.execute(arr).await {
                     log::error!("[settings-continuity] set_arrangement failed: {e}");
+                }
+            });
+        }));
+
+        let this = self.clone();
+        view.on_update_peer_config(Box::new(move |peer_id, config| {
+            let uc = this.update_configs_uc.clone();
+            tokio::spawn(async move {
+                let mut map = HashMap::new();
+                map.insert(peer_id, config);
+                if let Err(e) = uc.execute(map).await {
+                    log::error!("[settings-continuity] update_peer_config failed: {e}");
                 }
             });
         }));
