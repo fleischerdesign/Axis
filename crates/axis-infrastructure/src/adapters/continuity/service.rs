@@ -30,6 +30,14 @@ impl ContinuityService {
 
         svc
     }
+
+    pub fn cmd_tx(&self) -> async_channel::Sender<ContinuityCmd> {
+        self.cmd_tx.clone()
+    }
+
+    pub fn snapshot_rx(&self) -> watch::Receiver<axis_domain::models::continuity::ContinuityStatus> {
+        self.status_tx.subscribe()
+    }
 }
 
 #[async_trait]

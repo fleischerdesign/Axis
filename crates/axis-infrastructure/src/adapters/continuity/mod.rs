@@ -11,3 +11,4 @@ mod service;
 
 pub use service::ContinuityService;
 pub use proxy::ContinuityDbusProxy;
+pub use inner::ContinuityCmd;

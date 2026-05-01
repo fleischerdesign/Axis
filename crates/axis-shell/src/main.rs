@@ -53,10 +53,8 @@ use axis_domain::ports::clock::ClockProvider;
 use axis_domain::ports::bluetooth::BluetoothProvider;
 use axis_domain::ports::popups::PopupProvider;
 use axis_domain::ports::notifications::NotificationProvider;
-use axis_domain::ports::ipc::IpcProvider;
 use axis_domain::ports::tray::TrayProvider;
 use axis_domain::ports::continuity::ContinuityProvider;
-use axis_domain::models::ipc::IpcCommand;
 use axis_domain::models::dnd::DndStatus;
 
 use axis_infrastructure::adapters::google_auth::GoogleCloudAuthProvider;
@@ -71,7 +69,6 @@ use axis_infrastructure::adapters::bluetooth::BlueZProvider;
 use axis_infrastructure::adapters::nightlight::ConfigNightlightProvider;
 use axis_infrastructure::adapters::dnd::ConfigDndProvider;
 use axis_infrastructure::adapters::launcher::CompositeLauncherProvider;
-use axis_infrastructure::adapters::ipc::ZbusIpcProvider;
 use axis_infrastructure::adapters::notifications::ZbusNotificationProvider;
 use axis_infrastructure::adapters::appearance::ConfigAppearanceProvider;
 use axis_infrastructure::adapters::config::FileConfigProvider;
@@ -229,7 +226,6 @@ fn main() -> glib::ExitCode {
     let clock_provider: Arc<dyn ClockProvider> = MockClockProvider::new();
     let popup_provider: Arc<dyn PopupProvider> = LocalPopupProvider::new();
     let launcher_provider = CompositeLauncherProvider::new();
-    let ipc_provider = ZbusIpcProvider::new();
     let config_dir = dirs::config_dir().unwrap_or(PathBuf::from(".")).join("axis");
     let google_auth = GoogleCloudAuthProvider::new(config_dir.clone());
 
@@ -252,7 +248,8 @@ fn main() -> glib::ExitCode {
         }
     });
 
-    let continuity_provider: Arc<dyn ContinuityProvider> = ContinuityService::new();
+    let continuity_service = ContinuityService::new();
+    let continuity_provider: Arc<dyn ContinuityProvider> = continuity_service.clone();
 
     let subscribe_power = Arc::new(SubscribeUseCase::new(power_provider.clone()));
     let suspend_uc = Arc::new(SuspendUseCase::new(power_provider.clone()));
@@ -570,32 +567,37 @@ fn main() -> glib::ExitCode {
     let cont_sync = continuity_presenter.clone();
     glib::spawn_future_local(async move { cont_sync.run_sync().await; });
 
-    let ipc_tp = toggle_popup.clone();
-    let ipc_lock_uc = lock_session_uc.clone();
-    let ipc = ipc_provider.clone();
+    let dbus_tp = toggle_popup.clone();
+    let dbus_lock_uc = lock_session_uc.clone();
+    let cont_cmd_tx = continuity_service.cmd_tx();
+    let cont_status_rx = continuity_service.snapshot_rx();
     rt.spawn(async move {
-        if let Err(e) = ipc.run(Box::new(move |cmd: IpcCommand| {
-            match cmd {
-                IpcCommand::ToggleLauncher => {
-                    let tp = ipc_tp.clone();
+        services::dbus_host::run_dbus_host(
+            {
+                let tp = dbus_tp.clone();
+                move || {
+                    let tp = tp.clone();
                     tokio::spawn(async move {
                         if let Err(e) = tp.execute(axis_domain::models::popups::PopupType::Launcher).await {
-                            log::error!("[ipc] toggle launcher failed: {e}");
+                            log::error!("[dbus-host] toggle launcher failed: {e}");
                         }
                     });
                 }
-                IpcCommand::Lock => {
-                    let uc = ipc_lock_uc.clone();
+            },
+            {
+                let uc = dbus_lock_uc.clone();
+                move || {
+                    let uc = uc.clone();
                     tokio::spawn(async move {
                         if let Err(e) = uc.execute().await {
-                            log::error!("[ipc] lock failed: {e}");
+                            log::error!("[dbus-host] lock failed: {e}");
                         }
                     });
                 }
-            }
-        })).await {
-            log::error!("[ipc] D-Bus server error: {e}");
-        }
+            },
+            cont_cmd_tx,
+            cont_status_rx,
+        ).await;
     });
 
     let show_labels = get_config_uc.execute().map(|c| c.bar.show_labels).unwrap_or(true);
