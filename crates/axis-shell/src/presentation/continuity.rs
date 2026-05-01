@@ -2,7 +2,7 @@ use std::sync::Arc;
 use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
 use axis_domain::models::continuity::ContinuityStatus;
 use axis_domain::ports::continuity::ContinuityProvider;
-use axis_presentation::Presenter;
+use axis_presentation::{Presenter, View};
 
 pub struct ContinuityPresenter {
     inner: Presenter<ContinuityStatus>,
@@ -34,6 +34,10 @@ impl ContinuityPresenter {
         .with_initial_status(initial_status);
 
         Self { inner }
+    }
+
+    pub fn add_view(&self, view: Box<dyn View<ContinuityStatus>>) {
+        self.inner.add_view(view);
     }
 
     pub async fn run_sync(&self) {

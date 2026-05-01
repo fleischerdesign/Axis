@@ -797,3 +797,11 @@ preferencesgroup > .title {
 .agenda-task-add-btn:hover {
     background: @hover_bg_color_strong;
 }
+
+.continuity-edge-debug {
+    background-color: rgba(255, 0, 0, 0.3);
+}
+
+.continuity-overlay {
+    background-color: rgba(0, 0, 0, 0.01);
+}

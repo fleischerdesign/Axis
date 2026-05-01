@@ -1,10 +1,10 @@
 use axis_domain::models::notifications::{Notification, NotificationAction, NotificationStatus};
-use axis_domain::ports::notifications::{NotificationError, NotificationProvider, NotificationStream};
+use axis_domain::ports::notifications::{ActionHandler, NotificationError, NotificationProvider, NotificationStream};
 use async_trait::async_trait;
 use log::info;
 use tokio::sync::{watch, mpsc};
 use tokio_stream::wrappers::WatchStream;
-use std::sync::{Arc, atomic::{AtomicU32, Ordering}};
+use std::sync::{Arc, Mutex, atomic::{AtomicU32, Ordering}};
 use std::collections::HashMap;
 use zbus::connection;
 use zbus::zvariant::Value;
@@ -108,12 +108,14 @@ impl NotificationsIface {
 pub struct ZbusNotificationProvider {
     status_tx: watch::Sender<NotificationStatus>,
     cmd_tx: mpsc::Sender<Cmd>,
+    action_handlers: Arc<Mutex<HashMap<(u32, String), ActionHandler>>>,
 }
 
 impl ZbusNotificationProvider {
     pub async fn new() -> Result<Arc<Self>, NotificationError> {
         let (status_tx, _) = watch::channel(NotificationStatus::default());
         let (cmd_tx, mut cmd_rx) = mpsc::channel::<Cmd>(64);
+        let action_handlers = Arc::new(Mutex::new(HashMap::new()));
 
         let server = NotificationsIface {
             cmd_tx: cmd_tx.clone(),
@@ -139,6 +141,7 @@ impl ZbusNotificationProvider {
 
         let status_tx_bg = status_tx.clone();
         let cmd_tx_bg = cmd_tx.clone();
+        let action_handlers_bg = action_handlers.clone();
 
         tokio::spawn(async move {
             let mut history: Vec<Notification> = Vec::new();
@@ -164,8 +167,10 @@ impl ZbusNotificationProvider {
 
                         if timeout > 0 {
                             let tx = cmd_tx_bg.clone();
+                            let ah = action_handlers_bg.clone();
                             tokio::spawn(async move {
                                 tokio::time::sleep(std::time::Duration::from_millis(timeout as u64)).await;
+                                ah.lock().unwrap().retain(|(nid, _), _: &mut ActionHandler| *nid != id);
                                 let _ = tx.send(Cmd::Close(id)).await;
                             });
                         }
@@ -180,9 +185,18 @@ impl ZbusNotificationProvider {
 
                         let emitter = iface_ref.signal_emitter();
                         let _ = NotificationsIface::notification_closed(emitter, id, 2).await;
+                        action_handlers_bg.lock().unwrap().retain(|(nid, _), _: &mut ActionHandler| *nid != id);
                     }
                     Cmd::Action(id, key) => {
                         info!("[notifications] Notification {id} action: {key}");
+
+                        {
+                            let handlers = action_handlers_bg.lock().unwrap();
+                            if let Some(handler) = handlers.get(&(id, key.clone())) {
+                                handler();
+                            }
+                        }
+
                         let emitter = iface_ref.signal_emitter();
                         let _ = NotificationsIface::action_invoked(emitter, id, &key).await;
                         let _ = NotificationsIface::notification_closed(emitter, id, 2).await;
@@ -191,6 +205,7 @@ impl ZbusNotificationProvider {
                             notifications: history.clone(),
                             last_id: 0,
                         });
+                        action_handlers_bg.lock().unwrap().retain(|(nid, _), _: &mut ActionHandler| *nid != id);
                     }
                 }
             }
@@ -199,6 +214,7 @@ impl ZbusNotificationProvider {
         Ok(Arc::new(Self {
             status_tx,
             cmd_tx,
+            action_handlers,
         }))
     }
 }
@@ -225,5 +241,24 @@ impl NotificationProvider for ZbusNotificationProvider {
             .send(Cmd::Action(id, action_key.to_string()))
             .await
             .map_err(|e| NotificationError::ProviderError(e.to_string()))
+    }
+
+    async fn show(
+        &self,
+        notification: Notification,
+        action_handlers: HashMap<String, ActionHandler>,
+    ) -> Result<u32, NotificationError> {
+        let id = notification.id;
+        {
+            let mut handlers = self.action_handlers.lock().unwrap();
+            for (key, handler) in action_handlers {
+                handlers.insert((id, key), handler);
+            }
+        }
+        self.cmd_tx
+            .send(Cmd::Show(notification))
+            .await
+            .map_err(|e| NotificationError::ProviderError(e.to_string()))?;
+        Ok(id)
     }
 }

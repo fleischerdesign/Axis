@@ -1,7 +1,11 @@
-use crate::models::notifications::NotificationStatus;
+use crate::models::notifications::{Notification, NotificationStatus};
 use async_trait::async_trait;
 use thiserror::Error;
+use std::collections::HashMap;
+use std::sync::Arc;
 use super::StatusStream;
+
+pub type ActionHandler = Arc<dyn Fn() + Send + Sync>;
 
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum NotificationError {
@@ -17,6 +21,11 @@ pub trait NotificationProvider: Send + Sync {
     async fn subscribe(&self) -> Result<NotificationStream, NotificationError>;
     async fn close_notification(&self, id: u32) -> Result<(), NotificationError>;
     async fn invoke_action(&self, id: u32, action_key: &str) -> Result<(), NotificationError>;
+    async fn show(
+        &self,
+        notification: Notification,
+        action_handlers: HashMap<String, ActionHandler>,
+    ) -> Result<u32, NotificationError>;
 }
 
 crate::status_provider!(NotificationProvider, NotificationStatus, NotificationError);

@@ -1,8 +1,9 @@
 use axis_domain::models::notifications::{Notification, NotificationStatus};
-use axis_domain::ports::notifications::{NotificationProvider, NotificationError, NotificationStream};
+use axis_domain::ports::notifications::{ActionHandler, NotificationProvider, NotificationError, NotificationStream};
 use async_trait::async_trait;
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 pub struct MockNotificationProvider {
@@ -54,5 +55,22 @@ impl NotificationProvider for MockNotificationProvider {
 
     async fn invoke_action(&self, _id: u32, _action_key: &str) -> Result<(), NotificationError> {
         Ok(())
+    }
+
+    async fn show(
+        &self,
+        notification: Notification,
+        _action_handlers: HashMap<String, ActionHandler>,
+    ) -> Result<u32, NotificationError> {
+        let id = notification.id;
+        self.status_tx.send_modify(|s| {
+            if let Some(pos) = s.notifications.iter().position(|n| n.id == id) {
+                s.notifications[pos] = notification;
+            } else {
+                s.notifications.push(notification);
+            }
+            s.last_id = id;
+        });
+        Ok(id)
     }
 }

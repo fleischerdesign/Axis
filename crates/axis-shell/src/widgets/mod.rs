@@ -18,3 +18,4 @@ pub mod osd;
 pub mod sub_pages;
 pub mod lock_screen;
 pub mod tray;
+pub mod continuity_capture;

@@ -34,11 +34,15 @@ use axis_application::use_cases::tray::context_menu::ContextMenuTrayItemUseCase;
 use axis_application::use_cases::tray::scroll::ScrollTrayItemUseCase;
 use axis_application::use_cases::notifications::close_notification::CloseNotificationUseCase;
 use axis_application::use_cases::notifications::invoke_action::InvokeNotificationActionUseCase;
+use axis_application::use_cases::notifications::show_notification::ShowNotificationUseCase;
 use axis_application::use_cases::layout::set_border::SetBorderColorUseCase;
 use axis_application::use_cases::continuity::set_enabled::SetContinuityEnabledUseCase;
+use axis_application::use_cases::continuity::confirm_pin::ConfirmPinUseCase;
+use axis_application::use_cases::continuity::reject_pin::RejectPinUseCase;
 
 use axis_domain::models::appearance::{AccentColor, ColorScheme};
 use axis_domain::models::config::AxisConfig;
+use axis_domain::ports::config::ConfigProvider;
 use axis_domain::ports::network::NetworkProvider;
 use axis_domain::ports::lock::LockProvider;
 use axis_domain::ports::nightlight::NightlightProvider;
@@ -92,6 +96,7 @@ use widgets::quick_settings::QuickSettingsPopup;
 use widgets::launcher_popup::LauncherPopup;
 use widgets::notification_toast::NotificationToastManager;
 use widgets::notification_archive::NotificationArchive;
+use widgets::continuity_capture::ContinuityCaptureController;
 use widgets::osd::OsdManager;
 use widgets::components::power_actions::PowerActionStack;
 use widgets::lock_screen::LockScreenFactory;
@@ -308,6 +313,8 @@ fn main() -> glib::ExitCode {
     let subscribe_continuity_for_toggle = subscribe_continuity.clone();
     let get_continuity_status = Arc::new(GetStatusUseCase::new(continuity_provider.clone()));
     let continuity_set_enabled = Arc::new(SetContinuityEnabledUseCase::new(continuity_provider.clone()));
+    let continuity_confirm_pin = Arc::new(ConfirmPinUseCase::new(continuity_provider.clone()));
+    let continuity_reject_pin = Arc::new(RejectPinUseCase::new(continuity_provider.clone()));
 
     let subscribe_appearance = Arc::new(SubscribeUseCase::new(appearance_provider.clone()));
     let get_appearance_status = Arc::new(GetStatusUseCase::new(appearance_provider.clone()));
@@ -349,6 +356,18 @@ fn main() -> glib::ExitCode {
     let get_notifications_status = Arc::new(GetStatusUseCase::new(notification_provider.clone()));
     let close_notification_uc = Arc::new(CloseNotificationUseCase::new(notification_provider.clone()));
     let invoke_notification_action_uc = Arc::new(InvokeNotificationActionUseCase::new(notification_provider.clone()));
+    let show_notification_uc = Arc::new(ShowNotificationUseCase::new(notification_provider.clone()));
+
+    subscribe_continuity_notifications(
+        continuity_provider.clone(),
+        show_notification_uc.clone(),
+        continuity_confirm_pin.clone(),
+        continuity_reject_pin.clone(),
+        &rt,
+    );
+
+    let config_cp: Arc<dyn ConfigProvider> = config_provider.clone();
+    wire_continuity_sync(config_cp, continuity_provider.clone(), &rt);
 
     let launcher_presenter = Rc::new(LauncherPresenter::new(search_launcher));
     let notification_presenter = Rc::new(NotificationPresenter::new(
@@ -516,8 +535,8 @@ fn main() -> glib::ExitCode {
 
     let continuity_toggle_presenter = Rc::new(TogglePresenter::new(
         "Continuity",
-        "phone-symbolic",
-        "phone-disabled-symbolic",
+        "input-mouse-symbolic",
+        "input-mouse-symbolic",
         {
             let uc = subscribe_continuity_for_toggle.clone();
             move || {
@@ -673,6 +692,9 @@ fn main() -> glib::ExitCode {
 
         lock_presenter.add_view(Box::new(lock_factory.clone()));
         battery_presenter.add_view(Box::new(lock_factory.clone()));
+
+        let capture_controller = ContinuityCaptureController::new(app, continuity_provider.clone());
+        continuity_presenter.add_view(Box::new(capture_controller));
 
         let lf = lock_factory.clone();
         lock_gtk_handle_for_activate.set_content_factory(Box::new(move || {
@@ -852,6 +874,191 @@ fn main() -> glib::ExitCode {
     });
 
     app.run_with_args(&[&prog_name])
+}
+
+fn subscribe_continuity_notifications(
+    continuity_provider: Arc<dyn ContinuityProvider>,
+    show_notification_uc: Arc<ShowNotificationUseCase>,
+    confirm_pin_uc: Arc<ConfirmPinUseCase>,
+    reject_pin_uc: Arc<RejectPinUseCase>,
+    rt: &tokio::runtime::Runtime,
+) {
+    use std::collections::HashMap;
+
+    rt.spawn(async move {
+        let mut stream = match continuity_provider.subscribe().await {
+            Ok(s) => s,
+            Err(e) => {
+                log::error!("[continuity:notifications] Failed to subscribe: {e}");
+                return;
+            }
+        };
+
+        let mut last_notified: Option<String> = None;
+        let mut last_connected: Option<String> = None;
+
+        while let Some(status) = futures_util::StreamExt::next(&mut stream).await {
+            if let Some(pending) = &status.pending_pin {
+                if pending.is_incoming {
+                    let peer_id = &pending.peer_id;
+                    if last_notified.as_deref() != Some(peer_id) {
+                        last_notified = Some(peer_id.clone());
+
+                        let notification = axis_domain::models::notifications::Notification {
+                            id: u32::MAX - 2,
+                            app_name: "Continuity".to_string(),
+                            app_icon: "computer-symbolic".to_string(),
+                            summary: "Gerätekopplung".to_string(),
+                            body: format!(
+                                "Kopplungsanfrage von {}\nPIN: {}",
+                                pending.peer_name, pending.pin
+                            ),
+                            urgency: 2,
+                            actions: vec![
+                                axis_domain::models::notifications::NotificationAction {
+                                    key: "accept".into(),
+                                    label: "Bestätigen".into(),
+                                },
+                                axis_domain::models::notifications::NotificationAction {
+                                    key: "reject".into(),
+                                    label: "Ablehnen".into(),
+                                },
+                            ],
+                            timeout: 0,
+                            timestamp: std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .unwrap_or_default()
+                                .as_secs() as i64,
+                            internal_id: 0,
+                            ignore_dnd: true,
+                        };
+
+                        let mut action_handlers: HashMap<
+                            String,
+                            axis_domain::ports::notifications::ActionHandler,
+                        > = HashMap::new();
+
+                        action_handlers.insert("accept".into(), Arc::new({
+                            let uc = confirm_pin_uc.clone();
+                            move || {
+                                let uc = uc.clone();
+                                tokio::spawn(async move {
+                                    if let Err(e) = uc.execute().await {
+                                        log::error!("[continuity:notifications] confirm_pin failed: {e}");
+                                    }
+                                });
+                            }
+                        }));
+
+                        action_handlers.insert("reject".into(), Arc::new({
+                            let uc = reject_pin_uc.clone();
+                            move || {
+                                let uc = uc.clone();
+                                tokio::spawn(async move {
+                                    if let Err(e) = uc.execute().await {
+                                        log::error!("[continuity:notifications] reject_pin failed: {e}");
+                                    }
+                                });
+                            }
+                        }));
+
+                        if let Err(e) = show_notification_uc.execute(notification, action_handlers).await {
+                            log::error!("[continuity:notifications] show pairing notification failed: {e}");
+                        }
+                    }
+                }
+            } else {
+                last_notified = None;
+            }
+
+            if let Some(conn) = &status.active_connection {
+                if status.peer_configs.get(&conn.peer_id).is_some_and(|c| c.trusted) {
+                    if last_connected.as_deref() != Some(&conn.peer_id) {
+                        last_connected = Some(conn.peer_id.clone());
+
+                        let notification = axis_domain::models::notifications::Notification {
+                            id: u32::MAX - 3,
+                            app_name: "Continuity".to_string(),
+                            app_icon: "computer-symbolic".to_string(),
+                            summary: "Verbunden".to_string(),
+                            body: format!("Verbunden mit {}", conn.peer_name),
+                            urgency: 1,
+                            actions: vec![],
+                            timeout: 5000,
+                            timestamp: std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .unwrap_or_default()
+                                .as_secs() as i64,
+                            internal_id: 0,
+                            ignore_dnd: false,
+                        };
+
+                        if let Err(e) = show_notification_uc.execute(notification, HashMap::new()).await {
+                            log::error!("[continuity:notifications] show connected notification failed: {e}");
+                        }
+                    }
+                } else {
+                    last_connected = None;
+                }
+            } else {
+                last_connected = None;
+            }
+        }
+    });
+}
+
+fn wire_continuity_sync(
+    config_provider: Arc<dyn ConfigProvider>,
+    continuity_provider: Arc<dyn ContinuityProvider>,
+    rt: &tokio::runtime::Runtime,
+) {
+    {
+        let cont = continuity_provider.clone();
+        let mut config_stream = match config_provider.subscribe() {
+            Ok(s) => s,
+            Err(e) => {
+                log::error!("[continuity:sync] config subscribe failed: {e}");
+                return;
+            }
+        };
+        let mut last_enabled: Option<bool> = None;
+        rt.spawn(async move {
+            while let Some(config) = futures_util::StreamExt::next(&mut config_stream).await {
+                let enabled = config.continuity.enabled;
+                if last_enabled != Some(enabled) {
+                    last_enabled = Some(enabled);
+                    if let Err(e) = cont.set_enabled(enabled).await {
+                        log::error!("[continuity:sync] config→continuity failed: {e}");
+                    }
+                }
+            }
+        });
+    }
+
+    {
+        let cfg = config_provider.clone();
+        let mut cont_stream = match rt.block_on(continuity_provider.subscribe()) {
+            Ok(s) => s,
+            Err(e) => {
+                log::error!("[continuity:sync] continuity subscribe failed: {e}");
+                return;
+            }
+        };
+        let mut last_enabled: Option<bool> = None;
+        rt.spawn(async move {
+            while let Some(status) = futures_util::StreamExt::next(&mut cont_stream).await {
+                let enabled = status.enabled;
+                if last_enabled != Some(enabled) {
+                    last_enabled = Some(enabled);
+                    if let Err(e) = cfg.update(Box::new(move |c: &mut AxisConfig| {
+                        c.continuity.enabled = enabled;
+                    })) {
+                        log::error!("[continuity:sync] continuity→config failed: {e}");
+                    }
+                }
+            }
+        });
+    }
 }
 
 #[derive(clap::Parser)]
