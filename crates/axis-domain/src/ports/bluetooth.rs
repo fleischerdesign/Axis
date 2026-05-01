@@ -24,6 +24,8 @@ pub trait BluetoothProvider: Send + Sync {
     async fn set_powered(&self, powered: bool) -> Result<(), BluetoothError>;
     async fn start_scan(&self) -> Result<(), BluetoothError>;
     async fn stop_scan(&self) -> Result<(), BluetoothError>;
+    async fn pair_accept(&self) -> Result<(), BluetoothError>;
+    async fn pair_reject(&self) -> Result<(), BluetoothError>;
 }
 
 crate::status_provider!(BluetoothProvider, BluetoothStatus, BluetoothError);

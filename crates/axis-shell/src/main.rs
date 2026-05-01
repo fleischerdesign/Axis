@@ -25,6 +25,8 @@ use axis_application::use_cases::bluetooth::disconnect::DisconnectBluetoothDevic
 use axis_application::use_cases::bluetooth::set_powered::SetBluetoothPoweredUseCase;
 use axis_application::use_cases::bluetooth::start_scan::StartBluetoothScanUseCase;
 use axis_application::use_cases::bluetooth::stop_scan::StopBluetoothScanUseCase;
+use axis_application::use_cases::bluetooth::pair_accept::PairAcceptUseCase;
+use axis_application::use_cases::bluetooth::pair_reject::PairRejectUseCase;
 use axis_application::use_cases::nightlight::set_enabled::SetNightlightEnabledUseCase;
 use axis_application::use_cases::nightlight::set_temp_day::SetNightlightTempDayUseCase;
 use axis_application::use_cases::nightlight::set_temp_night::SetNightlightTempNightUseCase;
@@ -294,6 +296,8 @@ fn main() -> glib::ExitCode {
     let bt_set_powered = Arc::new(SetBluetoothPoweredUseCase::new(bluetooth_provider.clone()));
     let bt_start_scan = Arc::new(StartBluetoothScanUseCase::new(bluetooth_provider.clone()));
     let bt_stop_scan = Arc::new(StopBluetoothScanUseCase::new(bluetooth_provider.clone()));
+    let bt_pair_accept = Arc::new(PairAcceptUseCase::new(bluetooth_provider.clone()));
+    let bt_pair_reject = Arc::new(PairRejectUseCase::new(bluetooth_provider.clone()));
 
     let subscribe_nightlight = Arc::new(SubscribeUseCase::new(nightlight_provider.clone()));
     let subscribe_nightlight_for_toggle = subscribe_nightlight.clone();
@@ -364,6 +368,13 @@ fn main() -> glib::ExitCode {
         continuity_confirm_pin.clone(),
         continuity_reject_pin.clone(),
         &rt,
+    );
+
+    subscribe_bluetooth_pairing_notifications(
+        bluetooth_provider.clone(),
+        show_notification_uc.clone(),
+        bt_pair_accept.clone(),
+        bt_pair_reject.clone(),
     );
 
     let config_cp: Arc<dyn ConfigProvider> = config_provider.clone();
@@ -1059,6 +1070,114 @@ fn wire_continuity_sync(
             }
         });
     }
+}
+
+fn subscribe_bluetooth_pairing_notifications(
+    bluetooth_provider: Arc<dyn BluetoothProvider>,
+    show_notification_uc: Arc<ShowNotificationUseCase>,
+    pair_accept_uc: Arc<PairAcceptUseCase>,
+    pair_reject_uc: Arc<PairRejectUseCase>,
+) {
+    use std::collections::HashMap;
+
+    tokio::spawn(async move {
+        let mut stream = match bluetooth_provider.subscribe().await {
+            Ok(s) => s,
+            Err(e) => {
+                log::error!("[bluetooth:notifications] Failed to subscribe: {e}");
+                return;
+            }
+        };
+
+        let mut last_notified: Option<String> = None;
+
+        while let Some(status) = futures_util::StreamExt::next(&mut stream).await {
+            if let Some(pairing) = &status.pending_pairing {
+                let device_path = &pairing.device_path;
+                if last_notified.as_deref() != Some(device_path) {
+                    last_notified = Some(device_path.clone());
+
+                    let body = match pairing.pairing_type {
+                        axis_domain::models::bluetooth::PairingType::Confirmation => {
+                            pairing.passkey.as_ref().map(|pk| {
+                                format!("PIN: {pk}\nBestätigen Sie, dass der PIN auf dem Gerät übereinstimmt.")
+                            }).unwrap_or_else(|| "Bestätigen Sie die Kopplung.".to_string())
+                        }
+                        axis_domain::models::bluetooth::PairingType::PinCode => {
+                            "Geben Sie den PIN-Code ein, der am Gerät angezeigt wird.".to_string()
+                        }
+                        axis_domain::models::bluetooth::PairingType::Passkey => {
+                            "Geben Sie den Passkey ein.".to_string()
+                        }
+                        axis_domain::models::bluetooth::PairingType::Authorization => {
+                            "Möchten Sie die Kopplung erlauben?".to_string()
+                        }
+                    };
+
+                    let notification = axis_domain::models::notifications::Notification {
+                        id: u32::MAX,
+                        app_name: "Bluetooth".to_string(),
+                        app_icon: "bluetooth-active-symbolic".to_string(),
+                        summary: pairing.device_name.clone(),
+                        body,
+                        urgency: 2,
+                        actions: vec![
+                            axis_domain::models::notifications::NotificationAction {
+                                key: "accept".into(),
+                                label: "Bestätigen".into(),
+                            },
+                            axis_domain::models::notifications::NotificationAction {
+                                key: "reject".into(),
+                                label: "Ablehnen".into(),
+                            },
+                        ],
+                        timeout: 0,
+                        timestamp: std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs() as i64,
+                        internal_id: 0,
+                        ignore_dnd: true,
+                    };
+
+                    let mut action_handlers: HashMap<
+                        String,
+                        axis_domain::ports::notifications::ActionHandler,
+                    > = HashMap::new();
+
+                    action_handlers.insert("accept".into(), Arc::new({
+                        let uc = pair_accept_uc.clone();
+                        move || {
+                            let uc = uc.clone();
+                            tokio::spawn(async move {
+                                if let Err(e) = uc.execute().await {
+                                    log::error!("[bluetooth:notifications] pair_accept failed: {e}");
+                                }
+                            });
+                        }
+                    }));
+
+                    action_handlers.insert("reject".into(), Arc::new({
+                        let uc = pair_reject_uc.clone();
+                        move || {
+                            let uc = uc.clone();
+                            tokio::spawn(async move {
+                                if let Err(e) = uc.execute().await {
+                                    log::error!("[bluetooth:notifications] pair_reject failed: {e}");
+                                }
+                            });
+                        }
+                    }));
+
+                    if let Err(e) = show_notification_uc.execute(notification, action_handlers).await {
+                        log::error!("[bluetooth:notifications] show pairing notification failed: {e}");
+                    }
+                }
+            } else {
+                last_notified = None;
+            }
+        }
+    });
 }
 
 #[derive(clap::Parser)]

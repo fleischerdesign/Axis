@@ -31,6 +31,7 @@ impl MockBluetoothProvider {
                     icon: "phone-symbolic".to_string(),
                 },
             ],
+            pending_pairing: None,
         };
         let (tx, _) = watch::channel(initial.clone());
         Arc::new(Self {
@@ -90,6 +91,16 @@ impl BluetoothProvider for MockBluetoothProvider {
         let mut status = self.status.lock().unwrap();
         status.is_scanning = false;
         let _ = self.status_tx.send(status.clone());
+        Ok(())
+    }
+
+    async fn pair_accept(&self) -> Result<(), BluetoothError> {
+        self.status_tx.send_modify(|s| s.pending_pairing = None);
+        Ok(())
+    }
+
+    async fn pair_reject(&self) -> Result<(), BluetoothError> {
+        self.status_tx.send_modify(|s| s.pending_pairing = None);
         Ok(())
     }
 }

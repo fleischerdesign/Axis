@@ -22,10 +22,27 @@ impl Default for BluetoothDevice {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum PairingType {
+    Confirmation,
+    PinCode,
+    Passkey,
+    Authorization,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PendingPairing {
+    pub device_path: String,
+    pub device_name: String,
+    pub passkey: Option<String>,
+    pub pairing_type: PairingType,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BluetoothStatus {
     pub powered: bool,
     pub is_scanning: bool,
     pub devices: Vec<BluetoothDevice>,
+    pub pending_pairing: Option<PendingPairing>,
 }
 
 impl Default for BluetoothStatus {
@@ -34,6 +51,7 @@ impl Default for BluetoothStatus {
             powered: false,
             is_scanning: false,
             devices: vec![],
+            pending_pairing: None,
         }
     }
 }
