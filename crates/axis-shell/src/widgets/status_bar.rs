@@ -31,15 +31,18 @@ impl StatusBar {
 
 impl View<PowerStatus> for StatusBar {
     fn render(&self, status: &PowerStatus) {
-        let icon_name = battery_icon(status.battery_percentage, status.is_charging).to_string();
-        self.icon.set_icon_name(Some(&icon_name));
-        if self.label.is_visible() {
-            self.label.set_label(&format!("{:.0}%", status.battery_percentage));
-        }
-        if status.is_charging {
-            self.icon.add_css_class("charging");
-        } else {
-            self.icon.remove_css_class("charging");
+        self.container.set_visible(status.has_battery);
+        if status.has_battery {
+            let icon_name = battery_icon(status.battery_percentage, status.is_charging).to_string();
+            self.icon.set_icon_name(Some(&icon_name));
+            if self.label.is_visible() {
+                self.label.set_label(&format!("{:.0}%", status.battery_percentage));
+            }
+            if status.is_charging {
+                self.icon.add_css_class("charging");
+            } else {
+                self.icon.remove_css_class("charging");
+            }
         }
     }
 }

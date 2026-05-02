@@ -14,7 +14,7 @@ impl Default for PowerStatus {
             battery_percentage: 100.0,
             is_charging: false,
             power_profile: String::from("balanced"),
-            has_battery: true,
+            has_battery: false,
         }
     }
 }

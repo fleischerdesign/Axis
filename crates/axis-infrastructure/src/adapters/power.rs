@@ -20,6 +20,9 @@ trait UPowerDevice {
 
     #[zbus(property)]
     fn state(&self) -> zbus::Result<u32>;
+
+    #[zbus(property, name = "Type")]
+    fn type_(&self) -> zbus::Result<u32>;
 }
 
 #[proxy(
@@ -104,11 +107,17 @@ impl LogindPowerProvider {
 
         let is_charging = state == 1 || state == 4;
 
+        let has_battery = proxy
+            .type_()
+            .await
+            .map(|t| t == 2)
+            .unwrap_or(false);
+
         Ok(PowerStatus {
             battery_percentage: percentage,
             is_charging,
             power_profile: "balanced".to_string(),
-            has_battery: true,
+            has_battery,
         })
     }
 }
