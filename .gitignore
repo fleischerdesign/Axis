@@ -28,3 +28,6 @@ target
 # Added by cargo
 
 /target
+
+# Legacy backup (fully ported to hexagonal architecture)
+/backup
