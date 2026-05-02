@@ -1,0 +1,47 @@
+use libadwaita::prelude::*;
+use axis_presentation::View;
+use crate::presentation::network::wifi_icon;
+use axis_domain::models::network::NetworkStatus;
+
+#[derive(Clone)]
+pub struct WifiStatusWidget {
+    pub container: gtk4::Box,
+    icon: gtk4::Image,
+    label: gtk4::Label,
+}
+
+impl WifiStatusWidget {
+    pub fn new(show_labels: bool) -> Self {
+        let icon = gtk4::Image::new();
+        icon.set_pixel_size(20);
+        icon.add_css_class("status-icon");
+
+        let label = gtk4::Label::new(None);
+        label.add_css_class("status-text");
+        label.set_visible(show_labels);
+
+        let container = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
+        container.append(&icon);
+        container.append(&label);
+        container.set_visible(false);
+
+        Self { container, icon, label }
+    }
+}
+
+impl View<NetworkStatus> for WifiStatusWidget {
+    fn render(&self, status: &NetworkStatus) {
+        self.container.set_visible(status.is_wifi_enabled);
+        if status.is_wifi_enabled {
+            let icon_name = if status.is_wifi_connected {
+                wifi_icon(status.active_strength)
+            } else {
+                "network-wireless-signal-none-symbolic"
+            };
+            self.icon.set_icon_name(Some(icon_name));
+            if self.label.is_visible() {
+                self.label.set_label(&format!("{:.0}%", status.active_strength));
+            }
+        }
+    }
+}

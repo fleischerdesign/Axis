@@ -7,6 +7,11 @@ use std::rc::Rc;
 
 use crate::widgets::island::Island;
 use crate::widgets::status_bar::StatusBar;
+use crate::widgets::wifi_status::WifiStatusWidget;
+use crate::widgets::bluetooth_status::BluetoothStatusWidget;
+use crate::widgets::dnd_status::DndStatusWidget;
+use crate::widgets::airplane_status::AirplaneStatusWidget;
+use crate::widgets::continuity_status::ContinuityStatusWidget;
 use crate::widgets::clock::ClockWidget;
 use crate::widgets::audio::AudioWidget;
 use crate::widgets::workspace_dots::WorkspaceDots;
@@ -21,9 +26,15 @@ use crate::presentation::workspaces::WorkspacePresenter;
 use crate::presentation::auto_hide::{AutoHidePresenter, AutoHideView};
 use crate::presentation::tray::TrayPresenter;
 use crate::presentation::tray::TrayView;
+use crate::presentation::network::NetworkPresenter;
+use crate::presentation::bluetooth::BluetoothPresenter;
+use crate::presentation::continuity::ContinuityPresenter;
 
 use axis_application::use_cases::popups::TogglePopupUseCase;
 use axis_domain::models::popups::PopupType;
+use axis_domain::models::dnd::DndStatus;
+use axis_domain::models::airplane::AirplaneStatus;
+use axis_presentation::Presenter;
 
 glib::wrapper! {
     pub struct BarWindow(ObjectSubclass<imp::BarWindow>)
@@ -47,6 +58,11 @@ impl BarWindow {
         auto_hide_presenter: Arc<AutoHidePresenter>,
         tray_presenter: Rc<TrayPresenter>,
         toggle_popup_use_case: Arc<TogglePopupUseCase>,
+        network_presenter: Rc<NetworkPresenter>,
+        bluetooth_presenter: Rc<BluetoothPresenter>,
+        dnd_status_presenter: Rc<Presenter<DndStatus>>,
+        airplane_status_presenter: Rc<Presenter<AirplaneStatus>>,
+        continuity_presenter: Rc<ContinuityPresenter>,
         show_labels: bool,
     ) {
         let bar = Bar::new();
@@ -108,8 +124,18 @@ impl BarWindow {
         tray_presenter.add_view(Box::new(tray_widget.clone()));
 
         let end_island = Island::new();
+        let wifi_widget = WifiStatusWidget::new(show_labels);
+        let bt_widget = BluetoothStatusWidget::new();
+        let dnd_widget = DndStatusWidget::new();
+        let airplane_widget = AirplaneStatusWidget::new();
+        let continuity_widget = ContinuityStatusWidget::new();
         let audio_widget = AudioWidget::new(show_labels);
         let status_bar = StatusBar::new(show_labels);
+        end_island.container.append(&wifi_widget.container);
+        end_island.container.append(&bt_widget.container);
+        end_island.container.append(&dnd_widget.container);
+        end_island.container.append(&airplane_widget.container);
+        end_island.container.append(&continuity_widget.container);
         end_island.container.append(&audio_widget.container);
         end_island.container.append(&status_bar.container);
 
@@ -124,6 +150,11 @@ impl BarWindow {
         end_box.append(&end_island.container);
         bar.set_end_widget(Some(&end_box));
 
+        network_presenter.add_view(Box::new(wifi_widget.clone()));
+        bluetooth_presenter.add_view(Box::new(bt_widget.clone()));
+        dnd_status_presenter.add_view(Box::new(dnd_widget.clone()));
+        airplane_status_presenter.add_view(Box::new(airplane_widget.clone()));
+        continuity_presenter.add_view(Box::new(continuity_widget.clone()));
         battery_presenter.add_view(Box::new(status_bar.clone()));
 
         let cp = clock_presenter.clone();

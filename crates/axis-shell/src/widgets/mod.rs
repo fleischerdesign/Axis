@@ -1,4 +1,9 @@
 pub mod status_bar;
+pub mod wifi_status;
+pub mod bluetooth_status;
+pub mod dnd_status;
+pub mod airplane_status;
+pub mod continuity_status;
 pub mod island;
 pub mod clock;
 pub mod bar;

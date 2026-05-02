@@ -310,8 +310,24 @@ fn main() -> glib::ExitCode {
 
     let subscribe_dnd = Arc::new(SubscribeUseCase::new(dnd_provider.clone()));
     let dnd_set_enabled_uc = Arc::new(axis_application::use_cases::dnd::set_enabled::SetDndEnabledUseCase::new(dnd_provider.clone()));
+
+    let dnd_status_presenter = Rc::new({
+        let uc = subscribe_dnd.clone();
+        Presenter::from_subscribe(move || {
+            let uc = uc.clone();
+            async move { uc.execute().await }
+        })
+    });
     let subscribe_airplane = Arc::new(SubscribeUseCase::new(airplane_provider.clone()));
     let ap_set_enabled_uc = Arc::new(axis_application::use_cases::airplane::set_enabled::SetAirplaneModeUseCase::new(airplane_provider.clone()));
+
+    let airplane_status_presenter = Rc::new({
+        let uc = subscribe_airplane.clone();
+        Presenter::from_subscribe(move || {
+            let uc = uc.clone();
+            async move { uc.execute().await }
+        })
+    });
 
     let subscribe_continuity = Arc::new(SubscribeUseCase::new(continuity_provider.clone()));
     let subscribe_continuity_for_toggle = subscribe_continuity.clone();
@@ -597,6 +613,12 @@ fn main() -> glib::ExitCode {
     let cont_sync = continuity_presenter.clone();
     glib::spawn_future_local(async move { cont_sync.run_sync().await; });
 
+    let dnd_sync = dnd_status_presenter.clone();
+    glib::spawn_future_local(async move { dnd_sync.run_sync().await; });
+
+    let ap_sync = airplane_status_presenter.clone();
+    glib::spawn_future_local(async move { ap_sync.run_sync().await; });
+
     let dbus_tp = toggle_popup.clone();
     let dbus_lock_uc = lock_session_uc.clone();
     let cont_cmd_tx = continuity_service.cmd_tx();
@@ -717,6 +739,8 @@ fn main() -> glib::ExitCode {
             battery_presenter.clone(), clock_presenter.clone(), audio_presenter.clone(),
             workspace_presenter.clone(), auto_hide_presenter.clone(), tray_presenter.clone(),
             toggle_popup.clone(),
+            network_presenter.clone(), bluetooth_full_presenter.clone(), dnd_status_presenter.clone(),
+            airplane_status_presenter.clone(), continuity_presenter.clone(),
             show_labels,
         );
 

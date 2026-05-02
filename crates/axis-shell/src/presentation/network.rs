@@ -6,6 +6,16 @@ use axis_domain::models::network::NetworkStatus;
 use axis_domain::ports::network::NetworkProvider;
 use axis_presentation::{Presenter, View};
 
+pub(crate) fn wifi_icon(strength: u8) -> &'static str {
+    match strength {
+        0..=20 => "network-wireless-signal-none-symbolic",
+        21..=40 => "network-wireless-signal-weak-symbolic",
+        41..=60 => "network-wireless-signal-ok-symbolic",
+        61..=80 => "network-wireless-signal-good-symbolic",
+        _ => "network-wireless-signal-excellent-symbolic",
+    }
+}
+
 pub struct NetworkPresenter {
     inner: Presenter<NetworkStatus>,
     connect_use_case: Arc<ConnectToApUseCase>,
