@@ -32,11 +32,13 @@ use crate::presentation::bluetooth::BluetoothPresenter;
 use crate::presentation::continuity::ContinuityPresenter;
 
 use axis_application::use_cases::popups::TogglePopupUseCase;
+use axis_application::use_cases::workspaces::toggle_overview::ToggleOverviewUseCase;
 use axis_domain::models::popups::PopupType;
+use axis_domain::models::workspaces::WorkspaceStatus;
 use axis_domain::models::dnd::DndStatus;
 use axis_domain::models::airplane::AirplaneStatus;
 use axis_domain::models::idle_inhibit::IdleInhibitStatus;
-use axis_presentation::Presenter;
+use axis_presentation::{Presenter, FnView};
 
 glib::wrapper! {
     pub struct BarWindow(ObjectSubclass<imp::BarWindow>)
@@ -60,6 +62,7 @@ impl BarWindow {
         auto_hide_presenter: Arc<AutoHidePresenter>,
         tray_presenter: Rc<TrayPresenter>,
         toggle_popup_use_case: Arc<TogglePopupUseCase>,
+        toggle_overview_use_case: Arc<ToggleOverviewUseCase>,
         network_presenter: Rc<NetworkPresenter>,
         bluetooth_presenter: Rc<BluetoothPresenter>,
         dnd_status_presenter: Rc<Presenter<DndStatus>>,
@@ -89,10 +92,10 @@ impl BarWindow {
         let ws_dots = WorkspaceDots::new();
         ws_island.container.append(&ws_dots.container);
 
-        let tp = toggle_popup_use_case.clone();
+        let tou = toggle_overview_use_case.clone();
         ws_island.on_clicked(move || {
-            let uc = tp.clone();
-            tokio::spawn(async move { let _ = uc.execute(PopupType::Workspaces).await; });
+            let uc = tou.clone();
+            tokio::spawn(async move { let _ = uc.execute().await; });
         });
         center_island_box.append(&ws_island.container);
 
@@ -154,6 +157,15 @@ impl BarWindow {
         end_box.append(&tray_widget.container);
         end_box.append(&end_island.container);
         bar.set_end_widget(Some(&end_box));
+
+        {
+            let ahp = auto_hide_presenter.clone();
+            let bw = self.clone();
+            let ov = FnView::new(move |status: &WorkspaceStatus| {
+                ahp.set_force_visible(&bw, status.overview_open);
+            });
+            workspace_presenter.add_view(Box::new(ov));
+        }
 
         network_presenter.add_view(Box::new(wifi_widget.clone()));
         bluetooth_presenter.add_view(Box::new(bt_widget.clone()));

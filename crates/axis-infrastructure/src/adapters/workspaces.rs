@@ -36,21 +36,24 @@ impl NiriWorkspaceProvider {
                         while let Ok(event) = read_event() {
                             match event {
                                 Event::WorkspacesChanged { workspaces } => {
+                                    let overview_open = provider_clone.status_tx.borrow().overview_open;
                                     let status = WorkspaceStatus {
-                                        workspaces: workspaces.into_iter().map(Self::map_workspace).collect()
+                                        workspaces: workspaces.into_iter().map(Self::map_workspace).collect(),
+                                        overview_open,
                                     };
                                     let _ = provider_clone.status_tx.send(status);
                                 }
-                                Event::WorkspaceActivated { .. } => {
-                                    // On activation, query status via a new socket
-                                    if let Ok(mut query_sock) = Socket::connect() {
-                                        if let Ok(Ok(Response::Workspaces(ws_list))) = query_sock.send(Request::Workspaces) {
-                                            let status = WorkspaceStatus {
-                                                workspaces: ws_list.into_iter().map(Self::map_workspace).collect()
-                                            };
-                                            let _ = provider_clone.status_tx.send(status);
-                                        }
+                                Event::WorkspaceActivated { id, .. } => {
+                                    let mut status = provider_clone.status_tx.borrow().clone();
+                                    for ws in &mut status.workspaces {
+                                        ws.is_active = ws.id == id as u32;
                                     }
+                                    let _ = provider_clone.status_tx.send(status);
+                                }
+                                Event::OverviewOpenedOrClosed { is_open } => {
+                                    let mut status = provider_clone.status_tx.borrow().clone();
+                                    status.overview_open = is_open;
+                                    let _ = provider_clone.status_tx.send(status);
                                 }
                                 _ => {}
                             }
@@ -68,7 +71,7 @@ impl NiriWorkspaceProvider {
         match response {
             Response::Workspaces(ws_list) => {
                 let workspaces = ws_list.into_iter().map(Self::map_workspace).collect();
-                Ok(WorkspaceStatus { workspaces })
+                Ok(WorkspaceStatus { workspaces, overview_open: false })
             }
             _ => Err(WorkspaceError::ProviderError("Unexpected response from Niri".to_string())),
         }
@@ -104,6 +107,15 @@ impl WorkspaceProvider for NiriWorkspaceProvider {
         }))
         .map_err(|e| WorkspaceError::ProviderError(e.to_string()))?
         .map_err(|e| WorkspaceError::ProviderError(e))?;
+        Ok(())
+    }
+
+    async fn toggle_overview(&self) -> Result<(), WorkspaceError> {
+        let mut sock = Socket::connect()
+            .map_err(|e| WorkspaceError::ProviderError(e.to_string()))?;
+        sock.send(Request::Action(Action::ToggleOverview {}))
+            .map_err(|e| WorkspaceError::ProviderError(e.to_string()))?
+            .map_err(|e| WorkspaceError::ProviderError(e))?;
         Ok(())
     }
 }

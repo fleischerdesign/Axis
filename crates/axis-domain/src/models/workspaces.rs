@@ -12,12 +12,14 @@ pub struct Workspace {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WorkspaceStatus {
     pub workspaces: Vec<Workspace>,
+    pub overview_open: bool,
 }
 
 impl Default for WorkspaceStatus {
     fn default() -> Self {
         Self {
             workspaces: vec![],
+            overview_open: false,
         }
     }
 }

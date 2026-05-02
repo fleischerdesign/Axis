@@ -14,7 +14,7 @@ use axis_application::use_cases::audio::set_volume::SetVolumeUseCase;
 use axis_application::use_cases::audio::set_default_sink::SetDefaultSinkUseCase;
 use axis_application::use_cases::audio::set_default_source::SetDefaultSourceUseCase;
 use axis_application::use_cases::audio::set_sink_input_volume::SetSinkInputVolumeUseCase;
-use axis_application::use_cases::workspaces::focus::FocusWorkspaceUseCase;
+use axis_application::use_cases::workspaces::toggle_overview::ToggleOverviewUseCase;
 use axis_application::use_cases::popups::TogglePopupUseCase;
 use axis_application::use_cases::brightness::set::SetBrightnessUseCase;
 use axis_application::use_cases::launcher::search::SearchLauncherUseCase;
@@ -284,7 +284,7 @@ fn main() -> glib::ExitCode {
     let get_audio_status = Arc::new(GetStatusUseCase::new(audio_provider.clone()));
     let set_volume = Arc::new(SetVolumeUseCase::new(audio_provider.clone()));
     let subscribe_ws = Arc::new(SubscribeUseCase::new(workspace_provider.clone()));
-    let focus_ws = Arc::new(FocusWorkspaceUseCase::new(workspace_provider.clone()));
+    let toggle_overview_uc = Arc::new(ToggleOverviewUseCase::new(workspace_provider.clone()));
     let subscribe_popups = Arc::new(SubscribeUseCase::new(popup_provider.clone()));
     let subscribe_popups_for_presenter = subscribe_popups.clone();
     let toggle_popup = Arc::new(TogglePopupUseCase::new(popup_provider.clone()));
@@ -372,7 +372,7 @@ fn main() -> glib::ExitCode {
 
     let battery_presenter = Arc::new(BatteryPresenter::new(subscribe_power));
     let clock_presenter = Arc::new(ClockPresenter::new(subscribe_clock));
-    let workspace_presenter = Arc::new(WorkspacePresenter::new(subscribe_ws, focus_ws));
+    let workspace_presenter = Arc::new(WorkspacePresenter::new(subscribe_ws));
     let popup_presenter = Arc::new(PopupPresenter::new(subscribe_popups_for_presenter));
     let auto_hide_presenter = Arc::new(AutoHidePresenter::new(1, 500));
     let audio_presenter = Rc::new(AudioPresenter::new(
@@ -790,7 +790,7 @@ fn main() -> glib::ExitCode {
         bar_window.setup_content(
             battery_presenter.clone(), clock_presenter.clone(), audio_presenter.clone(),
             workspace_presenter.clone(), auto_hide_presenter.clone(), tray_presenter.clone(),
-            toggle_popup.clone(),
+            toggle_popup.clone(), toggle_overview_uc.clone(),
             network_presenter.clone(), bluetooth_full_presenter.clone(), dnd_status_presenter.clone(),
             airplane_status_presenter.clone(), continuity_presenter.clone(),
             idle_inhibit_status_presenter.clone(),

@@ -1,14 +1,11 @@
 use libadwaita::prelude::*;
-use crate::presentation::workspaces::WorkspaceView;
 use axis_domain::models::workspaces::WorkspaceStatus;
 use axis_presentation::View;
-use std::cell::{Cell, RefCell};
-use std::rc::Rc;
+use std::cell::Cell;
 
 #[derive(Clone)]
 pub struct WorkspaceDots {
     pub container: gtk4::Box,
-    click_callback: RefCell<Option<Rc<dyn Fn(u32) + Send + Sync>>>,
     dot_count: Cell<usize>,
 }
 
@@ -18,7 +15,6 @@ impl WorkspaceDots {
         container.add_css_class("workspace-dots");
         Self {
             container,
-            click_callback: RefCell::new(None),
             dot_count: Cell::new(0),
         }
     }
@@ -48,7 +44,7 @@ impl View<WorkspaceStatus> for WorkspaceDots {
                 }
                 child = existing_dot.next_sibling();
             } else {
-                let dot = gtk4::Button::builder()
+                let dot = gtk4::Box::builder()
                     .css_classes(["ws-dot"])
                     .valign(gtk4::Align::Center)
                     .build();
@@ -57,24 +53,9 @@ impl View<WorkspaceStatus> for WorkspaceDots {
                     dot.add_css_class("active");
                 }
 
-                if let Some(cb) = self.click_callback.borrow().as_ref() {
-                    let ws_id = ws.id;
-                    let cb_clone = cb.clone();
-                    dot.connect_clicked(move |_| {
-                        cb_clone(ws_id);
-                    });
-                }
-
                 self.container.append(&dot);
                 self.dot_count.set(self.dot_count.get() + 1);
             }
         }
     }
 }
-
-impl WorkspaceView for WorkspaceDots {
-    fn on_workspace_clicked(&self, f: Box<dyn Fn(u32) + Send + Sync>) {
-        *self.click_callback.borrow_mut() = Some(Rc::new(f));
-    }
-}
-

@@ -19,6 +19,7 @@ impl MockWorkspaceProvider {
                 Workspace { id: 4, name: "4".to_string(), is_active: false, is_empty: true, index: 4 },
                 Workspace { id: 5, name: "5".to_string(), is_active: false, is_empty: true, index: 5 },
             ],
+            overview_open: false,
         });
 
         Arc::new(Self { status_tx: tx })
@@ -46,6 +47,10 @@ impl WorkspaceProvider for MockWorkspaceProvider {
 
     async fn focus_workspace(&self, id: u32) -> Result<(), WorkspaceError> {
         self.simulate_active(id);
+        Ok(())
+    }
+
+    async fn toggle_overview(&self) -> Result<(), WorkspaceError> {
         Ok(())
     }
 }
