@@ -22,7 +22,7 @@ impl ClockWidget {
 
 impl View<TimeStatus> for ClockWidget {
     fn render(&self, status: &TimeStatus) {
-        let time_str = status.current_time.format("%H:%M:%S").to_string();
+        let time_str = status.current_time.format("%H:%M").to_string();
         self.label.set_label(&time_str);
     }
 }

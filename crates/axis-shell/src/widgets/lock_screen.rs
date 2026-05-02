@@ -54,7 +54,19 @@ impl LockScreenFactory {
         *self.on_auth.borrow_mut() = Some(callback);
     }
 
+    fn drain_overlays(&self) {
+        self.content_boxes.borrow_mut().clear();
+        self.backgrounds.borrow_mut().clear();
+        self.password_entries.borrow_mut().clear();
+        self.error_labels.borrow_mut().clear();
+        self.battery_icons.borrow_mut().clear();
+        self.battery_labels.borrow_mut().clear();
+        self.battery_rows.borrow_mut().clear();
+    }
+
     pub fn build_overlay(&self) -> gtk4::Widget {
+        self.drain_overlays();
+
         let overlay = gtk4::Overlay::new();
 
         let background = self.build_background();

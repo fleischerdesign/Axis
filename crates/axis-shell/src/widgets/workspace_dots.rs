@@ -2,13 +2,14 @@ use libadwaita::prelude::*;
 use crate::presentation::workspaces::WorkspaceView;
 use axis_domain::models::workspaces::WorkspaceStatus;
 use axis_presentation::View;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 #[derive(Clone)]
 pub struct WorkspaceDots {
     pub container: gtk4::Box,
     click_callback: RefCell<Option<Rc<dyn Fn(u32) + Send + Sync>>>,
+    dot_count: Cell<usize>,
 }
 
 impl WorkspaceDots {
@@ -18,6 +19,7 @@ impl WorkspaceDots {
         Self {
             container,
             click_callback: RefCell::new(None),
+            dot_count: Cell::new(0),
         }
     }
 }
@@ -29,9 +31,10 @@ impl View<WorkspaceStatus> for WorkspaceDots {
 
         let target = workspaces.len();
 
-        while child_count(&self.container) > target {
+        while self.dot_count.get() > target {
             if let Some(last) = self.container.last_child() {
                 self.container.remove(&last);
+                self.dot_count.set(self.dot_count.get() - 1);
             }
         }
 
@@ -63,6 +66,7 @@ impl View<WorkspaceStatus> for WorkspaceDots {
                 }
 
                 self.container.append(&dot);
+                self.dot_count.set(self.dot_count.get() + 1);
             }
         }
     }
@@ -74,12 +78,3 @@ impl WorkspaceView for WorkspaceDots {
     }
 }
 
-fn child_count(container: &gtk4::Box) -> usize {
-    let mut count = 0;
-    let mut child = container.first_child();
-    while child.is_some() {
-        count += 1;
-        child = child.and_then(|c| c.next_sibling());
-    }
-    count
-}

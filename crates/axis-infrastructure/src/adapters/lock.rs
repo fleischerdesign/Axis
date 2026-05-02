@@ -650,19 +650,16 @@ async fn is_inhibited(idle_inhibit_provider: &Arc<dyn IdleInhibitProvider>) -> b
 }
 
 async fn niri_action(action: niri_ipc::Action) {
-    let result = tokio::task::spawn_blocking(move || {
-        let mut sock = match niri_ipc::socket::Socket::connect() {
-            Ok(s) => s,
-            Err(e) => {
-                log::warn!("[lock] niri connect failed: {e}");
-                return;
-            }
-        };
-        match sock.send(niri_ipc::Request::Action(action)) {
-            Ok(Ok(_)) => {}
-            Ok(Err(e)) => log::warn!("[lock] niri action failed: {e}"),
-            Err(e) => log::warn!("[lock] niri send failed: {e}"),
+    let mut sock = match niri_ipc::socket::Socket::connect() {
+        Ok(s) => s,
+        Err(e) => {
+            log::warn!("[lock] niri connect failed: {e}");
+            return;
         }
-    });
-    let _ = result.await;
+    };
+    match sock.send(niri_ipc::Request::Action(action)) {
+        Ok(Ok(_)) => {}
+        Ok(Err(e)) => log::warn!("[lock] niri action failed: {e}"),
+        Err(e) => log::warn!("[lock] niri send failed: {e}"),
+    }
 }

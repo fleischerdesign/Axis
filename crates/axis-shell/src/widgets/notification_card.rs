@@ -6,7 +6,7 @@ use crate::widgets::components::swipe_dismiss::SwipeDismiss;
 pub type CloseCallback = Rc<dyn Fn(u32)>;
 pub type ActionCallback = Rc<dyn Fn(u32, String)>;
 
-fn format_time(timestamp: i64) -> String {
+pub fn format_time(timestamp: i64) -> String {
     let now = chrono::Local::now().timestamp();
     let diff = now - timestamp;
 
@@ -23,6 +23,8 @@ fn format_time(timestamp: i64) -> String {
 
 pub struct NotificationCard {
     pub container: gtk4::Box,
+    pub time_label: gtk4::Label,
+    pub timestamp: i64,
 }
 
 impl NotificationCard {
@@ -33,6 +35,7 @@ impl NotificationCard {
     ) -> Self {
         let card = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
         card.add_css_class("notification-card");
+        card.set_hexpand(true);
 
         let header_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
         header_box.add_css_class("notification-header");
@@ -58,19 +61,6 @@ impl NotificationCard {
             .halign(gtk4::Align::End)
             .css_classes(vec!["notification-time".to_string()])
             .build();
-
-        if data.timestamp > 0 {
-            let time_label_weak = time_label.downgrade();
-            let ts = data.timestamp;
-            gtk4::glib::timeout_add_seconds_local(60, move || {
-                if let Some(label) = time_label_weak.upgrade() {
-                    label.set_label(&format_time(ts));
-                    gtk4::glib::ControlFlow::Continue
-                } else {
-                    gtk4::glib::ControlFlow::Break
-                }
-            });
-        }
 
         let close_btn = gtk4::Button::builder()
             .icon_name("window-close-symbolic")
@@ -161,10 +151,15 @@ impl NotificationCard {
         });
 
         let container = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-        container.set_halign(gtk4::Align::End);
+        container.set_halign(gtk4::Align::Fill);
+        container.set_hexpand(true);
         container.add_css_class("notification-wrapper");
         container.append(&swipe.container);
 
-        Self { container }
+        Self {
+            container,
+            time_label,
+            timestamp: data.timestamp,
+        }
     }
 }

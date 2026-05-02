@@ -19,7 +19,7 @@ impl MockClockProvider {
         
         let tx_clone = tx.clone();
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(1));
+            let mut interval = tokio::time::interval(Duration::from_secs(30));
             loop {
                 interval.tick().await;
                 let _ = tx_clone.send(TimeStatus {

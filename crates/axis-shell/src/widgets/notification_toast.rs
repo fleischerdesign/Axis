@@ -2,7 +2,7 @@ use gtk4::prelude::*;
 use gtk4_layer_shell::{LayerShell, Layer, Edge};
 use axis_domain::models::notifications::{Notification, NotificationStatus};
 use axis_domain::models::dnd::DndStatus;
-use crate::widgets::notification_card::{NotificationCard, CloseCallback, ActionCallback};
+use crate::widgets::notification_card::{NotificationCard, format_time, CloseCallback, ActionCallback};
 use axis_presentation::View;
 use crate::presentation::notifications::NotificationPopupAware;
 use std::cell::{Cell, RefCell};
@@ -13,6 +13,8 @@ pub struct NotificationToastManager {
     container: gtk4::Box,
     last_shown_id: Cell<u32>,
     active_toasts: RefCell<HashMap<u32, gtk4::Revealer>>,
+    time_data: RefCell<HashMap<u32, (i64, gtk4::Label)>>,
+    refresh_timer: RefCell<Option<gtk4::glib::SourceId>>,
     on_close: CloseCallback,
     on_action: ActionCallback,
     popup_open: Cell<bool>,
@@ -37,9 +39,10 @@ impl NotificationToastManager {
         window.set_margin(Edge::Top, 10);
         window.set_margin(Edge::Right, 10);
         window.set_exclusive_zone(-1);
-        window.set_default_size(380, -1);
+        window.set_default_size(320, -1);
 
         let container = gtk4::Box::new(gtk4::Orientation::Vertical, 10);
+        container.set_hexpand(true);
         container.set_valign(gtk4::Align::Start);
         window.set_child(Some(&container));
 
@@ -48,6 +51,8 @@ impl NotificationToastManager {
             container,
             last_shown_id: Cell::new(0),
             active_toasts: RefCell::new(HashMap::new()),
+            time_data: RefCell::new(HashMap::new()),
+            refresh_timer: RefCell::new(None),
             on_close,
             on_action,
             popup_open: Cell::new(false),
@@ -62,10 +67,18 @@ impl NotificationToastManager {
             self.on_action.clone(),
         );
 
+        if card.timestamp > 0 {
+            self.time_data
+                .borrow_mut()
+                .insert(data.id, (card.timestamp, card.time_label.clone()));
+            self.ensure_refresh_timer();
+        }
+
         let revealer = gtk4::Revealer::builder()
             .transition_type(gtk4::RevealerTransitionType::SlideDown)
             .transition_duration(250)
             .build();
+        revealer.set_hexpand(true);
         revealer.set_child(Some(&card.container));
         self.container.append(&revealer);
 
@@ -82,12 +95,14 @@ impl NotificationToastManager {
         let id = data.id;
         let auto_dismiss = !data.ignore_dnd && data.internal_id == 0;
         let active = RefCell::clone(&self.active_toasts);
+        let time_data = RefCell::clone(&self.time_data);
         let cont = self.container.clone();
         let win = self.window.clone();
 
         if auto_dismiss {
             gtk4::glib::timeout_add_local_once(std::time::Duration::from_secs(5), move || {
                 if let Some(r) = active.borrow_mut().remove(&id) {
+                    time_data.borrow_mut().remove(&id);
                     r.set_reveal_child(false);
                     let cont_c = cont.clone();
                     let win_c = win.clone();
@@ -104,6 +119,8 @@ impl NotificationToastManager {
 
     fn remove_toast_by_id(&self, id: u32) {
         if let Some(revealer) = self.active_toasts.borrow_mut().remove(&id) {
+            self.time_data.borrow_mut().remove(&id);
+            self.cleanup_timer();
             let cont = self.container.clone();
             let win = self.window.clone();
             revealer.set_reveal_child(false);
@@ -118,6 +135,8 @@ impl NotificationToastManager {
 
     fn hide_all_toasts(&self) {
         let toasts: Vec<_> = self.active_toasts.borrow_mut().drain().collect();
+        self.time_data.borrow_mut().clear();
+        self.cleanup_timer();
         for (_, revealer) in toasts {
             let cont = self.container.clone();
             let win = self.window.clone();
@@ -128,6 +147,32 @@ impl NotificationToastManager {
                     win.set_visible(false);
                 }
             });
+        }
+    }
+    fn ensure_refresh_timer(&self) {
+        if self.refresh_timer.borrow().is_some() {
+            return;
+        }
+
+        let time_data = self.time_data.clone();
+        let src = gtk4::glib::timeout_add_seconds_local(60, move || {
+            let data = time_data.borrow();
+            if data.is_empty() {
+                return gtk4::glib::ControlFlow::Break;
+            }
+            for (ts, label) in data.values() {
+                label.set_label(&format_time(*ts));
+            }
+            gtk4::glib::ControlFlow::Continue
+        });
+        *self.refresh_timer.borrow_mut() = Some(src);
+    }
+
+    fn cleanup_timer(&self) {
+        if self.time_data.borrow().is_empty() {
+            if let Some(src) = self.refresh_timer.borrow_mut().take() {
+                src.remove();
+            }
         }
     }
 }

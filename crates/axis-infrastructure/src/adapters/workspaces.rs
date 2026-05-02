@@ -12,7 +12,7 @@ pub struct NiriWorkspaceProvider {
 
 impl NiriWorkspaceProvider {
     pub async fn new() -> Result<Arc<Self>, WorkspaceError> {
-        let (initial_status, _query_sock) = tokio::task::spawn_blocking(|| {
+        let (initial_status, _query_sock) = {
             let mut sock = Socket::connect()
                 .map_err(|e| WorkspaceError::ProviderError(e.to_string()))?;
             
@@ -21,8 +21,8 @@ impl NiriWorkspaceProvider {
                 .map_err(|e| WorkspaceError::ProviderError(e))?;
             
             let status = Self::map_workspaces_response(response)?;
-            Ok::<(WorkspaceStatus, Socket), WorkspaceError>((status, sock))
-        }).await.map_err(|e| WorkspaceError::ProviderError(e.to_string()))??;
+            (status, sock)
+        };
 
         let (tx, _) = watch::channel(initial_status);
         let provider = Arc::new(Self { status_tx: tx });
@@ -97,17 +97,13 @@ impl WorkspaceProvider for NiriWorkspaceProvider {
     }
 
     async fn focus_workspace(&self, id: u32) -> Result<(), WorkspaceError> {
-        tokio::task::spawn_blocking(move || {
-            let mut sock = Socket::connect()
-                .map_err(|e| WorkspaceError::ProviderError(e.to_string()))?;
-            
-            sock.send(Request::Action(Action::FocusWorkspace {
-                reference: WorkspaceReferenceArg::Id(id as u64),
-            }))
-            .map_err(|e| WorkspaceError::ProviderError(e.to_string()))?
-            .map_err(|e| WorkspaceError::ProviderError(e))?;
-            
-            Ok(())
-        }).await.map_err(|e| WorkspaceError::ProviderError(e.to_string()))?
+        let mut sock = Socket::connect()
+            .map_err(|e| WorkspaceError::ProviderError(e.to_string()))?;
+        sock.send(Request::Action(Action::FocusWorkspace {
+            reference: WorkspaceReferenceArg::Id(id as u64),
+        }))
+        .map_err(|e| WorkspaceError::ProviderError(e.to_string()))?
+        .map_err(|e| WorkspaceError::ProviderError(e))?;
+        Ok(())
     }
 }

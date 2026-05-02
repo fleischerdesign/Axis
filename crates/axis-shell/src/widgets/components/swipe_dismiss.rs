@@ -20,9 +20,11 @@ impl SwipeDismiss {
         let css_class = format!("swipe-dismiss-inner-{}", id);
 
         let container = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+        container.set_hexpand(true);
 
         let inner = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
         inner.add_css_class(&css_class);
+        inner.set_hexpand(true);
         inner.append(child);
         container.append(&inner);
 
