@@ -32,3 +32,5 @@ async-channel.workspace = true
 evdev.workspace = true
 uuid.workspace = true
 rand.workspace = true
+wayland-client.workspace = true
+wayland-protocols.workspace = true

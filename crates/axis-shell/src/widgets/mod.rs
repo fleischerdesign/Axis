@@ -4,6 +4,7 @@ pub mod bluetooth_status;
 pub mod dnd_status;
 pub mod airplane_status;
 pub mod continuity_status;
+pub mod idle_inhibit_status;
 pub mod island;
 pub mod clock;
 pub mod bar;

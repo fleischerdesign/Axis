@@ -15,12 +15,14 @@ use presentation::navigation::{NavigationPresenter, PageDescriptor};
 use presentation::network::NetworkPresenter;
 use presentation::bluetooth::BluetoothPresenter;
 use presentation::continuity::ContinuitySettingsPresenter;
+use presentation::idle::IdleSettingsPresenter;
 
 use widgets::accounts_page::AccountsPage;
 use widgets::appearance_page::AppearancePage;
 use widgets::network_page::NetworkPage;
 use widgets::bluetooth_page::BluetoothPage;
 use widgets::continuity_page::ContinuitySettingsPage;
+use widgets::idle_page::IdleSettingsPage;
 use widgets::sidebar::Sidebar;
 use widgets::window::SettingsWindow;
 
@@ -49,6 +51,7 @@ use axis_application::use_cases::continuity::unpair::UnpairUseCase;
 use axis_application::use_cases::continuity::cancel_reconnect::CancelReconnectUseCase;
 use axis_application::use_cases::continuity::set_peer_arrangement::SetPeerArrangementUseCase;
 use axis_application::use_cases::continuity::update_peer_configs::UpdatePeerConfigsUseCase;
+use axis_application::use_cases::idle_inhibit::set_inhibited::SetIdleInhibitUseCase;
 
 use axis_infrastructure::adapters::cloud::LocalCloudProvider;
 use axis_infrastructure::adapters::google_auth::GoogleCloudAuthProvider;
@@ -58,6 +61,7 @@ use axis_infrastructure::adapters::network::NetworkManagerProvider;
 use axis_infrastructure::adapters::bluetooth::BlueZProvider;
 use axis_infrastructure::adapters::niri_layout::NiriLayoutProvider;
 use axis_infrastructure::adapters::continuity::ContinuityDbusProxy;
+use axis_infrastructure::adapters::idle_inhibit::ConfigIdleInhibitProvider;
 
 use axis_domain::models::config::AxisConfig;
 use axis_domain::ports::cloud::CloudProvider;
@@ -66,6 +70,7 @@ use axis_domain::ports::network::NetworkProvider;
 use axis_domain::ports::bluetooth::BluetoothProvider;
 use axis_domain::ports::layout::LayoutProvider;
 use axis_domain::ports::continuity::ContinuityProvider;
+use axis_domain::ports::idle_inhibit::IdleInhibitProvider;
 use axis_presentation::ThemeService;
 
 fn main() -> glib::ExitCode {
@@ -152,6 +157,8 @@ fn build_ui(app: &adw::Application, theme_css: Rc<gtk4::CssProvider>, rt: &tokio
         }
     });
 
+    let idle_inhibit_provider: Arc<dyn IdleInhibitProvider> = rt.block_on(ConfigIdleInhibitProvider::new(config_provider.clone()));
+
     // 2. Use Cases
     let subscribe_cloud = Arc::new(SubscribeUseCase::new(cloud_provider.clone()));
     let authenticate_cloud = Arc::new(AuthenticateAccountUseCase::new(google_auth.clone(), cloud_provider.clone()));
@@ -187,6 +194,8 @@ fn build_ui(app: &adw::Application, theme_css: Rc<gtk4::CssProvider>, rt: &tokio
     let continuity_set_arrangement = Arc::new(SetPeerArrangementUseCase::new(continuity_provider.clone()));
     let continuity_update_configs = Arc::new(UpdatePeerConfigsUseCase::new(continuity_provider.clone()));
 
+    let set_idle_inhibited_uc = Arc::new(SetIdleInhibitUseCase::new(idle_inhibit_provider.clone()));
+
     // 3. Presenters
     let accounts_presenter = Rc::new(AccountsPresenter::new(subscribe_cloud, authenticate_cloud));
     let appearance_presenter = Rc::new(AppearancePresenter::new(subscribe_appearance, set_accent, set_scheme, set_wallpaper));
@@ -200,12 +209,18 @@ fn build_ui(app: &adw::Application, theme_css: Rc<gtk4::CssProvider>, rt: &tokio
         rt,
     ));
 
+    let idle_settings_presenter = Rc::new(IdleSettingsPresenter::new(
+        config_provider.clone(),
+        set_idle_inhibited_uc,
+    ));
+
     let initial_pages = vec![
         PageDescriptor { id: "appearance".to_string(), title: "Appearance".to_string(), icon: "preferences-desktop-wallpaper-symbolic".to_string() },
         PageDescriptor { id: "network".to_string(), title: "Network".to_string(), icon: "network-wireless-symbolic".to_string() },
         PageDescriptor { id: "bluetooth".to_string(), title: "Bluetooth".to_string(), icon: "bluetooth-active-symbolic".to_string() },
         PageDescriptor { id: "accounts".to_string(), title: "Accounts".to_string(), icon: "avatar-default-symbolic".to_string() },
         PageDescriptor { id: "continuity".to_string(), title: "Continuity".to_string(), icon: "input-mouse-symbolic".to_string() },
+        PageDescriptor { id: "idle".to_string(), title: "Idle".to_string(), icon: "changes-prevent-symbolic".to_string() },
     ];
     let navigation_presenter = Rc::new(NavigationPresenter::new(initial_pages));
 
@@ -215,6 +230,7 @@ fn build_ui(app: &adw::Application, theme_css: Rc<gtk4::CssProvider>, rt: &tokio
     let network_page = NetworkPage::new(network_presenter.clone());
     let bluetooth_page = BluetoothPage::new(bluetooth_presenter.clone());
     let continuity_settings_page = ContinuitySettingsPage::new(continuity_settings_presenter.clone());
+    let idle_settings_page = IdleSettingsPage::new(idle_settings_presenter.clone());
     let sidebar = Sidebar::new(navigation_presenter.clone());
     let settings_window = SettingsWindow::new(app, sidebar.widget().upcast_ref());
 
@@ -228,6 +244,7 @@ fn build_ui(app: &adw::Application, theme_css: Rc<gtk4::CssProvider>, rt: &tokio
     settings_window.register_page_widget("bluetooth", "Bluetooth", bluetooth_page.widget());
     settings_window.register_page_widget("accounts", "Accounts", accounts_page.widget());
     settings_window.register_page_widget("continuity", "Continuity", continuity_settings_page.widget());
+    settings_window.register_page_widget("idle", "Idle", idle_settings_page.widget());
     
     // 6. Wiring (Reactive bindings)
     let ap_run = accounts_presenter.clone();
@@ -259,6 +276,13 @@ fn build_ui(app: &adw::Application, theme_css: Rc<gtk4::CssProvider>, rt: &tokio
     glib::spawn_future_local(async move {
         cont_run.bind(Box::new(cont_page_c)).await;
         cont_run.run_sync().await;
+    });
+
+    let idle_run = idle_settings_presenter.clone();
+    let idle_page_c = idle_settings_page.clone();
+    glib::spawn_future_local(async move {
+        idle_run.bind(Box::new(idle_page_c)).await;
+        idle_run.run().await;
     });
 
     let nav_run = navigation_presenter.clone();

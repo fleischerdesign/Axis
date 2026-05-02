@@ -80,6 +80,8 @@ impl FileConfigProvider {
             bar: Self::merge_bar(&cli.bar, &file.bar),
             shortcuts: Self::merge_shortcuts(&cli.shortcuts, &file.shortcuts),
             continuity: Self::merge_continuity(&cli.continuity, &file.continuity),
+            idle: Self::merge_idle(&cli.idle, &file.idle),
+            idle_inhibit: Self::merge_idle_inhibit(&cli.idle_inhibit, &file.idle_inhibit),
         }
     }
 
@@ -182,6 +184,25 @@ impl FileConfigProvider {
         file: &axis_domain::models::config::ContinuityConfig,
     ) -> axis_domain::models::config::ContinuityConfig {
         axis_domain::models::config::ContinuityConfig {
+            enabled: if cli.enabled { true } else { file.enabled },
+        }
+    }
+
+    fn merge_idle(
+        cli: &axis_domain::models::config::IdleConfig,
+        file: &axis_domain::models::config::IdleConfig,
+    ) -> axis_domain::models::config::IdleConfig {
+        axis_domain::models::config::IdleConfig {
+            lock_timeout_seconds: cli.lock_timeout_seconds.or(file.lock_timeout_seconds),
+            blank_timeout_seconds: cli.blank_timeout_seconds.or(file.blank_timeout_seconds),
+        }
+    }
+
+    fn merge_idle_inhibit(
+        cli: &axis_domain::models::config::IdleInhibitConfig,
+        file: &axis_domain::models::config::IdleInhibitConfig,
+    ) -> axis_domain::models::config::IdleInhibitConfig {
+        axis_domain::models::config::IdleInhibitConfig {
             enabled: if cli.enabled { true } else { file.enabled },
         }
     }

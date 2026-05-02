@@ -10,6 +10,8 @@ pub mod bluetooth;
 pub mod cloud;
 pub mod nightlight;
 pub mod dnd;
+pub mod idle_inhibit;
+pub mod idle_notify;
 pub mod google_auth;
 pub mod google_calendar;
 pub mod google_tasks;

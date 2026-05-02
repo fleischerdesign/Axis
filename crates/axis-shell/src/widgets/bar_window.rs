@@ -12,6 +12,7 @@ use crate::widgets::bluetooth_status::BluetoothStatusWidget;
 use crate::widgets::dnd_status::DndStatusWidget;
 use crate::widgets::airplane_status::AirplaneStatusWidget;
 use crate::widgets::continuity_status::ContinuityStatusWidget;
+use crate::widgets::idle_inhibit_status::IdleInhibitStatusWidget;
 use crate::widgets::clock::ClockWidget;
 use crate::widgets::audio::AudioWidget;
 use crate::widgets::workspace_dots::WorkspaceDots;
@@ -34,6 +35,7 @@ use axis_application::use_cases::popups::TogglePopupUseCase;
 use axis_domain::models::popups::PopupType;
 use axis_domain::models::dnd::DndStatus;
 use axis_domain::models::airplane::AirplaneStatus;
+use axis_domain::models::idle_inhibit::IdleInhibitStatus;
 use axis_presentation::Presenter;
 
 glib::wrapper! {
@@ -63,6 +65,7 @@ impl BarWindow {
         dnd_status_presenter: Rc<Presenter<DndStatus>>,
         airplane_status_presenter: Rc<Presenter<AirplaneStatus>>,
         continuity_presenter: Rc<ContinuityPresenter>,
+        idle_inhibit_presenter: Rc<Presenter<IdleInhibitStatus>>,
         show_labels: bool,
     ) {
         let bar = Bar::new();
@@ -129,6 +132,7 @@ impl BarWindow {
         let dnd_widget = DndStatusWidget::new();
         let airplane_widget = AirplaneStatusWidget::new();
         let continuity_widget = ContinuityStatusWidget::new();
+        let idle_inhibit_widget = IdleInhibitStatusWidget::new();
         let audio_widget = AudioWidget::new(show_labels);
         let status_bar = StatusBar::new(show_labels);
         end_island.container.append(&wifi_widget.container);
@@ -136,6 +140,7 @@ impl BarWindow {
         end_island.container.append(&dnd_widget.container);
         end_island.container.append(&airplane_widget.container);
         end_island.container.append(&continuity_widget.container);
+        end_island.container.append(&idle_inhibit_widget.container);
         end_island.container.append(&audio_widget.container);
         end_island.container.append(&status_bar.container);
 
@@ -155,6 +160,7 @@ impl BarWindow {
         dnd_status_presenter.add_view(Box::new(dnd_widget.clone()));
         airplane_status_presenter.add_view(Box::new(airplane_widget.clone()));
         continuity_presenter.add_view(Box::new(continuity_widget.clone()));
+        idle_inhibit_presenter.add_view(Box::new(idle_inhibit_widget.clone()));
         battery_presenter.add_view(Box::new(status_bar.clone()));
 
         let cp = clock_presenter.clone();

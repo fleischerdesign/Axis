@@ -18,6 +18,10 @@ pub struct AxisConfig {
     pub shortcuts: ShortcutsConfig,
     #[serde(default)]
     pub continuity: ContinuityConfig,
+    #[serde(default)]
+    pub idle: IdleConfig,
+    #[serde(default)]
+    pub idle_inhibit: IdleInhibitConfig,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -213,4 +217,33 @@ impl Default for ShortcutsConfig {
 pub struct ContinuityConfig {
     #[serde(default)]
     pub enabled: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct IdleInhibitConfig {
+    #[serde(default)]
+    pub enabled: bool,
+}
+
+impl Default for IdleInhibitConfig {
+    fn default() -> Self {
+        Self { enabled: false }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct IdleConfig {
+    #[serde(default)]
+    pub lock_timeout_seconds: Option<u32>,
+    #[serde(default)]
+    pub blank_timeout_seconds: Option<u32>,
+}
+
+impl Default for IdleConfig {
+    fn default() -> Self {
+        Self {
+            lock_timeout_seconds: None,
+            blank_timeout_seconds: None,
+        }
+    }
 }

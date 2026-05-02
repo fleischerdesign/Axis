@@ -41,6 +41,7 @@ use axis_application::use_cases::layout::set_border::SetBorderColorUseCase;
 use axis_application::use_cases::continuity::set_enabled::SetContinuityEnabledUseCase;
 use axis_application::use_cases::continuity::confirm_pin::ConfirmPinUseCase;
 use axis_application::use_cases::continuity::reject_pin::RejectPinUseCase;
+use axis_application::use_cases::idle_inhibit::set_inhibited::SetIdleInhibitUseCase;
 
 use axis_domain::models::appearance::{AccentColor, ColorScheme};
 use axis_domain::models::config::AxisConfig;
@@ -61,6 +62,7 @@ use axis_domain::ports::popups::PopupProvider;
 use axis_domain::ports::notifications::NotificationProvider;
 use axis_domain::ports::tray::TrayProvider;
 use axis_domain::ports::continuity::ContinuityProvider;
+use axis_domain::ports::idle_inhibit::IdleInhibitProvider;
 use axis_domain::models::dnd::DndStatus;
 
 use axis_infrastructure::adapters::google_auth::GoogleCloudAuthProvider;
@@ -74,6 +76,7 @@ use axis_infrastructure::adapters::network::NetworkManagerProvider;
 use axis_infrastructure::adapters::bluetooth::BlueZProvider;
 use axis_infrastructure::adapters::nightlight::ConfigNightlightProvider;
 use axis_infrastructure::adapters::dnd::ConfigDndProvider;
+use axis_infrastructure::adapters::idle_inhibit::ConfigIdleInhibitProvider;
 use axis_infrastructure::adapters::launcher::CompositeLauncherProvider;
 use axis_infrastructure::adapters::notifications::ZbusNotificationProvider;
 use axis_infrastructure::adapters::appearance::ConfigAppearanceProvider;
@@ -230,6 +233,7 @@ fn main() -> glib::ExitCode {
     let airplane_provider: Arc<dyn AirplaneProvider> = rt.block_on(ConfigAirplaneProvider::new(config_provider.clone()));
     let appearance_provider: Arc<dyn AppearanceProvider> = rt.block_on(ConfigAppearanceProvider::new(config_provider.clone()));
     let dnd_provider: Arc<dyn DndProvider> = rt.block_on(ConfigDndProvider::new(config_provider.clone()));
+    let idle_inhibit_provider: Arc<dyn IdleInhibitProvider> = rt.block_on(ConfigIdleInhibitProvider::new(config_provider.clone()));
     let clock_provider: Arc<dyn ClockProvider> = MockClockProvider::new();
     let popup_provider: Arc<dyn PopupProvider> = LocalPopupProvider::new();
     let launcher_provider = CompositeLauncherProvider::new();
@@ -262,7 +266,14 @@ fn main() -> glib::ExitCode {
     let suspend_uc = Arc::new(SuspendUseCase::new(power_provider.clone()));
     let power_off_uc = Arc::new(PowerOffUseCase::new(power_provider.clone()));
     let reboot_uc = Arc::new(RebootUseCase::new(power_provider.clone()));
-    let (lock_provider_arc, lock_gtk_handle) = SessionLockProvider::new();
+    let initial_config = config_provider.get()
+        .unwrap_or_else(|e| { log::warn!("[main] config get failed: {e}"); AxisConfig::default() });
+    let (lock_provider_arc, lock_gtk_handle) = SessionLockProvider::new(
+        idle_inhibit_provider.clone(),
+        config_provider.clone(),
+        initial_config.idle.lock_timeout_seconds,
+        initial_config.idle.blank_timeout_seconds,
+    );
     let lock_provider: Arc<dyn LockProvider> = lock_provider_arc;
     let subscribe_lock = Arc::new(SubscribeUseCase::new(lock_provider.clone()));
     let lock_session_uc = Arc::new(LockSessionUseCase::new(lock_provider.clone()));
@@ -311,6 +322,9 @@ fn main() -> glib::ExitCode {
     let subscribe_dnd = Arc::new(SubscribeUseCase::new(dnd_provider.clone()));
     let dnd_set_enabled_uc = Arc::new(axis_application::use_cases::dnd::set_enabled::SetDndEnabledUseCase::new(dnd_provider.clone()));
 
+    let subscribe_idle_inhibit = Arc::new(SubscribeUseCase::new(idle_inhibit_provider.clone()));
+    let idle_inhibit_set_uc = Arc::new(SetIdleInhibitUseCase::new(idle_inhibit_provider.clone()));
+
     let dnd_status_presenter = Rc::new({
         let uc = subscribe_dnd.clone();
         Presenter::from_subscribe(move || {
@@ -318,6 +332,15 @@ fn main() -> glib::ExitCode {
             async move { uc.execute().await }
         })
     });
+
+    let idle_inhibit_status_presenter = Rc::new({
+        let uc = subscribe_idle_inhibit.clone();
+        Presenter::from_subscribe(move || {
+            let uc = uc.clone();
+            async move { uc.execute().await }
+        })
+    });
+
     let subscribe_airplane = Arc::new(SubscribeUseCase::new(airplane_provider.clone()));
     let ap_set_enabled_uc = Arc::new(axis_application::use_cases::airplane::set_enabled::SetAirplaneModeUseCase::new(airplane_provider.clone()));
 
@@ -586,6 +609,32 @@ fn main() -> glib::ExitCode {
         },
     ));
 
+    let idle_inhibit_toggle_presenter = Rc::new(TogglePresenter::new(
+        "Idle Inhibit",
+        "changes-prevent-symbolic",
+        "changes-allow-symbolic",
+        {
+            let uc = subscribe_idle_inhibit.clone();
+            move || {
+                let uc = uc.clone();
+                async move {
+                    uc.execute().await.map(|s| s.map(|status| status.inhibited))
+                }
+            }
+        },
+        {
+            let uc = idle_inhibit_set_uc.clone();
+            move |inhibited| {
+                let uc = uc.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = uc.execute(inhibited).await {
+                        log::error!("[toggle] idle inhibit set failed: {e}");
+                    }
+                });
+            }
+        },
+    ));
+
     let ap_sync = audio_presenter.clone();
     glib::spawn_future_local(async move { ap_sync.run_sync().await; });
 
@@ -618,6 +667,9 @@ fn main() -> glib::ExitCode {
 
     let ap_sync = airplane_status_presenter.clone();
     glib::spawn_future_local(async move { ap_sync.run_sync().await; });
+
+    let ii_sync = idle_inhibit_status_presenter.clone();
+    glib::spawn_future_local(async move { ii_sync.run_sync().await; });
 
     let dbus_tp = toggle_popup.clone();
     let dbus_lock_uc = lock_session_uc.clone();
@@ -741,6 +793,7 @@ fn main() -> glib::ExitCode {
             toggle_popup.clone(),
             network_presenter.clone(), bluetooth_full_presenter.clone(), dnd_status_presenter.clone(),
             airplane_status_presenter.clone(), continuity_presenter.clone(),
+            idle_inhibit_status_presenter.clone(),
             show_labels,
         );
 
@@ -759,6 +812,7 @@ fn main() -> glib::ExitCode {
         qs_popup.setup_toggle(1, 1, dnd_presenter.clone(), None);
         qs_popup.setup_toggle(2, 0, airplane_presenter.clone(), None);
         qs_popup.setup_toggle(2, 1, continuity_toggle_presenter.clone(), None);
+        qs_popup.setup_toggle(3, 0, idle_inhibit_toggle_presenter.clone(), None);
 
         qs_popup.setup_wifi_sub_page(network_presenter.clone());
         qs_popup.setup_bluetooth_sub_page(bluetooth_full_presenter.clone());
