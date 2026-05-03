@@ -72,7 +72,6 @@ pub struct MprisPopup {
     position_label: gtk4::Label,
     length_label: gtk4::Label,
     current_player_id: Rc<RefCell<Option<String>>>,
-    fallback_art: gtk4::Image,
     on_escape: Rc<RefCell<Option<Box<dyn Fn() + 'static>>>>,
     on_play_pause: Rc<RefCell<Option<Box<dyn Fn() + 'static>>>>,
     on_next: Rc<RefCell<Option<Box<dyn Fn() + 'static>>>>,
@@ -111,10 +110,6 @@ impl MprisPopup {
             .build();
         art.add_css_class("mpris-art");
         art.set_halign(gtk4::Align::Center);
-
-        let fallback_art = gtk4::Image::from_icon_name("audio-x-generic-symbolic");
-        fallback_art.set_pixel_size(200);
-        art.set_paintable(fallback_art.paintable().as_ref());
         content.append(&art);
 
         let info_box = gtk4::Box::new(gtk4::Orientation::Vertical, 2);
@@ -247,7 +242,6 @@ impl MprisPopup {
             position_label,
             length_label,
             current_player_id: Rc::new(RefCell::new(None)),
-            fallback_art,
             on_escape,
             on_play_pause,
             on_next,
@@ -320,12 +314,16 @@ impl View<MprisStatus> for MprisPopup {
                 }
 
                 self.art.set_file(None::<&gio::File>);
-                self.art.set_paintable(self.fallback_art.paintable().as_ref());
                 if let Some(ref art_url) = player.art_url {
                     if !art_url.is_empty() {
                         let file = gio::File::for_uri(art_url);
                         self.art.set_file(Some(&file));
+                        self.art.set_visible(true);
+                    } else {
+                        self.art.set_visible(false);
                     }
+                } else {
+                    self.art.set_visible(false);
                 }
             }
             None => {
@@ -341,7 +339,7 @@ impl View<MprisStatus> for MprisPopup {
                 self.position_label.set_label("0:00");
                 self.length_label.set_label("0:00");
                 self.art.set_file(None::<&gio::File>);
-                self.art.set_paintable(self.fallback_art.paintable().as_ref());
+                self.art.set_visible(false);
             }
         }
     }
