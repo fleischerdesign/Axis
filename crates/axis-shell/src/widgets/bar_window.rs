@@ -40,6 +40,7 @@ use axis_domain::models::workspaces::WorkspaceStatus;
 use axis_domain::models::dnd::DndStatus;
 use axis_domain::models::airplane::AirplaneStatus;
 use axis_domain::models::idle_inhibit::IdleInhibitStatus;
+use axis_domain::models::mpris::MprisStatus;
 use axis_presentation::{Presenter, FnView};
 
 glib::wrapper! {
@@ -204,6 +205,11 @@ impl BarWindow {
         idle_inhibit_presenter.add_view(Box::new(idle_inhibit_widget.clone()));
         battery_presenter.add_view(Box::new(status_bar.clone()));
         mpris_presenter.add_view(Box::new(mpris_bar_widget.clone()));
+
+        let island_container = mpris_island.container.clone();
+        mpris_presenter.add_view(Box::new(FnView::new(move |status: &MprisStatus| {
+            island_container.set_visible(status.active_player().is_some());
+        })));
 
         let cp = clock_presenter.clone();
         let cv = Box::new(clock_widget.clone());
