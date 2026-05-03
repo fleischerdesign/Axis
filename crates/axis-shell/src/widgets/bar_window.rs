@@ -89,8 +89,13 @@ impl BarWindow {
         });
         bar.set_start_widget(Some(&launcher_island.container));
 
-        let inner_center_box = gtk4::CenterBox::new();
-        inner_center_box.set_hexpand(true);
+        let center_island_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+        center_island_box.set_halign(gtk4::Align::Fill);
+        center_island_box.set_hexpand(true);
+
+        let left_area = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+        left_area.set_hexpand(true);
+        left_area.set_halign(gtk4::Align::Fill);
 
         let ws_island = Island::new();
         let ws_dots = WorkspaceDots::new();
@@ -102,7 +107,8 @@ impl BarWindow {
             let uc = tou.clone();
             tokio::spawn(async move { let _ = uc.execute().await; });
         });
-        inner_center_box.set_start_widget(Some(&ws_island.container));
+        left_area.append(&ws_island.container);
+        center_island_box.append(&left_area);
 
         let clock_island = Island::new();
         let clock_widget = ClockWidget::new();
@@ -113,7 +119,11 @@ impl BarWindow {
             let uc = tp.clone();
             tokio::spawn(async move { let _ = uc.execute(PopupType::Agenda).await; });
         });
-        inner_center_box.set_center_widget(Some(&clock_island.container));
+        center_island_box.append(&clock_island.container);
+
+        let right_area = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+        right_area.set_hexpand(true);
+        right_area.set_halign(gtk4::Align::Fill);
 
         let mpris_island = Island::new();
         let mpris_bar_widget = MprisBarWidget::new();
@@ -140,9 +150,10 @@ impl BarWindow {
         mpris_island.container.add_controller(gesture_right);
         mpris_island.container.set_cursor_from_name(Some("pointer"));
 
-        inner_center_box.set_end_widget(Some(&mpris_island.container));
+        right_area.append(&mpris_island.container);
+        center_island_box.append(&right_area);
 
-        bar.set_center_widget(Some(&inner_center_box));
+        bar.set_center_widget(Some(&center_island_box));
 
         let tray_widget = TrayWidget::new();
 
