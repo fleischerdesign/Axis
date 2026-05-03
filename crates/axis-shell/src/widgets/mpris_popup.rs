@@ -319,11 +319,13 @@ impl View<MprisStatus> for MprisPopup {
                     self.length_label.set_label("0:00");
                 }
 
+                self.art.set_file(None::<&gio::File>);
+                self.art.set_paintable(self.fallback_art.paintable().as_ref());
                 if let Some(ref art_url) = player.art_url {
-                    let file = gio::File::for_uri(art_url);
-                    self.art.set_file(Some(&file));
-                } else {
-                    self.art.set_paintable(self.fallback_art.paintable().as_ref());
+                    if !art_url.is_empty() {
+                        let file = gio::File::for_uri(art_url);
+                        self.art.set_file(Some(&file));
+                    }
                 }
             }
             None => {
@@ -338,6 +340,7 @@ impl View<MprisStatus> for MprisPopup {
                 self.progress_bar.set_fraction(0.0);
                 self.position_label.set_label("0:00");
                 self.length_label.set_label("0:00");
+                self.art.set_file(None::<&gio::File>);
                 self.art.set_paintable(self.fallback_art.paintable().as_ref());
             }
         }
