@@ -43,6 +43,7 @@ impl SessionLockProvider {
         config_provider: Arc<dyn ConfigProvider>,
         idle_lock_timeout_seconds: Option<u32>,
         idle_blank_timeout_seconds: Option<u32>,
+        idle_sleep_timeout_seconds: Option<u32>,
     ) -> (Arc<Self>, LockGtkHandle) {
         let initial = LockStatus {
             is_locked: false,
@@ -97,6 +98,7 @@ impl SessionLockProvider {
                 config_provider,
                 idle_lock_timeout_seconds,
                 idle_blank_timeout_seconds,
+                idle_sleep_timeout_seconds,
             ).await;
         });
 
@@ -325,6 +327,7 @@ async fn listen_logind_signals(
     config_provider: Arc<dyn ConfigProvider>,
     idle_lock_timeout_seconds: Option<u32>,
     idle_blank_timeout_seconds: Option<u32>,
+    idle_sleep_timeout_seconds: Option<u32>,
 ) {
     use futures_util::StreamExt;
 
@@ -387,6 +390,7 @@ async fn listen_logind_signals(
         config_provider,
         idle_lock_timeout_seconds,
         idle_blank_timeout_seconds,
+        idle_sleep_timeout_seconds,
     );
 
     info!("[lock] Listening for logind signals");
@@ -480,8 +484,9 @@ fn spawn_idle_monitor(
     config_provider: Arc<dyn ConfigProvider>,
     lock_timeout_seconds: Option<u32>,
     blank_timeout_seconds: Option<u32>,
+    sleep_timeout_seconds: Option<u32>,
 ) {
-    if lock_timeout_seconds.is_none() && blank_timeout_seconds.is_none() {
+    if lock_timeout_seconds.is_none() && blank_timeout_seconds.is_none() && sleep_timeout_seconds.is_none() {
         info!("[lock] No idle timeouts configured, skipping idle monitor");
         return;
     }
@@ -502,6 +507,7 @@ fn spawn_idle_monitor(
             config_provider,
             lock_timeout_seconds,
             blank_timeout_seconds,
+            sleep_timeout_seconds,
         )
         .await;
     });
@@ -514,6 +520,7 @@ async fn run_idle_monitor(
     config_provider: Arc<dyn ConfigProvider>,
     mut lock_timeout_seconds: Option<u32>,
     mut blank_timeout_seconds: Option<u32>,
+    mut sleep_timeout_seconds: Option<u32>,
 ) {
     use crate::adapters::idle_notify::IdleEvent;
     use futures_util::StreamExt;
@@ -521,6 +528,7 @@ async fn run_idle_monitor(
     let monitors_blanked = Arc::new(AtomicBool::new(false));
     let mut blank_handle: Option<JoinHandle<()>> = None;
     let mut lock_handle: Option<JoinHandle<()>> = None;
+    let mut sleep_handle: Option<JoinHandle<()>> = None;
     let mut config_stream = match config_provider.subscribe() {
         Ok(s) => Some(s),
         Err(e) => {
@@ -529,7 +537,7 @@ async fn run_idle_monitor(
         }
     };
 
-    info!("[lock] Idle monitor started (lock_timeout={lock_timeout_seconds:?}, blank_timeout={blank_timeout_seconds:?})");
+    info!("[lock] Idle monitor started (lock_timeout={lock_timeout_seconds:?}, blank_timeout={blank_timeout_seconds:?}, sleep_timeout={sleep_timeout_seconds:?})");
 
     loop {
         tokio::select! {
@@ -542,16 +550,18 @@ async fn run_idle_monitor(
                         start_timers(
                             &mut blank_handle,
                             &mut lock_handle,
+                            &mut sleep_handle,
                             &monitors_blanked,
                             &cmd_tx,
                             &idle_inhibit_provider,
                             blank_timeout_seconds,
                             lock_timeout_seconds,
+                            sleep_timeout_seconds,
                         );
                     }
                     IdleEvent::Resumed => {
                         info!("[lock] User active, canceling timers");
-                        cancel_timers(&mut blank_handle, &mut lock_handle, &monitors_blanked).await;
+                        cancel_timers(&mut blank_handle, &mut lock_handle, &mut sleep_handle, &monitors_blanked).await;
                     }
                 }
             }
@@ -564,11 +574,13 @@ async fn run_idle_monitor(
                 if let Some(config) = cfg {
                     let new_lock = config.idle.lock_timeout_seconds;
                     let new_blank = config.idle.blank_timeout_seconds;
+                    let new_sleep = config.idle.sleep_timeout_seconds;
 
-                    if new_lock != lock_timeout_seconds || new_blank != blank_timeout_seconds {
-                        info!("[lock] Idle timeouts changed live (lock={new_lock:?}, blank={new_blank:?})");
+                    if new_lock != lock_timeout_seconds || new_blank != blank_timeout_seconds || new_sleep != sleep_timeout_seconds {
+                        info!("[lock] Idle timeouts changed live (lock={new_lock:?}, blank={new_blank:?}, sleep={new_sleep:?})");
                         lock_timeout_seconds = new_lock;
                         blank_timeout_seconds = new_blank;
+                        sleep_timeout_seconds = new_sleep;
                     }
                 } else {
                     warn!("[lock] Config stream ended, idle timeouts will no longer hot-reload");
@@ -582,11 +594,13 @@ async fn run_idle_monitor(
 fn start_timers(
     blank_handle: &mut Option<JoinHandle<()>>,
     lock_handle: &mut Option<JoinHandle<()>>,
+    sleep_handle: &mut Option<JoinHandle<()>>,
     monitors_blanked: &Arc<AtomicBool>,
     cmd_tx: &mpsc::Sender<LockCommand>,
     idle_inhibit_provider: &Arc<dyn IdleInhibitProvider>,
     blank_timeout_seconds: Option<u32>,
     lock_timeout_seconds: Option<u32>,
+    sleep_timeout_seconds: Option<u32>,
 ) {
     if let Some(secs) = blank_timeout_seconds {
         let iip = idle_inhibit_provider.clone();
@@ -620,17 +634,40 @@ fn start_timers(
         });
         *lock_handle = Some(handle);
     }
+
+    if let Some(secs) = sleep_timeout_seconds {
+        let iip = idle_inhibit_provider.clone();
+        let tx = cmd_tx.clone();
+        let handle = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(secs as u64)).await;
+            if is_inhibited(&iip).await {
+                info!("[lock] Idle inhibit active, skipping suspend");
+                return;
+            }
+            info!("[lock] Sleep timeout reached, locking session before suspend");
+            let (reply_tx, reply_rx) = oneshot::channel();
+            let _ = tx.send(LockCommand::Lock(reply_tx)).await;
+            let _ = reply_rx.await;
+            info!("[lock] Suspending system via logind");
+            logind_suspend().await;
+        });
+        *sleep_handle = Some(handle);
+    }
 }
 
 async fn cancel_timers(
     blank_handle: &mut Option<tokio::task::JoinHandle<()>>,
     lock_handle: &mut Option<tokio::task::JoinHandle<()>>,
+    sleep_handle: &mut Option<tokio::task::JoinHandle<()>>,
     monitors_blanked: &Arc<AtomicBool>,
 ) {
     if let Some(h) = blank_handle.take() {
         h.abort();
     }
     if let Some(h) = lock_handle.take() {
+        h.abort();
+    }
+    if let Some(h) = sleep_handle.take() {
         h.abort();
     }
     if monitors_blanked.swap(false, Ordering::SeqCst) {
@@ -661,5 +698,34 @@ async fn niri_action(action: niri_ipc::Action) {
         Ok(Ok(_)) => {}
         Ok(Err(e)) => log::warn!("[lock] niri action failed: {e}"),
         Err(e) => log::warn!("[lock] niri send failed: {e}"),
+    }
+}
+
+async fn logind_suspend() {
+    let conn = match zbus::Connection::system().await {
+        Ok(c) => c,
+        Err(e) => {
+            log::warn!("[lock] Failed to connect to system D-Bus for suspend: {e}");
+            return;
+        }
+    };
+
+    let proxy = match zbus::Proxy::new(
+        &conn,
+        "org.freedesktop.login1",
+        "/org/freedesktop/login1",
+        "org.freedesktop.login1.Manager",
+    )
+    .await
+    {
+        Ok(p) => p,
+        Err(e) => {
+            log::warn!("[lock] Failed to create logind proxy for suspend: {e}");
+            return;
+        }
+    };
+
+    if let Err(e) = proxy.call::<_, (bool,), ()>("Suspend", &(false,)).await {
+        log::warn!("[lock] logind Suspend failed: {e}");
     }
 }

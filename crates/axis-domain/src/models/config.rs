@@ -237,6 +237,8 @@ pub struct IdleConfig {
     pub lock_timeout_seconds: Option<u32>,
     #[serde(default)]
     pub blank_timeout_seconds: Option<u32>,
+    #[serde(default)]
+    pub sleep_timeout_seconds: Option<u32>,
 }
 
 impl Default for IdleConfig {
@@ -244,6 +246,7 @@ impl Default for IdleConfig {
         Self {
             lock_timeout_seconds: None,
             blank_timeout_seconds: None,
+            sleep_timeout_seconds: None,
         }
     }
 }

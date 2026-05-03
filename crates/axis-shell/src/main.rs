@@ -273,6 +273,7 @@ fn main() -> glib::ExitCode {
         config_provider.clone(),
         initial_config.idle.lock_timeout_seconds,
         initial_config.idle.blank_timeout_seconds,
+        initial_config.idle.sleep_timeout_seconds,
     );
     let lock_provider: Arc<dyn LockProvider> = lock_provider_arc;
     let subscribe_lock = Arc::new(SubscribeUseCase::new(lock_provider.clone()));

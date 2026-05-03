@@ -22,6 +22,14 @@ const BLANK_TIMEOUTS: &[(Option<u32>, &str)] = &[
     (Some(600), "10 minutes"),
 ];
 
+const SLEEP_TIMEOUTS: &[(Option<u32>, &str)] = &[
+    (None, "Off"),
+    (Some(1800), "30 minutes"),
+    (Some(3600), "60 minutes"),
+    (Some(5400), "90 minutes"),
+    (Some(7200), "120 minutes"),
+];
+
 fn lock_index(value: Option<u32>) -> u32 {
     LOCK_TIMEOUTS.iter().position(|(v, _)| *v == value).unwrap_or(0) as u32
 }
@@ -38,15 +46,25 @@ fn blank_value(index: u32) -> Option<u32> {
     BLANK_TIMEOUTS.get(index as usize).and_then(|(v, _)| *v)
 }
 
+fn sleep_index(value: Option<u32>) -> u32 {
+    SLEEP_TIMEOUTS.iter().position(|(v, _)| *v == value).unwrap_or(0) as u32
+}
+
+fn sleep_value(index: u32) -> Option<u32> {
+    SLEEP_TIMEOUTS.get(index as usize).and_then(|(v, _)| *v)
+}
+
 pub struct IdleSettingsPage {
     root: adw::ToolbarView,
     inhibit_switch: adw::SwitchRow,
     lock_combo: adw::ComboRow,
     blank_combo: adw::ComboRow,
+    sleep_combo: adw::ComboRow,
 
     inhibit_callback: Rc<RefCell<Option<Box<dyn Fn(bool) + 'static>>>>,
     lock_callback: Rc<RefCell<Option<Box<dyn Fn(Option<u32>) + 'static>>>>,
     blank_callback: Rc<RefCell<Option<Box<dyn Fn(Option<u32>) + 'static>>>>,
+    sleep_callback: Rc<RefCell<Option<Box<dyn Fn(Option<u32>) + 'static>>>>,
 }
 
 impl IdleSettingsPage {
@@ -93,14 +111,23 @@ impl IdleSettingsPage {
             .build();
         timeouts_group.add(&blank_combo);
 
+        let sleep_strings: Vec<&str> = SLEEP_TIMEOUTS.iter().map(|(_, label)| *label).collect();
+        let sleep_combo = adw::ComboRow::builder()
+            .title("Suspend after")
+            .model(&gtk4::StringList::new(&sleep_strings))
+            .build();
+        timeouts_group.add(&sleep_combo);
+
         let page = Rc::new(Self {
             root: toolbar_view,
             inhibit_switch,
             lock_combo,
             blank_combo,
+            sleep_combo,
             inhibit_callback: Rc::new(RefCell::new(None)),
             lock_callback: Rc::new(RefCell::new(None)),
             blank_callback: Rc::new(RefCell::new(None)),
+            sleep_callback: Rc::new(RefCell::new(None)),
         });
 
         let cb_inhibit = page.inhibit_callback.clone();
@@ -124,6 +151,13 @@ impl IdleSettingsPage {
             }
         });
 
+        let cb_sleep = page.sleep_callback.clone();
+        page.sleep_combo.connect_selected_notify(move |combo| {
+            if let Some(f) = cb_sleep.borrow().as_ref() {
+                f(sleep_value(combo.selected()));
+            }
+        });
+
         page
     }
 
@@ -137,6 +171,7 @@ impl View<AxisConfig> for IdleSettingsPage {
         self.inhibit_switch.set_active(status.idle_inhibit.enabled);
         self.lock_combo.set_selected(lock_index(status.idle.lock_timeout_seconds));
         self.blank_combo.set_selected(blank_index(status.idle.blank_timeout_seconds));
+        self.sleep_combo.set_selected(sleep_index(status.idle.sleep_timeout_seconds));
     }
 }
 
@@ -151,5 +186,9 @@ impl IdleSettingsView for IdleSettingsPage {
 
     fn on_blank_timeout_changed(&self, f: Box<dyn Fn(Option<u32>) + 'static>) {
         *self.blank_callback.borrow_mut() = Some(f);
+    }
+
+    fn on_sleep_timeout_changed(&self, f: Box<dyn Fn(Option<u32>) + 'static>) {
+        *self.sleep_callback.borrow_mut() = Some(f);
     }
 }

@@ -10,6 +10,7 @@ pub trait IdleSettingsView: View<AxisConfig> {
     fn on_inhibited_toggled(&self, f: Box<dyn Fn(bool) + 'static>);
     fn on_lock_timeout_changed(&self, f: Box<dyn Fn(Option<u32>) + 'static>);
     fn on_blank_timeout_changed(&self, f: Box<dyn Fn(Option<u32>) + 'static>);
+    fn on_sleep_timeout_changed(&self, f: Box<dyn Fn(Option<u32>) + 'static>);
 }
 
 impl<T: IdleSettingsView + ?Sized> IdleSettingsView for Rc<T> {
@@ -21,6 +22,9 @@ impl<T: IdleSettingsView + ?Sized> IdleSettingsView for Rc<T> {
     }
     fn on_blank_timeout_changed(&self, f: Box<dyn Fn(Option<u32>) + 'static>) {
         (**self).on_blank_timeout_changed(f);
+    }
+    fn on_sleep_timeout_changed(&self, f: Box<dyn Fn(Option<u32>) + 'static>) {
+        (**self).on_sleep_timeout_changed(f);
     }
 }
 
@@ -96,6 +100,16 @@ impl IdleSettingsPresenter {
                 cfg.idle.blank_timeout_seconds = timeout;
             })) {
                 log::error!("[settings-idle] set blank timeout failed: {e}");
+            }
+        }));
+
+        let cp_sleep = self.config_provider.clone();
+        view.on_sleep_timeout_changed(Box::new(move |timeout| {
+            let cp = cp_sleep.clone();
+            if let Err(e) = cp.update(Box::new(move |cfg| {
+                cfg.idle.sleep_timeout_seconds = timeout;
+            })) {
+                log::error!("[settings-idle] set sleep timeout failed: {e}");
             }
         }));
 

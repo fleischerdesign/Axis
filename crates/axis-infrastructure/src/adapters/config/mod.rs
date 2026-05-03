@@ -195,6 +195,7 @@ impl FileConfigProvider {
         axis_domain::models::config::IdleConfig {
             lock_timeout_seconds: cli.lock_timeout_seconds.or(file.lock_timeout_seconds),
             blank_timeout_seconds: cli.blank_timeout_seconds.or(file.blank_timeout_seconds),
+            sleep_timeout_seconds: cli.sleep_timeout_seconds.or(file.sleep_timeout_seconds),
         }
     }
 
