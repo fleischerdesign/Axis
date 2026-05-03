@@ -17,6 +17,7 @@ use presentation::bluetooth::BluetoothPresenter;
 use presentation::continuity::ContinuitySettingsPresenter;
 use presentation::idle::IdleSettingsPresenter;
 
+use widgets::about_page::AboutPage;
 use widgets::accounts_page::AccountsPage;
 use widgets::appearance_page::AppearancePage;
 use widgets::network_page::NetworkPage;
@@ -221,6 +222,7 @@ fn build_ui(app: &adw::Application, theme_css: Rc<gtk4::CssProvider>, rt: &tokio
         PageDescriptor { id: "accounts".to_string(), title: "Accounts".to_string(), icon: "avatar-default-symbolic".to_string() },
         PageDescriptor { id: "continuity".to_string(), title: "Continuity".to_string(), icon: "input-mouse-symbolic".to_string() },
         PageDescriptor { id: "idle".to_string(), title: "Idle".to_string(), icon: "changes-prevent-symbolic".to_string() },
+        PageDescriptor { id: "about".to_string(), title: "About".to_string(), icon: "help-about-symbolic".to_string() },
     ];
     let navigation_presenter = Rc::new(NavigationPresenter::new(initial_pages));
 
@@ -231,6 +233,7 @@ fn build_ui(app: &adw::Application, theme_css: Rc<gtk4::CssProvider>, rt: &tokio
     let bluetooth_page = BluetoothPage::new(bluetooth_presenter.clone());
     let continuity_settings_page = ContinuitySettingsPage::new(continuity_settings_presenter.clone());
     let idle_settings_page = IdleSettingsPage::new(idle_settings_presenter.clone());
+    let about_page = AboutPage::new();
     let sidebar = Sidebar::new(navigation_presenter.clone());
     let settings_window = SettingsWindow::new(app, sidebar.widget().upcast_ref());
 
@@ -245,6 +248,7 @@ fn build_ui(app: &adw::Application, theme_css: Rc<gtk4::CssProvider>, rt: &tokio
     settings_window.register_page_widget("accounts", "Accounts", accounts_page.widget());
     settings_window.register_page_widget("continuity", "Continuity", continuity_settings_page.widget());
     settings_window.register_page_widget("idle", "Idle", idle_settings_page.widget());
+    settings_window.register_page_widget("about", "About", about_page.widget());
     
     // 6. Wiring (Reactive bindings)
     let ap_run = accounts_presenter.clone();

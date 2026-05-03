@@ -6,6 +6,7 @@ pub mod calendar;
 pub mod clock;
 pub mod continuity;
 pub mod dnd;
+pub mod mpris;
 pub mod network;
 pub mod nightlight;
 pub mod notifications;

@@ -17,6 +17,8 @@ pub mod launcher_popup;
 pub mod popup_base;
 pub mod quick_settings;
 pub mod components;
+pub mod mpris_bar;
+pub mod mpris_popup;
 pub mod notification_card;
 pub mod notification_toast;
 pub mod notification_archive;

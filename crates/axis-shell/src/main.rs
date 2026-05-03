@@ -42,6 +42,9 @@ use axis_application::use_cases::continuity::set_enabled::SetContinuityEnabledUs
 use axis_application::use_cases::continuity::confirm_pin::ConfirmPinUseCase;
 use axis_application::use_cases::continuity::reject_pin::RejectPinUseCase;
 use axis_application::use_cases::idle_inhibit::set_inhibited::SetIdleInhibitUseCase;
+use axis_application::use_cases::mpris::play_pause::PlayPauseUseCase;
+use axis_application::use_cases::mpris::next::NextTrackUseCase;
+use axis_application::use_cases::mpris::previous::PreviousTrackUseCase;
 
 use axis_domain::models::appearance::{AccentColor, ColorScheme};
 use axis_domain::models::config::AxisConfig;
@@ -63,6 +66,7 @@ use axis_domain::ports::notifications::NotificationProvider;
 use axis_domain::ports::tray::TrayProvider;
 use axis_domain::ports::continuity::ContinuityProvider;
 use axis_domain::ports::idle_inhibit::IdleInhibitProvider;
+use axis_domain::ports::mpris::MprisProvider;
 use axis_domain::models::dnd::DndStatus;
 
 use axis_infrastructure::adapters::google_auth::GoogleCloudAuthProvider;
@@ -262,6 +266,16 @@ fn main() -> glib::ExitCode {
     let continuity_service = ContinuityService::new();
     let continuity_provider: Arc<dyn ContinuityProvider> = continuity_service.clone();
 
+    let mpris_provider: Arc<dyn MprisProvider> = rt.block_on(async {
+        match axis_infrastructure::adapters::mpris::MprisDBusProvider::new().await {
+            Ok(p) => p as Arc<dyn MprisProvider>,
+            Err(_) => {
+                log::warn!("[mpris] MPRIS not available, using mock");
+                axis_infrastructure::mocks::mpris::MockMprisProvider::new()
+            }
+        }
+    });
+
     let subscribe_power = Arc::new(SubscribeUseCase::new(power_provider.clone()));
     let suspend_uc = Arc::new(SuspendUseCase::new(power_provider.clone()));
     let power_off_uc = Arc::new(PowerOffUseCase::new(power_provider.clone()));
@@ -452,6 +466,16 @@ fn main() -> glib::ExitCode {
 
     let continuity_presenter = Rc::new(ContinuityPresenter::new(
         subscribe_continuity, get_continuity_status, &rt,
+    ));
+
+    let subscribe_mpris = Arc::new(SubscribeUseCase::new(mpris_provider.clone()));
+    let get_mpris_status = Arc::new(GetStatusUseCase::new(mpris_provider.clone()));
+    let mpris_play_pause = Arc::new(PlayPauseUseCase::new(mpris_provider.clone()));
+    let mpris_next = Arc::new(NextTrackUseCase::new(mpris_provider.clone()));
+    let mpris_previous = Arc::new(PreviousTrackUseCase::new(mpris_provider.clone()));
+    let mpris_presenter = Rc::new(crate::presentation::mpris::MprisPresenter::new(
+        subscribe_mpris, get_mpris_status,
+        mpris_play_pause, mpris_next, mpris_previous, &rt,
     ));
 
     let wifi_presenter = Rc::new(TogglePresenter::new(
@@ -663,6 +687,9 @@ fn main() -> glib::ExitCode {
     let cont_sync = continuity_presenter.clone();
     glib::spawn_future_local(async move { cont_sync.run_sync().await; });
 
+    let mp_sync = mpris_presenter.clone();
+    glib::spawn_future_local(async move { mp_sync.run_sync().await; });
+
     let dnd_sync = dnd_status_presenter.clone();
     glib::spawn_future_local(async move { dnd_sync.run_sync().await; });
 
@@ -794,7 +821,7 @@ fn main() -> glib::ExitCode {
             toggle_popup.clone(), toggle_overview_uc.clone(),
             network_presenter.clone(), bluetooth_full_presenter.clone(), dnd_status_presenter.clone(),
             airplane_status_presenter.clone(), continuity_presenter.clone(),
-            idle_inhibit_status_presenter.clone(),
+            idle_inhibit_status_presenter.clone(), mpris_presenter.clone(),
             show_labels,
         );
 
@@ -935,6 +962,42 @@ fn main() -> glib::ExitCode {
         pp.add_popup(Box::new(qs_popup));
         pp.add_popup(Box::new(launcher_popup));
         pp.add_popup(Box::new(agenda_popup));
+
+        let mpris_popup = widgets::mpris_popup::MprisPopup::new(app);
+        mpris_presenter.add_view(Box::new(mpris_popup.clone()));
+
+        let mp_pp = mpris_presenter.clone();
+        mpris_popup.on_play_pause(Box::new(move || {
+            if let Some(id) = mp_pp.active_player_id() {
+                mp_pp.play_pause(&id);
+            }
+        }));
+
+        let mp_nx = mpris_presenter.clone();
+        mpris_popup.on_next(Box::new(move || {
+            if let Some(id) = mp_nx.active_player_id() {
+                mp_nx.next(&id);
+            }
+        }));
+
+        let mp_pv = mpris_presenter.clone();
+        mpris_popup.on_previous(Box::new(move || {
+            if let Some(id) = mp_pv.active_player_id() {
+                mp_pv.previous(&id);
+            }
+        }));
+
+        let tp_esc_mpris = toggle_popup.clone();
+        mpris_popup.on_escape(Box::new(move || {
+            let tp = tp_esc_mpris.clone();
+            tokio::spawn(async move {
+                if let Err(e) = tp.execute(axis_domain::models::popups::PopupType::Mpris).await {
+                    log::error!("[popup] MPRIS escape failed: {e}");
+                }
+            });
+        }));
+
+        pp.add_popup(Box::new(mpris_popup));
         
         let pp_sync = pp.clone();
         glib::spawn_future_local(async move {

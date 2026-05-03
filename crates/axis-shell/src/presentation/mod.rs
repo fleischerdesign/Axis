@@ -14,5 +14,6 @@ pub mod network;
 pub mod bluetooth;
 pub mod nightlight;
 pub mod lock;
+pub mod mpris;
 pub mod tray;
 pub mod continuity;

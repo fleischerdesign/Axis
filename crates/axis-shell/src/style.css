@@ -805,3 +805,39 @@ preferencesgroup > .title {
 .continuity-overlay {
     background-color: rgba(0, 0, 0, 0.01);
 }
+
+.mpris-bar {
+    min-width: 0;
+}
+
+.mpris-bar .mpris-label {
+    min-width: 0;
+}
+
+.mpris-popup {
+    padding: 8px;
+}
+
+.mpris-art {
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.mpris-controls button {
+    min-width: 42px;
+    min-height: 42px;
+    -gtk-icon-size: 20px;
+}
+
+.mpris-controls button.circular {
+    -gtk-icon-size: 20px;
+}
+
+.mpris-progress progress {
+    border-radius: 4px;
+}
+
+.mpris-progress trough {
+    border-radius: 4px;
+    min-height: 4px;
+}

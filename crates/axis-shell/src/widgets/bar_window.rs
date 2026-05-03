@@ -17,6 +17,7 @@ use crate::widgets::clock::ClockWidget;
 use crate::widgets::audio::AudioWidget;
 use crate::widgets::workspace_dots::WorkspaceDots;
 use crate::widgets::launcher::LauncherWidget;
+use crate::widgets::mpris_bar::MprisBarWidget;
 use crate::widgets::bar::Bar;
 use crate::widgets::tray::TrayWidget;
 
@@ -30,6 +31,7 @@ use crate::presentation::tray::TrayView;
 use crate::presentation::network::NetworkPresenter;
 use crate::presentation::bluetooth::BluetoothPresenter;
 use crate::presentation::continuity::ContinuityPresenter;
+use crate::presentation::mpris::MprisPresenter;
 
 use axis_application::use_cases::popups::TogglePopupUseCase;
 use axis_application::use_cases::workspaces::toggle_overview::ToggleOverviewUseCase;
@@ -69,6 +71,7 @@ impl BarWindow {
         airplane_status_presenter: Rc<Presenter<AirplaneStatus>>,
         continuity_presenter: Rc<ContinuityPresenter>,
         idle_inhibit_presenter: Rc<Presenter<IdleInhibitStatus>>,
+        mpris_presenter: Rc<MprisPresenter>,
         show_labels: bool,
     ) {
         let bar = Bar::new();
@@ -109,6 +112,32 @@ impl BarWindow {
             tokio::spawn(async move { let _ = uc.execute(PopupType::Agenda).await; });
         });
         center_island_box.append(&clock_island.container);
+
+        let mpris_island = Island::new();
+        let mpris_bar_widget = MprisBarWidget::new();
+        mpris_island.container.append(&mpris_bar_widget.container);
+
+        let tp_mpris = toggle_popup_use_case.clone();
+        let mp_pp = mpris_presenter.clone();
+        let gesture_left = gtk4::GestureClick::new();
+        gesture_left.set_button(gtk4::gdk::BUTTON_PRIMARY);
+        gesture_left.connect_released(move |_, _, _, _| {
+            let uc = tp_mpris.clone();
+            tokio::spawn(async move { let _ = uc.execute(PopupType::Mpris).await; });
+        });
+        mpris_island.container.add_controller(gesture_left);
+
+        let gesture_right = gtk4::GestureClick::new();
+        gesture_right.set_button(gtk4::gdk::BUTTON_SECONDARY);
+        gesture_right.connect_released(move |_, _, _, _| {
+            if let Some(id) = mp_pp.active_player_id() {
+                mp_pp.play_pause(&id);
+            }
+        });
+        mpris_island.container.add_controller(gesture_right);
+        mpris_island.container.set_cursor_from_name(Some("pointer"));
+
+        center_island_box.append(&mpris_island.container);
 
         bar.set_center_widget(Some(&center_island_box));
 
@@ -174,6 +203,7 @@ impl BarWindow {
         continuity_presenter.add_view(Box::new(continuity_widget.clone()));
         idle_inhibit_presenter.add_view(Box::new(idle_inhibit_widget.clone()));
         battery_presenter.add_view(Box::new(status_bar.clone()));
+        mpris_presenter.add_view(Box::new(mpris_bar_widget.clone()));
 
         let cp = clock_presenter.clone();
         let cv = Box::new(clock_widget.clone());

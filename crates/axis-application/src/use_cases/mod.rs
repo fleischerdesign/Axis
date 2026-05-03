@@ -10,6 +10,7 @@ pub mod config;
 pub mod continuity;
 pub mod dnd;
 pub mod idle_inhibit;
+pub mod mpris;
 pub mod network;
 pub mod nightlight;
 pub mod notifications;

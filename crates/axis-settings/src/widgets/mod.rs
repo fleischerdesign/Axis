@@ -1,3 +1,4 @@
+pub mod about_page;
 pub mod accounts_page;
 pub mod appearance_page;
 pub mod arrangement_grid;

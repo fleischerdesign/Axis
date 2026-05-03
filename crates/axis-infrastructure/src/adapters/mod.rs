@@ -18,6 +18,7 @@ pub mod google_tasks;
 pub mod launcher;
 pub mod ipc;
 pub mod lock;
+pub mod mpris;
 pub mod notifications;
 pub mod config;
 pub mod airplane;

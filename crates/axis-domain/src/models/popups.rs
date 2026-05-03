@@ -6,6 +6,7 @@ pub enum PopupType {
     Workspaces,
     Agenda,
     QuickSettings,
+    Mpris,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
