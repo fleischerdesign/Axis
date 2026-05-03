@@ -266,12 +266,16 @@ fn main() -> glib::ExitCode {
     let continuity_service = ContinuityService::new();
     let continuity_provider: Arc<dyn ContinuityProvider> = continuity_service.clone();
 
-    let mpris_provider: Arc<dyn MprisProvider> = rt.block_on(async {
+    let (mpris_provider, mpris_dbus_provider): (Arc<dyn MprisProvider>, Option<Arc<axis_infrastructure::adapters::mpris::MprisDBusProvider>>) = rt.block_on(async {
         match axis_infrastructure::adapters::mpris::MprisDBusProvider::new().await {
-            Ok(p) => p as Arc<dyn MprisProvider>,
+            Ok(p) => {
+                let dbus = p.clone();
+                (p as Arc<dyn MprisProvider>, Some(dbus))
+            }
             Err(_) => {
                 log::warn!("[mpris] MPRIS not available, using mock");
-                axis_infrastructure::mocks::mpris::MockMprisProvider::new()
+                let mock: Arc<dyn MprisProvider> = axis_infrastructure::mocks::mpris::MockMprisProvider::new();
+                (mock, None)
             }
         }
     });
@@ -996,6 +1000,27 @@ fn main() -> glib::ExitCode {
                 }
             });
         }));
+
+        if let Some(ref dbus) = mpris_dbus_provider {
+            let dbus_clone = dbus.clone();
+            mpris_popup.on_visibility_change(Box::new(move |visible| {
+                dbus_clone.set_position_polling(visible);
+            }));
+
+            let pos_popup = mpris_popup.clone();
+            let mut pos_rx = dbus.subscribe_positions();
+            glib::spawn_future_local(async move {
+                loop {
+                    if pos_rx.changed().await.is_err() {
+                        break;
+                    }
+                    let (id, pos, len) = pos_rx.borrow().clone();
+                    if !id.is_empty() {
+                        pos_popup.update_position(&id, pos, len);
+                    }
+                }
+            });
+        }
 
         pp.add_popup(Box::new(mpris_popup));
         

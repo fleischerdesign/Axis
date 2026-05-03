@@ -71,11 +71,13 @@ pub struct MprisPopup {
     progress_bar: gtk4::ProgressBar,
     position_label: gtk4::Label,
     length_label: gtk4::Label,
+    current_player_id: RefCell<Option<String>>,
     fallback_art: gtk4::Image,
     on_escape: Rc<RefCell<Option<Box<dyn Fn() + 'static>>>>,
     on_play_pause: Rc<RefCell<Option<Box<dyn Fn() + 'static>>>>,
     on_next: Rc<RefCell<Option<Box<dyn Fn() + 'static>>>>,
     on_previous: Rc<RefCell<Option<Box<dyn Fn() + 'static>>>>,
+    on_visibility_change: Rc<RefCell<Option<Box<dyn Fn(bool) + 'static>>>>,
 }
 
 fn format_duration(microseconds: i64) -> String {
@@ -94,6 +96,7 @@ impl MprisPopup {
         let on_play_pause: Rc<RefCell<Option<Box<dyn Fn() + 'static>>>> = Rc::new(RefCell::new(None));
         let on_next: Rc<RefCell<Option<Box<dyn Fn() + 'static>>>> = Rc::new(RefCell::new(None));
         let on_previous: Rc<RefCell<Option<Box<dyn Fn() + 'static>>>> = Rc::new(RefCell::new(None));
+        let on_visibility_change: Rc<RefCell<Option<Box<dyn Fn(bool) + 'static>>>> = Rc::new(RefCell::new(None));
 
         let content = gtk4::Box::new(gtk4::Orientation::Vertical, 16);
         content.add_css_class("mpris-popup");
@@ -243,11 +246,13 @@ impl MprisPopup {
             progress_bar,
             position_label,
             length_label,
+            current_player_id: RefCell::new(None),
             fallback_art,
             on_escape,
             on_play_pause,
             on_next,
             on_previous,
+            on_visibility_change,
         }
     }
 
@@ -266,10 +271,27 @@ impl MprisPopup {
     pub fn on_previous(&self, f: Box<dyn Fn() + 'static>) {
         *self.on_previous.borrow_mut() = Some(f);
     }
+
+    pub fn on_visibility_change(&self, f: Box<dyn Fn(bool) + 'static>) {
+        *self.on_visibility_change.borrow_mut() = Some(f);
+    }
+
+    pub fn update_position(&self, player_id: &str, position_us: i64, length_us: i64) {
+        if Some(player_id) != self.current_player_id.borrow().as_deref() {
+            return;
+        }
+        if length_us > 0 {
+            let fraction = (position_us as f64 / length_us as f64).clamp(0.0, 1.0);
+            self.progress_bar.set_fraction(fraction);
+            self.position_label.set_label(&format_duration(position_us));
+            self.length_label.set_label(&format_duration(length_us));
+        }
+    }
 }
 
 impl View<MprisStatus> for MprisPopup {
     fn render(&self, status: &MprisStatus) {
+        *self.current_player_id.borrow_mut() = status.active_player_id.clone();
         match status.active_player() {
             Some(player) => {
                 self.title_label.set_label(&player.title);
@@ -305,6 +327,7 @@ impl View<MprisStatus> for MprisPopup {
                 }
             }
             None => {
+                log::info!("[mpris-popup] No active player, showing placeholder");
                 self.title_label.set_label("Not Playing");
                 self.artist_label.set_label("");
                 self.album_label.set_label("");
@@ -331,4 +354,16 @@ impl PopupView for MprisPopup {
     fn get_type(&self) -> PopupType { PopupType::Mpris }
     fn popup_container(&self) -> PopupContainer { self.container.clone() }
     fn popup_window(&self) -> gtk4::ApplicationWindow { self.window.clone().upcast() }
+
+    fn handle_status(&self, status: &PopupStatus) {
+        let visible = status.active_popup == Some(self.get_type());
+        if visible {
+            self.show();
+        } else {
+            self.hide();
+        }
+        if let Some(cb) = self.on_visibility_change.borrow().as_ref() {
+            cb(visible);
+        }
+    }
 }

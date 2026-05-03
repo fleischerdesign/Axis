@@ -25,7 +25,10 @@ impl MprisPresenter {
     ) -> Self {
         let initial_status = rt.block_on(async {
             match get_status_uc.execute().await {
-                Ok(s) => s,
+                Ok(s) => {
+                    log::info!("[mpris-presenter] Initial status: {} players, active={:?}", s.players.len(), s.active_player_id);
+                    s
+                }
                 Err(e) => {
                     log::error!("[mpris] Failed to get initial status: {e}");
                     Default::default()
