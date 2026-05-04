@@ -1,4 +1,4 @@
-use axis_domain::models::audio::AudioStatus;
+use axis_domain::models::audio::{AudioStatus, AudioDevice, SinkInput};
 use axis_domain::ports::audio::{AudioProvider, AudioError, AudioStream};
 use async_trait::async_trait;
 use libpulse_binding::context::{Context, FlagSet as ContextFlagSet, State as ContextState};
@@ -8,7 +8,7 @@ use libpulse_binding::context::subscribe::{Facility, InterestMaskSet};
 use libpulse_binding::callbacks::ListResult;
 use tokio::sync::{watch, mpsc};
 use tokio_stream::wrappers::WatchStream;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use log::{info, warn};
 
@@ -19,6 +19,172 @@ enum PulseCmd {
     SetDefaultSink(u32),
     SetDefaultSource(u32),
     SetSinkInputVolume(u32, f64),
+}
+
+struct RefreshState {
+    default_sink_name: Option<String>,
+    default_source_name: Option<String>,
+    sinks: Vec<(AudioDevice, f64, bool)>,
+    sources: Vec<AudioDevice>,
+    sink_inputs: Vec<SinkInput>,
+    pending: u32,
+}
+
+impl RefreshState {
+    fn new() -> Self {
+        Self {
+            default_sink_name: None,
+            default_source_name: None,
+            sinks: Vec::new(),
+            sources: Vec::new(),
+            sink_inputs: Vec::new(),
+            pending: 4,
+        }
+    }
+
+    fn mark_done(&mut self) {
+        self.pending = self.pending.saturating_sub(1);
+    }
+
+    fn build_status(&mut self) -> AudioStatus {
+        let default_sink = self.default_sink_name.as_deref();
+        let default_source = self.default_source_name.as_deref();
+
+        let mut sinks = Vec::with_capacity(self.sinks.len());
+        let mut volume = 0.0;
+        let mut is_muted = false;
+
+        for (mut dev, vol, muted) in self.sinks.drain(..) {
+            if Some(dev.name.as_str()) == default_sink {
+                dev.is_default = true;
+                volume = vol;
+                is_muted = muted;
+            }
+            sinks.push(dev);
+        }
+
+        let mut sources = Vec::with_capacity(self.sources.len());
+        for mut dev in self.sources.drain(..) {
+            if Some(dev.name.as_str()) == default_source {
+                dev.is_default = true;
+            }
+            sources.push(dev);
+        }
+
+        sinks.sort_by(|a, b| b.is_default.cmp(&a.is_default).then_with(|| a.name.cmp(&b.name)));
+        sources.sort_by(|a, b| b.is_default.cmp(&a.is_default).then_with(|| a.name.cmp(&b.name)));
+
+        AudioStatus {
+            volume,
+            is_muted,
+            sinks,
+            sources,
+            sink_inputs: std::mem::take(&mut self.sink_inputs),
+        }
+    }
+}
+
+fn refresh_devices(context: &Context, status_tx: &watch::Sender<AudioStatus>) {
+    let state = Arc::new(Mutex::new(RefreshState::new()));
+    let stx = status_tx.clone();
+
+    let s1 = state.clone();
+    let stx1 = stx.clone();
+    context.introspect().get_server_info(move |info| {
+        let mut s = s1.lock().unwrap();
+        s.default_sink_name = info.default_sink_name.as_ref().map(|n| n.to_string());
+        s.default_source_name = info.default_source_name.as_ref().map(|n| n.to_string());
+        s.mark_done();
+        if s.pending == 0 {
+            let status = s.build_status();
+            drop(s);
+            let _ = stx1.send(status);
+        }
+    });
+
+    let s2 = state.clone();
+    let stx2 = stx.clone();
+    context.introspect().get_sink_info_list(move |res| {
+        let mut s = s2.lock().unwrap();
+        match res {
+            ListResult::Item(sink) => {
+                let name = sink.name.as_ref().map(|n| n.to_string()).unwrap_or_default();
+                let desc = sink.description.as_ref().map(|d| d.to_string()).unwrap_or_default();
+                let vol_raw = sink.volume.avg().0 as f64 / Volume::NORMAL.0 as f64;
+                let vol = (vol_raw * 100.0).round() / 100.0;
+                s.sinks.push((
+                    AudioDevice {
+                        id: sink.index,
+                        name,
+                        description: desc,
+                        is_default: false,
+                    },
+                    vol,
+                    sink.mute,
+                ));
+            }
+            ListResult::End | ListResult::Error => {
+                s.mark_done();
+                if s.pending == 0 {
+                    let status = s.build_status();
+                    drop(s);
+                    let _ = stx2.send(status);
+                }
+            }
+        }
+    });
+
+    let s3 = state.clone();
+    let stx3 = stx.clone();
+    context.introspect().get_source_info_list(move |res| {
+        let mut s = s3.lock().unwrap();
+        match res {
+            ListResult::Item(source) => {
+                let name = source.name.as_ref().map(|n| n.to_string()).unwrap_or_default();
+                let desc = source.description.as_ref().map(|d| d.to_string()).unwrap_or_default();
+                s.sources.push(AudioDevice {
+                    id: source.index,
+                    name,
+                    description: desc,
+                    is_default: false,
+                });
+            }
+            ListResult::End | ListResult::Error => {
+                s.mark_done();
+                if s.pending == 0 {
+                    let status = s.build_status();
+                    drop(s);
+                    let _ = stx3.send(status);
+                }
+            }
+        }
+    });
+
+    let s4 = state.clone();
+    let stx4 = stx.clone();
+    context.introspect().get_sink_input_info_list(move |res| {
+        let mut s = s4.lock().unwrap();
+        match res {
+            ListResult::Item(si) => {
+                let name = si.name.as_ref().map(|n| n.to_string()).unwrap_or_default();
+                let vol_raw = si.volume.avg().0 as f64 / Volume::NORMAL.0 as f64;
+                let vol = (vol_raw * 100.0).round() / 100.0;
+                s.sink_inputs.push(SinkInput {
+                    id: si.index,
+                    name,
+                    volume: vol,
+                });
+            }
+            ListResult::End | ListResult::Error => {
+                s.mark_done();
+                if s.pending == 0 {
+                    let status = s.build_status();
+                    drop(s);
+                    let _ = stx4.send(status);
+                }
+            }
+        }
+    });
 }
 
 pub struct PulseAudioProvider {
@@ -131,26 +297,18 @@ impl PulseAudioProvider {
         }
 
         let stx_init = status_tx.clone();
-        context.introspect().get_sink_info_by_name("@DEFAULT_SINK@", move |res| {
-            if let ListResult::Item(sink) = res {
-                let vol_raw = sink.volume.avg().0 as f64 / Volume::NORMAL.0 as f64;
-                let vol = (vol_raw * 100.0).round() / 100.0;
-                let status = AudioStatus {
-                    volume: vol,
-                    is_muted: sink.mute,
-                    ..AudioStatus::default()
-                };
-                let _ = stx_init.send(status);
-            }
-        });
+        refresh_devices(&context, &stx_init);
 
         let cmd_tx_loop = cmd_tx.clone();
         context.set_subscribe_callback(Some(Box::new(move |fac, _, _| {
-            if let Some(Facility::Sink) = fac {
-                let _ = cmd_tx_loop.try_send(PulseCmd::UpdateStatus);
+            match fac {
+                Some(Facility::Sink | Facility::Source | Facility::SinkInput) => {
+                    let _ = cmd_tx_loop.try_send(PulseCmd::UpdateStatus);
+                }
+                _ => {}
             }
         })));
-        context.subscribe(InterestMaskSet::SINK, |_| {});
+        context.subscribe(InterestMaskSet::SINK | InterestMaskSet::SOURCE | InterestMaskSet::SINK_INPUT, |_| {});
 
         mainloop.unlock();
 
@@ -177,70 +335,39 @@ impl PulseAudioProvider {
                 }
                 PulseCmd::UpdateStatus => {
                     let stx = status_tx_c.clone();
-                    let prev = status_tx_c.borrow().clone();
-                    context
-                        .introspect()
-                        .get_sink_info_by_name("@DEFAULT_SINK@", move |res| {
-                            if let ListResult::Item(sink) = res {
-                                let vol_raw =
-                                    sink.volume.avg().0 as f64 / Volume::NORMAL.0 as f64;
-                                let vol = (vol_raw * 100.0).round() / 100.0;
-                                let status = AudioStatus {
-                                    volume: vol,
-                                    is_muted: sink.mute,
-                                    sinks: prev.sinks.clone(),
-                                    sources: prev.sources.clone(),
-                                    sink_inputs: prev.sink_inputs.clone(),
-                                };
-                                let _ = stx.send(status);
-                            }
-                        });
+                    refresh_devices(&context, &stx);
                 }
                 PulseCmd::SetDefaultSink(id) => {
                     info!("[audio] Set default sink: {id}");
-                    let name_clone;
+                    let sink_name;
                     {
                         let status = status_tx_c.borrow();
                         if let Some(sink) = status.sinks.iter().find(|s| s.id == id) {
-                            name_clone = sink.name.clone();
+                            sink_name = sink.name.clone();
                         } else {
                             mainloop.unlock();
                             continue;
                         }
                     }
-                    let _ = std::process::Command::new("pactl")
-                        .args(["set-default-sink", &name_clone])
-                        .output();
-
-                    let prev = status_tx_c.borrow().clone();
-                    let mut new_status = prev.clone();
-                    for sink in new_status.sinks.iter_mut() {
-                        sink.is_default = sink.id == id;
-                    }
-                    let _ = status_tx_c.send(new_status);
+                    let _ = context.set_default_sink(&sink_name, |_| {});
+                    let stx = status_tx_c.clone();
+                    refresh_devices(&context, &stx);
                 }
                 PulseCmd::SetDefaultSource(id) => {
                     info!("[audio] Set default source: {id}");
-                    let name_clone;
+                    let source_name;
                     {
                         let status = status_tx_c.borrow();
                         if let Some(source) = status.sources.iter().find(|s| s.id == id) {
-                            name_clone = source.name.clone();
+                            source_name = source.name.clone();
                         } else {
                             mainloop.unlock();
                             continue;
                         }
                     }
-                    let _ = std::process::Command::new("pactl")
-                        .args(["set-default-source", &name_clone])
-                        .output();
-
-                    let prev = status_tx_c.borrow().clone();
-                    let mut new_status = prev.clone();
-                    for source in new_status.sources.iter_mut() {
-                        source.is_default = source.id == id;
-                    }
-                    let _ = status_tx_c.send(new_status);
+                    let _ = context.set_default_source(&source_name, |_| {});
+                    let stx = status_tx_c.clone();
+                    refresh_devices(&context, &stx);
                 }
                 PulseCmd::SetSinkInputVolume(id, vol) => {
                     info!("[audio] Set sink input {id} volume: {:.0}%", vol * 100.0);

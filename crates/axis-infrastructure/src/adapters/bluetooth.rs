@@ -25,8 +25,8 @@ trait BluetoothDevice1 {
     fn address(&self) -> zbus::Result<String>;
     #[zbus(property)]
     fn icon(&self) -> zbus::Result<String>;
-    fn connect_dev(&self) -> zbus::Result<()>;
-    fn disconnect_dev(&self) -> zbus::Result<()>;
+    fn connect(&self) -> zbus::Result<()>;
+    fn disconnect(&self) -> zbus::Result<()>;
 }
 
 #[proxy(
@@ -442,7 +442,7 @@ impl BluetoothProvider for BlueZProvider {
             .await
             .map_err(|e| BluetoothError::ConnectionFailed(format!("Proxy: {e}")))?;
         proxy
-            .connect_dev()
+            .connect()
             .await
             .map_err(|e| BluetoothError::ConnectionFailed(format!("Connect: {e}")))?;
         info!("[bluetooth] Connected: {id}");
@@ -462,7 +462,7 @@ impl BluetoothProvider for BlueZProvider {
             .await
             .map_err(|e| BluetoothError::ProviderError(format!("Proxy: {e}")))?;
         proxy
-            .disconnect_dev()
+            .disconnect()
             .await
             .map_err(|e| BluetoothError::ProviderError(format!("Disconnect: {e}")))?;
         info!("[bluetooth] Disconnected: {id}");
