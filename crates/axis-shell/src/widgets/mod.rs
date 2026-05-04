@@ -1,3 +1,4 @@
+pub mod ssh_status;
 pub mod status_bar;
 pub mod wifi_status;
 pub mod bluetooth_status;

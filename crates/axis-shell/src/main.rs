@@ -67,6 +67,7 @@ use axis_domain::ports::tray::TrayProvider;
 use axis_domain::ports::continuity::ContinuityProvider;
 use axis_domain::ports::idle_inhibit::IdleInhibitProvider;
 use axis_domain::ports::mpris::MprisProvider;
+use axis_domain::ports::ssh::SshProvider;
 use axis_domain::models::dnd::DndStatus;
 
 use axis_infrastructure::adapters::google_auth::GoogleCloudAuthProvider;
@@ -89,6 +90,7 @@ use axis_infrastructure::adapters::airplane::ConfigAirplaneProvider;
 use axis_infrastructure::adapters::tray::StatusNotifierTrayProvider;
 use axis_infrastructure::adapters::niri_layout::NiriLayoutProvider;
 use axis_infrastructure::adapters::continuity::ContinuityService;
+use axis_infrastructure::adapters::ssh::ProcSshProvider;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::rc::Rc;
@@ -127,6 +129,7 @@ use presentation::appearance::AppearancePresenter;
 use presentation::lock::LockPresenter;
 use presentation::continuity::ContinuityPresenter;
 use presentation::tray::TrayPresenter;
+use presentation::ssh::SshPresenter;
 
 use services::theme_service::ThemeService;
 use services::wallpaper_service::WallpaperService;
@@ -241,6 +244,7 @@ fn main() -> glib::ExitCode {
     let clock_provider: Arc<dyn ClockProvider> = SystemClockProvider::new();
     let popup_provider: Arc<dyn PopupProvider> = LocalPopupProvider::new();
     let launcher_provider = CompositeLauncherProvider::new();
+    let ssh_provider: Arc<dyn SshProvider> = ProcSshProvider::new();
     let config_dir = dirs::config_dir().unwrap_or(PathBuf::from(".")).join("axis");
     let google_auth = GoogleCloudAuthProvider::new(config_dir.clone());
 
@@ -299,6 +303,7 @@ fn main() -> glib::ExitCode {
     let unlock_session_uc = Arc::new(UnlockSessionUseCase::new(lock_provider.clone()));
     let authenticate_uc = Arc::new(AuthenticateUseCase::new(lock_provider.clone()));
     let subscribe_clock = Arc::new(SubscribeUseCase::new(clock_provider.clone()));
+    let subscribe_ssh = Arc::new(SubscribeUseCase::new(ssh_provider.clone()));
     let subscribe_audio = Arc::new(SubscribeUseCase::new(audio_provider.clone()));
     let get_audio_status = Arc::new(GetStatusUseCase::new(audio_provider.clone()));
     let set_volume = Arc::new(SetVolumeUseCase::new(audio_provider.clone()));
@@ -391,6 +396,7 @@ fn main() -> glib::ExitCode {
 
     let battery_presenter = Arc::new(BatteryPresenter::new(subscribe_power));
     let clock_presenter = Arc::new(ClockPresenter::new(subscribe_clock));
+    let ssh_presenter = Rc::new(SshPresenter::new(subscribe_ssh));
     let workspace_presenter = Arc::new(WorkspacePresenter::new(subscribe_ws));
     let popup_presenter = Arc::new(PopupPresenter::new(subscribe_popups_for_presenter));
     let auto_hide_presenter = Arc::new(AutoHidePresenter::new(1, 500));
@@ -695,6 +701,9 @@ fn main() -> glib::ExitCode {
     let cont_sync = continuity_presenter.clone();
     glib::spawn_future_local(async move { cont_sync.run_sync().await; });
 
+    let ssh_sync = ssh_presenter.clone();
+    glib::spawn_future_local(async move { ssh_sync.run_sync().await; });
+
     let mp_sync = mpris_presenter.clone();
     glib::spawn_future_local(async move { mp_sync.run_sync().await; });
 
@@ -829,7 +838,7 @@ fn main() -> glib::ExitCode {
             toggle_popup.clone(), toggle_overview_uc.clone(),
             network_presenter.clone(), bluetooth_full_presenter.clone(), dnd_status_presenter.clone(),
             airplane_status_presenter.clone(), continuity_presenter.clone(),
-            idle_inhibit_status_presenter.clone(), mpris_presenter.clone(),
+            idle_inhibit_status_presenter.clone(), ssh_presenter.clone(), mpris_presenter.clone(),
             show_labels,
         );
 
@@ -854,6 +863,8 @@ fn main() -> glib::ExitCode {
         qs_popup.setup_bluetooth_sub_page(bluetooth_full_presenter.clone());
         qs_popup.setup_audio_sub_page(audio_presenter.clone());
         qs_popup.setup_nightlight_sub_page(nightlight_full_presenter.clone());
+        qs_popup.setup_ssh_sub_page(ssh_presenter.clone());
+        qs_popup.setup_ssh_tile(ssh_presenter.clone());
 
         let np = notification_presenter.clone();
         let on_close: std::rc::Rc<dyn Fn(u32)> = std::rc::Rc::new(move |id| {

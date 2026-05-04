@@ -1,4 +1,5 @@
 pub mod clock;
+pub mod ssh;
 pub mod google_agenda;
 pub mod power;
 pub mod appearance;

@@ -13,6 +13,7 @@ use crate::widgets::dnd_status::DndStatusWidget;
 use crate::widgets::airplane_status::AirplaneStatusWidget;
 use crate::widgets::continuity_status::ContinuityStatusWidget;
 use crate::widgets::idle_inhibit_status::IdleInhibitStatusWidget;
+use crate::widgets::ssh_status::SshStatusWidget;
 use crate::widgets::clock::ClockWidget;
 use crate::widgets::audio::AudioWidget;
 use crate::widgets::workspace_dots::WorkspaceDots;
@@ -32,6 +33,7 @@ use crate::presentation::network::NetworkPresenter;
 use crate::presentation::bluetooth::BluetoothPresenter;
 use crate::presentation::continuity::ContinuityPresenter;
 use crate::presentation::mpris::MprisPresenter;
+use crate::presentation::ssh::SshPresenter;
 
 use axis_application::use_cases::popups::TogglePopupUseCase;
 use axis_application::use_cases::workspaces::toggle_overview::ToggleOverviewUseCase;
@@ -72,6 +74,7 @@ impl BarWindow {
         airplane_status_presenter: Rc<Presenter<AirplaneStatus>>,
         continuity_presenter: Rc<ContinuityPresenter>,
         idle_inhibit_presenter: Rc<Presenter<IdleInhibitStatus>>,
+        ssh_presenter: Rc<SshPresenter>,
         mpris_presenter: Rc<MprisPresenter>,
         show_labels: bool,
     ) {
@@ -166,6 +169,7 @@ impl BarWindow {
         let airplane_widget = AirplaneStatusWidget::new();
         let continuity_widget = ContinuityStatusWidget::new();
         let idle_inhibit_widget = IdleInhibitStatusWidget::new();
+        let ssh_widget = SshStatusWidget::new();
         let audio_widget = AudioWidget::new(show_labels);
         let status_bar = StatusBar::new(show_labels);
         end_island.container.append(&wifi_widget.container);
@@ -174,6 +178,7 @@ impl BarWindow {
         end_island.container.append(&airplane_widget.container);
         end_island.container.append(&continuity_widget.container);
         end_island.container.append(&idle_inhibit_widget.container);
+        end_island.container.append(&ssh_widget.container);
         end_island.container.append(&audio_widget.container);
         end_island.container.append(&status_bar.container);
 
@@ -203,6 +208,7 @@ impl BarWindow {
         airplane_status_presenter.add_view(Box::new(airplane_widget.clone()));
         continuity_presenter.add_view(Box::new(continuity_widget.clone()));
         idle_inhibit_presenter.add_view(Box::new(idle_inhibit_widget.clone()));
+        ssh_presenter.add_view(Box::new(ssh_widget.clone()));
         battery_presenter.add_view(Box::new(status_bar.clone()));
         mpris_presenter.add_view(Box::new(mpris_bar_widget.clone()));
 

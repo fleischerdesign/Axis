@@ -26,6 +26,7 @@ macro_rules! status_provider {
 }
 
 pub mod airplane;
+pub mod ssh;
 pub mod appearance;
 pub mod agenda;
 pub mod audio;
