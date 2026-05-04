@@ -13,7 +13,7 @@ impl MockBrightnessProvider {
     pub fn new() -> Arc<Self> {
         let (tx, _) = watch::channel(BrightnessStatus {
             percentage: 60.0,
-            has_backlight: true,
+            has_backlight: false,
         });
         Arc::new(Self { status_tx: tx })
     }
@@ -33,7 +33,7 @@ impl BrightnessProvider for MockBrightnessProvider {
     async fn set_brightness(&self, percentage: f64) -> Result<(), BrightnessError> {
         let _ = self.status_tx.send(BrightnessStatus {
             percentage,
-            has_backlight: true,
+            has_backlight: false,
         });
         Ok(())
     }

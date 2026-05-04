@@ -378,7 +378,15 @@ impl View<AudioStatus> for QuickSettingsPopup {
 
 impl View<BrightnessStatus> for QuickSettingsPopup {
     fn render(&self, status: &BrightnessStatus) {
+        if !status.has_backlight {
+            if let Some(slider) = self.brightness_slider.get() {
+                slider.container.set_visible(false);
+            }
+            return;
+        }
+
         if let Some(slider) = self.brightness_slider.get() {
+            slider.container.set_visible(true);
             slider.set_icon("display-brightness-symbolic");
 
             if !self.is_bright_dragging.get() {
