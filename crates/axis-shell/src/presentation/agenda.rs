@@ -3,7 +3,11 @@ use axis_domain::models::agenda::AgendaStatus;
 use axis_domain::models::popups::{PopupStatus, PopupType};
 use axis_domain::ports::popups::PopupProvider;
 use axis_application::use_cases::generic::SubscribeUseCase;
-use axis_application::use_cases::agenda::sync::AgendaUseCase;
+use axis_application::use_cases::agenda::sync_events::SyncEventsUseCase;
+use axis_application::use_cases::agenda::sync_tasks::SyncTasksUseCase;
+use axis_application::use_cases::agenda::toggle_task::ToggleTaskUseCase;
+use axis_application::use_cases::agenda::delete_task::DeleteTaskUseCase;
+use axis_application::use_cases::agenda::create_task::CreateTaskUseCase;
 use axis_presentation::{Presenter, View};
 use axis_domain::models::tasks::Task;
 use std::rc::Rc;
@@ -26,7 +30,11 @@ impl<T: View<AgendaStatus> + AgendaCallbacks> AgendaView for T {}
 
 pub struct AgendaPresenter {
     inner: Presenter<AgendaStatus>,
-    agenda_uc: Arc<AgendaUseCase>,
+    sync_events_uc: Arc<SyncEventsUseCase>,
+    sync_tasks_uc: Arc<SyncTasksUseCase>,
+    toggle_task_uc: Arc<ToggleTaskUseCase>,
+    delete_task_uc: Arc<DeleteTaskUseCase>,
+    create_task_uc: Arc<CreateTaskUseCase>,
     selected_list_id: Rc<RefCell<Option<String>>>,
     status_tx: watch::Sender<AgendaStatus>,
     is_syncing_events: Rc<Cell<bool>>,
@@ -34,7 +42,13 @@ pub struct AgendaPresenter {
 }
 
 impl AgendaPresenter {
-    pub fn new(agenda_uc: Arc<AgendaUseCase>) -> Self {
+    pub fn new(
+        sync_events_uc: Arc<SyncEventsUseCase>,
+        sync_tasks_uc: Arc<SyncTasksUseCase>,
+        toggle_task_uc: Arc<ToggleTaskUseCase>,
+        delete_task_uc: Arc<DeleteTaskUseCase>,
+        create_task_uc: Arc<CreateTaskUseCase>,
+    ) -> Self {
         let (status_tx, _) = watch::channel(AgendaStatus::default());
         let status_tx_c = status_tx.clone();
 
@@ -45,7 +59,11 @@ impl AgendaPresenter {
 
         Self {
             inner,
-            agenda_uc,
+            sync_events_uc,
+            sync_tasks_uc,
+            toggle_task_uc,
+            delete_task_uc,
+            create_task_uc,
             selected_list_id: Rc::new(RefCell::new(None)),
             status_tx,
             is_syncing_events: Rc::new(Cell::new(false)),
@@ -123,7 +141,7 @@ impl AgendaPresenter {
             let mut final_status = this.status_tx.borrow().clone();
 
             if fetch_events {
-                if let Ok(events) = this.agenda_uc.sync_events().await {
+                if let Ok(events) = this.sync_events_uc.execute().await {
                     final_status.events = events;
                 }
                 final_status.is_loading_events = false;
@@ -131,7 +149,7 @@ impl AgendaPresenter {
             }
 
             if fetch_tasks {
-                if let Ok((lists, tasks, selected)) = this.agenda_uc.sync_tasks(list_id).await {
+                if let Ok((lists, tasks, selected)) = this.sync_tasks_uc.execute(list_id).await {
                     final_status.task_lists = lists;
                     final_status.tasks = tasks;
                     if this.selected_list_id.borrow().is_none() {
@@ -172,9 +190,9 @@ impl AgendaPresenter {
 
         if let Some(list_id) = list_id {
             let this = self.clone();
-            let uc = self.agenda_uc.clone();
+            let uc = self.toggle_task_uc.clone();
             glib::spawn_future_local(async move {
-                if let Err(e) = uc.toggle_task(&list_id, &task_id, done).await {
+                if let Err(e) = uc.execute(&list_id, &task_id, done).await {
                     log::error!("[agenda] Failed to toggle task: {e}");
                     this.refresh(false, true).await;
                 }
@@ -192,9 +210,9 @@ impl AgendaPresenter {
 
         if let Some(list_id) = list_id {
             let this = self.clone();
-            let uc = self.agenda_uc.clone();
+            let uc = self.delete_task_uc.clone();
             glib::spawn_future_local(async move {
-                if let Err(e) = uc.delete_task(&list_id, &task_id).await {
+                if let Err(e) = uc.execute(&list_id, &task_id).await {
                     log::error!("[agenda] Failed to delete task: {e}");
                     this.refresh(false, true).await;
                 }
@@ -218,10 +236,10 @@ impl AgendaPresenter {
             let _ = self.status_tx.send(status);
 
             let this = self.clone();
-            let uc = self.agenda_uc.clone();
+            let uc = self.create_task_uc.clone();
             let list_id_c = list_id.clone();
             glib::spawn_future_local(async move {
-                if let Err(e) = uc.create_task(&list_id_c, &title).await {
+                if let Err(e) = uc.execute(&list_id_c, &title).await {
                     log::error!("[agenda] Failed to create task: {e}");
                 }
                 this.refresh(false, true).await;
@@ -234,7 +252,11 @@ impl Clone for AgendaPresenter {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
-            agenda_uc: self.agenda_uc.clone(),
+            sync_events_uc: self.sync_events_uc.clone(),
+            sync_tasks_uc: self.sync_tasks_uc.clone(),
+            toggle_task_uc: self.toggle_task_uc.clone(),
+            delete_task_uc: self.delete_task_uc.clone(),
+            create_task_uc: self.create_task_uc.clone(),
             selected_list_id: self.selected_list_id.clone(),
             status_tx: self.status_tx.clone(),
             is_syncing_events: self.is_syncing_events.clone(),

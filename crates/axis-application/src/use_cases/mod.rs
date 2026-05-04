@@ -17,7 +17,6 @@ pub mod nightlight;
 pub mod notifications;
 pub mod popups;
 pub mod power;
-pub mod tasks;
 pub mod workspaces;
 pub mod launcher;
 pub mod layout;

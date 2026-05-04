@@ -407,9 +407,16 @@ fn main() -> glib::ExitCode {
     let google_tasks = axis_infrastructure::adapters::google_tasks::GoogleTasksProvider::new(google_auth.clone());
 
     let google_agenda = axis_infrastructure::adapters::google_agenda::GoogleAgendaProvider::new(google_calendar, google_tasks);
-    let agenda_uc = Arc::new(axis_application::use_cases::agenda::sync::AgendaUseCase::new(google_agenda));
 
-    let agenda_presenter = Rc::new(AgendaPresenter::new(agenda_uc));
+    let sync_events_uc = Arc::new(axis_application::use_cases::agenda::sync_events::SyncEventsUseCase::new(google_agenda.clone()));
+    let sync_tasks_uc = Arc::new(axis_application::use_cases::agenda::sync_tasks::SyncTasksUseCase::new(google_agenda.clone()));
+    let toggle_task_uc = Arc::new(axis_application::use_cases::agenda::toggle_task::ToggleTaskUseCase::new(google_agenda.clone()));
+    let delete_task_uc = Arc::new(axis_application::use_cases::agenda::delete_task::DeleteTaskUseCase::new(google_agenda.clone()));
+    let create_task_uc = Arc::new(axis_application::use_cases::agenda::create_task::CreateTaskUseCase::new(google_agenda));
+
+    let agenda_presenter = Rc::new(AgendaPresenter::new(
+        sync_events_uc, sync_tasks_uc, toggle_task_uc, delete_task_uc, create_task_uc,
+    ));
 
     let subscribe_notifications = Arc::new(SubscribeUseCase::new(notification_provider.clone()));
     let get_notifications_status = Arc::new(GetStatusUseCase::new(notification_provider.clone()));
