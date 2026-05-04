@@ -11,8 +11,8 @@ impl InvokeNotificationActionUseCase {
         Self { provider }
     }
 
-    pub async fn execute(&self, id: u32, action_key: &str) -> Result<(), NotificationError> {
+    pub async fn execute(&self, id: u32, action_key: &str, user_input: Option<String>) -> Result<(), NotificationError> {
         info!("[use-case] Invoking action '{}' on notification {}", action_key, id);
-        self.provider.invoke_action(id, action_key).await
+        self.provider.invoke_action(id, action_key, user_input).await
     }
 }

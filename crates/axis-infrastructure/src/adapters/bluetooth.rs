@@ -89,6 +89,7 @@ enum PairResponse {
 
 struct BluetoothAgent {
     pair_tx: mpsc::Sender<(PendingPairing, oneshot::Sender<PairResponse>)>,
+    connection: Connection,
 }
 
 #[zbus::interface(name = "org.bluez.Agent1")]
@@ -99,9 +100,12 @@ impl BluetoothAgent {
         &self,
         device: OwnedObjectPath,
     ) -> Result<String, zbus::fdo::Error> {
+        let device_name = self.resolve_device_name(&device).await.unwrap_or_else(|| {
+            device.as_str().to_string()
+        });
         let req = PendingPairing {
             device_path: device.to_string(),
-            device_name: device.to_string(),
+            device_name,
             passkey: None,
             pairing_type: PairingType::PinCode,
         };
@@ -116,9 +120,12 @@ impl BluetoothAgent {
         &self,
         device: OwnedObjectPath,
     ) -> Result<u32, zbus::fdo::Error> {
+        let device_name = self.resolve_device_name(&device).await.unwrap_or_else(|| {
+            device.as_str().to_string()
+        });
         let req = PendingPairing {
             device_path: device.to_string(),
-            device_name: device.to_string(),
+            device_name,
             passkey: None,
             pairing_type: PairingType::Passkey,
         };
@@ -134,9 +141,12 @@ impl BluetoothAgent {
         device: OwnedObjectPath,
         passkey: u32,
     ) -> Result<(), zbus::fdo::Error> {
+        let device_name = self.resolve_device_name(&device).await.unwrap_or_else(|| {
+            device.as_str().to_string()
+        });
         let req = PendingPairing {
             device_path: device.to_string(),
-            device_name: device.to_string(),
+            device_name,
             passkey: Some(format!("{passkey:06}")),
             pairing_type: PairingType::Confirmation,
         };
@@ -145,15 +155,9 @@ impl BluetoothAgent {
 
     async fn request_authorization(
         &self,
-        device: OwnedObjectPath,
+        _device: OwnedObjectPath,
     ) -> Result<(), zbus::fdo::Error> {
-        let req = PendingPairing {
-            device_path: device.to_string(),
-            device_name: device.to_string(),
-            passkey: None,
-            pairing_type: PairingType::Authorization,
-        };
-        self.wait_for_response(req).await.map(|_| ())
+        Ok(())
     }
 
     async fn authorize_service(
@@ -170,6 +174,16 @@ impl BluetoothAgent {
 }
 
 impl BluetoothAgent {
+    async fn resolve_device_name(&self, device: &OwnedObjectPath) -> Option<String> {
+        let Ok(builder) = BluetoothDevice1Proxy::builder(&self.connection).path(device.clone()) else {
+            return None;
+        };
+        let Ok(proxy) = builder.build().await else {
+            return None;
+        };
+        proxy.name().await.ok()
+    }
+
     fn reject() -> zbus::fdo::Error {
         zbus::fdo::Error::Failed("Rejected".into())
     }
@@ -248,6 +262,7 @@ impl BlueZProvider {
 
         let agent = BluetoothAgent {
             pair_tx: pair_tx_agent,
+            connection: conn_for_agent.clone(),
         };
 
         let agent_path = OwnedObjectPath::try_from("/org/axis/bluetooth_agent")
@@ -460,7 +475,7 @@ impl BluetoothProvider for BlueZProvider {
             .map_err(|e| BluetoothError::ProviderError(e.to_string()))?
             .build()
             .await
-            .map_err(|e| BluetoothError::ProviderError(format!("Proxy: {e}")))?;
+            .map_err(|e| BluetoothError::ConnectionFailed(format!("Proxy: {e}")))?;
         proxy
             .disconnect()
             .await
@@ -496,7 +511,8 @@ impl BluetoothProvider for BlueZProvider {
             info!("[bluetooth] Set powered: {powered}");
 
             let prev = self.status_tx.borrow().clone();
-            let _ = self.status_tx.send(BluetoothStatus { powered, ..prev });
+            let is_scanning = if powered { prev.is_scanning } else { false };
+            let _ = self.status_tx.send(BluetoothStatus { powered, is_scanning, ..prev });
         }
         Ok(())
     }
@@ -559,10 +575,10 @@ impl BluetoothProvider for BlueZProvider {
         Ok(())
     }
 
-    async fn pair_accept(&self) -> Result<(), BluetoothError> {
+    async fn pair_accept(&self, value: Vec<u8>) -> Result<(), BluetoothError> {
         let response = self.current_pair_response.lock().unwrap().take();
         if let Some(tx) = response {
-            let _ = tx.send(PairResponse::Accept(Vec::new()));
+            let _ = tx.send(PairResponse::Accept(value));
             self.status_tx.send_modify(|s| s.pending_pairing = None);
         }
         Ok(())

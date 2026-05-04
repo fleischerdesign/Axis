@@ -19,6 +19,7 @@ pub struct Notification {
     pub timestamp: i64,
     pub internal_id: u64,
     pub ignore_dnd: bool,
+    pub input_placeholder: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

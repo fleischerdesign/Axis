@@ -14,7 +14,7 @@ const MAX_HISTORY: usize = 20;
 enum Cmd {
     Show(Notification),
     Close(u32),
-    Action(u32, String),
+    Action(u32, String, Option<String>),
 }
 
 struct NotificationsIface {
@@ -70,6 +70,7 @@ impl NotificationsIface {
                 .as_secs() as i64,
             internal_id: 0,
             ignore_dnd: urgency == 2,
+            input_placeholder: None,
         };
 
         let _ = self.cmd_tx.try_send(Cmd::Show(n));
@@ -187,13 +188,13 @@ impl ZbusNotificationProvider {
                         let _ = NotificationsIface::notification_closed(emitter, id, 2).await;
                         action_handlers_bg.lock().unwrap().retain(|(nid, _), _: &mut ActionHandler| *nid != id);
                     }
-                    Cmd::Action(id, key) => {
+                    Cmd::Action(id, key, user_input) => {
                         info!("[notifications] Notification {id} action: {key}");
 
                         {
                             let handlers = action_handlers_bg.lock().unwrap();
                             if let Some(handler) = handlers.get(&(id, key.clone())) {
-                                handler();
+                                handler(user_input);
                             }
                         }
 
@@ -236,9 +237,9 @@ impl NotificationProvider for ZbusNotificationProvider {
             .map_err(|e| NotificationError::ProviderError(e.to_string()))
     }
 
-    async fn invoke_action(&self, id: u32, action_key: &str) -> Result<(), NotificationError> {
+    async fn invoke_action(&self, id: u32, action_key: &str, user_input: Option<String>) -> Result<(), NotificationError> {
         self.cmd_tx
-            .send(Cmd::Action(id, action_key.to_string()))
+            .send(Cmd::Action(id, action_key.to_string(), user_input))
             .await
             .map_err(|e| NotificationError::ProviderError(e.to_string()))
     }

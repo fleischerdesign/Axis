@@ -80,10 +80,10 @@ impl NotificationPresenter {
         });
     }
 
-    pub fn invoke_action(&self, id: u32, action_key: String) {
+    pub fn invoke_action(&self, id: u32, action_key: String, user_input: Option<String>) {
         let uc = self.invoke_action_use_case.clone();
         tokio::spawn(async move {
-            if let Err(e) = uc.execute(id, &action_key).await {
+            if let Err(e) = uc.execute(id, &action_key, user_input).await {
                 log::error!("[notifications] invoke_action failed: {e}");
             }
         });

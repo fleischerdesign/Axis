@@ -28,6 +28,7 @@ impl MockNotificationProvider {
                     .as_secs() as i64,
                 internal_id: 0,
                 ignore_dnd: false,
+                input_placeholder: None,
             }],
             last_id: 1,
         };
@@ -53,7 +54,7 @@ impl NotificationProvider for MockNotificationProvider {
         Ok(())
     }
 
-    async fn invoke_action(&self, _id: u32, _action_key: &str) -> Result<(), NotificationError> {
+    async fn invoke_action(&self, _id: u32, _action_key: &str, _user_input: Option<String>) -> Result<(), NotificationError> {
         Ok(())
     }
 

@@ -856,8 +856,8 @@ fn main() -> glib::ExitCode {
             np.close_notification(id);
         });
         let np_act = notification_presenter.clone();
-        let on_action: std::rc::Rc<dyn Fn(u32, String)> = std::rc::Rc::new(move |id, key| {
-            np_act.invoke_action(id, key);
+        let on_action: std::rc::Rc<dyn Fn(u32, String, Option<String>)> = std::rc::Rc::new(move |id, key, user_input| {
+            np_act.invoke_action(id, key, user_input);
         });
 
         let toast = std::rc::Rc::new(NotificationToastManager::new(app, on_close.clone(), on_action.clone()));
@@ -1109,6 +1109,7 @@ fn subscribe_continuity_notifications(
                                 .as_secs() as i64,
                             internal_id: 0,
                             ignore_dnd: true,
+                            input_placeholder: None,
                         };
 
                         let mut action_handlers: HashMap<
@@ -1118,7 +1119,7 @@ fn subscribe_continuity_notifications(
 
                         action_handlers.insert("accept".into(), Arc::new({
                             let uc = confirm_pin_uc.clone();
-                            move || {
+                            move |_: Option<String>| {
                                 let uc = uc.clone();
                                 tokio::spawn(async move {
                                     if let Err(e) = uc.execute().await {
@@ -1130,7 +1131,7 @@ fn subscribe_continuity_notifications(
 
                         action_handlers.insert("reject".into(), Arc::new({
                             let uc = reject_pin_uc.clone();
-                            move || {
+                            move |_: Option<String>| {
                                 let uc = uc.clone();
                                 tokio::spawn(async move {
                                     if let Err(e) = uc.execute().await {
@@ -1169,6 +1170,7 @@ fn subscribe_continuity_notifications(
                                 .as_secs() as i64,
                             internal_id: 0,
                             ignore_dnd: false,
+                            input_placeholder: None,
                         };
 
                         if let Err(e) = show_notification_uc.execute(notification, HashMap::new()).await {
@@ -1264,20 +1266,23 @@ fn subscribe_bluetooth_pairing_notifications(
                 if last_notified.as_deref() != Some(device_path) {
                     last_notified = Some(device_path.clone());
 
-                    let body = match pairing.pairing_type {
+                    let (body, input_placeholder) = match pairing.pairing_type {
                         axis_domain::models::bluetooth::PairingType::Confirmation => {
-                            pairing.passkey.as_ref().map(|pk| {
-                                format!("PIN: {pk}\nBestätigen Sie, dass der PIN auf dem Gerät übereinstimmt.")
-                            }).unwrap_or_else(|| "Bestätigen Sie die Kopplung.".to_string())
+                            let msg = pairing.passkey.as_ref().map(|pk| {
+                                format!("PIN: {pk}\nGeben Sie die Kopplung frei, wenn der PIN auf dem Gerät übereinstimmt.")
+                            }).unwrap_or_else(|| "Bestätigen Sie die Kopplung.".to_string());
+                            (msg, None)
                         }
                         axis_domain::models::bluetooth::PairingType::PinCode => {
-                            "Geben Sie den PIN-Code ein, der am Gerät angezeigt wird.".to_string()
+                            ("Geben Sie den PIN-Code ein, der am Gerät angezeigt wird.".to_string(),
+                             Some("PIN-Code".to_string()))
                         }
                         axis_domain::models::bluetooth::PairingType::Passkey => {
-                            "Geben Sie den Passkey ein.".to_string()
+                            ("Geben Sie den Passkey ein.".to_string(),
+                             Some("Passkey".to_string()))
                         }
                         axis_domain::models::bluetooth::PairingType::Authorization => {
-                            "Möchten Sie die Kopplung erlauben?".to_string()
+                            ("Möchten Sie die Kopplung erlauben?".to_string(), None)
                         }
                     };
 
@@ -1305,6 +1310,7 @@ fn subscribe_bluetooth_pairing_notifications(
                             .as_secs() as i64,
                         internal_id: 0,
                         ignore_dnd: true,
+                        input_placeholder,
                     };
 
                     let mut action_handlers: HashMap<
@@ -1314,10 +1320,11 @@ fn subscribe_bluetooth_pairing_notifications(
 
                     action_handlers.insert("accept".into(), Arc::new({
                         let uc = pair_accept_uc.clone();
-                        move || {
+                        move |input: Option<String>| {
                             let uc = uc.clone();
+                            let value = input.map(|s| s.into_bytes()).unwrap_or_default();
                             tokio::spawn(async move {
-                                if let Err(e) = uc.execute().await {
+                                if let Err(e) = uc.execute(value).await {
                                     log::error!("[bluetooth:notifications] pair_accept failed: {e}");
                                 }
                             });
@@ -1326,7 +1333,7 @@ fn subscribe_bluetooth_pairing_notifications(
 
                     action_handlers.insert("reject".into(), Arc::new({
                         let uc = pair_reject_uc.clone();
-                        move || {
+                        move |_: Option<String>| {
                             let uc = uc.clone();
                             tokio::spawn(async move {
                                 if let Err(e) = uc.execute().await {

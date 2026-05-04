@@ -88,6 +88,7 @@ pub struct QuickSettingsPopup {
     is_bright_updating: Rc<Cell<bool>>,
     is_bright_dragging: Rc<Cell<bool>>,
     notification_presenter: Rc<RefCell<Option<Rc<NotificationPresenter>>>>,
+    bluetooth_presenter: Rc<RefCell<Option<Rc<BluetoothPresenter>>>>,
     on_escape: Rc<RefCell<Option<Box<dyn Fn() + 'static>>>>,
 }
 
@@ -112,6 +113,7 @@ impl QuickSettingsPopup {
             is_bright_updating: Rc::new(Cell::new(false)),
             is_bright_dragging: Rc::new(Cell::new(false)),
             notification_presenter: Rc::new(RefCell::new(None)),
+            bluetooth_presenter: Rc::new(RefCell::new(None)),
             on_escape: Rc::new(RefCell::new(None)),
         };
 
@@ -278,6 +280,7 @@ impl QuickSettingsPopup {
     }
 
     pub fn setup_bluetooth_sub_page(&self, presenter: Rc<BluetoothPresenter>) {
+        *self.bluetooth_presenter.borrow_mut() = Some(presenter.clone());
         let stack = self.qs_stack.get().expect("stack not initialized").clone();
         let page = crate::widgets::sub_pages::bluetooth_page::BluetoothPage::new(
             presenter,
@@ -400,6 +403,9 @@ impl PopupView for QuickSettingsPopup {
         self.popup_container().animate_hide(&self.popup_window());
         if let Some(presenter) = self.notification_presenter.borrow().as_ref() {
             presenter.set_popup_open(false);
+        }
+        if let Some(presenter) = self.bluetooth_presenter.borrow().as_ref() {
+            presenter.stop_scan();
         }
         self.reset_to_main();
     }

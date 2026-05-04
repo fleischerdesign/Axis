@@ -4,7 +4,7 @@ use std::rc::Rc;
 use crate::widgets::components::swipe_dismiss::SwipeDismiss;
 
 pub type CloseCallback = Rc<dyn Fn(u32)>;
-pub type ActionCallback = Rc<dyn Fn(u32, String)>;
+pub type ActionCallback = Rc<dyn Fn(u32, String, Option<String>)>;
 
 pub fn format_time(timestamp: i64) -> String {
     let now = chrono::Local::now().timestamp();
@@ -111,6 +111,16 @@ impl NotificationCard {
         card.append(&header_box);
         card.append(&content_box);
 
+        let entry: Option<gtk4::Entry> = data.input_placeholder.as_ref().map(|placeholder| {
+            let e = gtk4::Entry::builder()
+                .placeholder_text(placeholder)
+                .css_classes(vec!["notification-input".to_string()])
+                .build();
+            e.set_margin_top(4);
+            card.append(&e);
+            e
+        });
+
         if !data.actions.is_empty() {
             let action_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
             action_box.set_margin_top(8);
@@ -125,9 +135,18 @@ impl NotificationCard {
                 let act_id = data.id;
                 let act_key = action.key.clone();
                 let act_cb = on_action.clone();
-                btn.connect_clicked(move |_| {
-                    act_cb(act_id, act_key.clone());
-                });
+                if let Some(ref entry) = entry {
+                    let entry_for_btn = entry.clone();
+                    btn.connect_clicked(move |_| {
+                        let text = entry_for_btn.buffer().text();
+                        let input = if text.is_empty() { None } else { Some(text.to_string()) };
+                        act_cb(act_id, act_key.clone(), input);
+                    });
+                } else {
+                    btn.connect_clicked(move |_| {
+                        act_cb(act_id, act_key.clone(), None);
+                    });
+                }
                 action_box.append(&btn);
             }
             card.append(&action_box);
@@ -139,7 +158,7 @@ impl NotificationCard {
             let click_id = data.id;
             let click_cb = on_action.clone();
             click.connect_pressed(move |_, _, _, _| {
-                click_cb(click_id, "default".to_string());
+                click_cb(click_id, "default".to_string(), None);
             });
             card.add_controller(click);
         }

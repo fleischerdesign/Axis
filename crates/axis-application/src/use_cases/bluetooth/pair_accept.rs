@@ -10,7 +10,7 @@ impl PairAcceptUseCase {
         Self { provider }
     }
 
-    pub async fn execute(&self) -> Result<(), BluetoothError> {
-        self.provider.pair_accept().await
+    pub async fn execute(&self, value: Vec<u8>) -> Result<(), BluetoothError> {
+        self.provider.pair_accept(value).await
     }
 }

@@ -94,7 +94,7 @@ impl BluetoothProvider for MockBluetoothProvider {
         Ok(())
     }
 
-    async fn pair_accept(&self) -> Result<(), BluetoothError> {
+    async fn pair_accept(&self, _value: Vec<u8>) -> Result<(), BluetoothError> {
         self.status_tx.send_modify(|s| s.pending_pairing = None);
         Ok(())
     }
