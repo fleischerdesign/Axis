@@ -103,4 +103,15 @@ impl BluetoothProvider for MockBluetoothProvider {
         self.status_tx.send_modify(|s| s.pending_pairing = None);
         Ok(())
     }
+
+    async fn unpair(&self, id: &str) -> Result<(), BluetoothError> {
+        let mut status = self.status.lock().unwrap();
+        if let Some(pos) = status.devices.iter().position(|d| d.id == id) {
+            status.devices.remove(pos);
+            let _ = self.status_tx.send(status.clone());
+            Ok(())
+        } else {
+            Err(BluetoothError::DeviceNotFound(id.to_string()))
+        }
+    }
 }

@@ -7,6 +7,7 @@ use axis_application::use_cases::bluetooth::disconnect::DisconnectBluetoothDevic
 use axis_application::use_cases::bluetooth::set_powered::SetBluetoothPoweredUseCase;
 use axis_application::use_cases::bluetooth::start_scan::StartBluetoothScanUseCase;
 use axis_application::use_cases::bluetooth::stop_scan::StopBluetoothScanUseCase;
+use axis_application::use_cases::bluetooth::unpair::UnpairBluetoothDeviceUseCase;
 use std::sync::Arc;
 use std::rc::Rc;
 
@@ -15,6 +16,7 @@ pub trait BluetoothView: View<BluetoothStatus> {
     fn on_scan_toggled(&self, f: Box<dyn Fn(bool) + 'static>);
     fn on_device_connect(&self, f: Box<dyn Fn(String) + 'static>);
     fn on_device_disconnect(&self, f: Box<dyn Fn(String) + 'static>);
+    fn on_device_unpair(&self, f: Box<dyn Fn(String) + 'static>);
 }
 
 impl<T: BluetoothView + ?Sized> BluetoothView for Rc<T> {
@@ -30,6 +32,9 @@ impl<T: BluetoothView + ?Sized> BluetoothView for Rc<T> {
     fn on_device_disconnect(&self, f: Box<dyn Fn(String) + 'static>) {
         (**self).on_device_disconnect(f);
     }
+    fn on_device_unpair(&self, f: Box<dyn Fn(String) + 'static>) {
+        (**self).on_device_unpair(f);
+    }
 }
 
 pub struct BluetoothPresenter {
@@ -39,6 +44,7 @@ pub struct BluetoothPresenter {
     set_powered_uc: Arc<SetBluetoothPoweredUseCase>,
     start_scan_uc: Arc<StartBluetoothScanUseCase>,
     stop_scan_uc: Arc<StopBluetoothScanUseCase>,
+    unpair_uc: Arc<UnpairBluetoothDeviceUseCase>,
 }
 
 impl BluetoothPresenter {
@@ -50,6 +56,7 @@ impl BluetoothPresenter {
         set_powered_uc: Arc<SetBluetoothPoweredUseCase>,
         start_scan_uc: Arc<StartBluetoothScanUseCase>,
         stop_scan_uc: Arc<StopBluetoothScanUseCase>,
+        unpair_uc: Arc<UnpairBluetoothDeviceUseCase>,
         rt: &tokio::runtime::Runtime,
     ) -> Self {
         let initial_status = rt.block_on(async {
@@ -81,6 +88,7 @@ impl BluetoothPresenter {
             set_powered_uc,
             start_scan_uc,
             stop_scan_uc,
+            unpair_uc,
         }
     }
 
@@ -131,6 +139,16 @@ impl BluetoothPresenter {
             });
         }));
 
+        let this_u = self.clone();
+        view.on_device_unpair(Box::new(move |id| {
+            let uc = this_u.unpair_uc.clone();
+            tokio::spawn(async move {
+                if let Err(e) = uc.execute(&id).await {
+                    log::error!("[settings-bluetooth] unpair failed: {e}");
+                }
+            });
+        }));
+
         self.inner.add_view(view);
     }
 
@@ -148,6 +166,7 @@ impl Clone for BluetoothPresenter {
             set_powered_uc: self.set_powered_uc.clone(),
             start_scan_uc: self.start_scan_uc.clone(),
             stop_scan_uc: self.stop_scan_uc.clone(),
+            unpair_uc: self.unpair_uc.clone(),
         }
     }
 }

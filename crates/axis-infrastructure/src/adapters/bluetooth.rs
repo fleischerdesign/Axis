@@ -22,6 +22,9 @@ trait BluetoothDevice1 {
     #[zbus(property)]
     fn paired(&self) -> zbus::Result<bool>;
     #[zbus(property)]
+    fn trusted(&self) -> zbus::Result<bool>;
+    fn set_trusted(&self, value: bool) -> zbus::Result<()>;
+    #[zbus(property)]
     fn address(&self) -> zbus::Result<String>;
     #[zbus(property)]
     fn icon(&self) -> zbus::Result<String>;
@@ -41,6 +44,7 @@ trait Adapter1 {
     fn discovering(&self) -> zbus::Result<bool>;
     fn start_discovery(&self) -> zbus::Result<()>;
     fn stop_discovery(&self) -> zbus::Result<()>;
+    fn remove_device(&self, device: &OwnedObjectPath) -> zbus::Result<()>;
 }
 
 #[proxy(
@@ -590,6 +594,46 @@ impl BluetoothProvider for BlueZProvider {
             let _ = tx.send(PairResponse::Reject);
             self.status_tx.send_modify(|s| s.pending_pairing = None);
         }
+        Ok(())
+    }
+
+    async fn unpair(&self, id: &str) -> Result<(), BluetoothError> {
+        let device_path = OwnedObjectPath::try_from(id.to_string())
+            .map_err(|e| BluetoothError::ProviderError(e.to_string()))?;
+
+        let device_proxy = BluetoothDevice1Proxy::builder(&self.connection)
+            .path(device_path.clone())
+            .map_err(|e| BluetoothError::ProviderError(e.to_string()))?
+            .build()
+            .await
+            .map_err(|e| BluetoothError::ConnectionFailed(format!("Proxy: {e}")))?;
+        let _ = device_proxy.set_trusted(false).await;
+
+        let om_proxy = ObjectManagerProxy::new(&self.connection)
+            .await
+            .map_err(|e| BluetoothError::ProviderError(e.to_string()))?;
+        let objects = om_proxy
+            .get_managed_objects()
+            .await
+            .map_err(|e| BluetoothError::ProviderError(e.to_string()))?;
+
+        if let Some(adapter_path) = Self::find_adapter_path(&objects) {
+            let adapter_proxy = Adapter1Proxy::builder(&self.connection)
+                .path(adapter_path)
+                .map_err(|e| BluetoothError::ProviderError(e.to_string()))?
+                .build()
+                .await
+                .map_err(|e| BluetoothError::ConnectionFailed(format!("Proxy: {e}")))?;
+            adapter_proxy
+                .remove_device(&device_path)
+                .await
+                .map_err(|e| BluetoothError::ProviderError(format!("RemoveDevice: {e}")))?;
+            info!("[bluetooth] Unpaired: {id}");
+        }
+
+        let devices = Self::fetch_devices(&self.connection).await;
+        let prev = self.status_tx.borrow().clone();
+        let _ = self.status_tx.send(BluetoothStatus { devices, ..prev });
         Ok(())
     }
 }

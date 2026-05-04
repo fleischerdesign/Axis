@@ -42,6 +42,7 @@ use axis_application::use_cases::bluetooth::disconnect::DisconnectBluetoothDevic
 use axis_application::use_cases::bluetooth::set_powered::SetBluetoothPoweredUseCase;
 use axis_application::use_cases::bluetooth::start_scan::StartBluetoothScanUseCase;
 use axis_application::use_cases::bluetooth::stop_scan::StopBluetoothScanUseCase;
+use axis_application::use_cases::bluetooth::unpair::UnpairBluetoothDeviceUseCase;
 
 use axis_application::use_cases::continuity::set_enabled::SetContinuityEnabledUseCase;
 use axis_application::use_cases::continuity::connect_to_peer::ConnectToPeerUseCase;
@@ -182,6 +183,7 @@ fn build_ui(app: &adw::Application, theme_css: Rc<gtk4::CssProvider>, rt: &tokio
     let bt_set_powered = Arc::new(SetBluetoothPoweredUseCase::new(bluetooth_provider.clone()));
     let bt_start_scan = Arc::new(StartBluetoothScanUseCase::new(bluetooth_provider.clone()));
     let bt_stop_scan = Arc::new(StopBluetoothScanUseCase::new(bluetooth_provider.clone()));
+    let bt_unpair = Arc::new(UnpairBluetoothDeviceUseCase::new(bluetooth_provider.clone()));
 
     let subscribe_continuity = Arc::new(SubscribeUseCase::new(continuity_provider.clone()));
     let get_continuity_status = Arc::new(GetStatusUseCase::new(continuity_provider.clone()));
@@ -201,7 +203,7 @@ fn build_ui(app: &adw::Application, theme_css: Rc<gtk4::CssProvider>, rt: &tokio
     let accounts_presenter = Rc::new(AccountsPresenter::new(subscribe_cloud, authenticate_cloud));
     let appearance_presenter = Rc::new(AppearancePresenter::new(subscribe_appearance, set_accent, set_scheme, set_wallpaper));
     let network_presenter = Rc::new(NetworkPresenter::new(subscribe_network, get_network_status, scan_wifi, connect_to_ap, disconnect_wifi, rt));
-    let bluetooth_presenter = Rc::new(BluetoothPresenter::new(subscribe_bluetooth, get_bluetooth_status, bt_connect, bt_disconnect, bt_set_powered, bt_start_scan, bt_stop_scan, rt));
+    let bluetooth_presenter = Rc::new(BluetoothPresenter::new(subscribe_bluetooth, get_bluetooth_status, bt_connect, bt_disconnect, bt_set_powered, bt_start_scan, bt_stop_scan, bt_unpair, rt));
     let continuity_settings_presenter = Rc::new(ContinuitySettingsPresenter::new(
         subscribe_continuity, get_continuity_status,
         continuity_set_enabled, continuity_connect, continuity_confirm_pin,

@@ -15,6 +15,7 @@ pub struct BluetoothPage {
     scan_callback: Rc<RefCell<Option<Box<dyn Fn(bool) + 'static>>>>,
     connect_callback: Rc<RefCell<Option<Box<dyn Fn(String) + 'static>>>>,
     disconnect_callback: Rc<RefCell<Option<Box<dyn Fn(String) + 'static>>>>,
+    unpair_callback: Rc<RefCell<Option<Box<dyn Fn(String) + 'static>>>>,
 }
 
 impl BluetoothPage {
@@ -58,6 +59,7 @@ impl BluetoothPage {
             scan_callback: Rc::new(RefCell::new(None)),
             connect_callback: Rc::new(RefCell::new(None)),
             disconnect_callback: Rc::new(RefCell::new(None)),
+            unpair_callback: Rc::new(RefCell::new(None)),
         });
 
         let cb = page.toggle_callback.clone();
@@ -123,7 +125,8 @@ impl View<BluetoothStatus> for BluetoothPage {
             let is_connected = dev.connected;
             let cb_c = self.connect_callback.clone();
             let cb_d = self.disconnect_callback.clone();
-            
+            let cb_u = self.unpair_callback.clone();
+
             connect_btn.connect_clicked(move |_| {
                 if is_connected {
                     if let Some(f) = cb_d.borrow().as_ref() { f(id.clone()); }
@@ -133,6 +136,23 @@ impl View<BluetoothStatus> for BluetoothPage {
             });
 
             row.add_suffix(&connect_btn);
+
+            if dev.paired && !dev.connected {
+                let forget_btn = gtk4::Button::builder()
+                    .label("Forget")
+                    .valign(gtk4::Align::Center)
+                    .build();
+                forget_btn.add_css_class("destructive-action");
+
+                let id_forget = dev.id.clone();
+                let cb_u_forget = cb_u.clone();
+                forget_btn.connect_clicked(move |_| {
+                    if let Some(f) = cb_u_forget.borrow().as_ref() { f(id_forget.clone()); }
+                });
+
+                row.add_suffix(&forget_btn);
+            }
+
             self.device_list.append(&row);
         }
     }
@@ -150,5 +170,8 @@ impl BluetoothView for BluetoothPage {
     }
     fn on_device_disconnect(&self, f: Box<dyn Fn(String) + 'static>) {
         *self.disconnect_callback.borrow_mut() = Some(f);
+    }
+    fn on_device_unpair(&self, f: Box<dyn Fn(String) + 'static>) {
+        *self.unpair_callback.borrow_mut() = Some(f);
     }
 }
