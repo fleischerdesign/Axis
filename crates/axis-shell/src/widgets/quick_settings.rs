@@ -362,7 +362,7 @@ impl QuickSettingsPopup {
         }));
         presenter.add_view(view);
 
-        self.grid.attach(&tile.container, 1, 3, 1, 1);
+        self.grid.attach(&tile.container, 3, 1, 1, 1);
     }
 
     pub fn reset_to_main(&self) {
