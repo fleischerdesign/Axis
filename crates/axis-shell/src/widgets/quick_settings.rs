@@ -20,9 +20,6 @@ use crate::presentation::network::NetworkPresenter;
 use crate::presentation::bluetooth::BluetoothPresenter;
 use crate::presentation::nightlight::NightlightPresenter;
 use crate::presentation::battery::BatteryPresenter;
-use crate::presentation::ssh::SshPresenter;
-use axis_domain::models::ssh::SshStatus;
-use axis_presentation::view::FnView;
 use std::sync::Arc;
 use std::rc::Rc;
 use std::cell::{Cell, OnceCell, RefCell};
@@ -326,43 +323,6 @@ impl QuickSettingsPopup {
             move || stack.set_visible_child_name("main"),
         );
         self.qs_stack.get().expect("stack not initialized").add_named(&page.container, Some("nightlight"));
-    }
-
-    pub fn setup_ssh_sub_page(&self, presenter: Rc<SshPresenter>) {
-        let stack = self.qs_stack.get().expect("stack not initialized").clone();
-        let page = crate::widgets::sub_pages::ssh_page::SshPage::new(
-            presenter,
-            move || stack.set_visible_child_name("main"),
-        );
-        self.qs_stack.get().expect("stack not initialized").add_named(&page.container, Some("ssh"));
-    }
-
-    pub fn setup_ssh_tile(&self, presenter: Rc<SshPresenter>) {
-        let stack = self.qs_stack.get().expect("stack not initialized").clone();
-        let tile = ToggleTile::new("SSH", "network-server-symbolic", true);
-
-        let stack_click = stack.clone();
-        tile.on_clicked(move || {
-            stack_click.set_visible_child_name("ssh");
-        });
-
-        let stack_arrow = stack.clone();
-        tile.on_arrow_clicked(move || {
-            stack_arrow.set_visible_child_name("ssh");
-        });
-
-        let tile_label = tile.clone();
-        let view = Box::new(FnView::new(move |status: &SshStatus| {
-            let label = if status.active_count > 0 {
-                format!("SSH · {} active", status.active_count)
-            } else {
-                "SSH".to_string()
-            };
-            tile_label.set_label(&label);
-        }));
-        presenter.add_view(view);
-
-        self.grid.attach(&tile.container, 3, 1, 1, 1);
     }
 
     pub fn reset_to_main(&self) {

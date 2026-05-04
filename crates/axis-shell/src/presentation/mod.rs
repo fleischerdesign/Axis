@@ -1,4 +1,3 @@
-pub mod ssh;
 pub mod appearance;
 pub mod agenda;
 pub mod battery;

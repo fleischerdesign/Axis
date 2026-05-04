@@ -1,4 +1,3 @@
-pub mod ssh;
 pub mod agenda;
 pub mod airplane;
 pub mod audio;

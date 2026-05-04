@@ -1,5 +1,4 @@
 pub mod airplane;
-pub mod ssh;
 pub mod appearance;
 pub mod audio;
 pub mod bluetooth;
