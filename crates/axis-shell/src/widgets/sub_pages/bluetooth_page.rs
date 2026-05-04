@@ -15,7 +15,6 @@ struct DeviceEntry {
 
 pub struct BluetoothPage {
     pub container: gtk4::Box,
-    _presenter: Rc<BluetoothPresenter>,
 }
 
 impl BluetoothPage {
@@ -39,14 +38,10 @@ impl BluetoothPage {
         scrolled.set_child(Some(&list));
         container.append(&scrolled);
 
-        let presenter_c = presenter.clone();
         let on_back = Rc::new(on_back);
         header.connect_back(move || {
-            presenter_c.stop_scan();
             on_back();
         });
-
-        presenter.start_scan();
 
         let rows: Rc<RefCell<HashMap<String, DeviceEntry>>> = Rc::new(RefCell::new(HashMap::new()));
         let rows_c = rows.clone();
@@ -60,7 +55,7 @@ impl BluetoothPage {
         });
         presenter.add_view(view);
 
-        Self { container, _presenter: presenter }
+        Self { container }
     }
 }
 
