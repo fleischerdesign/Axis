@@ -62,28 +62,20 @@ impl ProcSshProvider {
                 Err(_) => continue,
             };
 
-            if process_name.contains("listener")
-                || process_name.contains("[net]")
-                || process_name.contains("[accepted]")
-                || process_name.ends_with(" [priv]")
-            {
+            if !process_name.starts_with("sshd: ") || process_name.contains("listener") || process_name.contains("[net]") || process_name.contains("[accepted]") {
                 continue;
             }
 
-            let rest = if let Some(r) = process_name.strip_prefix("sshd: ") {
-                r
-            } else if let Some(r) = process_name.strip_prefix("sshd-session: ") {
-                r
-            } else {
-                continue;
-            };
+            let rest = process_name.strip_prefix("sshd: ").unwrap();
 
             let (username, terminal) = if let Some(at_pos) = rest.find('@') {
                 let user = &rest[..at_pos];
                 let term = &rest[at_pos + 1..];
                 (user.to_string(), term.to_string())
+            } else if rest.ends_with(" [priv]") {
+                continue;
             } else {
-                let user = rest.to_string();
+                let user = rest.trim_end_matches(" [priv]").to_string();
                 (user, "notty".to_string())
             };
 
@@ -104,70 +96,25 @@ impl ProcSshProvider {
     }
 
     fn read_ssh_connection(pid: u32) -> Option<String> {
-        if let Some(ip) = Self::try_read_environ(pid) {
-            return Some(ip);
-        }
-        let children = Self::read_child_pids(pid);
-        for child_pid in children {
-            if let Some(ip) = Self::try_read_environ(child_pid) {
-                return Some(ip);
-            }
-        }
-        None
-    }
-
-    fn try_read_environ(pid: u32) -> Option<String> {
         let environ_path = std::path::PathBuf::from(format!("/proc/{}/environ", pid));
-        let data = std::fs::read(&environ_path).ok()?;
+        let data = match std::fs::read(&environ_path) {
+            Ok(d) => d,
+            Err(_) => return None,
+        };
 
         for var in data.split(|&b| b == 0) {
             if let Ok(s) = String::from_utf8(var.to_vec()) {
                 if let Some(value) = s.strip_prefix("SSH_CONNECTION=") {
-                    return Some(value.split(' ').next()?.to_string());
+                    let ip = value.split(' ').next().unwrap_or(value);
+                    return Some(ip.to_string());
                 }
                 if let Some(value) = s.strip_prefix("SSH_CLIENT=") {
-                    return Some(value.split(' ').next()?.to_string());
+                    let ip = value.split(' ').next().unwrap_or(value);
+                    return Some(ip.to_string());
                 }
             }
         }
         None
-    }
-
-    fn read_child_pids(parent_pid: u32) -> Vec<u32> {
-        let mut children = Vec::new();
-        let dir = match std::fs::read_dir("/proc") {
-            Ok(d) => d,
-            Err(_) => return children,
-        };
-        for entry in dir.flatten() {
-            let file_name = entry.file_name();
-            let pid_str = match file_name.to_str() {
-                Some(s) => s,
-                None => continue,
-            };
-            let child_pid: u32 = match pid_str.parse() {
-                Ok(p) => p,
-                Err(_) => continue,
-            };
-            let stat_path = std::path::PathBuf::from(format!("/proc/{}/stat", child_pid));
-            let stat_data = match std::fs::read_to_string(&stat_path) {
-                Ok(d) => d,
-                Err(_) => continue,
-            };
-            let after_paren = match stat_data.find(')') {
-                Some(pos) => &stat_data[pos + 2..],
-                None => continue,
-            };
-            let fields: Vec<&str> = after_paren.split(' ').collect();
-            let ppid: u32 = match fields.get(1).and_then(|s| s.parse().ok()) {
-                Some(p) => p,
-                None => continue,
-            };
-            if ppid == parent_pid {
-                children.push(child_pid);
-            }
-        }
-        children
     }
 
     fn read_duration(pid: u32) -> String {
