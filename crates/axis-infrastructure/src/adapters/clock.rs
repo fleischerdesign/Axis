@@ -7,11 +7,11 @@ use chrono::Local;
 use std::sync::Arc;
 use std::time::Duration;
 
-pub struct MockClockProvider {
+pub struct SystemClockProvider {
     status_tx: watch::Sender<TimeStatus>,
 }
 
-impl MockClockProvider {
+impl SystemClockProvider {
     pub fn new() -> Arc<Self> {
         let (tx, _) = watch::channel(TimeStatus {
             current_time: Local::now(),
@@ -33,7 +33,7 @@ impl MockClockProvider {
 }
 
 #[async_trait]
-impl ClockProvider for MockClockProvider {
+impl ClockProvider for SystemClockProvider {
     async fn get_status(&self) -> Result<TimeStatus, ClockError> {
         Ok(self.status_tx.borrow().clone())
     }

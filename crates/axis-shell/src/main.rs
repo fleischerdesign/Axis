@@ -70,7 +70,7 @@ use axis_domain::ports::mpris::MprisProvider;
 use axis_domain::models::dnd::DndStatus;
 
 use axis_infrastructure::adapters::google_auth::GoogleCloudAuthProvider;
-use axis_infrastructure::mocks::clock::MockClockProvider;
+use axis_infrastructure::adapters::clock::SystemClockProvider;
 use axis_infrastructure::adapters::power::LogindPowerProvider;
 use axis_infrastructure::adapters::workspaces::NiriWorkspaceProvider;
 use axis_infrastructure::adapters::popups::LocalPopupProvider;
@@ -238,7 +238,7 @@ fn main() -> glib::ExitCode {
     let appearance_provider: Arc<dyn AppearanceProvider> = rt.block_on(ConfigAppearanceProvider::new(config_provider.clone()));
     let dnd_provider: Arc<dyn DndProvider> = rt.block_on(ConfigDndProvider::new(config_provider.clone()));
     let idle_inhibit_provider: Arc<dyn IdleInhibitProvider> = rt.block_on(ConfigIdleInhibitProvider::new(config_provider.clone()));
-    let clock_provider: Arc<dyn ClockProvider> = MockClockProvider::new();
+    let clock_provider: Arc<dyn ClockProvider> = SystemClockProvider::new();
     let popup_provider: Arc<dyn PopupProvider> = LocalPopupProvider::new();
     let launcher_provider = CompositeLauncherProvider::new();
     let config_dir = dirs::config_dir().unwrap_or(PathBuf::from(".")).join("axis");
@@ -405,14 +405,11 @@ fn main() -> glib::ExitCode {
     
     let google_calendar = axis_infrastructure::adapters::google_calendar::GoogleCalendarProvider::new(google_auth.clone());
     let google_tasks = axis_infrastructure::adapters::google_tasks::GoogleTasksProvider::new(google_auth.clone());
-    
-    let sync_calendar_uc = Arc::new(axis_application::use_cases::cloud::sync_calendar::SyncCalendarUseCase::new(google_calendar));
-    let sync_tasks_uc = Arc::new(axis_application::use_cases::cloud::sync_tasks::SyncTasksUseCase::new(google_tasks.clone()));
-    let toggle_task_uc = Arc::new(axis_application::use_cases::tasks::toggle_task::ToggleTaskUseCase::new(google_tasks.clone()));
-    let delete_task_uc = Arc::new(axis_application::use_cases::tasks::delete_task::DeleteTaskUseCase::new(google_tasks.clone()));
-    let create_task_uc = Arc::new(axis_application::use_cases::tasks::create_task::CreateTaskUseCase::new(google_tasks));
-    
-    let agenda_presenter = Rc::new(AgendaPresenter::new(sync_calendar_uc, sync_tasks_uc, toggle_task_uc, delete_task_uc, create_task_uc));
+
+    let google_agenda = axis_infrastructure::adapters::google_agenda::GoogleAgendaProvider::new(google_calendar, google_tasks);
+    let agenda_uc = Arc::new(axis_application::use_cases::agenda::sync::AgendaUseCase::new(google_agenda));
+
+    let agenda_presenter = Rc::new(AgendaPresenter::new(agenda_uc));
 
     let subscribe_notifications = Arc::new(SubscribeUseCase::new(notification_provider.clone()));
     let get_notifications_status = Arc::new(GetStatusUseCase::new(notification_provider.clone()));

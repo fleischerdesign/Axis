@@ -27,6 +27,7 @@ macro_rules! status_provider {
 
 pub mod airplane;
 pub mod appearance;
+pub mod agenda;
 pub mod audio;
 pub mod bluetooth;
 pub mod brightness;

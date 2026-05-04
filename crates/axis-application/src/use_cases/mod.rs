@@ -1,4 +1,5 @@
 pub mod generic;
+pub mod agenda;
 pub mod airplane;
 pub mod appearance;
 pub mod audio;

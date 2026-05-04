@@ -1,3 +1,5 @@
+pub mod clock;
+pub mod google_agenda;
 pub mod power;
 pub mod appearance;
 pub mod workspaces;

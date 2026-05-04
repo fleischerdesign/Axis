@@ -1,9 +1,9 @@
+pub mod agenda;
 pub mod airplane;
 pub mod audio;
 pub mod bluetooth;
 pub mod brightness;
 pub mod calendar;
-pub mod clock;
 pub mod continuity;
 pub mod dnd;
 pub mod mpris;
