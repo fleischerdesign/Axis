@@ -6,6 +6,8 @@ use thiserror::Error;
 pub enum LauncherError {
     #[error("Launcher provider error: {0}")]
     ProviderError(String),
+    #[error("Validation error: {0}")]
+    ValidationError(String),
 }
 
 #[async_trait]

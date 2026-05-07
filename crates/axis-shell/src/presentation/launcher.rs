@@ -99,6 +99,7 @@ impl LauncherPresenter {
         if let Some(idx) = idx {
             if let Some(item) = s.results.get(idx) {
                 match &item.action {
+                    LauncherAction::Noop => {}
                     LauncherAction::Exec(program) => {
                         log::info!("[launcher] Executing: {program}");
                         if let Err(e) = std::process::Command::new("sh")

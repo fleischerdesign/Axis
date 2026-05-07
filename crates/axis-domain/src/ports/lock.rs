@@ -7,6 +7,8 @@ use super::StatusStream;
 pub enum LockError {
     #[error("Lock provider error: {0}")]
     ProviderError(String),
+    #[error("Validation error: {0}")]
+    ValidationError(String),
     #[error("Session lock protocol not supported")]
     NotSupported,
 }

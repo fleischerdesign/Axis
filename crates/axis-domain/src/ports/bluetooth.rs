@@ -7,6 +7,8 @@ use super::StatusStream;
 pub enum BluetoothError {
     #[error("Bluetooth provider error: {0}")]
     ProviderError(String),
+    #[error("Validation error: {0}")]
+    ValidationError(String),
     #[error("Device not found: {0}")]
     DeviceNotFound(String),
     #[error("Connection failed: {0}")]

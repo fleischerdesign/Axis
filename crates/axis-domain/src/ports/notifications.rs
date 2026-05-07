@@ -11,6 +11,8 @@ pub type ActionHandler = Arc<dyn Fn(Option<String>) + Send + Sync>;
 pub enum NotificationError {
     #[error("Notification provider error: {0}")]
     ProviderError(String),
+    #[error("Validation error: {0}")]
+    ValidationError(String),
 }
 
 pub type NotificationStream = StatusStream<NotificationStatus>;

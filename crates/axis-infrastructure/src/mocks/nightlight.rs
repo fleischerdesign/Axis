@@ -17,8 +17,8 @@ impl MockNightlightProvider {
             temp_day: 6500,
             temp_night: 4500,
             schedule_enabled: false,
-            sunrise: String::new(),
-            sunset: String::new(),
+            sunrise: chrono::NaiveTime::from_hms_opt(6, 0, 0).unwrap(),
+            sunset: chrono::NaiveTime::from_hms_opt(18, 0, 0).unwrap(),
         });
         Arc::new(Self { status_tx })
     }
@@ -51,8 +51,10 @@ impl NightlightProvider for MockNightlightProvider {
     }
 
     async fn set_schedule(&self, sunrise: &str, sunset: &str) -> Result<(), NightlightError> {
-        let sunrise = sunrise.to_string();
-        let sunset = sunset.to_string();
+        let sunrise = chrono::NaiveTime::parse_from_str(sunrise, "%H:%M")
+            .unwrap_or_else(|_| chrono::NaiveTime::from_hms_opt(6, 0, 0).unwrap());
+        let sunset = chrono::NaiveTime::parse_from_str(sunset, "%H:%M")
+            .unwrap_or_else(|_| chrono::NaiveTime::from_hms_opt(18, 0, 0).unwrap());
         self.status_tx.send_modify(move |s| {
             s.schedule_enabled = true;
             s.sunrise = sunrise;

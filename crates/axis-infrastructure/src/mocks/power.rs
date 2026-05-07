@@ -1,4 +1,4 @@
-use axis_domain::models::power::PowerStatus;
+use axis_domain::models::power::{PowerStatus, PowerProfile};
 use axis_domain::ports::power::{PowerProvider, PowerError, PowerStream};
 use async_trait::async_trait;
 use log::info;
@@ -15,7 +15,7 @@ impl MockPowerProvider {
         let (tx, _) = watch::channel(PowerStatus {
             battery_percentage: 75.5,
             is_charging: false,
-            power_profile: "balanced".to_string(),
+            power_profile: PowerProfile::Balanced,
             has_battery: true,
         });
 

@@ -15,7 +15,7 @@ impl CreateTaskUseCase {
     pub async fn execute(&self, list_id: &str, title: &str) -> Result<Task, AgendaError> {
         if title.trim().is_empty() {
             error!("[use-case] Task title cannot be empty");
-            return Err(AgendaError::ProviderError(
+            return Err(AgendaError::ValidationError(
                 "Task title cannot be empty".to_string(),
             ));
         }

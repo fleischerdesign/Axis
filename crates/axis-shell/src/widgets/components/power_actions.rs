@@ -5,7 +5,7 @@ use std::sync::Arc;
 use axis_application::use_cases::power::suspend::SuspendUseCase;
 use axis_application::use_cases::power::power_off::PowerOffUseCase;
 use axis_application::use_cases::power::reboot::RebootUseCase;
-use axis_application::use_cases::lock::lock::LockSessionUseCase;
+use axis_application::use_cases::lock::session::LockSessionUseCase;
 
 pub struct PowerActionStack {
     pub stack: gtk4::Stack,

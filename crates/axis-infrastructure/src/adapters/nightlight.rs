@@ -129,8 +129,10 @@ impl ConfigNightlightProvider {
             temp_night: config.temp_night,
             schedule_enabled: config.auto_schedule
                 || (!config.sunrise.is_empty() && !config.sunset.is_empty()),
-            sunrise: config.sunrise.clone(),
-            sunset: config.sunset.clone(),
+            sunrise: chrono::NaiveTime::parse_from_str(&config.sunrise, "%H:%M")
+                .unwrap_or_else(|_| chrono::NaiveTime::from_hms_opt(6, 0, 0).unwrap()),
+            sunset: chrono::NaiveTime::parse_from_str(&config.sunset, "%H:%M")
+                .unwrap_or_else(|_| chrono::NaiveTime::from_hms_opt(18, 0, 0).unwrap()),
         }
     }
 

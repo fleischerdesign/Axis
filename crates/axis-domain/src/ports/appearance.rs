@@ -8,6 +8,8 @@ use thiserror::Error;
 pub enum AppearanceError {
     #[error("Appearance provider error: {0}")]
     ProviderError(String),
+    #[error("Validation error: {0}")]
+    ValidationError(String),
 }
 
 pub type AppearanceStream = StatusStream<AppearanceConfig>;

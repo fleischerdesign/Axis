@@ -6,6 +6,8 @@ use thiserror::Error;
 pub enum ConfigError {
     #[error("Config provider error: {0}")]
     ProviderError(String),
+    #[error("Validation error: {0}")]
+    ValidationError(String),
 }
 
 pub type ConfigStream = StatusStream<AxisConfig>;

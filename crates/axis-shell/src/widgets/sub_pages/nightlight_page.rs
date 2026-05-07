@@ -185,11 +185,11 @@ impl View<NightlightStatus> for NightlightPageView {
         self.night_slider.set_value(status.temp_night as f64);
         self.night_val.set_text(&format!("{} K", status.temp_night));
 
-        if self.sunrise_entry.text() != status.sunrise {
-            self.sunrise_entry.set_text(&status.sunrise);
+        if self.sunrise_entry.text() != status.sunrise.format("%H:%M").to_string() {
+            self.sunrise_entry.set_text(&status.sunrise.format("%H:%M").to_string());
         }
-        if self.sunset_entry.text() != status.sunset {
-            self.sunset_entry.set_text(&status.sunset);
+        if self.sunset_entry.text() != status.sunset.format("%H:%M").to_string() {
+            self.sunset_entry.set_text(&status.sunset.format("%H:%M").to_string());
         }
 
         self.updating.set(false);

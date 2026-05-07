@@ -19,7 +19,7 @@ impl SetWallpaperUseCase {
         let p = Path::new(&path);
         if !p.exists() {
             warn!("[use-case] Wallpaper path does not exist: {}", path);
-            return Err(AppearanceError::ProviderError(format!("File not found: {}", path)));
+            return Err(AppearanceError::ValidationError(format!("File not found: {}", path)));
         }
 
         // 2. Persist

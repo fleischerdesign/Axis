@@ -205,16 +205,8 @@ fn events_for_day(y: i32, m: u32, d: u32, events: &[CalendarEvent]) -> Vec<&Cale
     let day_start = NaiveDate::from_ymd_opt(y, m, d).unwrap().and_hms_opt(0, 0, 0).unwrap();
     let day_end = NaiveDate::from_ymd_opt(y, m, d).unwrap().and_hms_opt(23, 59, 59).unwrap();
     events.iter().filter(|e| {
-        let (s, e) = parse_range(e);
-        s <= day_end && e >= day_start
+        e.start <= day_end && e.end >= day_start
     }).collect()
-}
-
-fn parse_range(e: &CalendarEvent) -> (NaiveDateTime, NaiveDateTime) {
-    let p = |s: &str| NaiveDateTime::parse_from_str(s.split('+').next().unwrap().trim_end_matches('Z'), "%Y-%m-%dT%H:%M:%S").unwrap_or_else(|_| {
-        NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap_or_default().and_hms_opt(0, 0, 0).unwrap()
-    });
-    (p(&e.start), p(&e.end))
 }
 
 fn color_id_to_hex(id: Option<&str>) -> &'static str {

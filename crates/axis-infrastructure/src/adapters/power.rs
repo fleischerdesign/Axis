@@ -1,4 +1,4 @@
-use axis_domain::models::power::PowerStatus;
+use axis_domain::models::power::{PowerStatus, PowerProfile};
 use axis_domain::ports::power::{PowerProvider, PowerError, PowerStream};
 use async_trait::async_trait;
 use zbus::proxy;
@@ -116,7 +116,7 @@ impl LogindPowerProvider {
         Ok(PowerStatus {
             battery_percentage: percentage,
             is_charging,
-            power_profile: "balanced".to_string(),
+            power_profile: PowerProfile::Balanced,
             has_battery,
         })
     }

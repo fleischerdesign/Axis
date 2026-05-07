@@ -7,6 +7,8 @@ use thiserror::Error;
 pub enum AirplaneError {
     #[error("Airplane provider error: {0}")]
     ProviderError(String),
+    #[error("Validation error: {0}")]
+    ValidationError(String),
 }
 
 pub type AirplaneStream = StatusStream<AirplaneStatus>;

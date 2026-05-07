@@ -7,6 +7,8 @@ use super::StatusStream;
 pub enum BrightnessError {
     #[error("Brightness provider error: {0}")]
     ProviderError(String),
+    #[error("Validation error: {0}")]
+    ValidationError(String),
 }
 
 pub type BrightnessStream = StatusStream<BrightnessStatus>;

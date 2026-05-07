@@ -7,6 +7,8 @@ use super::StatusStream;
 pub enum TrayError {
     #[error("Tray provider error: {0}")]
     ProviderError(String),
+    #[error("Validation error: {0}")]
+    ValidationError(String),
 }
 
 pub type TrayStream = StatusStream<TrayStatus>;

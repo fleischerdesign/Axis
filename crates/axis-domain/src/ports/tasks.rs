@@ -7,6 +7,8 @@ use thiserror::Error;
 pub enum TaskError {
     #[error("Task provider error: {0}")]
     ProviderError(String),
+    #[error("Validation error: {0}")]
+    ValidationError(String),
 }
 
 #[async_trait]

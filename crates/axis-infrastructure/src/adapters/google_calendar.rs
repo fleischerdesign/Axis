@@ -2,6 +2,7 @@ use axis_domain::models::calendar::CalendarEvent;
 use axis_domain::ports::calendar::{CalendarProvider, CalendarError};
 use axis_domain::ports::cloud_auth::CloudAuthProvider;
 use async_trait::async_trait;
+use chrono::NaiveDateTime;
 use log::{debug, info, warn};
 use serde::Deserialize;
 use std::sync::Arc;
@@ -86,12 +87,16 @@ impl GoogleCalendarProvider {
 
         Ok(event_list.items.into_iter().map(|e| {
             let (start_time, all_day) = if let Some(dt) = e.start.date_time {
-                (dt, false)
+                (parse_datetime(&dt), false)
             } else {
-                (e.start.date.unwrap_or_default(), true)
+                (parse_date(e.start.date.as_deref().unwrap_or("1970-01-01")), true)
             };
 
-            let end_time = e.end.date_time.or(e.end.date).unwrap_or_default();
+            let end_time = if let Some(dt) = e.end.date_time {
+                parse_datetime(&dt)
+            } else {
+                parse_date(e.end.date.as_deref().unwrap_or("1970-01-01"))
+            };
 
             CalendarEvent {
                 id: e.id,
@@ -150,4 +155,27 @@ impl CalendarProvider for GoogleCalendarProvider {
         all_events.sort_by(|a, b| a.start.cmp(&b.start));
         Ok(all_events)
     }
+}
+
+fn parse_datetime(s: &str) -> NaiveDateTime {
+    // Try RFC3339 first
+    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(s) {
+        return dt.naive_utc();
+    }
+    // Try common ISO formats
+    let cleaned = s.trim_end_matches('Z').split('+').next().unwrap_or(s);
+    if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(cleaned, "%Y-%m-%dT%H:%M:%S") {
+        return dt;
+    }
+    if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(cleaned, "%Y-%m-%dT%H:%M:%S%.f") {
+        return dt;
+    }
+    NaiveDateTime::from_timestamp_opt(0, 0).unwrap()
+}
+
+fn parse_date(s: &str) -> NaiveDateTime {
+    chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d")
+        .ok()
+        .and_then(|d| d.and_hms_opt(0, 0, 0))
+        .unwrap_or_else(|| NaiveDateTime::from_timestamp_opt(0, 0).unwrap())
 }

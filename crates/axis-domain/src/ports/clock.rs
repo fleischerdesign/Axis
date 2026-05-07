@@ -1,4 +1,4 @@
-use crate::models::clock::TimeStatus;
+use crate::models::clock::ClockStatus;
 use async_trait::async_trait;
 use thiserror::Error;
 use super::StatusStream;
@@ -7,14 +7,16 @@ use super::StatusStream;
 pub enum ClockError {
     #[error("Clock provider error: {0}")]
     ProviderError(String),
+    #[error("Validation error: {0}")]
+    ValidationError(String),
 }
 
-pub type ClockStream = StatusStream<TimeStatus>;
+pub type ClockStream = StatusStream<ClockStatus>;
 
 #[async_trait]
 pub trait ClockProvider: Send + Sync {
-    async fn get_status(&self) -> Result<TimeStatus, ClockError>;
+    async fn get_status(&self) -> Result<ClockStatus, ClockError>;
     async fn subscribe(&self) -> Result<ClockStream, ClockError>;
 }
 
-crate::status_provider!(ClockProvider, TimeStatus, ClockError);
+crate::status_provider!(ClockProvider, ClockStatus, ClockError);

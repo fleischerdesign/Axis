@@ -7,6 +7,8 @@ use thiserror::Error;
 pub enum AgendaError {
     #[error("Agenda provider error: {0}")]
     ProviderError(String),
+    #[error("Validation error: {0}")]
+    ValidationError(String),
 }
 
 #[async_trait]

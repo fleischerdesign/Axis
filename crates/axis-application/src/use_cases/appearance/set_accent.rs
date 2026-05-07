@@ -23,7 +23,7 @@ impl SetAccentColorUseCase {
         // 1. Domain Validation
         let hex = color.hex_value().to_string();
         if !AccentColor::is_valid_hex(&hex) {
-            return Err(AppearanceError::ProviderError(format!("Invalid hex color: {}", hex)));
+            return Err(AppearanceError::ValidationError(format!("Invalid hex color: {}", hex)));
         }
 
         // 2. Persist in Config

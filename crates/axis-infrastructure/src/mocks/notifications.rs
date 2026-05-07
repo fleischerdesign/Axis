@@ -1,4 +1,4 @@
-use axis_domain::models::notifications::{Notification, NotificationStatus};
+use axis_domain::models::notifications::{Notification, NotificationStatus, Urgency};
 use axis_domain::ports::notifications::{ActionHandler, NotificationProvider, NotificationError, NotificationStream};
 use async_trait::async_trait;
 use tokio::sync::watch;
@@ -19,7 +19,7 @@ impl MockNotificationProvider {
                 app_icon: "system-software-update".to_string(),
                 summary: "Update Available".to_string(),
                 body: "A new version of Axis is ready.".to_string(),
-                urgency: 1,
+                urgency: Urgency::Normal,
                 actions: vec![],
                 timeout: 0,
                 timestamp: std::time::SystemTime::now()

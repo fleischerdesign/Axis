@@ -7,7 +7,7 @@ use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
 use axis_application::use_cases::power::suspend::SuspendUseCase;
 use axis_application::use_cases::power::power_off::PowerOffUseCase;
 use axis_application::use_cases::power::reboot::RebootUseCase;
-use axis_application::use_cases::lock::lock::LockSessionUseCase;
+use axis_application::use_cases::lock::session::LockSessionUseCase;
 use axis_application::use_cases::lock::unlock::UnlockSessionUseCase;
 use axis_application::use_cases::lock::authenticate::AuthenticateUseCase;
 use axis_application::use_cases::audio::set_volume::SetVolumeUseCase;
@@ -1095,7 +1095,7 @@ fn subscribe_continuity_notifications(
                                 "Kopplungsanfrage von {}\nPIN: {}",
                                 pending.peer_name, pending.pin
                             ),
-                            urgency: 2,
+                            urgency: axis_domain::models::notifications::Urgency::Critical,
                             actions: vec![
                                 axis_domain::models::notifications::NotificationAction {
                                     key: "accept".into(),
@@ -1165,7 +1165,7 @@ fn subscribe_continuity_notifications(
                             app_icon: "computer-symbolic".to_string(),
                             summary: "Verbunden".to_string(),
                             body: format!("Verbunden mit {}", conn.peer_name),
-                            urgency: 1,
+                            urgency: axis_domain::models::notifications::Urgency::Normal,
                             actions: vec![],
                             timeout: 5000,
                             timestamp: std::time::SystemTime::now()
@@ -1296,7 +1296,7 @@ fn subscribe_bluetooth_pairing_notifications(
                         app_icon: "bluetooth-active-symbolic".to_string(),
                         summary: pairing.device_name.clone(),
                         body,
-                        urgency: 2,
+                        urgency: axis_domain::models::notifications::Urgency::Critical,
                         actions: vec![
                             axis_domain::models::notifications::NotificationAction {
                                 key: "accept".into(),

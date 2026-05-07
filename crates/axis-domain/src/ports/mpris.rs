@@ -7,6 +7,8 @@ use super::StatusStream;
 pub enum MprisError {
     #[error("MPRIS error: {0}")]
     ProviderError(String),
+    #[error("Validation error: {0}")]
+    ValidationError(String),
 }
 
 pub type MprisStream = StatusStream<MprisStatus>;

@@ -10,6 +10,8 @@ use super::StatusStream;
 pub enum ContinuityError {
     #[error("Continuity provider error: {0}")]
     ProviderError(String),
+    #[error("Validation error: {0}")]
+    ValidationError(String),
     #[error("Discovery failed: {0}")]
     DiscoveryFailed(String),
     #[error("Connection failed: {0}")]

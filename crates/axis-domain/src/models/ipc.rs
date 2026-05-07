@@ -1,5 +1,8 @@
-#[derive(Debug, Clone, PartialEq, Eq)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum IpcCommand {
-    ToggleLauncher,
+    #[default]
     Lock,
+    ToggleLauncher,
 }

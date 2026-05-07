@@ -1,6 +1,6 @@
 use libadwaita::prelude::*;
 use axis_presentation::View;
-use axis_domain::models::clock::TimeStatus;
+use axis_domain::models::clock::ClockStatus;
 
 #[derive(Clone)]
 pub struct ClockWidget {
@@ -20,8 +20,8 @@ impl ClockWidget {
     }
 }
 
-impl View<TimeStatus> for ClockWidget {
-    fn render(&self, status: &TimeStatus) {
+impl View<ClockStatus> for ClockWidget {
+    fn render(&self, status: &ClockStatus) {
         let time_str = status.current_time.format("%H:%M").to_string();
         self.label.set_label(&time_str);
     }

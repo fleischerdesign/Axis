@@ -1,4 +1,4 @@
-use axis_domain::models::notifications::{Notification, NotificationAction, NotificationStatus};
+use axis_domain::models::notifications::{Notification, NotificationAction, NotificationStatus, Urgency};
 use axis_domain::ports::notifications::{ActionHandler, NotificationError, NotificationProvider, NotificationStream};
 use async_trait::async_trait;
 use log::info;
@@ -45,7 +45,12 @@ impl NotificationsIface {
         let urgency = hints
             .get("urgency")
             .and_then(|v| v.downcast_ref::<u8>().ok())
-            .unwrap_or(1);
+            .map(|u| match u {
+                0 => Urgency::Low,
+                2 => Urgency::Critical,
+                _ => Urgency::Normal,
+            })
+            .unwrap_or(Urgency::Normal);
 
         let parsed_actions = actions
             .chunks_exact(2)
@@ -69,7 +74,7 @@ impl NotificationsIface {
                 .unwrap_or_default()
                 .as_secs() as i64,
             internal_id: 0,
-            ignore_dnd: urgency == 2,
+            ignore_dnd: urgency == Urgency::Critical,
             input_placeholder: None,
         };
 

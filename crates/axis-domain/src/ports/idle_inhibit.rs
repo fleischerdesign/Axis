@@ -7,6 +7,8 @@ use super::StatusStream;
 pub enum IdleInhibitError {
     #[error("Idle inhibit provider error: {0}")]
     ProviderError(String),
+    #[error("Validation error: {0}")]
+    ValidationError(String),
 }
 
 pub type IdleInhibitStream = StatusStream<IdleInhibitStatus>;

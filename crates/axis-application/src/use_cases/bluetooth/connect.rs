@@ -13,7 +13,7 @@ impl ConnectBluetoothDeviceUseCase {
 
     pub async fn execute(&self, id: &str) -> Result<(), BluetoothError> {
         if id.is_empty() {
-            return Err(BluetoothError::ProviderError("Bluetooth device ID cannot be empty".to_string()));
+            return Err(BluetoothError::ValidationError("Bluetooth device ID cannot be empty".to_string()));
         }
 
         info!("[use-case] Attempting to connect to Bluetooth device: {}", id);
