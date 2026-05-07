@@ -1,13 +1,13 @@
 use axis_domain::models::continuity::Side;
-use axis_domain::ports::continuity::{ContinuityProvider, ContinuityError};
+use axis_domain::ports::continuity::{ContinuitySharingProvider, ContinuityError};
 use std::sync::Arc;
 
 pub struct StartSharingUseCase {
-    provider: Arc<dyn ContinuityProvider>,
+    provider: Arc<dyn ContinuitySharingProvider>,
 }
 
 impl StartSharingUseCase {
-    pub fn new(provider: Arc<dyn ContinuityProvider>) -> Self {
+    pub fn new(provider: Arc<dyn ContinuitySharingProvider>) -> Self {
         Self { provider }
     }
 

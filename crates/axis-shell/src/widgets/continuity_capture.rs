@@ -5,11 +5,11 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 use axis_domain::models::continuity::{ContinuityStatus, PeerArrangement, SharingState, Side};
-use axis_domain::ports::continuity::ContinuityProvider;
+use axis_domain::ports::continuity::ContinuitySharingProvider;
 use axis_presentation::View;
 
 pub struct ContinuityCaptureController {
-    provider: Arc<dyn ContinuityProvider>,
+    provider: Arc<dyn ContinuitySharingProvider>,
     app: libadwaita::Application,
     edge_window: Rc<RefCell<Option<gtk4::Window>>>,
     overlay: Rc<RefCell<Option<gtk4::Window>>>,
@@ -21,7 +21,7 @@ pub struct ContinuityCaptureController {
 impl ContinuityCaptureController {
     pub fn new(
         app: &libadwaita::Application,
-        provider: Arc<dyn ContinuityProvider>,
+        provider: Arc<dyn ContinuitySharingProvider>,
     ) -> Self {
         Self {
             provider,

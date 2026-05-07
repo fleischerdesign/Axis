@@ -1,13 +1,13 @@
 use axis_domain::models::continuity::InputEvent;
-use axis_domain::ports::continuity::{ContinuityProvider, ContinuityError};
+use axis_domain::ports::continuity::{ContinuitySharingProvider, ContinuityError};
 use std::sync::Arc;
 
 pub struct SendInputUseCase {
-    provider: Arc<dyn ContinuityProvider>,
+    provider: Arc<dyn ContinuitySharingProvider>,
 }
 
 impl SendInputUseCase {
-    pub fn new(provider: Arc<dyn ContinuityProvider>) -> Self {
+    pub fn new(provider: Arc<dyn ContinuitySharingProvider>) -> Self {
         Self { provider }
     }
 

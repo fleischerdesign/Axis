@@ -65,6 +65,7 @@ use axis_domain::ports::popups::PopupProvider;
 use axis_domain::ports::notifications::NotificationProvider;
 use axis_domain::ports::tray::TrayProvider;
 use axis_domain::ports::continuity::ContinuityProvider;
+use axis_domain::ports::continuity::ContinuitySharingProvider;
 use axis_domain::ports::idle_inhibit::IdleInhibitProvider;
 use axis_domain::ports::mpris::MprisProvider;
 use axis_domain::models::dnd::DndStatus;
@@ -265,6 +266,7 @@ fn main() -> glib::ExitCode {
 
     let continuity_service = ContinuityService::new();
     let continuity_provider: Arc<dyn ContinuityProvider> = continuity_service.clone();
+    let continuity_sharing_provider: Arc<dyn ContinuitySharingProvider> = continuity_service.clone();
 
     let (mpris_provider, mpris_dbus_provider): (Arc<dyn MprisProvider>, Option<Arc<axis_infrastructure::adapters::mpris::MprisDBusProvider>>) = rt.block_on(async {
         match axis_infrastructure::adapters::mpris::MprisDBusProvider::new().await {
@@ -814,7 +816,7 @@ fn main() -> glib::ExitCode {
         lock_presenter.add_view(Box::new(lock_factory.clone()));
         battery_presenter.add_view(Box::new(lock_factory.clone()));
 
-        let capture_controller = ContinuityCaptureController::new(app, continuity_provider.clone());
+        let capture_controller = ContinuityCaptureController::new(app, continuity_sharing_provider.clone());
         continuity_presenter.add_view(Box::new(capture_controller));
 
         let lf = lock_factory.clone();

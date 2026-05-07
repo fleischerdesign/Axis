@@ -41,11 +41,6 @@ pub trait ContinuityProvider: Send + Sync {
     async fn cancel_reconnect(&self) -> Result<(), ContinuityError>;
     async fn unpair(&self, peer_id: &str) -> Result<(), ContinuityError>;
 
-    async fn start_sharing(&self, side: Side, edge_pos: f64) -> Result<(), ContinuityError>;
-    async fn stop_sharing(&self, edge_pos: f64) -> Result<(), ContinuityError>;
-    async fn send_input(&self, event: InputEvent) -> Result<(), ContinuityError>;
-    async fn force_local(&self) -> Result<(), ContinuityError>;
-
     async fn set_peer_arrangement(&self, arrangement: PeerArrangement) -> Result<(), ContinuityError>;
     async fn update_peer_configs(
         &self,
@@ -54,3 +49,11 @@ pub trait ContinuityProvider: Send + Sync {
 }
 
 crate::status_provider!(ContinuityProvider, ContinuityStatus, ContinuityError);
+
+#[async_trait]
+pub trait ContinuitySharingProvider: Send + Sync {
+    async fn start_sharing(&self, side: Side, edge_pos: f64) -> Result<(), ContinuityError>;
+    async fn stop_sharing(&self, edge_pos: f64) -> Result<(), ContinuityError>;
+    async fn send_input(&self, event: InputEvent) -> Result<(), ContinuityError>;
+    async fn force_local(&self) -> Result<(), ContinuityError>;
+}

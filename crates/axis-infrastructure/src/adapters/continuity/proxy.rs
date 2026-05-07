@@ -1,5 +1,5 @@
 use axis_domain::models::continuity::{
-    ContinuityStatus, InputEvent, PeerArrangement, PeerConfig, Side,
+    ContinuityStatus, PeerArrangement, PeerConfig,
 };
 use axis_domain::ports::continuity::{ContinuityError, ContinuityProvider, ContinuityStream};
 use async_trait::async_trait;
@@ -246,22 +246,6 @@ impl ContinuityProvider for ContinuityDbusProxy {
 
     async fn unpair(&self, peer_id: &str) -> Result<(), ContinuityError> {
         self.call_method_str("Unpair", peer_id).await
-    }
-
-    async fn start_sharing(&self, _side: Side, _edge_pos: f64) -> Result<(), ContinuityError> {
-        Err(ContinuityError::ProviderError("start_sharing not supported via D-Bus".into()))
-    }
-
-    async fn stop_sharing(&self, _edge_pos: f64) -> Result<(), ContinuityError> {
-        Err(ContinuityError::ProviderError("stop_sharing not supported via D-Bus".into()))
-    }
-
-    async fn send_input(&self, _event: InputEvent) -> Result<(), ContinuityError> {
-        Err(ContinuityError::ProviderError("send_input not supported via D-Bus".into()))
-    }
-
-    async fn force_local(&self) -> Result<(), ContinuityError> {
-        Err(ContinuityError::ProviderError("force_local not supported via D-Bus".into()))
     }
 
     async fn set_peer_arrangement(&self, arrangement: PeerArrangement) -> Result<(), ContinuityError> {
