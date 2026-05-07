@@ -420,6 +420,12 @@ pub fn wire(args: WiringArgs) {
 }
 
 fn spawn_run_sync(pres: &Presenters) {
+    let p = pres.clock.clone();
+    glib::spawn_future_local(async move { p.run_sync().await });
+
+    let p = pres.workspace.clone();
+    glib::spawn_future_local(async move { p.run_sync().await });
+
     let p = pres.audio.clone();
     glib::spawn_future_local(async move { p.run_sync().await });
 
