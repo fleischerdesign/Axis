@@ -1,6 +1,6 @@
-use axis_domain::ports::airplane::{AirplaneProvider, AirplaneError};
-use std::sync::Arc;
+use axis_domain::ports::airplane::{AirplaneError, AirplaneProvider};
 use log::info;
+use std::sync::Arc;
 
 pub struct SetAirplaneModeUseCase {
     provider: Arc<dyn AirplaneProvider>,

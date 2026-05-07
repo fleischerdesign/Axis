@@ -1,13 +1,13 @@
-use axis_domain::models::launcher::{LauncherAction, LauncherItem, SearchPriority};
-use axis_domain::ports::launcher::{LauncherError, LauncherSearchProvider};
 use crate::adapters::launcher::util::scored_match;
 use async_trait::async_trait;
+use axis_domain::models::launcher::{LauncherAction, LauncherItem, SearchPriority};
+use axis_domain::ports::launcher::{LauncherError, LauncherSearchProvider};
 use log::info;
 use std::collections::HashSet;
+use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use std::time::SystemTime;
-use std::fs;
 
 #[derive(Debug, Clone)]
 struct AppEntry {
@@ -38,15 +38,22 @@ impl AppSearchProvider {
         let query_lower = query.to_lowercase();
 
         if query_lower.is_empty() {
-            return apps.iter().map(|app| LauncherItem {
-                id: format!("app-{}", app.name),
-                title: app.name.clone(),
-                description: app.comment.clone(),
-                icon_name: app.icon.clone(),
-                action: LauncherAction::Exec(app.exec.clone()),
-                score: 1,
-                priority: SearchPriority::Primary,
-            }).collect();
+            return apps
+                .iter()
+                .map(|app| LauncherItem {
+                    id: format!("app-{}", app.name),
+                    title: app.name.clone(),
+                    description: app.comment.clone(),
+                    icon_name: app.icon.clone(),
+                    action: LauncherAction::Exec(vec![
+                        "sh".to_string(),
+                        "-c".to_string(),
+                        app.exec.clone(),
+                    ]),
+                    score: 1,
+                    priority: SearchPriority::Primary,
+                })
+                .collect();
         }
 
         let mut results = Vec::new();
@@ -58,7 +65,11 @@ impl AppSearchProvider {
                     title: app.name.clone(),
                     description: app.comment.clone(),
                     icon_name: app.icon.clone(),
-                    action: LauncherAction::Exec(app.exec.clone()),
+                    action: LauncherAction::Exec(vec![
+                        "sh".to_string(),
+                        "-c".to_string(),
+                        app.exec.clone(),
+                    ]),
                     score,
                     priority: SearchPriority::Primary,
                 });
@@ -71,10 +82,10 @@ impl AppSearchProvider {
     fn get_cached_or_scan(&self) -> Vec<AppEntry> {
         {
             let guard = self.cache.read().unwrap();
-            if let Some(ref cache) = *guard {
-                if !self.dirs_changed(&cache.dir_mtimes) {
-                    return cache.apps.clone();
-                }
+            if let Some(ref cache) = *guard
+                && !self.dirs_changed(&cache.dir_mtimes)
+            {
+                return cache.apps.clone();
             }
         }
 
@@ -82,18 +93,20 @@ impl AppSearchProvider {
         apps.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
         info!("[launcher] Found {} apps", apps.len());
         let dir_mtimes = self.get_dir_mtimes();
-        *self.cache.write().unwrap() = Some(Cache { apps: apps.clone(), dir_mtimes });
+        *self.cache.write().unwrap() = Some(Cache {
+            apps: apps.clone(),
+            dir_mtimes,
+        });
         apps
     }
 
     fn dirs_changed(&self, cached: &[(PathBuf, SystemTime)]) -> bool {
         for (path, cached_time) in cached {
-            if let Ok(meta) = fs::metadata(path) {
-                if let Ok(mtime) = meta.modified() {
-                    if mtime != *cached_time {
-                        return true;
-                    }
-                }
+            if let Ok(meta) = fs::metadata(path)
+                && let Ok(mtime) = meta.modified()
+                && mtime != *cached_time
+            {
+                return true;
             }
         }
         false
@@ -135,16 +148,17 @@ impl AppSearchProvider {
         let mut seen_names = HashSet::new();
 
         for path in self.app_dirs() {
-            if !path.exists() { continue; }
+            if !path.exists() {
+                continue;
+            }
 
             if let Ok(entries) = fs::read_dir(&path) {
                 for entry in entries.flatten() {
-                    if entry.path().extension().map_or(false, |ext| ext == "desktop") {
-                        if let Some(app) = Self::parse_desktop_file(entry.path()) {
-                            if seen_names.insert(app.name.clone()) {
-                                apps.push(app);
-                            }
-                        }
+                    if entry.path().extension().is_some_and(|ext| ext == "desktop")
+                        && let Some(app) = Self::parse_desktop_file(entry.path())
+                        && seen_names.insert(app.name.clone())
+                    {
+                        apps.push(app);
                     }
                 }
             }
@@ -169,7 +183,8 @@ impl AppSearchProvider {
                 name = Some(line.replace("Name=", ""));
             } else if line.starts_with("Exec=") && exec.is_none() {
                 let full_exec = line.replace("Exec=", "");
-                let clean_exec = full_exec.split_whitespace()
+                let clean_exec = full_exec
+                    .split_whitespace()
                     .filter(|s| !s.starts_with('%'))
                     .collect::<Vec<_>>()
                     .join(" ");
@@ -183,7 +198,9 @@ impl AppSearchProvider {
             }
         }
 
-        if !is_app || no_display { return None; }
+        if !is_app || no_display {
+            return None;
+        }
 
         match (name, exec) {
             (Some(n), Some(e)) => Some(AppEntry {

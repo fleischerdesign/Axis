@@ -1,4 +1,4 @@
-use axis_domain::ports::bluetooth::{BluetoothProvider, BluetoothError};
+use axis_domain::ports::bluetooth::{BluetoothError, BluetoothProvider};
 use std::sync::Arc;
 
 pub struct PairRejectUseCase {

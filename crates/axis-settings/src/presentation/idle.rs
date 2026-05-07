@@ -1,10 +1,10 @@
-use axis_domain::models::config::AxisConfig;
 use axis_application::use_cases::idle_inhibit::set_inhibited::SetIdleInhibitUseCase;
+use axis_domain::models::config::AxisConfig;
 use axis_domain::ports::config::ConfigProvider;
 use axis_presentation::{Presenter, View};
+use gtk4::glib;
 use std::rc::Rc;
 use std::sync::Arc;
-use gtk4::glib;
 
 pub trait IdleSettingsView: View<AxisConfig> {
     fn on_inhibited_toggled(&self, f: Box<dyn Fn(bool) + 'static>);

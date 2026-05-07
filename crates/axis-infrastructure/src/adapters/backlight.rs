@@ -1,15 +1,15 @@
-use axis_domain::models::brightness::BrightnessStatus;
-use axis_domain::ports::brightness::{BrightnessProvider, BrightnessError, BrightnessStream};
 use async_trait::async_trait;
-use tokio::sync::{watch, mpsc};
-use tokio_stream::wrappers::WatchStream;
-use std::sync::Arc;
+use axis_domain::models::brightness::BrightnessStatus;
+use axis_domain::ports::brightness::{BrightnessError, BrightnessProvider, BrightnessStream};
+use brightness::blocking::Brightness;
+use inotify::{Inotify, WatchMask};
+use log::warn;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
-use inotify::{Inotify, WatchMask};
-use brightness::blocking::Brightness;
-use log::warn;
+use tokio::sync::{mpsc, watch};
+use tokio_stream::wrappers::WatchStream;
 
 const BACKLIGHT_DIR: &str = "/sys/class/backlight";
 
@@ -20,12 +20,13 @@ pub struct SysfsBrightnessProvider {
 
 impl SysfsBrightnessProvider {
     pub async fn new() -> Result<Arc<Self>, BrightnessError> {
-        let device_path = Self::find_device().ok_or_else(|| BrightnessError::ProviderError("No backlight device found".into()))?;
-        
+        let device_path = Self::find_device()
+            .ok_or_else(|| BrightnessError::ProviderError("No backlight device found".into()))?;
+
         // Read initial value immediately
         let actual = Self::read_u32(&device_path.join("actual_brightness")).unwrap_or(0);
         let max = Self::read_u32(&device_path.join("max_brightness")).unwrap_or(1);
-        let initial_pct = (actual as f64 / max as f64) * 100.0;
+        let initial_pct = actual as f64 / max as f64;
 
         let (status_tx, _) = watch::channel(BrightnessStatus {
             percentage: initial_pct,
@@ -47,7 +48,7 @@ impl SysfsBrightnessProvider {
 
                     loop {
                         if let Some(actual) = Self::read_u32(&actual_path) {
-                            let pct = (actual as f64 / max as f64) * 100.0;
+                            let pct = actual as f64 / max as f64;
                             let _ = status_tx_clone.send(BrightnessStatus {
                                 percentage: pct,
                                 has_backlight: true,
@@ -72,7 +73,7 @@ impl SysfsBrightnessProvider {
                     while let Ok(newer) = cmd_rx.try_recv() {
                         latest = newer;
                     }
-                    let _ = device.set(latest as u32);
+                    let _ = device.set((latest * 100.0) as u32);
                 }
             }
         });
@@ -81,10 +82,17 @@ impl SysfsBrightnessProvider {
     }
 
     fn find_device() -> Option<PathBuf> {
-        fs::read_dir(BACKLIGHT_DIR).ok()?.flatten().find_map(|entry| {
-            let path = entry.path();
-            if path.join("actual_brightness").exists() { Some(path) } else { None }
-        })
+        fs::read_dir(BACKLIGHT_DIR)
+            .ok()?
+            .flatten()
+            .find_map(|entry| {
+                let path = entry.path();
+                if path.join("actual_brightness").exists() {
+                    Some(path)
+                } else {
+                    None
+                }
+            })
     }
 
     fn read_u32(path: &PathBuf) -> Option<u32> {
@@ -104,7 +112,9 @@ impl BrightnessProvider for SysfsBrightnessProvider {
     }
 
     async fn set_brightness(&self, percentage: f64) -> Result<(), BrightnessError> {
-        self.cmd_tx.send(percentage).await
+        self.cmd_tx
+            .send(percentage)
+            .await
             .map_err(|e| BrightnessError::ProviderError(format!("Backlight channel closed: {e}")))
     }
 }

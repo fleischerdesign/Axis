@@ -1,11 +1,17 @@
-use libadwaita::prelude::*;
-use axis_presentation::View;
 use axis_domain::models::continuity::ContinuityStatus;
+use axis_presentation::View;
+use libadwaita::prelude::*;
 
 #[derive(Clone)]
 pub struct ContinuityStatusWidget {
     pub container: gtk4::Box,
     icon: gtk4::Image,
+}
+
+impl Default for ContinuityStatusWidget {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ContinuityStatusWidget {

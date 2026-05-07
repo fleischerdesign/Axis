@@ -1,4 +1,5 @@
-use axis_domain::ports::continuity::{ContinuityProvider, ContinuityError};
+use axis_domain::ports::continuity::{ContinuityError, ContinuityProvider};
+use log::info;
 use std::sync::Arc;
 
 pub struct SetContinuityEnabledUseCase {
@@ -11,6 +12,7 @@ impl SetContinuityEnabledUseCase {
     }
 
     pub async fn execute(&self, enabled: bool) -> Result<(), ContinuityError> {
+        info!("[use-case] Setting continuity enabled: {}", enabled);
         self.provider.set_enabled(enabled).await
     }
 }

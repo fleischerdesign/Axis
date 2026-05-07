@@ -1,4 +1,4 @@
-use axis_domain::ports::lock::{LockProvider, LockError};
+use axis_domain::ports::lock::{LockError, LockProvider};
 use std::sync::Arc;
 
 pub struct IsLockSupportedUseCase {

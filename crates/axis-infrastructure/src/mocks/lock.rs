@@ -1,10 +1,10 @@
-use axis_domain::models::lock::LockStatus;
-use axis_domain::ports::lock::{LockProvider, LockError, LockStream};
 use async_trait::async_trait;
+use axis_domain::models::lock::LockStatus;
+use axis_domain::ports::lock::{LockError, LockProvider, LockStream};
 use log::info;
+use std::sync::Arc;
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
-use std::sync::Arc;
 
 pub struct MockLockProvider {
     status_tx: watch::Sender<LockStatus>,

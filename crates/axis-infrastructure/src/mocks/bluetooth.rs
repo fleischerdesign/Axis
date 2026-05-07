@@ -1,9 +1,9 @@
-use axis_domain::models::bluetooth::{BluetoothDevice, BluetoothStatus};
-use axis_domain::ports::bluetooth::{BluetoothStream, BluetoothProvider, BluetoothError};
 use async_trait::async_trait;
+use axis_domain::models::bluetooth::{BluetoothDevice, BluetoothStatus};
+use axis_domain::ports::bluetooth::{BluetoothError, BluetoothProvider, BluetoothStream};
+use std::sync::{Arc, Mutex};
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
-use std::sync::{Arc, Mutex};
 
 pub struct MockBluetoothProvider {
     status: Mutex<BluetoothStatus>,

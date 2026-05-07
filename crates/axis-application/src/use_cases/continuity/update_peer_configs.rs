@@ -1,5 +1,6 @@
 use axis_domain::models::continuity::PeerConfig;
-use axis_domain::ports::continuity::{ContinuityProvider, ContinuityError};
+use axis_domain::ports::continuity::{ContinuityError, ContinuityProvider};
+use log::info;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -16,6 +17,7 @@ impl UpdatePeerConfigsUseCase {
         &self,
         configs: HashMap<String, PeerConfig>,
     ) -> Result<(), ContinuityError> {
+        info!("[use-case] Updating peer configs");
         self.provider.update_peer_configs(configs).await
     }
 }

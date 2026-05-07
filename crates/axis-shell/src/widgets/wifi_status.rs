@@ -1,7 +1,7 @@
-use libadwaita::prelude::*;
-use axis_presentation::View;
 use crate::presentation::network::wifi_icon;
 use axis_domain::models::network::NetworkStatus;
+use axis_presentation::View;
+use libadwaita::prelude::*;
 
 #[derive(Clone)]
 pub struct WifiStatusWidget {
@@ -25,7 +25,11 @@ impl WifiStatusWidget {
         container.append(&label);
         container.set_visible(false);
 
-        Self { container, icon, label }
+        Self {
+            container,
+            icon,
+            label,
+        }
     }
 }
 
@@ -40,7 +44,8 @@ impl View<NetworkStatus> for WifiStatusWidget {
             };
             self.icon.set_icon_name(Some(icon_name));
             if self.label.is_visible() {
-                self.label.set_label(&format!("{:.0}%", status.active_strength));
+                self.label
+                    .set_label(&format!("{:.0}%", status.active_strength));
             }
         }
     }

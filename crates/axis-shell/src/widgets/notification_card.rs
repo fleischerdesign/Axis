@@ -1,7 +1,7 @@
-use gtk4::prelude::*;
-use axis_domain::models::notifications::Notification;
-use std::rc::Rc;
 use crate::widgets::components::swipe_dismiss::SwipeDismiss;
+use axis_domain::models::notifications::Notification;
+use gtk4::prelude::*;
+use std::rc::Rc;
 
 pub type CloseCallback = Rc<dyn Fn(u32)>;
 pub type ActionCallback = Rc<dyn Fn(u32, String, Option<String>)>;
@@ -28,11 +28,7 @@ pub struct NotificationCard {
 }
 
 impl NotificationCard {
-    pub fn new(
-        data: &Notification,
-        on_close: CloseCallback,
-        on_action: ActionCallback,
-    ) -> Self {
+    pub fn new(data: &Notification, on_close: CloseCallback, on_action: ActionCallback) -> Self {
         let card = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
         card.add_css_class("notification-card");
         card.set_hexpand(true);
@@ -57,7 +53,7 @@ impl NotificationCard {
         spacer.set_hexpand(true);
 
         let time_label = gtk4::Label::builder()
-            .label(&format_time(data.timestamp))
+            .label(format_time(data.timestamp))
             .halign(gtk4::Align::End)
             .css_classes(vec!["notification-time".to_string()])
             .build();
@@ -139,7 +135,11 @@ impl NotificationCard {
                     let entry_for_btn = entry.clone();
                     btn.connect_clicked(move |_| {
                         let text = entry_for_btn.buffer().text();
-                        let input = if text.is_empty() { None } else { Some(text.to_string()) };
+                        let input = if text.is_empty() {
+                            None
+                        } else {
+                            Some(text.to_string())
+                        };
                         act_cb(act_id, act_key.clone(), input);
                     });
                 } else {

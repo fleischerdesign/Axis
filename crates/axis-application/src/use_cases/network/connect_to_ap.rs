@@ -1,6 +1,6 @@
-use axis_domain::ports::network::{NetworkProvider, NetworkError};
-use std::sync::Arc;
+use axis_domain::ports::network::{NetworkError, NetworkProvider};
 use log::info;
+use std::sync::Arc;
 
 pub struct ConnectToApUseCase {
     provider: Arc<dyn NetworkProvider>,
@@ -13,7 +13,9 @@ impl ConnectToApUseCase {
 
     pub async fn execute(&self, id: &str, password: Option<&str>) -> Result<(), NetworkError> {
         if id.is_empty() {
-            return Err(NetworkError::ProviderError("Access point ID cannot be empty".to_string()));
+            return Err(NetworkError::ValidationError(
+                "Access point ID cannot be empty".to_string(),
+            ));
         }
 
         info!("[use-case] Connecting to access point: {}", id);

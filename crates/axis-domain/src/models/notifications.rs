@@ -1,5 +1,13 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
+pub enum Urgency {
+    #[default]
+    Normal = 0,
+    Low = 1,
+    Critical = 2,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct NotificationAction {
     pub key: String,
@@ -13,7 +21,7 @@ pub struct Notification {
     pub app_icon: String,
     pub summary: String,
     pub body: String,
-    pub urgency: u8,
+    pub urgency: Urgency,
     pub actions: Vec<NotificationAction>,
     pub timeout: u32,
     pub timestamp: i64,

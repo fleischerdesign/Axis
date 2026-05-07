@@ -1,12 +1,14 @@
+use super::StatusStream;
 use crate::models::brightness::BrightnessStatus;
 use async_trait::async_trait;
 use thiserror::Error;
-use super::StatusStream;
 
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum BrightnessError {
     #[error("Brightness provider error: {0}")]
     ProviderError(String),
+    #[error("Validation error: {0}")]
+    ValidationError(String),
 }
 
 pub type BrightnessStream = StatusStream<BrightnessStatus>;

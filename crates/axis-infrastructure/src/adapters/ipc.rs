@@ -1,6 +1,6 @@
+use async_trait::async_trait;
 use axis_domain::models::ipc::IpcCommand;
 use axis_domain::ports::ipc::{IpcError, IpcProvider};
-use async_trait::async_trait;
 use log::info;
 use std::sync::Arc;
 use zbus::connection;

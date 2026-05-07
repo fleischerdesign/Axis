@@ -1,10 +1,10 @@
-pub mod view;
 pub mod presenter;
 pub mod theme;
+pub mod view;
 
-pub use view::View;
-pub use view::FnView;
 pub use presenter::Presenter;
+pub use view::FnView;
+pub use view::View;
 
 #[cfg(feature = "gtk")]
 pub use theme::gtk_service::GtkThemeService as ThemeService;

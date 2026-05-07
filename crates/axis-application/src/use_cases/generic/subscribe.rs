@@ -1,6 +1,6 @@
+use axis_domain::ports::{StatusProvider, StatusStream};
 use std::marker::PhantomData;
 use std::sync::Arc;
-use axis_domain::ports::{StatusProvider, StatusStream};
 
 pub struct SubscribeUseCase<P: ?Sized, S> {
     provider: Arc<P>,

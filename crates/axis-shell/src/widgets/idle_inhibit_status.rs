@@ -1,11 +1,17 @@
-use libadwaita::prelude::*;
-use axis_presentation::View;
 use axis_domain::models::idle_inhibit::IdleInhibitStatus;
+use axis_presentation::View;
+use libadwaita::prelude::*;
 
 #[derive(Clone)]
 pub struct IdleInhibitStatusWidget {
     pub container: gtk4::Box,
     icon: gtk4::Image,
+}
+
+impl Default for IdleInhibitStatusWidget {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl IdleInhibitStatusWidget {

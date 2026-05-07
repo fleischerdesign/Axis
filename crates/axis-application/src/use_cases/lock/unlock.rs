@@ -1,6 +1,6 @@
-use axis_domain::ports::lock::{LockProvider, LockError};
-use std::sync::Arc;
+use axis_domain::ports::lock::{LockError, LockProvider};
 use log::info;
+use std::sync::Arc;
 
 pub struct UnlockSessionUseCase {
     provider: Arc<dyn LockProvider>,

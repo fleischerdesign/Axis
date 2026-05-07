@@ -1,15 +1,15 @@
+use axis_domain::models::continuity::{ContinuityStatus, PeerArrangement, SharingState, Side};
+use axis_domain::ports::continuity::ContinuitySharingProvider;
+use axis_presentation::View;
 use gtk4::prelude::*;
-use gtk4_layer_shell::{Edge, Layer, LayerShell, KeyboardMode};
+use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
-use axis_domain::models::continuity::{ContinuityStatus, PeerArrangement, SharingState, Side};
-use axis_domain::ports::continuity::ContinuityProvider;
-use axis_presentation::View;
 
 pub struct ContinuityCaptureController {
-    provider: Arc<dyn ContinuityProvider>,
+    provider: Arc<dyn ContinuitySharingProvider>,
     app: libadwaita::Application,
     edge_window: Rc<RefCell<Option<gtk4::Window>>>,
     overlay: Rc<RefCell<Option<gtk4::Window>>>,
@@ -21,7 +21,7 @@ pub struct ContinuityCaptureController {
 impl ContinuityCaptureController {
     pub fn new(
         app: &libadwaita::Application,
-        provider: Arc<dyn ContinuityProvider>,
+        provider: Arc<dyn ContinuitySharingProvider>,
     ) -> Self {
         Self {
             provider,
@@ -29,7 +29,10 @@ impl ContinuityCaptureController {
             edge_window: Rc::new(RefCell::new(None)),
             overlay: Rc::new(RefCell::new(None)),
             last_trigger: Rc::new(RefCell::new(Instant::now())),
-            last_arrangement: Rc::new(RefCell::new(PeerArrangement { side: Side::Right, offset: 0 })),
+            last_arrangement: Rc::new(RefCell::new(PeerArrangement {
+                side: Side::Right,
+                offset: 0,
+            })),
             is_receiving: Rc::new(RefCell::new(false)),
         }
     }
@@ -56,7 +59,10 @@ impl ContinuityCaptureController {
 
         log::info!(
             "[continuity:edge] overlap: {}..{} (len={}) on {:?} edge",
-            overlap_start, overlap_end, overlap_len, side
+            overlap_start,
+            overlap_end,
+            overlap_len,
+            side
         );
 
         let window = gtk4::Window::builder()
@@ -129,12 +135,20 @@ impl ContinuityCaptureController {
 
             let p = provider.clone();
             if is_receiving {
-                log::info!("[continuity:edge] stop_sharing via {:?}, edge_pos={:.0}", side, edge_pos);
+                log::info!(
+                    "[continuity:edge] stop_sharing via {:?}, edge_pos={:.0}",
+                    side,
+                    edge_pos
+                );
                 tokio::spawn(async move {
                     let _ = p.stop_sharing(edge_pos).await;
                 });
             } else {
-                log::info!("[continuity:edge] start_sharing via {:?}, edge_pos={:.0}", side, edge_pos);
+                log::info!(
+                    "[continuity:edge] start_sharing via {:?}, edge_pos={:.0}",
+                    side,
+                    edge_pos
+                );
                 tokio::spawn(async move {
                     let _ = p.start_sharing(side, edge_pos).await;
                 });
@@ -179,15 +193,16 @@ impl View<ContinuityStatus> for ContinuityCaptureController {
 
         let show_edge = data.enabled
             && data.active_connection.is_some()
-            && (data.sharing_state.is_idle() || matches!(data.sharing_state, SharingState::Receiving));
+            && (data.sharing_state.is_idle()
+                || matches!(data.sharing_state, SharingState::Receiving));
 
         if show_edge {
             let config = data.active_peer_config();
             let side = config.arrangement.side;
             let receiving = matches!(data.sharing_state, SharingState::Receiving);
 
-            let arrangement_changed = edge.is_some()
-                && *self.last_arrangement.borrow() != config.arrangement;
+            let arrangement_changed =
+                edge.is_some() && *self.last_arrangement.borrow() != config.arrangement;
 
             if edge.is_none() || arrangement_changed {
                 if let Some(w) = edge.take() {
@@ -206,7 +221,10 @@ impl View<ContinuityStatus> for ContinuityCaptureController {
                 w.present();
                 log::info!(
                     "[continuity:edge] presenting edge window for {:?}, screen={}x{}, remote={:?}",
-                    side, data.screen_width, data.screen_height, data.remote_screen
+                    side,
+                    data.screen_width,
+                    data.screen_height,
+                    data.remote_screen
                 );
                 *edge = Some(w);
                 *self.last_arrangement.borrow_mut() = config.arrangement;
@@ -220,8 +238,8 @@ impl View<ContinuityStatus> for ContinuityCaptureController {
             }
         }
 
-        let show_overlay = data.enabled
-            && matches!(data.sharing_state, SharingState::Sharing { .. });
+        let show_overlay =
+            data.enabled && matches!(data.sharing_state, SharingState::Sharing { .. });
         if show_overlay {
             if overlay.is_none() {
                 let w = self.create_capture_overlay();

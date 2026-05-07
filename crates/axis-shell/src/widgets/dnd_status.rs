@@ -1,11 +1,17 @@
-use libadwaita::prelude::*;
-use axis_presentation::View;
 use axis_domain::models::dnd::DndStatus;
+use axis_presentation::View;
+use libadwaita::prelude::*;
 
 #[derive(Clone)]
 pub struct DndStatusWidget {
     pub container: gtk4::Box,
     icon: gtk4::Image,
+}
+
+impl Default for DndStatusWidget {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl DndStatusWidget {
@@ -26,7 +32,8 @@ impl View<DndStatus> for DndStatusWidget {
     fn render(&self, status: &DndStatus) {
         self.container.set_visible(status.enabled);
         if status.enabled {
-            self.icon.set_icon_name(Some("notifications-disabled-symbolic"));
+            self.icon
+                .set_icon_name(Some("notifications-disabled-symbolic"));
         }
     }
 }

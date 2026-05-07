@@ -1,6 +1,6 @@
+use crate::models::cloud::CloudAccount;
 use async_trait::async_trait;
 use thiserror::Error;
-use crate::models::cloud::CloudAccount;
 
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum AuthError {

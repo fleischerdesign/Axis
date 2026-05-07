@@ -1,11 +1,12 @@
-use libadwaita::prelude::*;
-use libadwaita as adw;
-use std::rc::Rc;
-use std::cell::RefCell;
+use crate::presentation::appearance::{AppearancePresenter, AppearanceView};
+use crate::widgets::callback::FnCell;
 use axis_domain::models::appearance::{AccentColor, ColorScheme};
 use axis_domain::models::config::AppearanceConfig;
-use crate::presentation::appearance::{AppearanceView, AppearancePresenter};
 use axis_presentation::View;
+use libadwaita as adw;
+use libadwaita::prelude::*;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 pub struct AppearancePage {
     root: adw::ToolbarView,
@@ -13,10 +14,10 @@ pub struct AppearancePage {
     accent_group: adw::PreferencesGroup,
     _wallpaper_group: adw::PreferencesGroup,
     wallpaper_row: adw::ActionRow,
-    
-    scheme_callback: Rc<RefCell<Option<Box<dyn Fn(ColorScheme) + 'static>>>>,
-    accent_callback: Rc<RefCell<Option<Box<dyn Fn(AccentColor) + 'static>>>>,
-    wallpaper_callback: Rc<RefCell<Option<Box<dyn Fn(String) + 'static>>>>,
+
+    scheme_callback: FnCell<ColorScheme>,
+    accent_callback: FnCell<AccentColor>,
+    wallpaper_callback: FnCell<String>,
 }
 
 impl AppearancePage {
@@ -44,16 +45,14 @@ impl AppearancePage {
         preferences_page.add(&accent_group);
 
         // 3. Wallpaper Section
-        let wallpaper_group = adw::PreferencesGroup::builder()
-            .title("Wallpaper")
-            .build();
+        let wallpaper_group = adw::PreferencesGroup::builder().title("Wallpaper").build();
         preferences_page.add(&wallpaper_group);
 
         let wallpaper_row = adw::ActionRow::builder()
             .title("Background Image")
             .subtitle("Select a wallpaper")
             .build();
-        
+
         let select_btn = gtk4::Button::builder()
             .label("Select File...")
             .valign(gtk4::Align::Center)
@@ -88,24 +87,31 @@ impl AppearancePage {
             .build();
 
         let dark_btn = gtk4::ToggleButton::builder().label("Dark").build();
-        let light_btn = gtk4::ToggleButton::builder().label("Light").group(&dark_btn).build();
+        let light_btn = gtk4::ToggleButton::builder()
+            .label("Light")
+            .group(&dark_btn)
+            .build();
 
         box_.append(&dark_btn);
         box_.append(&light_btn);
-        
+
         self.scheme_group.add(&box_);
 
         let cb_d = self.scheme_callback.clone();
         dark_btn.connect_toggled(move |btn| {
-            if btn.is_active() {
-                if let Some(f) = cb_d.borrow().as_ref() { f(ColorScheme::Dark); }
+            if btn.is_active()
+                && let Some(f) = cb_d.borrow().as_ref()
+            {
+                f(ColorScheme::Dark);
             }
         });
-        
+
         let cb_l = self.scheme_callback.clone();
         light_btn.connect_toggled(move |btn| {
-            if btn.is_active() {
-                if let Some(f) = cb_l.borrow().as_ref() { f(ColorScheme::Light); }
+            if btn.is_active()
+                && let Some(f) = cb_l.borrow().as_ref()
+            {
+                f(ColorScheme::Light);
             }
         });
     }
@@ -133,12 +139,16 @@ impl AppearancePage {
         let auto_btn = gtk4::Button::builder()
             .tooltip_text("Auto (from wallpaper)")
             .css_classes(vec!["accent-button".to_string(), "accent-auto".to_string()])
-            .child(&gtk4::Image::from_icon_name("applications-graphics-symbolic"))
+            .child(&gtk4::Image::from_icon_name(
+                "applications-graphics-symbolic",
+            ))
             .build();
-        
+
         let cb_auto = self.accent_callback.clone();
         auto_btn.connect_clicked(move |_| {
-            if let Some(f) = cb_auto.borrow().as_ref() { f(AccentColor::Auto); }
+            if let Some(f) = cb_auto.borrow().as_ref() {
+                f(AccentColor::Auto);
+            }
         });
         flow_box.append(&auto_btn);
 
@@ -147,19 +157,22 @@ impl AppearancePage {
                 .tooltip_text(name)
                 .css_classes(vec!["accent-button".to_string()])
                 .build();
-            
+
             // Set individual button color
             let provider = gtk4::CssProvider::new();
             provider.load_from_string(&format!("button {{ background-color: {}; }}", hex));
             // TODO: Replace with gtk::Widget::add_css_provider when available in gtk4-rs
             #[allow(deprecated)]
-            btn.style_context().add_provider(&provider, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION);
+            btn.style_context()
+                .add_provider(&provider, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION);
 
             let cb = self.accent_callback.clone();
             let color_c = color_type.clone();
 
             btn.connect_clicked(move |_| {
-                if let Some(f) = cb.borrow().as_ref() { f(color_c.clone()); }
+                if let Some(f) = cb.borrow().as_ref() {
+                    f(color_c.clone());
+                }
             });
             flow_box.append(&btn);
         }
@@ -187,14 +200,12 @@ impl AppearancePage {
                 btn_c.root().and_downcast_ref::<gtk4::Window>(),
                 None::<&gtk4::gio::Cancellable>,
                 move |result| {
-                    if let Ok(file) = result {
-                        if let Some(path) = file.path() {
-                            if let Some(path_str) = path.to_str() {
-                                if let Some(f) = cb_inner.borrow().as_ref() {
-                                    f(path_str.to_string());
-                                }
-                            }
-                        }
+                    if let Ok(file) = result
+                        && let Some(path) = file.path()
+                        && let Some(path_str) = path.to_str()
+                        && let Some(f) = cb_inner.borrow().as_ref()
+                    {
+                        f(path_str.to_string());
                     }
                 },
             );

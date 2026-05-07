@@ -1,12 +1,14 @@
-use crate::models::popups::{PopupType, PopupStatus};
+use super::StatusStream;
+use crate::models::popups::{PopupStatus, PopupType};
 use async_trait::async_trait;
 use thiserror::Error;
-use super::StatusStream;
 
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum PopupError {
     #[error("Popup provider error: {0}")]
     ProviderError(String),
+    #[error("Validation error: {0}")]
+    ValidationError(String),
 }
 
 pub type PopupStream = StatusStream<PopupStatus>;

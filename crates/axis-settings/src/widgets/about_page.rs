@@ -1,5 +1,5 @@
-use libadwaita::prelude::*;
 use libadwaita as adw;
+use libadwaita::prelude::*;
 use std::rc::Rc;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -70,20 +70,18 @@ impl AboutPage {
             .build();
         app_group.add(&desc_label);
 
-        let system_group = adw::PreferencesGroup::builder()
-            .title("System")
-            .build();
+        let system_group = adw::PreferencesGroup::builder().title("System").build();
         preferences_page.add(&system_group);
 
         let os_row = adw::ActionRow::builder()
             .title("Operating System")
-            .subtitle(&os_name())
+            .subtitle(os_name())
             .build();
         system_group.add(&os_row);
 
         let kernel_row = adw::ActionRow::builder()
             .title("Kernel")
-            .subtitle(&kernel_version())
+            .subtitle(kernel_version())
             .build();
         system_group.add(&kernel_row);
 
@@ -123,18 +121,14 @@ impl AboutPage {
             .build();
         system_group.add(&adw_row);
 
-        let links_group = adw::PreferencesGroup::builder()
-            .title("Links")
-            .build();
+        let links_group = adw::PreferencesGroup::builder().title("Links").build();
         preferences_page.add(&links_group);
 
         let issue_link = gtk4::LinkButton::builder()
             .label("Report an Issue")
             .uri("https://github.com/anomalyco/axis/issues")
             .build();
-        let issue_row = adw::ActionRow::builder()
-            .title("Report an Issue")
-            .build();
+        let issue_row = adw::ActionRow::builder().title("Report an Issue").build();
         issue_row.add_suffix(&issue_link);
         links_group.add(&issue_row);
 
@@ -144,9 +138,7 @@ impl AboutPage {
             .build();
         links_group.add(&license_row);
 
-        Rc::new(Self {
-            root: toolbar_view,
-        })
+        Rc::new(Self { root: toolbar_view })
     }
 
     pub fn widget(&self) -> &adw::ToolbarView {

@@ -1,6 +1,6 @@
-use axis_domain::ports::nightlight::{NightlightProvider, NightlightError};
-use std::sync::Arc;
+use axis_domain::ports::nightlight::{NightlightError, NightlightProvider};
 use log::info;
+use std::sync::Arc;
 
 pub struct SetNightlightScheduleUseCase {
     provider: Arc<dyn NightlightProvider>,
@@ -12,7 +12,10 @@ impl SetNightlightScheduleUseCase {
     }
 
     pub async fn execute(&self, sunrise: &str, sunset: &str) -> Result<(), NightlightError> {
-        info!("[use-case] Updating nightlight schedule: sunrise={}, sunset={}", sunrise, sunset);
+        info!(
+            "[use-case] Updating nightlight schedule: sunrise={}, sunset={}",
+            sunrise, sunset
+        );
         self.provider.set_schedule(sunrise, sunset).await
     }
 }

@@ -1,12 +1,18 @@
-use libadwaita::prelude::*;
 use axis_domain::models::workspaces::WorkspaceStatus;
 use axis_presentation::View;
+use libadwaita::prelude::*;
 use std::cell::Cell;
 
 #[derive(Clone)]
 pub struct WorkspaceDots {
     pub container: gtk4::Box,
     dot_count: Cell<usize>,
+}
+
+impl Default for WorkspaceDots {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl WorkspaceDots {

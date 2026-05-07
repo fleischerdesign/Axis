@@ -1,12 +1,12 @@
-use std::sync::Arc;
 use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
 use axis_application::use_cases::nightlight::set_enabled::SetNightlightEnabledUseCase;
+use axis_application::use_cases::nightlight::set_schedule::SetNightlightScheduleUseCase;
 use axis_application::use_cases::nightlight::set_temp_day::SetNightlightTempDayUseCase;
 use axis_application::use_cases::nightlight::set_temp_night::SetNightlightTempNightUseCase;
-use axis_application::use_cases::nightlight::set_schedule::SetNightlightScheduleUseCase;
 use axis_domain::models::nightlight::NightlightStatus;
 use axis_domain::ports::nightlight::NightlightProvider;
 use axis_presentation::{Presenter, View};
+use std::sync::Arc;
 
 pub struct NightlightPresenter {
     inner: Presenter<NightlightStatus>,
@@ -36,13 +36,8 @@ impl NightlightPresenter {
             }
         });
 
-        let inner = Presenter::from_subscribe({
-            let uc = subscribe_use_case.clone();
-            move || {
-                let uc = uc.clone();
-                async move { uc.execute().await }
-            }
-        }).with_initial_status(initial_status);
+        let inner = Presenter::from_subscribe_use_case(subscribe_use_case.clone())
+            .with_initial_status(initial_status);
 
         Self {
             inner,

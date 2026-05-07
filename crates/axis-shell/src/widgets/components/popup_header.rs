@@ -29,7 +29,10 @@ impl PopupHeader {
         container.append(&back_btn);
         container.append(&title_label);
 
-        Self { container, back_btn }
+        Self {
+            container,
+            back_btn,
+        }
     }
 
     pub fn with_spinner(title: &str, spinner: &gtk4::Spinner) -> Self {

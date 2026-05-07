@@ -6,6 +6,8 @@ use thiserror::Error;
 pub enum IpcError {
     #[error("IPC provider error: {0}")]
     ProviderError(String),
+    #[error("Validation error: {0}")]
+    ValidationError(String),
 }
 
 #[async_trait]

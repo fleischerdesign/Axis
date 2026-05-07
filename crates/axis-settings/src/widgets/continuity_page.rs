@@ -1,12 +1,15 @@
-use libadwaita::prelude::*;
-use libadwaita as adw;
-use std::rc::Rc;
-use std::cell::RefCell;
-use axis_domain::models::continuity::{ContinuityStatus, PeerArrangement, PeerConfig};
-use crate::presentation::continuity::{ContinuitySettingsView, ContinuitySettingsPresenter};
+use crate::presentation::continuity::{ContinuitySettingsPresenter, ContinuitySettingsView};
 use crate::widgets::arrangement_grid::ArrangementGrid;
+use crate::widgets::callback::{FnCell, FnCell0};
 use crate::widgets::peer_detail_page::PeerDetailPage;
+use axis_domain::models::continuity::{ContinuityStatus, PeerArrangement, PeerConfig};
 use axis_presentation::View;
+use libadwaita as adw;
+use libadwaita::prelude::*;
+use std::cell::RefCell;
+use std::rc::Rc;
+
+type ContinuityConfigFnCell = Rc<RefCell<Option<Box<dyn Fn(String, PeerConfig) + 'static>>>>;
 
 pub struct ContinuitySettingsPage {
     root: adw::ToolbarView,
@@ -16,15 +19,15 @@ pub struct ContinuitySettingsPage {
     grid: Rc<ArrangementGrid>,
     current_peer_page: RefCell<Option<Rc<PeerDetailPage>>>,
 
-    toggle_cb: Rc<RefCell<Option<Box<dyn Fn(bool) + 'static>>>>,
-    connect_cb: Rc<RefCell<Option<Box<dyn Fn(String) + 'static>>>>,
-    disconnect_cb: Rc<RefCell<Option<Box<dyn Fn() + 'static>>>>,
-    confirm_pin_cb: Rc<RefCell<Option<Box<dyn Fn() + 'static>>>>,
-    reject_pin_cb: Rc<RefCell<Option<Box<dyn Fn() + 'static>>>>,
-    cancel_reconnect_cb: Rc<RefCell<Option<Box<dyn Fn() + 'static>>>>,
-    unpair_cb: Rc<RefCell<Option<Box<dyn Fn(String) + 'static>>>>,
-    arrangement_cb: Rc<RefCell<Option<Box<dyn Fn(PeerArrangement) + 'static>>>>,
-    config_cb: Rc<RefCell<Option<Box<dyn Fn(String, PeerConfig) + 'static>>>>,
+    toggle_cb: FnCell<bool>,
+    connect_cb: FnCell<String>,
+    disconnect_cb: FnCell0,
+    confirm_pin_cb: FnCell0,
+    reject_pin_cb: FnCell0,
+    cancel_reconnect_cb: FnCell0,
+    unpair_cb: FnCell<String>,
+    arrangement_cb: FnCell<PeerArrangement>,
+    config_cb: ContinuityConfigFnCell,
 }
 
 impl ContinuitySettingsPage {
@@ -48,9 +51,7 @@ impl ContinuitySettingsPage {
             .build();
         main_page.add(&main_group);
 
-        let enable_switch = adw::SwitchRow::builder()
-            .title("Enable Continuity")
-            .build();
+        let enable_switch = adw::SwitchRow::builder().title("Enable Continuity").build();
         main_group.add(&enable_switch);
 
         let arrangement_group = adw::PreferencesGroup::builder()
@@ -59,7 +60,7 @@ impl ContinuitySettingsPage {
             .build();
         main_page.add(&arrangement_group);
 
-        let grid_cb: Rc<RefCell<Option<Box<dyn Fn(PeerArrangement) + 'static>>>> = Rc::new(RefCell::new(None));
+        let grid_cb: FnCell<PeerArrangement> = Rc::new(RefCell::new(None));
         let grid_cb_closure = grid_cb.clone();
         let grid = ArrangementGrid::new(move |arr| {
             if let Some(f) = grid_cb_closure.borrow().as_ref() {
@@ -68,9 +69,7 @@ impl ContinuitySettingsPage {
         });
         arrangement_group.add(grid.widget());
 
-        let peers_group = adw::PreferencesGroup::builder()
-            .title("Devices")
-            .build();
+        let peers_group = adw::PreferencesGroup::builder().title("Devices").build();
         main_page.add(&peers_group);
 
         let peer_list = gtk4::ListBox::builder()
@@ -125,45 +124,49 @@ impl ContinuitySettingsPage {
             return;
         }
 
-        if let Some(pin) = &status.pending_pin {
-            if pin.is_incoming {
-                let row = adw::ActionRow::builder()
-                    .title(&format!("{} wants to connect", pin.peer_name))
-                    .subtitle("Pairing request")
-                    .build();
+        if let Some(pin) = &status.pending_pin
+            && pin.is_incoming
+        {
+            let row = adw::ActionRow::builder()
+                .title(format!("{} wants to connect", pin.peer_name))
+                .subtitle("Pairing request")
+                .build();
 
-                let btn_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
-                btn_box.set_valign(gtk4::Align::Center);
+            let btn_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
+            btn_box.set_valign(gtk4::Align::Center);
 
-                let accept_btn = gtk4::Button::builder()
-                    .label("Accept")
-                    .css_classes(vec!["suggested-action".to_string(), "flat".to_string()])
-                    .valign(gtk4::Align::Center)
-                    .build();
-                let decline_btn = gtk4::Button::builder()
-                    .label("Decline")
-                    .css_classes(vec!["destructive-action".to_string(), "flat".to_string()])
-                    .valign(gtk4::Align::Center)
-                    .build();
+            let accept_btn = gtk4::Button::builder()
+                .label("Accept")
+                .css_classes(vec!["suggested-action".to_string(), "flat".to_string()])
+                .valign(gtk4::Align::Center)
+                .build();
+            let decline_btn = gtk4::Button::builder()
+                .label("Decline")
+                .css_classes(vec!["destructive-action".to_string(), "flat".to_string()])
+                .valign(gtk4::Align::Center)
+                .build();
 
-                let cb_c = self.confirm_pin_cb.clone();
-                accept_btn.connect_clicked(move |_| {
-                    if let Some(f) = cb_c.borrow().as_ref() { f(); }
-                });
+            let cb_c = self.confirm_pin_cb.clone();
+            accept_btn.connect_clicked(move |_| {
+                if let Some(f) = cb_c.borrow().as_ref() {
+                    f();
+                }
+            });
 
-                let cb_r = self.reject_pin_cb.clone();
-                decline_btn.connect_clicked(move |_| {
-                    if let Some(f) = cb_r.borrow().as_ref() { f(); }
-                });
+            let cb_r = self.reject_pin_cb.clone();
+            decline_btn.connect_clicked(move |_| {
+                if let Some(f) = cb_r.borrow().as_ref() {
+                    f();
+                }
+            });
 
-                btn_box.append(&accept_btn);
-                btn_box.append(&decline_btn);
-                row.add_suffix(&btn_box);
-                self.peer_list.append(&row);
-            }
+            btn_box.append(&accept_btn);
+            btn_box.append(&decline_btn);
+            row.add_suffix(&btn_box);
+            self.peer_list.append(&row);
         }
 
-        if status.peers.is_empty() && status.pending_pin.as_ref().map_or(true, |p| !p.is_incoming) {
+        if status.peers.is_empty() && status.pending_pin.as_ref().is_none_or(|p| !p.is_incoming) {
             let row = adw::ActionRow::builder()
                 .title("No devices found")
                 .subtitle("Enable Continuity on other devices to discover them")
@@ -174,16 +177,16 @@ impl ContinuitySettingsPage {
         }
 
         for peer in &status.peers {
-            let is_connected = status.active_connection
+            let is_connected = status
+                .active_connection
                 .as_ref()
-                .map_or(false, |c| c.peer_id == peer.device_id);
+                .is_some_and(|c| c.peer_id == peer.device_id);
 
-            let row = adw::ActionRow::builder()
-                .title(&peer.device_name)
-                .build();
+            let row = adw::ActionRow::builder().title(&peer.device_name).build();
 
             if is_connected {
-                let connected_secs = status.active_connection
+                let connected_secs = status
+                    .active_connection
                     .as_ref()
                     .map_or(0, |c| c.connected_secs);
                 let time_str = if connected_secs < 60 {
@@ -201,7 +204,9 @@ impl ContinuitySettingsPage {
 
                 let cb_d = self.disconnect_cb.clone();
                 disconnect_btn.connect_clicked(move |_| {
-                    if let Some(f) = cb_d.borrow().as_ref() { f(); }
+                    if let Some(f) = cb_d.borrow().as_ref() {
+                        f();
+                    }
                 });
                 row.add_suffix(&disconnect_btn);
             } else {
@@ -216,7 +221,9 @@ impl ContinuitySettingsPage {
                 let cb_c = self.connect_cb.clone();
                 let id_c = peer.device_id.clone();
                 connect_btn.connect_clicked(move |_| {
-                    if let Some(f) = cb_c.borrow().as_ref() { f(id_c.clone()); }
+                    if let Some(f) = cb_c.borrow().as_ref() {
+                        f(id_c.clone());
+                    }
                 });
                 row.add_suffix(&connect_btn);
             }
@@ -235,21 +242,27 @@ impl ContinuitySettingsPage {
                 detail_page.set_on_disconnect({
                     let cb = disconnect_cb_r.clone();
                     Box::new(move || {
-                        if let Some(f) = cb.borrow().as_ref() { f(); }
+                        if let Some(f) = cb.borrow().as_ref() {
+                            f();
+                        }
                     })
                 });
 
                 detail_page.set_on_unpair({
                     let cb = unpair_cb_r.clone();
                     Box::new(move |id| {
-                        if let Some(f) = cb.borrow().as_ref() { f(id); }
+                        if let Some(f) = cb.borrow().as_ref() {
+                            f(id);
+                        }
                     })
                 });
 
                 detail_page.set_on_config({
                     let cb = config_cb.clone();
                     Box::new(move |id, config| {
-                        if let Some(f) = cb.borrow().as_ref() { f(id, config); }
+                        if let Some(f) = cb.borrow().as_ref() {
+                            f(id, config);
+                        }
                     })
                 });
 
@@ -276,13 +289,31 @@ impl View<ContinuityStatus> for ContinuitySettingsPage {
 }
 
 impl ContinuitySettingsView for ContinuitySettingsPage {
-    fn on_toggle_enabled(&self, f: Box<dyn Fn(bool) + 'static>) { *self.toggle_cb.borrow_mut() = Some(f); }
-    fn on_connect_peer(&self, f: Box<dyn Fn(String) + 'static>) { *self.connect_cb.borrow_mut() = Some(f); }
-    fn on_disconnect(&self, f: Box<dyn Fn() + 'static>) { *self.disconnect_cb.borrow_mut() = Some(f); }
-    fn on_confirm_pin(&self, f: Box<dyn Fn() + 'static>) { *self.confirm_pin_cb.borrow_mut() = Some(f); }
-    fn on_reject_pin(&self, f: Box<dyn Fn() + 'static>) { *self.reject_pin_cb.borrow_mut() = Some(f); }
-    fn on_cancel_reconnect(&self, f: Box<dyn Fn() + 'static>) { *self.cancel_reconnect_cb.borrow_mut() = Some(f); }
-    fn on_unpair(&self, f: Box<dyn Fn(String) + 'static>) { *self.unpair_cb.borrow_mut() = Some(f); }
-    fn on_set_arrangement(&self, f: Box<dyn Fn(PeerArrangement) + 'static>) { *self.arrangement_cb.borrow_mut() = Some(f); }
-    fn on_update_peer_config(&self, f: Box<dyn Fn(String, PeerConfig) + 'static>) { *self.config_cb.borrow_mut() = Some(f); }
+    fn on_toggle_enabled(&self, f: Box<dyn Fn(bool) + 'static>) {
+        *self.toggle_cb.borrow_mut() = Some(f);
+    }
+    fn on_connect_peer(&self, f: Box<dyn Fn(String) + 'static>) {
+        *self.connect_cb.borrow_mut() = Some(f);
+    }
+    fn on_disconnect(&self, f: Box<dyn Fn() + 'static>) {
+        *self.disconnect_cb.borrow_mut() = Some(f);
+    }
+    fn on_confirm_pin(&self, f: Box<dyn Fn() + 'static>) {
+        *self.confirm_pin_cb.borrow_mut() = Some(f);
+    }
+    fn on_reject_pin(&self, f: Box<dyn Fn() + 'static>) {
+        *self.reject_pin_cb.borrow_mut() = Some(f);
+    }
+    fn on_cancel_reconnect(&self, f: Box<dyn Fn() + 'static>) {
+        *self.cancel_reconnect_cb.borrow_mut() = Some(f);
+    }
+    fn on_unpair(&self, f: Box<dyn Fn(String) + 'static>) {
+        *self.unpair_cb.borrow_mut() = Some(f);
+    }
+    fn on_set_arrangement(&self, f: Box<dyn Fn(PeerArrangement) + 'static>) {
+        *self.arrangement_cb.borrow_mut() = Some(f);
+    }
+    fn on_update_peer_config(&self, f: Box<dyn Fn(String, PeerConfig) + 'static>) {
+        *self.config_cb.borrow_mut() = Some(f);
+    }
 }

@@ -29,7 +29,10 @@ impl<T: NavigationView + ?Sized> NavigationView for Rc<T> {}
 
 impl NavigationPresenter {
     pub fn new(initial_pages: Vec<PageDescriptor>) -> Self {
-        let active_id = initial_pages.first().map(|p| p.id.clone()).unwrap_or_default();
+        let active_id = initial_pages
+            .first()
+            .map(|p| p.id.clone())
+            .unwrap_or_default();
         let initial_state = NavigationState {
             pages: initial_pages,
             active_id,
@@ -43,10 +46,7 @@ impl NavigationPresenter {
             Box::pin(WatchStream::new(rx))
         });
 
-        Self {
-            inner,
-            state_tx,
-        }
+        Self { inner, state_tx }
     }
 
     pub fn add_view(&self, view: Box<dyn View<NavigationState>>) {

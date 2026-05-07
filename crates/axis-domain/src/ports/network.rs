@@ -1,12 +1,14 @@
+use super::StatusStream;
 use crate::models::network::NetworkStatus;
 use async_trait::async_trait;
 use thiserror::Error;
-use super::StatusStream;
 
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum NetworkError {
     #[error("Network provider error: {0}")]
     ProviderError(String),
+    #[error("Validation error: {0}")]
+    ValidationError(String),
     #[error("Access point not found: {0}")]
     AccessPointNotFound(String),
     #[error("Authentication failed")]

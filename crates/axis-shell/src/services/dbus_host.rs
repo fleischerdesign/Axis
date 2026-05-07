@@ -1,6 +1,6 @@
-use axis_infrastructure::adapters::continuity::dbus::ContinuityDbusServer;
-use axis_infrastructure::adapters::continuity::ContinuityCmd;
 use axis_domain::models::continuity::ContinuityStatus;
+use axis_infrastructure::adapters::continuity::ContinuityCmd;
+use axis_infrastructure::adapters::continuity::dbus::ContinuityDbusServer;
 use log::{error, info};
 use std::sync::Arc;
 use tokio::sync::watch;
@@ -96,10 +96,7 @@ pub async fn run_dbus_host(
 
             if let Ok(iface) = iface_res {
                 let json = serde_json::to_string(&status).unwrap_or_default();
-                let _ = ContinuityDbusServer::state_changed(
-                    iface.signal_emitter(),
-                    &json,
-                ).await;
+                let _ = ContinuityDbusServer::state_changed(iface.signal_emitter(), &json).await;
             }
         }
     };

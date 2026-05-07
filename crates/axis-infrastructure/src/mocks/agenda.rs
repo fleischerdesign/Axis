@@ -1,7 +1,7 @@
+use async_trait::async_trait;
 use axis_domain::models::calendar::CalendarEvent;
 use axis_domain::models::tasks::{Task, TaskList};
-use axis_domain::ports::agenda::{AgendaProvider, AgendaError};
-use async_trait::async_trait;
+use axis_domain::ports::agenda::{AgendaError, AgendaProvider};
 use std::sync::Arc;
 
 pub struct MockAgendaProvider;
@@ -43,11 +43,7 @@ impl AgendaProvider for MockAgendaProvider {
         Ok(())
     }
 
-    async fn create_task(
-        &self,
-        _list_id: &str,
-        _title: &str,
-    ) -> Result<Task, AgendaError> {
+    async fn create_task(&self, _list_id: &str, _title: &str) -> Result<Task, AgendaError> {
         Ok(Task {
             id: "mock-task-1".to_string(),
             title: _title.to_string(),

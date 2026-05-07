@@ -4,11 +4,11 @@ use gtk4::prelude::*;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use axis_presentation::View;
+use crate::presentation::battery::battery_icon;
 use crate::widgets::components::blurred_picture::BlurredPicture;
 use axis_domain::models::lock::LockStatus;
 use axis_domain::models::power::PowerStatus;
-use crate::presentation::battery::battery_icon;
+use axis_presentation::View;
 
 type AuthCallback = dyn Fn(&str);
 
@@ -97,13 +97,13 @@ impl LockScreenFactory {
         content.append(&user_label);
 
         let clock_label = gtk4::Label::builder()
-            .label(&Self::format_clock())
+            .label(Self::format_clock())
             .css_classes(vec!["lock-clock".to_string()])
             .build();
         content.append(&clock_label);
 
         let date_label = gtk4::Label::builder()
-            .label(&Self::format_date())
+            .label(Self::format_date())
             .css_classes(vec!["lock-date".to_string()])
             .build();
         content.append(&date_label);

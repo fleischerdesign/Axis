@@ -1,28 +1,28 @@
-use axis_domain::models::clock::TimeStatus;
-use axis_domain::ports::clock::{ClockProvider, ClockError, ClockStream};
 use async_trait::async_trait;
-use tokio::sync::watch;
-use tokio_stream::wrappers::WatchStream;
+use axis_domain::models::clock::ClockStatus;
+use axis_domain::ports::clock::{ClockError, ClockProvider, ClockStream};
 use chrono::Local;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::watch;
+use tokio_stream::wrappers::WatchStream;
 
 pub struct SystemClockProvider {
-    status_tx: watch::Sender<TimeStatus>,
+    status_tx: watch::Sender<ClockStatus>,
 }
 
 impl SystemClockProvider {
     pub fn new() -> Arc<Self> {
-        let (tx, _) = watch::channel(TimeStatus {
+        let (tx, _) = watch::channel(ClockStatus {
             current_time: Local::now(),
         });
-        
+
         let tx_clone = tx.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(30));
             loop {
                 interval.tick().await;
-                let _ = tx_clone.send(TimeStatus {
+                let _ = tx_clone.send(ClockStatus {
                     current_time: Local::now(),
                 });
             }
@@ -34,7 +34,7 @@ impl SystemClockProvider {
 
 #[async_trait]
 impl ClockProvider for SystemClockProvider {
-    async fn get_status(&self) -> Result<TimeStatus, ClockError> {
+    async fn get_status(&self) -> Result<ClockStatus, ClockError> {
         Ok(self.status_tx.borrow().clone())
     }
 

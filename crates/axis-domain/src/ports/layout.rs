@@ -5,6 +5,8 @@ use thiserror::Error;
 pub enum LayoutError {
     #[error("Layout provider error: {0}")]
     ProviderError(String),
+    #[error("Validation error: {0}")]
+    ValidationError(String),
 }
 
 #[async_trait]

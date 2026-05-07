@@ -1,6 +1,6 @@
+use async_trait::async_trait;
 use axis_domain::models::launcher::{LauncherAction, LauncherItem, SearchPriority};
 use axis_domain::ports::launcher::{LauncherError, LauncherSearchProvider};
-use async_trait::async_trait;
 use std::sync::Arc;
 
 fn url_encode(query: &str) -> String {
@@ -34,10 +34,7 @@ impl WebSearchProvider {
             return None;
         }
 
-        let url = format!(
-            "https://www.google.com/search?q={}",
-            url_encode(trimmed)
-        );
+        let url = format!("https://www.google.com/search?q={}", url_encode(trimmed));
 
         Some(LauncherItem {
             id: "web-google".to_string(),

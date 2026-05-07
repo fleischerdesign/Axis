@@ -1,6 +1,6 @@
+use axis_domain::models::continuity::Message;
 use std::io;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use axis_domain::models::continuity::Message;
 
 pub const PROTOCOL_VERSION: u32 = 1;
 pub const MAGIC: &[u8; 4] = b"AXIS";
@@ -33,9 +33,7 @@ pub async fn write_message<W: AsyncWriteExt + Unpin>(
     Ok(())
 }
 
-pub async fn read_message<R: AsyncReadExt + Unpin>(
-    reader: &mut R,
-) -> io::Result<Message> {
+pub async fn read_message<R: AsyncReadExt + Unpin>(reader: &mut R) -> io::Result<Message> {
     log::trace!("[continuity:protocol] read_message started");
 
     let mut magic = [0u8; 4];
@@ -72,9 +70,7 @@ pub async fn read_message<R: AsyncReadExt + Unpin>(
     let version = u32::from_be_bytes(ver_bytes);
     let len = u32::from_be_bytes(len_bytes) as usize;
 
-    log::debug!(
-        "[continuity:protocol] RX header: ver={version} len={len}"
-    );
+    log::debug!("[continuity:protocol] RX header: ver={version} len={len}");
 
     if version != PROTOCOL_VERSION {
         return Err(io::Error::new(
@@ -93,6 +89,5 @@ pub async fn read_message<R: AsyncReadExt + Unpin>(
     let mut payload = vec![0u8; len];
     reader.read_exact(&mut payload).await?;
 
-    serde_json::from_slice(&payload)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+    serde_json::from_slice(&payload).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
 }

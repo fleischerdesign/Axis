@@ -1,41 +1,41 @@
-use libadwaita::prelude::*;
-use libadwaita as adw;
-use gtk4::{glib, gdk};
 use chrono::Local;
+use gtk4::{gdk, glib};
+use libadwaita as adw;
+use libadwaita::prelude::*;
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::path::PathBuf;
 
 mod presentation;
 mod widgets;
 
 use presentation::accounts::AccountsPresenter;
 use presentation::appearance::AppearancePresenter;
+use presentation::bluetooth::{BluetoothPresenter, BluetoothPresenterArgs};
+use presentation::continuity::{ContinuitySettingsPresenter, ContinuitySettingsPresenterArgs};
+use presentation::idle::IdleSettingsPresenter;
 use presentation::navigation::{NavigationPresenter, PageDescriptor};
 use presentation::network::NetworkPresenter;
-use presentation::bluetooth::BluetoothPresenter;
-use presentation::continuity::ContinuitySettingsPresenter;
-use presentation::idle::IdleSettingsPresenter;
 
 use widgets::about_page::AboutPage;
 use widgets::accounts_page::AccountsPage;
 use widgets::appearance_page::AppearancePage;
-use widgets::network_page::NetworkPage;
 use widgets::bluetooth_page::BluetoothPage;
 use widgets::continuity_page::ContinuitySettingsPage;
 use widgets::idle_page::IdleSettingsPage;
+use widgets::network_page::NetworkPage;
 use widgets::sidebar::Sidebar;
 use widgets::window::SettingsWindow;
 
-use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
-use axis_application::use_cases::cloud::authenticate::AuthenticateAccountUseCase;
 use axis_application::use_cases::appearance::set_accent::SetAccentColorUseCase;
 use axis_application::use_cases::appearance::set_scheme::SetColorSchemeUseCase;
 use axis_application::use_cases::appearance::set_wallpaper::SetWallpaperUseCase;
+use axis_application::use_cases::cloud::authenticate::AuthenticateAccountUseCase;
+use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
 
-use axis_application::use_cases::network::scan_wifi::ScanWifiUseCase;
 use axis_application::use_cases::network::connect_to_ap::ConnectToApUseCase;
 use axis_application::use_cases::network::disconnect_wifi::DisconnectWifiUseCase;
+use axis_application::use_cases::network::scan_wifi::ScanWifiUseCase;
 
 use axis_application::use_cases::bluetooth::connect::ConnectBluetoothDeviceUseCase;
 use axis_application::use_cases::bluetooth::disconnect::DisconnectBluetoothDeviceUseCase;
@@ -44,35 +44,35 @@ use axis_application::use_cases::bluetooth::start_scan::StartBluetoothScanUseCas
 use axis_application::use_cases::bluetooth::stop_scan::StopBluetoothScanUseCase;
 use axis_application::use_cases::bluetooth::unpair::UnpairBluetoothDeviceUseCase;
 
-use axis_application::use_cases::continuity::set_enabled::SetContinuityEnabledUseCase;
-use axis_application::use_cases::continuity::connect_to_peer::ConnectToPeerUseCase;
-use axis_application::use_cases::continuity::confirm_pin::ConfirmPinUseCase;
-use axis_application::use_cases::continuity::reject_pin::RejectPinUseCase;
-use axis_application::use_cases::continuity::disconnect::DisconnectUseCase;
-use axis_application::use_cases::continuity::unpair::UnpairUseCase;
 use axis_application::use_cases::continuity::cancel_reconnect::CancelReconnectUseCase;
+use axis_application::use_cases::continuity::confirm_pin::ConfirmPinUseCase;
+use axis_application::use_cases::continuity::connect_to_peer::ConnectToPeerUseCase;
+use axis_application::use_cases::continuity::disconnect::DisconnectUseCase;
+use axis_application::use_cases::continuity::reject_pin::RejectPinUseCase;
+use axis_application::use_cases::continuity::set_enabled::SetContinuityEnabledUseCase;
 use axis_application::use_cases::continuity::set_peer_arrangement::SetPeerArrangementUseCase;
+use axis_application::use_cases::continuity::unpair::UnpairUseCase;
 use axis_application::use_cases::continuity::update_peer_configs::UpdatePeerConfigsUseCase;
 use axis_application::use_cases::idle_inhibit::set_inhibited::SetIdleInhibitUseCase;
 
-use axis_infrastructure::adapters::cloud::LocalCloudProvider;
-use axis_infrastructure::adapters::google_auth::GoogleCloudAuthProvider;
 use axis_infrastructure::adapters::appearance::ConfigAppearanceProvider;
-use axis_infrastructure::adapters::config::FileConfigProvider;
-use axis_infrastructure::adapters::network::NetworkManagerProvider;
 use axis_infrastructure::adapters::bluetooth::BlueZProvider;
-use axis_infrastructure::adapters::niri_layout::NiriLayoutProvider;
+use axis_infrastructure::adapters::cloud::LocalCloudProvider;
+use axis_infrastructure::adapters::config::FileConfigProvider;
 use axis_infrastructure::adapters::continuity::ContinuityDbusProxy;
+use axis_infrastructure::adapters::google_auth::GoogleCloudAuthProvider;
 use axis_infrastructure::adapters::idle_inhibit::ConfigIdleInhibitProvider;
+use axis_infrastructure::adapters::network::NetworkManagerProvider;
+use axis_infrastructure::adapters::niri_layout::NiriLayoutProvider;
 
 use axis_domain::models::config::AxisConfig;
-use axis_domain::ports::cloud::CloudProvider;
 use axis_domain::ports::appearance::AppearanceProvider;
-use axis_domain::ports::network::NetworkProvider;
 use axis_domain::ports::bluetooth::BluetoothProvider;
-use axis_domain::ports::layout::LayoutProvider;
+use axis_domain::ports::cloud::CloudProvider;
 use axis_domain::ports::continuity::ContinuityProvider;
 use axis_domain::ports::idle_inhibit::IdleInhibitProvider;
+use axis_domain::ports::layout::LayoutProvider;
+use axis_domain::ports::network::NetworkProvider;
 use axis_presentation::ThemeService;
 
 fn main() -> glib::ExitCode {
@@ -84,7 +84,8 @@ fn main() -> glib::ExitCode {
         .application_id("design.fleischer.axis.settings")
         .build();
 
-    let theme_provider: Rc<std::cell::OnceCell<Rc<gtk4::CssProvider>>> = Rc::new(std::cell::OnceCell::new());
+    let theme_provider: Rc<std::cell::OnceCell<Rc<gtk4::CssProvider>>> =
+        Rc::new(std::cell::OnceCell::new());
     let theme_provider_c = theme_provider.clone();
 
     app.connect_startup(move |_| {
@@ -95,7 +96,7 @@ fn main() -> glib::ExitCode {
             &provider,
             gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
         );
-        
+
         let theme_css = Rc::new(gtk4::CssProvider::new());
         gtk4::style_context_add_provider_for_display(
             &gdk::Display::default().expect("Could not connect to a display."),
@@ -112,12 +113,18 @@ fn main() -> glib::ExitCode {
         });
         build_ui(app, theme_css, &rt);
     });
-    
+
     app.run()
 }
 
-fn build_ui(app: &adw::Application, theme_css: Rc<gtk4::CssProvider>, rt: &tokio::runtime::Runtime) {
-    let config_dir = dirs::config_dir().unwrap_or(PathBuf::from(".")).join("axis");
+fn build_ui(
+    app: &adw::Application,
+    theme_css: Rc<gtk4::CssProvider>,
+    rt: &tokio::runtime::Runtime,
+) {
+    let config_dir = dirs::config_dir()
+        .unwrap_or(PathBuf::from("."))
+        .join("axis");
     if let Err(e) = std::fs::create_dir_all(&config_dir) {
         log::warn!("[settings] Failed to create config dir: {e}");
     }
@@ -126,9 +133,10 @@ fn build_ui(app: &adw::Application, theme_css: Rc<gtk4::CssProvider>, rt: &tokio
     let config_provider = FileConfigProvider::new(AxisConfig::default());
     let cloud_provider: Arc<dyn CloudProvider> = LocalCloudProvider::new(config_dir.clone());
     let google_auth = GoogleCloudAuthProvider::new(config_dir.clone());
-    let appearance_provider: Arc<dyn AppearanceProvider> = rt.block_on(ConfigAppearanceProvider::new(config_provider.clone()));
+    let appearance_provider: Arc<dyn AppearanceProvider> =
+        rt.block_on(ConfigAppearanceProvider::new(config_provider.clone()));
     let niri_layout_provider: Arc<dyn LayoutProvider> = NiriLayoutProvider::new(config_dir.clone());
-    
+
     let network_provider: Arc<dyn NetworkProvider> = rt.block_on(async {
         match NetworkManagerProvider::new().await {
             Ok(p) => p as Arc<dyn NetworkProvider>,
@@ -159,14 +167,21 @@ fn build_ui(app: &adw::Application, theme_css: Rc<gtk4::CssProvider>, rt: &tokio
         }
     });
 
-    let idle_inhibit_provider: Arc<dyn IdleInhibitProvider> = rt.block_on(ConfigIdleInhibitProvider::new(config_provider.clone()));
+    let idle_inhibit_provider: Arc<dyn IdleInhibitProvider> =
+        rt.block_on(ConfigIdleInhibitProvider::new(config_provider.clone()));
 
     // 2. Use Cases
     let subscribe_cloud = Arc::new(SubscribeUseCase::new(cloud_provider.clone()));
-    let authenticate_cloud = Arc::new(AuthenticateAccountUseCase::new(google_auth.clone(), cloud_provider.clone()));
-    
+    let authenticate_cloud = Arc::new(AuthenticateAccountUseCase::new(
+        google_auth.clone(),
+        cloud_provider.clone(),
+    ));
+
     let subscribe_appearance = Arc::new(SubscribeUseCase::new(appearance_provider.clone()));
-    let set_accent = Arc::new(SetAccentColorUseCase::new(appearance_provider.clone(), niri_layout_provider));
+    let set_accent = Arc::new(SetAccentColorUseCase::new(
+        appearance_provider.clone(),
+        niri_layout_provider,
+    ));
     let set_scheme = Arc::new(SetColorSchemeUseCase::new(appearance_provider.clone()));
     let set_wallpaper = Arc::new(SetWallpaperUseCase::new(appearance_provider.clone()));
 
@@ -178,37 +193,81 @@ fn build_ui(app: &adw::Application, theme_css: Rc<gtk4::CssProvider>, rt: &tokio
 
     let subscribe_bluetooth = Arc::new(SubscribeUseCase::new(bluetooth_provider.clone()));
     let get_bluetooth_status = Arc::new(GetStatusUseCase::new(bluetooth_provider.clone()));
-    let bt_connect = Arc::new(ConnectBluetoothDeviceUseCase::new(bluetooth_provider.clone()));
-    let bt_disconnect = Arc::new(DisconnectBluetoothDeviceUseCase::new(bluetooth_provider.clone()));
+    let bt_connect = Arc::new(ConnectBluetoothDeviceUseCase::new(
+        bluetooth_provider.clone(),
+    ));
+    let bt_disconnect = Arc::new(DisconnectBluetoothDeviceUseCase::new(
+        bluetooth_provider.clone(),
+    ));
     let bt_set_powered = Arc::new(SetBluetoothPoweredUseCase::new(bluetooth_provider.clone()));
     let bt_start_scan = Arc::new(StartBluetoothScanUseCase::new(bluetooth_provider.clone()));
     let bt_stop_scan = Arc::new(StopBluetoothScanUseCase::new(bluetooth_provider.clone()));
-    let bt_unpair = Arc::new(UnpairBluetoothDeviceUseCase::new(bluetooth_provider.clone()));
+    let bt_unpair = Arc::new(UnpairBluetoothDeviceUseCase::new(
+        bluetooth_provider.clone(),
+    ));
 
     let subscribe_continuity = Arc::new(SubscribeUseCase::new(continuity_provider.clone()));
     let get_continuity_status = Arc::new(GetStatusUseCase::new(continuity_provider.clone()));
-    let continuity_set_enabled = Arc::new(SetContinuityEnabledUseCase::new(continuity_provider.clone()));
+    let continuity_set_enabled = Arc::new(SetContinuityEnabledUseCase::new(
+        continuity_provider.clone(),
+    ));
     let continuity_connect = Arc::new(ConnectToPeerUseCase::new(continuity_provider.clone()));
     let continuity_confirm_pin = Arc::new(ConfirmPinUseCase::new(continuity_provider.clone()));
     let continuity_reject_pin = Arc::new(RejectPinUseCase::new(continuity_provider.clone()));
     let continuity_disconnect = Arc::new(DisconnectUseCase::new(continuity_provider.clone()));
-    let continuity_cancel_reconnect = Arc::new(CancelReconnectUseCase::new(continuity_provider.clone()));
+    let continuity_cancel_reconnect =
+        Arc::new(CancelReconnectUseCase::new(continuity_provider.clone()));
     let continuity_unpair = Arc::new(UnpairUseCase::new(continuity_provider.clone()));
-    let continuity_set_arrangement = Arc::new(SetPeerArrangementUseCase::new(continuity_provider.clone()));
-    let continuity_update_configs = Arc::new(UpdatePeerConfigsUseCase::new(continuity_provider.clone()));
+    let continuity_set_arrangement =
+        Arc::new(SetPeerArrangementUseCase::new(continuity_provider.clone()));
+    let continuity_update_configs =
+        Arc::new(UpdatePeerConfigsUseCase::new(continuity_provider.clone()));
 
     let set_idle_inhibited_uc = Arc::new(SetIdleInhibitUseCase::new(idle_inhibit_provider.clone()));
 
     // 3. Presenters
     let accounts_presenter = Rc::new(AccountsPresenter::new(subscribe_cloud, authenticate_cloud));
-    let appearance_presenter = Rc::new(AppearancePresenter::new(subscribe_appearance, set_accent, set_scheme, set_wallpaper));
-    let network_presenter = Rc::new(NetworkPresenter::new(subscribe_network, get_network_status, scan_wifi, connect_to_ap, disconnect_wifi, rt));
-    let bluetooth_presenter = Rc::new(BluetoothPresenter::new(subscribe_bluetooth, get_bluetooth_status, bt_connect, bt_disconnect, bt_set_powered, bt_start_scan, bt_stop_scan, bt_unpair, rt));
+    let appearance_presenter = Rc::new(AppearancePresenter::new(
+        subscribe_appearance,
+        set_accent,
+        set_scheme,
+        set_wallpaper,
+    ));
+    let network_presenter = Rc::new(NetworkPresenter::new(
+        subscribe_network,
+        get_network_status,
+        scan_wifi,
+        connect_to_ap,
+        disconnect_wifi,
+        rt,
+    ));
+    let bluetooth_presenter = Rc::new(BluetoothPresenter::new(
+        BluetoothPresenterArgs {
+            subscribe_uc: subscribe_bluetooth,
+            get_status_uc: get_bluetooth_status,
+            connect_uc: bt_connect,
+            disconnect_uc: bt_disconnect,
+            set_powered_uc: bt_set_powered,
+            start_scan_uc: bt_start_scan,
+            stop_scan_uc: bt_stop_scan,
+            unpair_uc: bt_unpair,
+        },
+        rt,
+    ));
     let continuity_settings_presenter = Rc::new(ContinuitySettingsPresenter::new(
-        subscribe_continuity, get_continuity_status,
-        continuity_set_enabled, continuity_connect, continuity_confirm_pin,
-        continuity_reject_pin, continuity_disconnect, continuity_cancel_reconnect,
-        continuity_unpair, continuity_set_arrangement, continuity_update_configs,
+        ContinuitySettingsPresenterArgs {
+            subscribe_uc: subscribe_continuity,
+            get_status_uc: get_continuity_status,
+            set_enabled_uc: continuity_set_enabled,
+            connect_uc: continuity_connect,
+            confirm_pin_uc: continuity_confirm_pin,
+            reject_pin_uc: continuity_reject_pin,
+            disconnect_uc: continuity_disconnect,
+            cancel_reconnect_uc: continuity_cancel_reconnect,
+            unpair_uc: continuity_unpair,
+            set_arrangement_uc: continuity_set_arrangement,
+            update_configs_uc: continuity_update_configs,
+        },
         rt,
     ));
 
@@ -218,13 +277,41 @@ fn build_ui(app: &adw::Application, theme_css: Rc<gtk4::CssProvider>, rt: &tokio
     ));
 
     let initial_pages = vec![
-        PageDescriptor { id: "appearance".to_string(), title: "Appearance".to_string(), icon: "preferences-desktop-wallpaper-symbolic".to_string() },
-        PageDescriptor { id: "network".to_string(), title: "Network".to_string(), icon: "network-wireless-symbolic".to_string() },
-        PageDescriptor { id: "bluetooth".to_string(), title: "Bluetooth".to_string(), icon: "bluetooth-active-symbolic".to_string() },
-        PageDescriptor { id: "accounts".to_string(), title: "Accounts".to_string(), icon: "avatar-default-symbolic".to_string() },
-        PageDescriptor { id: "continuity".to_string(), title: "Continuity".to_string(), icon: "input-mouse-symbolic".to_string() },
-        PageDescriptor { id: "idle".to_string(), title: "Idle".to_string(), icon: "changes-prevent-symbolic".to_string() },
-        PageDescriptor { id: "about".to_string(), title: "About".to_string(), icon: "help-about-symbolic".to_string() },
+        PageDescriptor {
+            id: "appearance".to_string(),
+            title: "Appearance".to_string(),
+            icon: "preferences-desktop-wallpaper-symbolic".to_string(),
+        },
+        PageDescriptor {
+            id: "network".to_string(),
+            title: "Network".to_string(),
+            icon: "network-wireless-symbolic".to_string(),
+        },
+        PageDescriptor {
+            id: "bluetooth".to_string(),
+            title: "Bluetooth".to_string(),
+            icon: "bluetooth-active-symbolic".to_string(),
+        },
+        PageDescriptor {
+            id: "accounts".to_string(),
+            title: "Accounts".to_string(),
+            icon: "avatar-default-symbolic".to_string(),
+        },
+        PageDescriptor {
+            id: "continuity".to_string(),
+            title: "Continuity".to_string(),
+            icon: "input-mouse-symbolic".to_string(),
+        },
+        PageDescriptor {
+            id: "idle".to_string(),
+            title: "Idle".to_string(),
+            icon: "changes-prevent-symbolic".to_string(),
+        },
+        PageDescriptor {
+            id: "about".to_string(),
+            title: "About".to_string(),
+            icon: "help-about-symbolic".to_string(),
+        },
     ];
     let navigation_presenter = Rc::new(NavigationPresenter::new(initial_pages));
 
@@ -233,7 +320,8 @@ fn build_ui(app: &adw::Application, theme_css: Rc<gtk4::CssProvider>, rt: &tokio
     let appearance_page = AppearancePage::new(appearance_presenter.clone());
     let network_page = NetworkPage::new(network_presenter.clone());
     let bluetooth_page = BluetoothPage::new(bluetooth_presenter.clone());
-    let continuity_settings_page = ContinuitySettingsPage::new(continuity_settings_presenter.clone());
+    let continuity_settings_page =
+        ContinuitySettingsPage::new(continuity_settings_presenter.clone());
     let idle_settings_page = IdleSettingsPage::new(idle_settings_presenter.clone());
     let about_page = AboutPage::new();
     let sidebar = Sidebar::new(navigation_presenter.clone());
@@ -248,13 +336,19 @@ fn build_ui(app: &adw::Application, theme_css: Rc<gtk4::CssProvider>, rt: &tokio
     settings_window.register_page_widget("network", "Network", network_page.widget());
     settings_window.register_page_widget("bluetooth", "Bluetooth", bluetooth_page.widget());
     settings_window.register_page_widget("accounts", "Accounts", accounts_page.widget());
-    settings_window.register_page_widget("continuity", "Continuity", continuity_settings_page.widget());
+    settings_window.register_page_widget(
+        "continuity",
+        "Continuity",
+        continuity_settings_page.widget(),
+    );
     settings_window.register_page_widget("idle", "Idle", idle_settings_page.widget());
     settings_window.register_page_widget("about", "About", about_page.widget());
-    
+
     // 6. Wiring (Reactive bindings)
     let ap_run = accounts_presenter.clone();
-    glib::spawn_future_local(async move { ap_run.run().await; });
+    glib::spawn_future_local(async move {
+        ap_run.run().await;
+    });
 
     let app_run = appearance_presenter.clone();
     let app_page_c = appearance_page.clone();
@@ -292,7 +386,9 @@ fn build_ui(app: &adw::Application, theme_css: Rc<gtk4::CssProvider>, rt: &tokio
     });
 
     let nav_run = navigation_presenter.clone();
-    glib::spawn_future_local(async move { nav_run.run().await; });
+    glib::spawn_future_local(async move {
+        nav_run.run().await;
+    });
 
     accounts_presenter.add_view(Box::new(accounts_page));
     navigation_presenter.add_view(Box::new(sidebar));
@@ -314,10 +410,10 @@ fn setup_logger() -> Result<(), fern::InitError> {
         })
         .level(log::LevelFilter::Info);
 
-    if let Ok(lvl) = std::env::var("RUST_LOG") {
-        if let Ok(parsed) = lvl.parse() {
-            dispatch = dispatch.level(parsed);
-        }
+    if let Ok(lvl) = std::env::var("RUST_LOG")
+        && let Ok(parsed) = lvl.parse()
+    {
+        dispatch = dispatch.level(parsed);
     }
 
     dispatch.chain(std::io::stdout()).apply()?;

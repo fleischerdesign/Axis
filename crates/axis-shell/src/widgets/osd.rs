@@ -1,9 +1,9 @@
-use gtk4::prelude::*;
-use gtk4_layer_shell::{Edge, Layer, LayerShell};
+use crate::presentation::audio::audio_icon;
 use axis_domain::models::audio::AudioStatus;
 use axis_domain::models::brightness::BrightnessStatus;
-use crate::presentation::audio::audio_icon;
 use axis_presentation::View;
+use gtk4::prelude::*;
+use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::Duration;
@@ -87,9 +87,7 @@ pub struct OsdManager {
 
 impl OsdManager {
     pub fn new(app: &libadwaita::Application) -> Self {
-        let window = gtk4::ApplicationWindow::builder()
-            .application(app)
-            .build();
+        let window = gtk4::ApplicationWindow::builder().application(app).build();
 
         window.init_layer_shell();
         window.add_css_class("osd-window");
@@ -139,25 +137,28 @@ impl OsdManager {
         let timeout_ref = self.hide_timeout.clone();
         let inner_ref = self.inner_timeout.clone();
 
-        let src = gtk4::glib::timeout_add_local_once(Duration::from_millis(OSD_SHOW_MS), move || {
-            *timeout_ref.borrow_mut() = None;
+        let src =
+            gtk4::glib::timeout_add_local_once(Duration::from_millis(OSD_SHOW_MS), move || {
+                *timeout_ref.borrow_mut() = None;
 
-            vol.hide();
-            bright.hide();
+                vol.hide();
+                bright.hide();
 
-            let win_c = win.clone();
-            let vol_c = vol.clone();
-            let bright_c = bright.clone();
-            let inner_ref_c = inner_ref.clone();
-            let inner_src =
-                gtk4::glib::timeout_add_local_once(Duration::from_millis(OSD_AUTO_HIDE_MS), move || {
-                    *inner_ref_c.borrow_mut() = None;
-                    if !vol_c.is_active() && !bright_c.is_active() {
-                        win_c.set_visible(false);
-                    }
-                });
-            *inner_ref.borrow_mut() = Some(inner_src);
-        });
+                let win_c = win.clone();
+                let vol_c = vol.clone();
+                let bright_c = bright.clone();
+                let inner_ref_c = inner_ref.clone();
+                let inner_src = gtk4::glib::timeout_add_local_once(
+                    Duration::from_millis(OSD_AUTO_HIDE_MS),
+                    move || {
+                        *inner_ref_c.borrow_mut() = None;
+                        if !vol_c.is_active() && !bright_c.is_active() {
+                            win_c.set_visible(false);
+                        }
+                    },
+                );
+                *inner_ref.borrow_mut() = Some(inner_src);
+            });
 
         *self.hide_timeout.borrow_mut() = Some(src);
     }
@@ -221,9 +222,9 @@ impl View<BrightnessStatus> for OsdManager {
             if !self.window.is_visible() {
                 self.window.set_visible(true);
             }
-            self.bright_module.show(value, "display-brightness-symbolic");
+            self.bright_module
+                .show(value, "display-brightness-symbolic");
             self.reset_hide_timeout();
         }
     }
 }
-

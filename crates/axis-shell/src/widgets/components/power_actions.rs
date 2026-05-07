@@ -1,11 +1,11 @@
+use axis_application::use_cases::lock::session::LockSessionUseCase;
+use axis_application::use_cases::power::power_off::PowerOffUseCase;
+use axis_application::use_cases::power::reboot::RebootUseCase;
+use axis_application::use_cases::power::suspend::SuspendUseCase;
 use gtk4::prelude::*;
 use std::cell::Cell;
 use std::rc::Rc;
 use std::sync::Arc;
-use axis_application::use_cases::power::suspend::SuspendUseCase;
-use axis_application::use_cases::power::power_off::PowerOffUseCase;
-use axis_application::use_cases::power::reboot::RebootUseCase;
-use axis_application::use_cases::lock::lock::LockSessionUseCase;
 
 pub struct PowerActionStack {
     pub stack: gtk4::Stack,
@@ -140,7 +140,10 @@ impl PowerActionStack {
             });
         }
 
-        Self { stack, power_expanded }
+        Self {
+            stack,
+            power_expanded,
+        }
     }
 
     pub fn is_power_expanded(&self) -> bool {
@@ -164,10 +167,7 @@ impl PowerActionStack {
     fn create_power_btn(icon: &str, css_class: &str) -> gtk4::Button {
         gtk4::Button::builder()
             .icon_name(icon)
-            .css_classes(vec![
-                "qs-power-btn".to_string(),
-                css_class.to_string(),
-            ])
+            .css_classes(vec!["qs-power-btn".to_string(), css_class.to_string()])
             .halign(gtk4::Align::Center)
             .valign(gtk4::Align::Center)
             .build()

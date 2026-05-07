@@ -1,7 +1,7 @@
+use axis_domain::models::continuity::{ContinuityStatus, PeerArrangement, Side};
+use gtk4::prelude::*;
 use std::cell::RefCell;
 use std::rc::Rc;
-use gtk4::prelude::*;
-use axis_domain::models::continuity::{ContinuityStatus, PeerArrangement, Side};
 
 const CANVAS_VIRTUAL_WIDTH: f64 = 500.0;
 const CANVAS_VIRTUAL_HEIGHT: f64 = 350.0;
@@ -148,8 +148,14 @@ fn calculate_snap(px: f64, py: f64, state: &ArrangementState) -> (Side, i32, Can
     };
     let snapped = canvas_rect_from_arrangement(side, 0, &local, pw, ph, scale);
     let snapped = match side {
-        Side::Right | Side::Left => CanvasRect { y: peer_y, ..snapped },
-        Side::Top | Side::Bottom => CanvasRect { x: peer_x, ..snapped },
+        Side::Right | Side::Left => CanvasRect {
+            y: peer_y,
+            ..snapped
+        },
+        Side::Top | Side::Bottom => CanvasRect {
+            x: peer_x,
+            ..snapped
+        },
     };
     let offset = match side {
         Side::Right | Side::Left => ((snapped.y - local.y) / scale).round() as i32,
@@ -179,8 +185,10 @@ impl ArrangementGrid {
 
         let default_screen: (i32, i32) = (1920, 1080);
         let (local_rect, scale, peer_rect) = compute_layout(
-            default_screen.0, default_screen.1,
-            default_screen.0, default_screen.1,
+            default_screen.0,
+            default_screen.1,
+            default_screen.0,
+            default_screen.1,
         );
 
         let state = Rc::new(RefCell::new(ArrangementState {
@@ -202,7 +210,10 @@ impl ArrangementGrid {
         Self::setup_draw_func(&drawing_area, &state);
         Self::setup_drag_handler(&drawing_area, &state, on_snap);
 
-        Rc::new(Self { drawing_area, state })
+        Rc::new(Self {
+            drawing_area,
+            state,
+        })
     }
 
     pub fn widget(&self) -> &gtk4::DrawingArea {
@@ -217,9 +228,8 @@ impl ArrangementGrid {
         let dims_changed = new_local != s.local_screen || new_peer != s.peer_screen;
 
         if dims_changed && !s.dragging {
-            let (local_rect, scale, peer_rect) = compute_layout(
-                new_local.0, new_local.1, new_peer.0, new_peer.1,
-            );
+            let (local_rect, scale, peer_rect) =
+                compute_layout(new_local.0, new_local.1, new_peer.0, new_peer.1);
             s.local_rect = local_rect;
             s.peer_rect = peer_rect;
             s.scale = scale;
@@ -231,11 +241,12 @@ impl ArrangementGrid {
             if let Some(ref conn) = status.active_connection {
                 let pc = status.peer_configs.get(&conn.peer_id);
                 let incoming = pc.map(|p| p.arrangement).unwrap_or_default();
-                if let Some(ref remote) = s.remote {
-                    if incoming.side == remote.side && incoming.offset == remote.offset {
-                        drop(s);
-                        return;
-                    }
+                if let Some(ref remote) = s.remote
+                    && incoming.side == remote.side
+                    && incoming.offset == remote.offset
+                {
+                    drop(s);
+                    return;
                 }
             }
             s.skip_update = false;
@@ -289,30 +300,30 @@ impl ArrangementGrid {
 
             draw_device_rect(cr, &s.local_rect, CORNER_RADIUS, "This Device");
 
-            if s.dragging {
-                if let Some(side) = s.potential_side {
-                    draw_snap_highlight(cr, &s.local_rect, side);
-                }
+            if s.dragging
+                && let Some(side) = s.potential_side
+            {
+                draw_snap_highlight(cr, &s.local_rect, side);
             }
 
-            if let Some(ref remote) = s.remote {
-                if !s.dragging {
-                    draw_remote_device(cr, remote, 1.0);
-                }
+            if let Some(ref remote) = s.remote
+                && !s.dragging
+            {
+                draw_remote_device(cr, remote, 1.0);
             }
 
-            if s.dragging {
-                if let Some(ref remote) = s.remote {
-                    let ghost = RemoteDevice {
-                        rect: CanvasRect {
-                            x: s.drag_pos_x - s.drag_offset_x,
-                            y: s.drag_pos_y - s.drag_offset_y,
-                            ..remote.rect
-                        },
-                        ..remote.clone()
-                    };
-                    draw_remote_device(cr, &ghost, DRAG_OPACITY);
-                }
+            if s.dragging
+                && let Some(ref remote) = s.remote
+            {
+                let ghost = RemoteDevice {
+                    rect: CanvasRect {
+                        x: s.drag_pos_x - s.drag_offset_x,
+                        y: s.drag_pos_y - s.drag_offset_y,
+                        ..remote.rect
+                    },
+                    ..remote.clone()
+                };
+                draw_remote_device(cr, &ghost, DRAG_OPACITY);
             }
 
             if s.remote.is_none() {
@@ -403,8 +414,20 @@ impl ArrangementGrid {
             cr.new_sub_path();
             cr.arc(x + w - r, y + r, r, -std::f64::consts::FRAC_PI_2, 0.0);
             cr.arc(x + w - r, y + h - r, r, 0.0, std::f64::consts::FRAC_PI_2);
-            cr.arc(x + r, y + h - r, r, std::f64::consts::FRAC_PI_2, std::f64::consts::PI);
-            cr.arc(x + r, y + r, r, std::f64::consts::PI, 3.0 * std::f64::consts::FRAC_PI_2);
+            cr.arc(
+                x + r,
+                y + h - r,
+                r,
+                std::f64::consts::FRAC_PI_2,
+                std::f64::consts::PI,
+            );
+            cr.arc(
+                x + r,
+                y + r,
+                r,
+                std::f64::consts::PI,
+                3.0 * std::f64::consts::FRAC_PI_2,
+            );
             cr.close_path();
         }
 

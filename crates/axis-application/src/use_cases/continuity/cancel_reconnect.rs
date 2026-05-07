@@ -1,4 +1,5 @@
-use axis_domain::ports::continuity::{ContinuityProvider, ContinuityError};
+use axis_domain::ports::continuity::{ContinuityError, ContinuityProvider};
+use log::info;
 use std::sync::Arc;
 
 pub struct CancelReconnectUseCase {
@@ -11,6 +12,7 @@ impl CancelReconnectUseCase {
     }
 
     pub async fn execute(&self) -> Result<(), ContinuityError> {
+        info!("[use-case] Cancelling reconnect");
         self.provider.cancel_reconnect().await
     }
 }

@@ -1,132 +1,134 @@
-use libadwaita::prelude::*;
-use futures_util::StreamExt;
-use gtk4::{glib, gdk};
 use clap::Parser;
+use futures_util::StreamExt;
+use gtk4::{gdk, glib};
+use libadwaita::prelude::*;
 
-use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
-use axis_application::use_cases::power::suspend::SuspendUseCase;
-use axis_application::use_cases::power::power_off::PowerOffUseCase;
-use axis_application::use_cases::power::reboot::RebootUseCase;
-use axis_application::use_cases::lock::lock::LockSessionUseCase;
-use axis_application::use_cases::lock::unlock::UnlockSessionUseCase;
-use axis_application::use_cases::lock::authenticate::AuthenticateUseCase;
-use axis_application::use_cases::audio::set_volume::SetVolumeUseCase;
 use axis_application::use_cases::audio::set_default_sink::SetDefaultSinkUseCase;
 use axis_application::use_cases::audio::set_default_source::SetDefaultSourceUseCase;
 use axis_application::use_cases::audio::set_sink_input_volume::SetSinkInputVolumeUseCase;
-use axis_application::use_cases::workspaces::toggle_overview::ToggleOverviewUseCase;
-use axis_application::use_cases::popups::TogglePopupUseCase;
-use axis_application::use_cases::brightness::set::SetBrightnessUseCase;
-use axis_application::use_cases::launcher::search::SearchLauncherUseCase;
-use axis_application::use_cases::network::connect_to_ap::ConnectToApUseCase;
-use axis_application::use_cases::network::disconnect_wifi::DisconnectWifiUseCase;
+use axis_application::use_cases::audio::set_volume::SetVolumeUseCase;
 use axis_application::use_cases::bluetooth::connect::ConnectBluetoothDeviceUseCase;
 use axis_application::use_cases::bluetooth::disconnect::DisconnectBluetoothDeviceUseCase;
+use axis_application::use_cases::bluetooth::pair_accept::PairAcceptUseCase;
+use axis_application::use_cases::bluetooth::pair_reject::PairRejectUseCase;
 use axis_application::use_cases::bluetooth::set_powered::SetBluetoothPoweredUseCase;
 use axis_application::use_cases::bluetooth::start_scan::StartBluetoothScanUseCase;
 use axis_application::use_cases::bluetooth::stop_scan::StopBluetoothScanUseCase;
-use axis_application::use_cases::bluetooth::pair_accept::PairAcceptUseCase;
-use axis_application::use_cases::bluetooth::pair_reject::PairRejectUseCase;
+use axis_application::use_cases::brightness::set::SetBrightnessUseCase;
+use axis_application::use_cases::continuity::confirm_pin::ConfirmPinUseCase;
+use axis_application::use_cases::continuity::reject_pin::RejectPinUseCase;
+use axis_application::use_cases::continuity::set_enabled::SetContinuityEnabledUseCase;
+use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
+use axis_application::use_cases::idle_inhibit::set_inhibited::SetIdleInhibitUseCase;
+use axis_application::use_cases::launcher::execute::ExecuteLauncherActionUseCase;
+use axis_application::use_cases::launcher::search::SearchLauncherUseCase;
+use axis_application::use_cases::layout::set_border::SetBorderColorUseCase;
+use axis_application::use_cases::lock::authenticate::AuthenticateUseCase;
+use axis_application::use_cases::lock::session::LockSessionUseCase;
+use axis_application::use_cases::lock::unlock::UnlockSessionUseCase;
+use axis_application::use_cases::mpris::next::NextTrackUseCase;
+use axis_application::use_cases::mpris::play_pause::PlayPauseUseCase;
+use axis_application::use_cases::mpris::previous::PreviousTrackUseCase;
+use axis_application::use_cases::network::connect_to_ap::ConnectToApUseCase;
+use axis_application::use_cases::network::disconnect_wifi::DisconnectWifiUseCase;
 use axis_application::use_cases::nightlight::set_enabled::SetNightlightEnabledUseCase;
+use axis_application::use_cases::nightlight::set_schedule::SetNightlightScheduleUseCase;
 use axis_application::use_cases::nightlight::set_temp_day::SetNightlightTempDayUseCase;
 use axis_application::use_cases::nightlight::set_temp_night::SetNightlightTempNightUseCase;
-use axis_application::use_cases::nightlight::set_schedule::SetNightlightScheduleUseCase;
-use axis_application::use_cases::tray::activate::ActivateTrayItemUseCase;
-use axis_application::use_cases::tray::context_menu::ContextMenuTrayItemUseCase;
-use axis_application::use_cases::tray::scroll::ScrollTrayItemUseCase;
 use axis_application::use_cases::notifications::close_notification::CloseNotificationUseCase;
 use axis_application::use_cases::notifications::invoke_action::InvokeNotificationActionUseCase;
 use axis_application::use_cases::notifications::show_notification::ShowNotificationUseCase;
-use axis_application::use_cases::layout::set_border::SetBorderColorUseCase;
-use axis_application::use_cases::continuity::set_enabled::SetContinuityEnabledUseCase;
-use axis_application::use_cases::continuity::confirm_pin::ConfirmPinUseCase;
-use axis_application::use_cases::continuity::reject_pin::RejectPinUseCase;
-use axis_application::use_cases::idle_inhibit::set_inhibited::SetIdleInhibitUseCase;
-use axis_application::use_cases::mpris::play_pause::PlayPauseUseCase;
-use axis_application::use_cases::mpris::next::NextTrackUseCase;
-use axis_application::use_cases::mpris::previous::PreviousTrackUseCase;
+use axis_application::use_cases::popups::TogglePopupUseCase;
+use axis_application::use_cases::power::power_off::PowerOffUseCase;
+use axis_application::use_cases::power::reboot::RebootUseCase;
+use axis_application::use_cases::power::suspend::SuspendUseCase;
+use axis_application::use_cases::tray::activate::ActivateTrayItemUseCase;
+use axis_application::use_cases::tray::context_menu::ContextMenuTrayItemUseCase;
+use axis_application::use_cases::tray::scroll::ScrollTrayItemUseCase;
+use axis_application::use_cases::workspaces::toggle_overview::ToggleOverviewUseCase;
 
 use axis_domain::models::appearance::{AccentColor, ColorScheme};
 use axis_domain::models::config::AxisConfig;
-use axis_domain::ports::config::ConfigProvider;
-use axis_domain::ports::network::NetworkProvider;
-use axis_domain::ports::lock::LockProvider;
-use axis_domain::ports::nightlight::NightlightProvider;
-use axis_domain::ports::dnd::DndProvider;
-use axis_domain::ports::airplane::AirplaneProvider;
-use axis_domain::ports::power::PowerProvider;
-use axis_domain::ports::audio::AudioProvider;
-use axis_domain::ports::workspaces::WorkspaceProvider;
-use axis_domain::ports::brightness::BrightnessProvider;
-use axis_domain::ports::appearance::AppearanceProvider;
-use axis_domain::ports::clock::ClockProvider;
-use axis_domain::ports::bluetooth::BluetoothProvider;
-use axis_domain::ports::popups::PopupProvider;
-use axis_domain::ports::notifications::NotificationProvider;
-use axis_domain::ports::tray::TrayProvider;
-use axis_domain::ports::continuity::ContinuityProvider;
-use axis_domain::ports::idle_inhibit::IdleInhibitProvider;
-use axis_domain::ports::mpris::MprisProvider;
 use axis_domain::models::dnd::DndStatus;
+use axis_domain::ports::airplane::AirplaneProvider;
+use axis_domain::ports::appearance::AppearanceProvider;
+use axis_domain::ports::audio::AudioProvider;
+use axis_domain::ports::bluetooth::BluetoothProvider;
+use axis_domain::ports::brightness::BrightnessProvider;
+use axis_domain::ports::clock::ClockProvider;
+use axis_domain::ports::config::ConfigProvider;
+use axis_domain::ports::continuity::ContinuityProvider;
+use axis_domain::ports::continuity::ContinuitySharingProvider;
+use axis_domain::ports::dnd::DndProvider;
+use axis_domain::ports::idle_inhibit::IdleInhibitProvider;
+use axis_domain::ports::lock::LockProvider;
+use axis_domain::ports::mpris::MprisProvider;
+use axis_domain::ports::network::NetworkProvider;
+use axis_domain::ports::nightlight::NightlightProvider;
+use axis_domain::ports::notifications::NotificationProvider;
+use axis_domain::ports::popups::PopupProvider;
+use axis_domain::ports::power::PowerProvider;
+use axis_domain::ports::tray::TrayProvider;
+use axis_domain::ports::workspaces::WorkspaceProvider;
 
-use axis_infrastructure::adapters::google_auth::GoogleCloudAuthProvider;
-use axis_infrastructure::adapters::clock::SystemClockProvider;
-use axis_infrastructure::adapters::power::LogindPowerProvider;
-use axis_infrastructure::adapters::workspaces::NiriWorkspaceProvider;
-use axis_infrastructure::adapters::popups::LocalPopupProvider;
-use axis_infrastructure::adapters::pulse::PulseAudioProvider;
+use axis_infrastructure::adapters::airplane::ConfigAirplaneProvider;
+use axis_infrastructure::adapters::appearance::ConfigAppearanceProvider;
 use axis_infrastructure::adapters::backlight::SysfsBrightnessProvider;
-use axis_infrastructure::adapters::network::NetworkManagerProvider;
 use axis_infrastructure::adapters::bluetooth::BlueZProvider;
-use axis_infrastructure::adapters::nightlight::ConfigNightlightProvider;
+use axis_infrastructure::adapters::clock::SystemClockProvider;
+use axis_infrastructure::adapters::config::FileConfigProvider;
+use axis_infrastructure::adapters::continuity::ContinuityService;
 use axis_infrastructure::adapters::dnd::ConfigDndProvider;
+use axis_infrastructure::adapters::google_auth::GoogleCloudAuthProvider;
 use axis_infrastructure::adapters::idle_inhibit::ConfigIdleInhibitProvider;
 use axis_infrastructure::adapters::launcher::CompositeLauncherProvider;
-use axis_infrastructure::adapters::notifications::ZbusNotificationProvider;
-use axis_infrastructure::adapters::appearance::ConfigAppearanceProvider;
-use axis_infrastructure::adapters::config::FileConfigProvider;
-use axis_infrastructure::adapters::airplane::ConfigAirplaneProvider;
-use axis_infrastructure::adapters::tray::StatusNotifierTrayProvider;
+use axis_infrastructure::adapters::network::NetworkManagerProvider;
+use axis_infrastructure::adapters::nightlight::ConfigNightlightProvider;
 use axis_infrastructure::adapters::niri_layout::NiriLayoutProvider;
-use axis_infrastructure::adapters::continuity::ContinuityService;
+use axis_infrastructure::adapters::notifications::ZbusNotificationProvider;
+use axis_infrastructure::adapters::popups::LocalPopupProvider;
+use axis_infrastructure::adapters::power::LogindPowerProvider;
+use axis_infrastructure::adapters::pulse::PulseAudioProvider;
+use axis_infrastructure::adapters::tray::StatusNotifierTrayProvider;
+use axis_infrastructure::adapters::workspaces::NiriWorkspaceProvider;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::rc::Rc;
+use std::sync::Arc;
 
 mod presentation;
-mod widgets;
-mod utils;
 mod services;
+mod utils;
+mod widgets;
 
-use widgets::agenda::AgendaPopup;
+use axis_presentation::{Presenter, view::FnView};
 use presentation::agenda::AgendaPresenter;
-use widgets::bar_window::BarWindow;
-use widgets::quick_settings::QuickSettingsPopup;
-use widgets::launcher_popup::LauncherPopup;
-use widgets::notification_toast::NotificationToastManager;
-use widgets::notification_archive::NotificationArchive;
-use widgets::continuity_capture::ContinuityCaptureController;
-use widgets::osd::OsdManager;
-use widgets::components::power_actions::PowerActionStack;
-use widgets::lock_screen::LockScreenFactory;
-use presentation::battery::BatteryPresenter;
-use presentation::clock::ClockPresenter;
+use presentation::appearance::AppearancePresenter;
 use presentation::audio::AudioPresenter;
-use presentation::workspaces::WorkspacePresenter;
 use presentation::auto_hide::AutoHidePresenter;
+use presentation::battery::BatteryPresenter;
+use presentation::bluetooth::BluetoothPresenter;
+use presentation::brightness::BrightnessPresenter;
+use presentation::clock::ClockPresenter;
+use presentation::continuity::ContinuityPresenter;
+use presentation::launcher::LauncherPresenter;
+use presentation::lock::LockPresenter;
+use presentation::network::NetworkPresenter;
+use presentation::nightlight::NightlightPresenter;
+use presentation::notifications::NotificationPresenter;
 use presentation::popups::PopupPresenter;
 use presentation::toggle::TogglePresenter;
-use presentation::brightness::BrightnessPresenter;
-use presentation::launcher::LauncherPresenter;
-use presentation::notifications::NotificationPresenter;
-use axis_presentation::{Presenter, view::FnView};
-use presentation::network::NetworkPresenter;
-use presentation::bluetooth::BluetoothPresenter;
-use presentation::nightlight::NightlightPresenter;
-use presentation::appearance::AppearancePresenter;
-use presentation::lock::LockPresenter;
-use presentation::continuity::ContinuityPresenter;
 use presentation::tray::TrayPresenter;
+use presentation::workspaces::WorkspacePresenter;
+use widgets::agenda::AgendaPopup;
+use widgets::bar_window::{BarPresenters, BarWindow};
+use widgets::components::power_actions::PowerActionStack;
+use widgets::continuity_capture::ContinuityCaptureController;
+use widgets::launcher_popup::LauncherPopup;
+use widgets::lock_screen::LockScreenFactory;
+use widgets::notification_archive::NotificationArchive;
+use widgets::notification_toast::NotificationToastManager;
+use widgets::osd::OsdManager;
+use widgets::quick_settings::QuickSettingsPopup;
 
 use services::theme_service::ThemeService;
 use services::wallpaper_service::WallpaperService;
@@ -144,7 +146,11 @@ fn main() -> glib::ExitCode {
         appearance: axis_domain::models::config::AppearanceConfig {
             wallpaper: cli.wallpaper,
             accent_color: cli.accent.as_deref().map(parse_accent).unwrap_or_default(),
-            color_scheme: cli.mode.as_deref().and_then(parse_color_scheme).unwrap_or_default(),
+            color_scheme: cli
+                .mode
+                .as_deref()
+                .and_then(parse_color_scheme)
+                .unwrap_or_default(),
             font: cli.font,
         },
         ..AxisConfig::default()
@@ -152,13 +158,16 @@ fn main() -> glib::ExitCode {
 
     let start_locked = cli.locked;
 
-    let prog_name = std::env::args().next().unwrap_or_else(|| "axis-shell".to_string());
+    let prog_name = std::env::args()
+        .next()
+        .unwrap_or_else(|| "axis-shell".to_string());
 
     let app = libadwaita::Application::builder()
         .application_id("org.axis.shell")
         .build();
 
-    let theme_provider: Rc<std::cell::OnceCell<Rc<gtk4::CssProvider>>> = Rc::new(std::cell::OnceCell::new());
+    let theme_provider: Rc<std::cell::OnceCell<Rc<gtk4::CssProvider>>> =
+        Rc::new(std::cell::OnceCell::new());
     let theme_provider_for_startup = theme_provider.clone();
 
     app.connect_startup(move |_| {
@@ -233,15 +242,22 @@ fn main() -> glib::ExitCode {
         }
     });
     let config_provider = FileConfigProvider::new(cli_config);
-    let nightlight_provider: Arc<dyn NightlightProvider> = rt.block_on(ConfigNightlightProvider::new(config_provider.clone()));
-    let airplane_provider: Arc<dyn AirplaneProvider> = rt.block_on(ConfigAirplaneProvider::new(config_provider.clone()));
-    let appearance_provider: Arc<dyn AppearanceProvider> = rt.block_on(ConfigAppearanceProvider::new(config_provider.clone()));
-    let dnd_provider: Arc<dyn DndProvider> = rt.block_on(ConfigDndProvider::new(config_provider.clone()));
-    let idle_inhibit_provider: Arc<dyn IdleInhibitProvider> = rt.block_on(ConfigIdleInhibitProvider::new(config_provider.clone()));
+    let nightlight_provider: Arc<dyn NightlightProvider> =
+        rt.block_on(ConfigNightlightProvider::new(config_provider.clone()));
+    let airplane_provider: Arc<dyn AirplaneProvider> =
+        rt.block_on(ConfigAirplaneProvider::new(config_provider.clone()));
+    let appearance_provider: Arc<dyn AppearanceProvider> =
+        rt.block_on(ConfigAppearanceProvider::new(config_provider.clone()));
+    let dnd_provider: Arc<dyn DndProvider> =
+        rt.block_on(ConfigDndProvider::new(config_provider.clone()));
+    let idle_inhibit_provider: Arc<dyn IdleInhibitProvider> =
+        rt.block_on(ConfigIdleInhibitProvider::new(config_provider.clone()));
     let clock_provider: Arc<dyn ClockProvider> = SystemClockProvider::new();
     let popup_provider: Arc<dyn PopupProvider> = LocalPopupProvider::new();
     let launcher_provider = CompositeLauncherProvider::new();
-    let config_dir = dirs::config_dir().unwrap_or(PathBuf::from(".")).join("axis");
+    let config_dir = dirs::config_dir()
+        .unwrap_or(PathBuf::from("."))
+        .join("axis");
     let google_auth = GoogleCloudAuthProvider::new(config_dir.clone());
 
     let notification_provider: Arc<dyn NotificationProvider> = rt.block_on(async {
@@ -265,8 +281,13 @@ fn main() -> glib::ExitCode {
 
     let continuity_service = ContinuityService::new();
     let continuity_provider: Arc<dyn ContinuityProvider> = continuity_service.clone();
+    let continuity_sharing_provider: Arc<dyn ContinuitySharingProvider> =
+        continuity_service.clone();
 
-    let (mpris_provider, mpris_dbus_provider): (Arc<dyn MprisProvider>, Option<Arc<axis_infrastructure::adapters::mpris::MprisDBusProvider>>) = rt.block_on(async {
+    let (mpris_provider, mpris_dbus_provider): (
+        Arc<dyn MprisProvider>,
+        Option<Arc<axis_infrastructure::adapters::mpris::MprisDBusProvider>>,
+    ) = rt.block_on(async {
         match axis_infrastructure::adapters::mpris::MprisDBusProvider::new().await {
             Ok(p) => {
                 let dbus = p.clone();
@@ -274,7 +295,8 @@ fn main() -> glib::ExitCode {
             }
             Err(_) => {
                 log::warn!("[mpris] MPRIS not available, using mock");
-                let mock: Arc<dyn MprisProvider> = axis_infrastructure::mocks::mpris::MockMprisProvider::new();
+                let mock: Arc<dyn MprisProvider> =
+                    axis_infrastructure::mocks::mpris::MockMprisProvider::new();
                 (mock, None)
             }
         }
@@ -284,8 +306,10 @@ fn main() -> glib::ExitCode {
     let suspend_uc = Arc::new(SuspendUseCase::new(power_provider.clone()));
     let power_off_uc = Arc::new(PowerOffUseCase::new(power_provider.clone()));
     let reboot_uc = Arc::new(RebootUseCase::new(power_provider.clone()));
-    let initial_config = config_provider.get()
-        .unwrap_or_else(|e| { log::warn!("[main] config get failed: {e}"); AxisConfig::default() });
+    let initial_config = config_provider.get().unwrap_or_else(|e| {
+        log::warn!("[main] config get failed: {e}");
+        AxisConfig::default()
+    });
     let (lock_provider_arc, lock_gtk_handle) = SessionLockProvider::new(
         idle_inhibit_provider.clone(),
         config_provider.clone(),
@@ -316,13 +340,21 @@ fn main() -> glib::ExitCode {
     let get_network_status = Arc::new(GetStatusUseCase::new(network_provider.clone()));
     let connect_to_ap = Arc::new(ConnectToApUseCase::new(network_provider.clone()));
     let disconnect_wifi = Arc::new(DisconnectWifiUseCase::new(network_provider.clone()));
-    let set_wifi = Arc::new(axis_application::use_cases::network::set_wifi::SetWifiEnabledUseCase::new(network_provider.clone()));
+    let set_wifi = Arc::new(
+        axis_application::use_cases::network::set_wifi::SetWifiEnabledUseCase::new(
+            network_provider.clone(),
+        ),
+    );
 
     let subscribe_bluetooth = Arc::new(SubscribeUseCase::new(bluetooth_provider.clone()));
     let subscribe_bluetooth_for_toggle = subscribe_bluetooth.clone();
     let get_bluetooth_status = Arc::new(GetStatusUseCase::new(bluetooth_provider.clone()));
-    let bt_connect = Arc::new(ConnectBluetoothDeviceUseCase::new(bluetooth_provider.clone()));
-    let bt_disconnect = Arc::new(DisconnectBluetoothDeviceUseCase::new(bluetooth_provider.clone()));
+    let bt_connect = Arc::new(ConnectBluetoothDeviceUseCase::new(
+        bluetooth_provider.clone(),
+    ));
+    let bt_disconnect = Arc::new(DisconnectBluetoothDeviceUseCase::new(
+        bluetooth_provider.clone(),
+    ));
     let bt_set_powered = Arc::new(SetBluetoothPoweredUseCase::new(bluetooth_provider.clone()));
     let bt_start_scan = Arc::new(StartBluetoothScanUseCase::new(bluetooth_provider.clone()));
     let bt_stop_scan = Arc::new(StopBluetoothScanUseCase::new(bluetooth_provider.clone()));
@@ -332,56 +364,62 @@ fn main() -> glib::ExitCode {
     let subscribe_nightlight = Arc::new(SubscribeUseCase::new(nightlight_provider.clone()));
     let subscribe_nightlight_for_toggle = subscribe_nightlight.clone();
     let get_nightlight_status = Arc::new(GetStatusUseCase::new(nightlight_provider.clone()));
-    let nl_set_enabled = Arc::new(SetNightlightEnabledUseCase::new(nightlight_provider.clone()));
+    let nl_set_enabled = Arc::new(SetNightlightEnabledUseCase::new(
+        nightlight_provider.clone(),
+    ));
     let nl_set_enabled_for_toggle = nl_set_enabled.clone();
-    let nl_set_temp_day = Arc::new(SetNightlightTempDayUseCase::new(nightlight_provider.clone()));
-    let nl_set_temp_night = Arc::new(SetNightlightTempNightUseCase::new(nightlight_provider.clone()));
-    let nl_set_schedule = Arc::new(SetNightlightScheduleUseCase::new(nightlight_provider.clone()));
+    let nl_set_temp_day = Arc::new(SetNightlightTempDayUseCase::new(
+        nightlight_provider.clone(),
+    ));
+    let nl_set_temp_night = Arc::new(SetNightlightTempNightUseCase::new(
+        nightlight_provider.clone(),
+    ));
+    let nl_set_schedule = Arc::new(SetNightlightScheduleUseCase::new(
+        nightlight_provider.clone(),
+    ));
 
     let subscribe_dnd = Arc::new(SubscribeUseCase::new(dnd_provider.clone()));
-    let dnd_set_enabled_uc = Arc::new(axis_application::use_cases::dnd::set_enabled::SetDndEnabledUseCase::new(dnd_provider.clone()));
+    let dnd_set_enabled_uc = Arc::new(
+        axis_application::use_cases::dnd::set_enabled::SetDndEnabledUseCase::new(
+            dnd_provider.clone(),
+        ),
+    );
 
     let subscribe_idle_inhibit = Arc::new(SubscribeUseCase::new(idle_inhibit_provider.clone()));
     let idle_inhibit_set_uc = Arc::new(SetIdleInhibitUseCase::new(idle_inhibit_provider.clone()));
 
-    let dnd_status_presenter = Rc::new({
-        let uc = subscribe_dnd.clone();
-        Presenter::from_subscribe(move || {
-            let uc = uc.clone();
-            async move { uc.execute().await }
-        })
-    });
+    let dnd_status_presenter = Rc::new(Presenter::from_subscribe_use_case(subscribe_dnd.clone()));
 
-    let idle_inhibit_status_presenter = Rc::new({
-        let uc = subscribe_idle_inhibit.clone();
-        Presenter::from_subscribe(move || {
-            let uc = uc.clone();
-            async move { uc.execute().await }
-        })
-    });
+    let idle_inhibit_status_presenter = Rc::new(Presenter::from_subscribe_use_case(
+        subscribe_idle_inhibit.clone(),
+    ));
 
     let subscribe_airplane = Arc::new(SubscribeUseCase::new(airplane_provider.clone()));
-    let ap_set_enabled_uc = Arc::new(axis_application::use_cases::airplane::set_enabled::SetAirplaneModeUseCase::new(airplane_provider.clone()));
+    let ap_set_enabled_uc = Arc::new(
+        axis_application::use_cases::airplane::set_enabled::SetAirplaneModeUseCase::new(
+            airplane_provider.clone(),
+        ),
+    );
 
-    let airplane_status_presenter = Rc::new({
-        let uc = subscribe_airplane.clone();
-        Presenter::from_subscribe(move || {
-            let uc = uc.clone();
-            async move { uc.execute().await }
-        })
-    });
+    let airplane_status_presenter = Rc::new(Presenter::from_subscribe_use_case(
+        subscribe_airplane.clone(),
+    ));
 
     let subscribe_continuity = Arc::new(SubscribeUseCase::new(continuity_provider.clone()));
     let subscribe_continuity_for_toggle = subscribe_continuity.clone();
     let get_continuity_status = Arc::new(GetStatusUseCase::new(continuity_provider.clone()));
-    let continuity_set_enabled = Arc::new(SetContinuityEnabledUseCase::new(continuity_provider.clone()));
+    let continuity_set_enabled = Arc::new(SetContinuityEnabledUseCase::new(
+        continuity_provider.clone(),
+    ));
     let continuity_confirm_pin = Arc::new(ConfirmPinUseCase::new(continuity_provider.clone()));
     let continuity_reject_pin = Arc::new(RejectPinUseCase::new(continuity_provider.clone()));
 
     let subscribe_appearance = Arc::new(SubscribeUseCase::new(appearance_provider.clone()));
     let get_appearance_status = Arc::new(GetStatusUseCase::new(appearance_provider.clone()));
 
-    let get_config_uc = Arc::new(axis_application::use_cases::config::get::GetConfigUseCase::new(config_provider.clone()));
+    let get_config_uc = Arc::new(
+        axis_application::use_cases::config::get::GetConfigUseCase::new(config_provider.clone()),
+    );
 
     let subscribe_tray = Arc::new(SubscribeUseCase::new(tray_provider.clone()));
     let get_tray_status = Arc::new(GetStatusUseCase::new(tray_provider.clone()));
@@ -389,40 +427,78 @@ fn main() -> glib::ExitCode {
     let tray_context_menu = Arc::new(ContextMenuTrayItemUseCase::new(tray_provider.clone()));
     let tray_scroll = Arc::new(ScrollTrayItemUseCase::new(tray_provider.clone()));
 
-    let battery_presenter = Arc::new(BatteryPresenter::new(subscribe_power));
-    let clock_presenter = Arc::new(ClockPresenter::new(subscribe_clock));
-    let workspace_presenter = Arc::new(WorkspacePresenter::new(subscribe_ws));
-    let popup_presenter = Arc::new(PopupPresenter::new(subscribe_popups_for_presenter));
-    let auto_hide_presenter = Arc::new(AutoHidePresenter::new(1, 500));
+    let battery_presenter = Rc::new(BatteryPresenter::new(subscribe_power));
+    let clock_presenter = Rc::new(ClockPresenter::new(subscribe_clock));
+    let workspace_presenter = Rc::new(WorkspacePresenter::new(subscribe_ws));
+    let popup_presenter = Rc::new(PopupPresenter::new(subscribe_popups_for_presenter));
+    let auto_hide_presenter = Rc::new(AutoHidePresenter::new(1, 500));
     let audio_presenter = Rc::new(AudioPresenter::new(
-        subscribe_audio, get_audio_status, set_volume,
+        subscribe_audio,
+        get_audio_status,
+        set_volume,
         Arc::new(SetDefaultSinkUseCase::new(audio_provider.clone())),
         Arc::new(SetDefaultSourceUseCase::new(audio_provider.clone())),
         Arc::new(SetSinkInputVolumeUseCase::new(audio_provider.clone())),
         &rt,
     ));
-    let brightness_presenter = Rc::new(BrightnessPresenter::new(subscribe_brightness, set_brightness));
-    
-    let google_calendar = axis_infrastructure::adapters::google_calendar::GoogleCalendarProvider::new(google_auth.clone());
-    let google_tasks = axis_infrastructure::adapters::google_tasks::GoogleTasksProvider::new(google_auth.clone());
+    let brightness_presenter = Rc::new(BrightnessPresenter::new(
+        subscribe_brightness,
+        set_brightness,
+    ));
 
-    let google_agenda = axis_infrastructure::adapters::google_agenda::GoogleAgendaProvider::new(google_calendar, google_tasks);
+    let google_calendar =
+        axis_infrastructure::adapters::google_calendar::GoogleCalendarProvider::new(
+            google_auth.clone(),
+        );
+    let google_tasks =
+        axis_infrastructure::adapters::google_tasks::GoogleTasksProvider::new(google_auth.clone());
 
-    let sync_events_uc = Arc::new(axis_application::use_cases::agenda::sync_events::SyncEventsUseCase::new(google_agenda.clone()));
-    let sync_tasks_uc = Arc::new(axis_application::use_cases::agenda::sync_tasks::SyncTasksUseCase::new(google_agenda.clone()));
-    let toggle_task_uc = Arc::new(axis_application::use_cases::agenda::toggle_task::ToggleTaskUseCase::new(google_agenda.clone()));
-    let delete_task_uc = Arc::new(axis_application::use_cases::agenda::delete_task::DeleteTaskUseCase::new(google_agenda.clone()));
-    let create_task_uc = Arc::new(axis_application::use_cases::agenda::create_task::CreateTaskUseCase::new(google_agenda));
+    let google_agenda = axis_infrastructure::adapters::google_agenda::GoogleAgendaProvider::new(
+        google_calendar,
+        google_tasks,
+    );
+
+    let sync_events_uc = Arc::new(
+        axis_application::use_cases::agenda::sync_events::SyncEventsUseCase::new(
+            google_agenda.clone(),
+        ),
+    );
+    let sync_tasks_uc = Arc::new(
+        axis_application::use_cases::agenda::sync_tasks::SyncTasksUseCase::new(
+            google_agenda.clone(),
+        ),
+    );
+    let toggle_task_uc = Arc::new(
+        axis_application::use_cases::agenda::toggle_task::ToggleTaskUseCase::new(
+            google_agenda.clone(),
+        ),
+    );
+    let delete_task_uc = Arc::new(
+        axis_application::use_cases::agenda::delete_task::DeleteTaskUseCase::new(
+            google_agenda.clone(),
+        ),
+    );
+    let create_task_uc = Arc::new(
+        axis_application::use_cases::agenda::create_task::CreateTaskUseCase::new(google_agenda),
+    );
 
     let agenda_presenter = Rc::new(AgendaPresenter::new(
-        sync_events_uc, sync_tasks_uc, toggle_task_uc, delete_task_uc, create_task_uc,
+        sync_events_uc,
+        sync_tasks_uc,
+        toggle_task_uc,
+        delete_task_uc,
+        create_task_uc,
     ));
 
     let subscribe_notifications = Arc::new(SubscribeUseCase::new(notification_provider.clone()));
     let get_notifications_status = Arc::new(GetStatusUseCase::new(notification_provider.clone()));
-    let close_notification_uc = Arc::new(CloseNotificationUseCase::new(notification_provider.clone()));
-    let invoke_notification_action_uc = Arc::new(InvokeNotificationActionUseCase::new(notification_provider.clone()));
-    let show_notification_uc = Arc::new(ShowNotificationUseCase::new(notification_provider.clone()));
+    let close_notification_uc =
+        Arc::new(CloseNotificationUseCase::new(notification_provider.clone()));
+    let invoke_notification_action_uc = Arc::new(InvokeNotificationActionUseCase::new(
+        notification_provider.clone(),
+    ));
+    let show_notification_uc =
+        Arc::new(ShowNotificationUseCase::new(notification_provider.clone()));
 
     subscribe_continuity_notifications(
         continuity_provider.clone(),
@@ -442,38 +518,68 @@ fn main() -> glib::ExitCode {
     let config_cp: Arc<dyn ConfigProvider> = config_provider.clone();
     wire_continuity_sync(config_cp, continuity_provider.clone(), &rt);
 
-    let launcher_presenter = Rc::new(LauncherPresenter::new(search_launcher));
+    let launcher_executor = Arc::new(ExecuteLauncherActionUseCase::new());
+    let launcher_presenter = Rc::new(LauncherPresenter::new(search_launcher, launcher_executor));
     let notification_presenter = Rc::new(NotificationPresenter::new(
-        subscribe_notifications, get_notifications_status,
-        close_notification_uc, invoke_notification_action_uc, &rt,
+        subscribe_notifications,
+        get_notifications_status,
+        close_notification_uc,
+        invoke_notification_action_uc,
+        &rt,
     ));
 
     let network_presenter = Rc::new(NetworkPresenter::new(
-        subscribe_network, get_network_status, connect_to_ap, disconnect_wifi, &rt,
+        subscribe_network,
+        get_network_status,
+        connect_to_ap,
+        disconnect_wifi,
+        &rt,
     ));
     let bluetooth_full_presenter = Rc::new(BluetoothPresenter::new(
-        subscribe_bluetooth, get_bluetooth_status, bt_connect, bt_disconnect,
-        bt_start_scan, bt_stop_scan, &rt,
+        subscribe_bluetooth,
+        get_bluetooth_status,
+        bt_connect,
+        bt_disconnect,
+        bt_start_scan,
+        bt_stop_scan,
+        &rt,
     ));
     let nightlight_full_presenter = Rc::new(NightlightPresenter::new(
-        subscribe_nightlight, get_nightlight_status, nl_set_enabled,
-        nl_set_temp_day, nl_set_temp_night, nl_set_schedule, &rt,
+        subscribe_nightlight,
+        get_nightlight_status,
+        nl_set_enabled,
+        nl_set_temp_day,
+        nl_set_temp_night,
+        nl_set_schedule,
+        &rt,
     ));
 
     let appearance_presenter = Rc::new(AppearancePresenter::new(
-        subscribe_appearance, get_appearance_status, &rt,
+        subscribe_appearance,
+        get_appearance_status,
+        &rt,
     ));
 
     let tray_presenter = Rc::new(TrayPresenter::new(
-        subscribe_tray, get_tray_status, tray_activate, tray_context_menu, tray_scroll, &rt,
+        subscribe_tray,
+        get_tray_status,
+        tray_activate,
+        tray_context_menu,
+        tray_scroll,
+        &rt,
     ));
 
     let lock_presenter = Rc::new(LockPresenter::new(
-        subscribe_lock, lock_session_uc.clone(), unlock_session_uc.clone(), authenticate_uc.clone(),
+        subscribe_lock,
+        lock_session_uc.clone(),
+        unlock_session_uc.clone(),
+        authenticate_uc.clone(),
     ));
 
     let continuity_presenter = Rc::new(ContinuityPresenter::new(
-        subscribe_continuity, get_continuity_status, &rt,
+        subscribe_continuity,
+        get_continuity_status,
+        &rt,
     ));
 
     let subscribe_mpris = Arc::new(SubscribeUseCase::new(mpris_provider.clone()));
@@ -482,8 +588,12 @@ fn main() -> glib::ExitCode {
     let mpris_next = Arc::new(NextTrackUseCase::new(mpris_provider.clone()));
     let mpris_previous = Arc::new(PreviousTrackUseCase::new(mpris_provider.clone()));
     let mpris_presenter = Rc::new(crate::presentation::mpris::MprisPresenter::new(
-        subscribe_mpris, get_mpris_status,
-        mpris_play_pause, mpris_next, mpris_previous, &rt,
+        subscribe_mpris,
+        get_mpris_status,
+        mpris_play_pause,
+        mpris_next,
+        mpris_previous,
+        &rt,
     ));
 
     let wifi_presenter = Rc::new(TogglePresenter::new(
@@ -495,7 +605,9 @@ fn main() -> glib::ExitCode {
             move || {
                 let uc = uc.clone();
                 async move {
-                    uc.execute().await.map(|s| s.map(|status| status.is_wifi_enabled))
+                    uc.execute()
+                        .await
+                        .map(|s| s.map(|status| status.is_wifi_enabled))
                 }
             }
         },
@@ -520,9 +632,7 @@ fn main() -> glib::ExitCode {
             let uc = subscribe_bluetooth_for_toggle.clone();
             move || {
                 let uc = uc.clone();
-                async move {
-                    uc.execute().await.map(|s| s.map(|status| status.powered))
-                }
+                async move { uc.execute().await.map(|s| s.map(|status| status.powered)) }
             }
         },
         {
@@ -546,9 +656,7 @@ fn main() -> glib::ExitCode {
             let uc = subscribe_nightlight_for_toggle.clone();
             move || {
                 let uc = uc.clone();
-                async move {
-                    uc.execute().await.map(|s| s.map(|status| status.enabled))
-                }
+                async move { uc.execute().await.map(|s| s.map(|status| status.enabled)) }
             }
         },
         {
@@ -572,9 +680,7 @@ fn main() -> glib::ExitCode {
             let uc = subscribe_dnd.clone();
             move || {
                 let uc = uc.clone();
-                async move {
-                    uc.execute().await.map(|s| s.map(|status| status.enabled))
-                }
+                async move { uc.execute().await.map(|s| s.map(|status| status.enabled)) }
             }
         },
         {
@@ -598,9 +704,7 @@ fn main() -> glib::ExitCode {
             let uc = subscribe_airplane.clone();
             move || {
                 let uc = uc.clone();
-                async move {
-                    uc.execute().await.map(|s| s.map(|status| status.enabled))
-                }
+                async move { uc.execute().await.map(|s| s.map(|status| status.enabled)) }
             }
         },
         {
@@ -624,9 +728,7 @@ fn main() -> glib::ExitCode {
             let uc = subscribe_continuity_for_toggle.clone();
             move || {
                 let uc = uc.clone();
-                async move {
-                    uc.execute().await.map(|s| s.map(|status| status.enabled))
-                }
+                async move { uc.execute().await.map(|s| s.map(|status| status.enabled)) }
             }
         },
         {
@@ -650,9 +752,7 @@ fn main() -> glib::ExitCode {
             let uc = subscribe_idle_inhibit.clone();
             move || {
                 let uc = uc.clone();
-                async move {
-                    uc.execute().await.map(|s| s.map(|status| status.inhibited))
-                }
+                async move { uc.execute().await.map(|s| s.map(|status| status.inhibited)) }
             }
         },
         {
@@ -669,43 +769,69 @@ fn main() -> glib::ExitCode {
     ));
 
     let ap_sync = audio_presenter.clone();
-    glib::spawn_future_local(async move { ap_sync.run_sync().await; });
+    glib::spawn_future_local(async move {
+        ap_sync.run_sync().await;
+    });
 
     let bp_sync = brightness_presenter.clone();
-    glib::spawn_future_local(async move { bp_sync.run_sync().await; });
+    glib::spawn_future_local(async move {
+        bp_sync.run_sync().await;
+    });
 
     let bat_sync = battery_presenter.clone();
-    glib::spawn_future_local(async move { bat_sync.run_sync().await; });
+    glib::spawn_future_local(async move {
+        bat_sync.run_sync().await;
+    });
 
     let np_sync = network_presenter.clone();
-    glib::spawn_future_local(async move { np_sync.run_sync().await; });
+    glib::spawn_future_local(async move {
+        np_sync.run_sync().await;
+    });
 
     let bt_sync = bluetooth_full_presenter.clone();
-    glib::spawn_future_local(async move { bt_sync.run_sync().await; });
+    glib::spawn_future_local(async move {
+        bt_sync.run_sync().await;
+    });
 
     let nl_sync = nightlight_full_presenter.clone();
-    glib::spawn_future_local(async move { nl_sync.run_sync().await; });
+    glib::spawn_future_local(async move {
+        nl_sync.run_sync().await;
+    });
 
     let tray_sync = tray_presenter.clone();
-    glib::spawn_future_local(async move { tray_sync.run_sync().await; });
+    glib::spawn_future_local(async move {
+        tray_sync.run_sync().await;
+    });
 
     let lock_sync = lock_presenter.clone();
-    glib::spawn_future_local(async move { lock_sync.run_sync().await; });
+    glib::spawn_future_local(async move {
+        lock_sync.run_sync().await;
+    });
 
     let cont_sync = continuity_presenter.clone();
-    glib::spawn_future_local(async move { cont_sync.run_sync().await; });
+    glib::spawn_future_local(async move {
+        cont_sync.run_sync().await;
+    });
 
     let mp_sync = mpris_presenter.clone();
-    glib::spawn_future_local(async move { mp_sync.run_sync().await; });
+    glib::spawn_future_local(async move {
+        mp_sync.run_sync().await;
+    });
 
     let dnd_sync = dnd_status_presenter.clone();
-    glib::spawn_future_local(async move { dnd_sync.run_sync().await; });
+    glib::spawn_future_local(async move {
+        dnd_sync.run_sync().await;
+    });
 
     let ap_sync = airplane_status_presenter.clone();
-    glib::spawn_future_local(async move { ap_sync.run_sync().await; });
+    glib::spawn_future_local(async move {
+        ap_sync.run_sync().await;
+    });
 
     let ii_sync = idle_inhibit_status_presenter.clone();
-    glib::spawn_future_local(async move { ii_sync.run_sync().await; });
+    glib::spawn_future_local(async move {
+        ii_sync.run_sync().await;
+    });
 
     let dbus_tp = toggle_popup.clone();
     let dbus_lock_uc = lock_session_uc.clone();
@@ -718,7 +844,10 @@ fn main() -> glib::ExitCode {
                 move || {
                     let tp = tp.clone();
                     tokio::spawn(async move {
-                        if let Err(e) = tp.execute(axis_domain::models::popups::PopupType::Launcher).await {
+                        if let Err(e) = tp
+                            .execute(axis_domain::models::popups::PopupType::Launcher)
+                            .await
+                        {
                             log::error!("[dbus-host] toggle launcher failed: {e}");
                         }
                     });
@@ -737,10 +866,14 @@ fn main() -> glib::ExitCode {
             },
             cont_cmd_tx,
             cont_status_rx,
-        ).await;
+        )
+        .await;
     });
 
-    let show_labels = get_config_uc.execute().map(|c| c.bar.show_labels).unwrap_or(true);
+    let show_labels = get_config_uc
+        .execute()
+        .map(|c| c.bar.show_labels)
+        .unwrap_or(true);
 
     let lock_gtk_handle_for_activate = lock_gtk_handle;
     app.connect_activate(move |app| {
@@ -750,7 +883,9 @@ fn main() -> glib::ExitCode {
         });
         let theme_svc = Rc::new(ThemeService::new(theme_css));
         let wallpaper_svc = Rc::new(WallpaperService::new(app));
-        let config_dir = dirs::config_dir().unwrap_or(PathBuf::from(".")).join("axis");
+        let config_dir = dirs::config_dir()
+            .unwrap_or(PathBuf::from("."))
+            .join("axis");
         let niri_layout = NiriLayoutProvider::new(config_dir);
         let set_border_color = Arc::new(SetBorderColorUseCase::new(niri_layout.clone()));
 
@@ -768,28 +903,35 @@ fn main() -> glib::ExitCode {
         appearance_presenter.add_view(Box::new(wallpaper_svc.clone()));
 
         let border_manual = set_border_color.clone();
-        appearance_presenter.add_view(Box::new(FnView::new(move |status: &axis_domain::models::config::AppearanceConfig| {
-            if let axis_domain::models::appearance::AccentColor::Custom(hex) = &status.accent_color {
-                let uc = border_manual.clone();
-                let hex_c = hex.clone();
-                tokio::spawn(async move {
-                    if let Err(e) = uc.execute(hex_c).await {
-                        log::error!("[appearance] border color custom sync failed: {e}");
-                    }
-                });
-            } else if status.accent_color != axis_domain::models::appearance::AccentColor::Auto {
-                let uc = border_manual.clone();
-                let hex = status.accent_color.hex_value().to_string();
-                tokio::spawn(async move {
-                    if let Err(e) = uc.execute(hex).await {
-                        log::error!("[appearance] border color preset sync failed: {e}");
-                    }
-                });
-            }
-        })));
+        appearance_presenter.add_view(Box::new(FnView::new(
+            move |status: &axis_domain::models::config::AppearanceConfig| {
+                if let axis_domain::models::appearance::AccentColor::Custom(hex) =
+                    &status.accent_color
+                {
+                    let uc = border_manual.clone();
+                    let hex_c = hex.clone();
+                    tokio::spawn(async move {
+                        if let Err(e) = uc.execute(hex_c).await {
+                            log::error!("[appearance] border color custom sync failed: {e}");
+                        }
+                    });
+                } else if status.accent_color != axis_domain::models::appearance::AccentColor::Auto
+                {
+                    let uc = border_manual.clone();
+                    let hex = status.accent_color.hex_value().to_string();
+                    tokio::spawn(async move {
+                        if let Err(e) = uc.execute(hex).await {
+                            log::error!("[appearance] border color preset sync failed: {e}");
+                        }
+                    });
+                }
+            },
+        )));
 
         let app_sync = appearance_presenter.clone();
-        glib::spawn_future_local(async move { app_sync.run_sync().await; });
+        glib::spawn_future_local(async move {
+            app_sync.run_sync().await;
+        });
 
         let lock_factory = LockScreenFactory::new();
 
@@ -803,48 +945,67 @@ fn main() -> glib::ExitCode {
         lock_factory.on_authenticate(Rc::new(move |password| {
             let lf = lf_auth.clone();
             let lp = lp_auth.clone();
-            lp_auth.authenticate(password, Rc::new(move |success| {
-                lf.on_auth_result(success);
-                if success {
-                    lp.unlock();
-                }
-            }));
+            lp_auth.authenticate(
+                password,
+                Rc::new(move |success| {
+                    lf.on_auth_result(success);
+                    if success {
+                        lp.unlock();
+                    }
+                }),
+            );
         }));
 
         lock_presenter.add_view(Box::new(lock_factory.clone()));
         battery_presenter.add_view(Box::new(lock_factory.clone()));
 
-        let capture_controller = ContinuityCaptureController::new(app, continuity_provider.clone());
+        let capture_controller =
+            ContinuityCaptureController::new(app, continuity_sharing_provider.clone());
         continuity_presenter.add_view(Box::new(capture_controller));
 
         let lf = lock_factory.clone();
-        lock_gtk_handle_for_activate.set_content_factory(Box::new(move || {
-            lf.build_overlay()
-        }));
+        lock_gtk_handle_for_activate.set_content_factory(Box::new(move || lf.build_overlay()));
 
         let bar_window = BarWindow::new(app);
-        bar_window.setup_content(
-            battery_presenter.clone(), clock_presenter.clone(), audio_presenter.clone(),
-            workspace_presenter.clone(), auto_hide_presenter.clone(), tray_presenter.clone(),
-            toggle_popup.clone(), toggle_overview_uc.clone(),
-            network_presenter.clone(), bluetooth_full_presenter.clone(), dnd_status_presenter.clone(),
-            airplane_status_presenter.clone(), continuity_presenter.clone(),
-            idle_inhibit_status_presenter.clone(), mpris_presenter.clone(),
+        bar_window.setup_content(BarPresenters {
+            battery: battery_presenter.clone(),
+            clock: clock_presenter.clone(),
+            audio: audio_presenter.clone(),
+            workspaces: workspace_presenter.clone(),
+            auto_hide: auto_hide_presenter.clone(),
+            tray: tray_presenter.clone(),
+            toggle_popup: toggle_popup.clone(),
+            toggle_overview: toggle_overview_uc.clone(),
+            network: network_presenter.clone(),
+            bluetooth: bluetooth_full_presenter.clone(),
+            dnd: dnd_status_presenter.clone(),
+            airplane: airplane_status_presenter.clone(),
+            continuity: continuity_presenter.clone(),
+            idle_inhibit: idle_inhibit_status_presenter.clone(),
+            mpris: mpris_presenter.clone(),
             show_labels,
-        );
+        });
 
         let qs_popup = QuickSettingsPopup::new(app);
         qs_popup.setup_audio(audio_presenter.clone());
         qs_popup.setup_brightness(brightness_presenter.clone());
 
         let power_actions = Rc::new(PowerActionStack::new(
-            suspend_uc.clone(), power_off_uc.clone(), reboot_uc.clone(), lock_session_uc.clone(),
+            suspend_uc.clone(),
+            power_off_uc.clone(),
+            reboot_uc.clone(),
+            lock_session_uc.clone(),
         ));
         qs_popup.setup_bottom_row(battery_presenter.clone(), power_actions);
 
         qs_popup.setup_toggle(0, 0, wifi_presenter.clone(), Some("wifi"));
         qs_popup.setup_toggle(0, 1, bluetooth_toggle_presenter.clone(), Some("bluetooth"));
-        qs_popup.setup_toggle(1, 0, nightlight_toggle_presenter.clone(), Some("nightlight"));
+        qs_popup.setup_toggle(
+            1,
+            0,
+            nightlight_toggle_presenter.clone(),
+            Some("nightlight"),
+        );
         qs_popup.setup_toggle(1, 1, dnd_presenter.clone(), None);
         qs_popup.setup_toggle(2, 0, airplane_presenter.clone(), None);
         qs_popup.setup_toggle(2, 1, continuity_toggle_presenter.clone(), None);
@@ -860,30 +1021,35 @@ fn main() -> glib::ExitCode {
             np.close_notification(id);
         });
         let np_act = notification_presenter.clone();
-        let on_action: std::rc::Rc<dyn Fn(u32, String, Option<String>)> = std::rc::Rc::new(move |id, key, user_input| {
-            np_act.invoke_action(id, key, user_input);
-        });
+        let on_action: std::rc::Rc<dyn Fn(u32, String, Option<String>)> =
+            std::rc::Rc::new(move |id, key, user_input| {
+                np_act.invoke_action(id, key, user_input);
+            });
 
-        let toast = std::rc::Rc::new(NotificationToastManager::new(app, on_close.clone(), on_action.clone()));
+        let toast = std::rc::Rc::new(NotificationToastManager::new(
+            app,
+            on_close.clone(),
+            on_action.clone(),
+        ));
         notification_presenter.register_toast(toast.clone());
         notification_presenter.add_view(Box::new(toast.clone()));
 
         {
             let subscribe_dnd_clone = subscribe_dnd.clone();
-            let dnd_presenter: Rc<Presenter<DndStatus>> = Rc::new(Presenter::from_subscribe({
-                let uc = subscribe_dnd_clone.clone();
-                move || {
-                    let uc = uc.clone();
-                    async move { uc.execute().await }
-                }
-            }));
+            let dnd_presenter: Rc<Presenter<DndStatus>> = Rc::new(
+                Presenter::from_subscribe_use_case(subscribe_dnd_clone.clone()),
+            );
             dnd_presenter.add_view(Box::new(toast.clone()));
             let dp = dnd_presenter.clone();
-            glib::spawn_future_local(async move { dp.run_sync().await; });
-
+            glib::spawn_future_local(async move {
+                dp.run_sync().await;
+            });
         }
 
-        let archive = std::rc::Rc::new(NotificationArchive::new(on_close.clone(), on_action.clone()));
+        let archive = std::rc::Rc::new(NotificationArchive::new(
+            on_close.clone(),
+            on_action.clone(),
+        ));
         qs_popup.setup_notification_archive(archive.container.clone());
         notification_presenter.register_archive(archive.clone());
         notification_presenter.add_view(Box::new(archive));
@@ -895,7 +1061,9 @@ fn main() -> glib::ExitCode {
         brightness_presenter.add_view(Box::new(osd.clone()));
 
         let notif_sync = notification_presenter.clone();
-        glib::spawn_future_local(async move { notif_sync.run_sync().await; });
+        glib::spawn_future_local(async move {
+            notif_sync.run_sync().await;
+        });
 
         let launcher_popup = LauncherPopup::new(app);
         let lp = launcher_presenter.clone();
@@ -925,7 +1093,10 @@ fn main() -> glib::ExitCode {
         lp.on_close(Box::new(move || {
             let tp = tp_close.clone();
             tokio::spawn(async move {
-                if let Err(e) = tp.execute(axis_domain::models::popups::PopupType::Launcher).await {
+                if let Err(e) = tp
+                    .execute(axis_domain::models::popups::PopupType::Launcher)
+                    .await
+                {
                     log::error!("[popup] launcher close failed: {e}");
                 }
             });
@@ -935,7 +1106,10 @@ fn main() -> glib::ExitCode {
         launcher_popup.on_escape(Box::new(move || {
             let tp = tp_esc.clone();
             tokio::spawn(async move {
-                if let Err(e) = tp.execute(axis_domain::models::popups::PopupType::Launcher).await {
+                if let Err(e) = tp
+                    .execute(axis_domain::models::popups::PopupType::Launcher)
+                    .await
+                {
                     log::error!("[popup] launcher escape failed: {e}");
                 }
             });
@@ -945,7 +1119,10 @@ fn main() -> glib::ExitCode {
         qs_popup.on_escape(Box::new(move || {
             let tp = tp_esc_qs.clone();
             tokio::spawn(async move {
-                if let Err(e) = tp.execute(axis_domain::models::popups::PopupType::QuickSettings).await {
+                if let Err(e) = tp
+                    .execute(axis_domain::models::popups::PopupType::QuickSettings)
+                    .await
+                {
                     log::error!("[popup] QS escape failed: {e}");
                 }
             });
@@ -999,7 +1176,10 @@ fn main() -> glib::ExitCode {
         mpris_popup.on_escape(Box::new(move || {
             let tp = tp_esc_mpris.clone();
             tokio::spawn(async move {
-                if let Err(e) = tp.execute(axis_domain::models::popups::PopupType::Mpris).await {
+                if let Err(e) = tp
+                    .execute(axis_domain::models::popups::PopupType::Mpris)
+                    .await
+                {
                     log::error!("[popup] MPRIS escape failed: {e}");
                 }
             });
@@ -1027,7 +1207,7 @@ fn main() -> glib::ExitCode {
         }
 
         pp.add_popup(Box::new(mpris_popup));
-        
+
         let pp_sync = pp.clone();
         glib::spawn_future_local(async move {
             pp_sync.run_sync().await;
@@ -1041,8 +1221,8 @@ fn main() -> glib::ExitCode {
                 while let Some(status) = futures_util::StreamExt::next(&mut stream).await {
                     ahp.set_force_visible(&bar_win, status.active_popup.is_some());
                 }
-        }
-    });
+            }
+        });
 
         bar_window.present();
 
@@ -1095,7 +1275,7 @@ fn subscribe_continuity_notifications(
                                 "Kopplungsanfrage von {}\nPIN: {}",
                                 pending.peer_name, pending.pin
                             ),
-                            urgency: 2,
+                            urgency: axis_domain::models::notifications::Urgency::Critical,
                             actions: vec![
                                 axis_domain::models::notifications::NotificationAction {
                                     key: "accept".into(),
@@ -1121,32 +1301,47 @@ fn subscribe_continuity_notifications(
                             axis_domain::ports::notifications::ActionHandler,
                         > = HashMap::new();
 
-                        action_handlers.insert("accept".into(), Arc::new({
-                            let uc = confirm_pin_uc.clone();
-                            move |_: Option<String>| {
-                                let uc = uc.clone();
-                                tokio::spawn(async move {
-                                    if let Err(e) = uc.execute().await {
-                                        log::error!("[continuity:notifications] confirm_pin failed: {e}");
-                                    }
-                                });
-                            }
-                        }));
+                        action_handlers.insert(
+                            "accept".into(),
+                            Arc::new({
+                                let uc = confirm_pin_uc.clone();
+                                move |_: Option<String>| {
+                                    let uc = uc.clone();
+                                    tokio::spawn(async move {
+                                        if let Err(e) = uc.execute().await {
+                                            log::error!(
+                                                "[continuity:notifications] confirm_pin failed: {e}"
+                                            );
+                                        }
+                                    });
+                                }
+                            }),
+                        );
 
-                        action_handlers.insert("reject".into(), Arc::new({
-                            let uc = reject_pin_uc.clone();
-                            move |_: Option<String>| {
-                                let uc = uc.clone();
-                                tokio::spawn(async move {
-                                    if let Err(e) = uc.execute().await {
-                                        log::error!("[continuity:notifications] reject_pin failed: {e}");
-                                    }
-                                });
-                            }
-                        }));
+                        action_handlers.insert(
+                            "reject".into(),
+                            Arc::new({
+                                let uc = reject_pin_uc.clone();
+                                move |_: Option<String>| {
+                                    let uc = uc.clone();
+                                    tokio::spawn(async move {
+                                        if let Err(e) = uc.execute().await {
+                                            log::error!(
+                                                "[continuity:notifications] reject_pin failed: {e}"
+                                            );
+                                        }
+                                    });
+                                }
+                            }),
+                        );
 
-                        if let Err(e) = show_notification_uc.execute(notification, action_handlers).await {
-                            log::error!("[continuity:notifications] show pairing notification failed: {e}");
+                        if let Err(e) = show_notification_uc
+                            .execute(notification, action_handlers)
+                            .await
+                        {
+                            log::error!(
+                                "[continuity:notifications] show pairing notification failed: {e}"
+                            );
                         }
                     }
                 }
@@ -1155,7 +1350,11 @@ fn subscribe_continuity_notifications(
             }
 
             if let Some(conn) = &status.active_connection {
-                if status.peer_configs.get(&conn.peer_id).is_some_and(|c| c.trusted) {
+                if status
+                    .peer_configs
+                    .get(&conn.peer_id)
+                    .is_some_and(|c| c.trusted)
+                {
                     if last_connected.as_deref() != Some(&conn.peer_id) {
                         last_connected = Some(conn.peer_id.clone());
 
@@ -1165,7 +1364,7 @@ fn subscribe_continuity_notifications(
                             app_icon: "computer-symbolic".to_string(),
                             summary: "Verbunden".to_string(),
                             body: format!("Verbunden mit {}", conn.peer_name),
-                            urgency: 1,
+                            urgency: axis_domain::models::notifications::Urgency::Normal,
                             actions: vec![],
                             timeout: 5000,
                             timestamp: std::time::SystemTime::now()
@@ -1177,8 +1376,13 @@ fn subscribe_continuity_notifications(
                             input_placeholder: None,
                         };
 
-                        if let Err(e) = show_notification_uc.execute(notification, HashMap::new()).await {
-                            log::error!("[continuity:notifications] show connected notification failed: {e}");
+                        if let Err(e) = show_notification_uc
+                            .execute(notification, HashMap::new())
+                            .await
+                        {
+                            log::error!(
+                                "[continuity:notifications] show connected notification failed: {e}"
+                            );
                         }
                     }
                 } else {
@@ -1277,14 +1481,14 @@ fn subscribe_bluetooth_pairing_notifications(
                             }).unwrap_or_else(|| "Bestätigen Sie die Kopplung.".to_string());
                             (msg, None)
                         }
-                        axis_domain::models::bluetooth::PairingType::PinCode => {
-                            ("Geben Sie den PIN-Code ein, der am Gerät angezeigt wird.".to_string(),
-                             Some("PIN-Code".to_string()))
-                        }
-                        axis_domain::models::bluetooth::PairingType::Passkey => {
-                            ("Geben Sie den Passkey ein.".to_string(),
-                             Some("Passkey".to_string()))
-                        }
+                        axis_domain::models::bluetooth::PairingType::PinCode => (
+                            "Geben Sie den PIN-Code ein, der am Gerät angezeigt wird.".to_string(),
+                            Some("PIN-Code".to_string()),
+                        ),
+                        axis_domain::models::bluetooth::PairingType::Passkey => (
+                            "Geben Sie den Passkey ein.".to_string(),
+                            Some("Passkey".to_string()),
+                        ),
                         axis_domain::models::bluetooth::PairingType::Authorization => {
                             ("Möchten Sie die Kopplung erlauben?".to_string(), None)
                         }
@@ -1296,7 +1500,7 @@ fn subscribe_bluetooth_pairing_notifications(
                         app_icon: "bluetooth-active-symbolic".to_string(),
                         summary: pairing.device_name.clone(),
                         body,
-                        urgency: 2,
+                        urgency: axis_domain::models::notifications::Urgency::Critical,
                         actions: vec![
                             axis_domain::models::notifications::NotificationAction {
                                 key: "accept".into(),
@@ -1322,33 +1526,48 @@ fn subscribe_bluetooth_pairing_notifications(
                         axis_domain::ports::notifications::ActionHandler,
                     > = HashMap::new();
 
-                    action_handlers.insert("accept".into(), Arc::new({
-                        let uc = pair_accept_uc.clone();
-                        move |input: Option<String>| {
-                            let uc = uc.clone();
-                            let value = input.map(|s| s.into_bytes()).unwrap_or_default();
-                            tokio::spawn(async move {
-                                if let Err(e) = uc.execute(value).await {
-                                    log::error!("[bluetooth:notifications] pair_accept failed: {e}");
-                                }
-                            });
-                        }
-                    }));
+                    action_handlers.insert(
+                        "accept".into(),
+                        Arc::new({
+                            let uc = pair_accept_uc.clone();
+                            move |input: Option<String>| {
+                                let uc = uc.clone();
+                                let value = input.map(|s| s.into_bytes()).unwrap_or_default();
+                                tokio::spawn(async move {
+                                    if let Err(e) = uc.execute(value).await {
+                                        log::error!(
+                                            "[bluetooth:notifications] pair_accept failed: {e}"
+                                        );
+                                    }
+                                });
+                            }
+                        }),
+                    );
 
-                    action_handlers.insert("reject".into(), Arc::new({
-                        let uc = pair_reject_uc.clone();
-                        move |_: Option<String>| {
-                            let uc = uc.clone();
-                            tokio::spawn(async move {
-                                if let Err(e) = uc.execute().await {
-                                    log::error!("[bluetooth:notifications] pair_reject failed: {e}");
-                                }
-                            });
-                        }
-                    }));
+                    action_handlers.insert(
+                        "reject".into(),
+                        Arc::new({
+                            let uc = pair_reject_uc.clone();
+                            move |_: Option<String>| {
+                                let uc = uc.clone();
+                                tokio::spawn(async move {
+                                    if let Err(e) = uc.execute().await {
+                                        log::error!(
+                                            "[bluetooth:notifications] pair_reject failed: {e}"
+                                        );
+                                    }
+                                });
+                            }
+                        }),
+                    );
 
-                    if let Err(e) = show_notification_uc.execute(notification, action_handlers).await {
-                        log::error!("[bluetooth:notifications] show pairing notification failed: {e}");
+                    if let Err(e) = show_notification_uc
+                        .execute(notification, action_handlers)
+                        .await
+                    {
+                        log::error!(
+                            "[bluetooth:notifications] show pairing notification failed: {e}"
+                        );
                     }
                 }
             } else {
@@ -1414,10 +1633,10 @@ fn setup_logger() -> Result<(), fern::InitError> {
         })
         .level(log::LevelFilter::Info);
 
-    if let Ok(lvl) = std::env::var("RUST_LOG") {
-        if let Ok(parsed) = lvl.parse() {
-            dispatch = dispatch.level(parsed);
-        }
+    if let Ok(lvl) = std::env::var("RUST_LOG")
+        && let Ok(parsed) = lvl.parse()
+    {
+        dispatch = dispatch.level(parsed);
     }
 
     dispatch.chain(std::io::stdout()).apply()?;

@@ -1,12 +1,12 @@
-use std::sync::Arc;
-use std::cell::RefCell;
-use std::rc::Rc;
 use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
 use axis_application::use_cases::notifications::close_notification::CloseNotificationUseCase;
 use axis_application::use_cases::notifications::invoke_action::InvokeNotificationActionUseCase;
 use axis_domain::models::notifications::NotificationStatus;
 use axis_domain::ports::notifications::NotificationProvider;
 use axis_presentation::{Presenter, View};
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::sync::Arc;
 
 pub struct NotificationPresenter {
     inner: Presenter<NotificationStatus>,
@@ -38,13 +38,8 @@ impl NotificationPresenter {
             }
         });
 
-        let inner = Presenter::from_subscribe({
-            let uc = subscribe_use_case.clone();
-            move || {
-                let uc = uc.clone();
-                async move { uc.execute().await }
-            }
-        }).with_initial_status(initial_status);
+        let inner = Presenter::from_subscribe_use_case(subscribe_use_case.clone())
+            .with_initial_status(initial_status);
 
         Self {
             inner,

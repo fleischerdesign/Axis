@@ -1,19 +1,19 @@
-use std::sync::Arc;
-use axis_domain::models::agenda::AgendaStatus;
-use axis_domain::models::popups::{PopupStatus, PopupType};
-use axis_domain::ports::popups::PopupProvider;
-use axis_application::use_cases::generic::SubscribeUseCase;
+use axis_application::use_cases::agenda::create_task::CreateTaskUseCase;
+use axis_application::use_cases::agenda::delete_task::DeleteTaskUseCase;
 use axis_application::use_cases::agenda::sync_events::SyncEventsUseCase;
 use axis_application::use_cases::agenda::sync_tasks::SyncTasksUseCase;
 use axis_application::use_cases::agenda::toggle_task::ToggleTaskUseCase;
-use axis_application::use_cases::agenda::delete_task::DeleteTaskUseCase;
-use axis_application::use_cases::agenda::create_task::CreateTaskUseCase;
-use axis_presentation::{Presenter, View};
+use axis_application::use_cases::generic::SubscribeUseCase;
+use axis_domain::models::agenda::AgendaStatus;
+use axis_domain::models::popups::{PopupStatus, PopupType};
 use axis_domain::models::tasks::Task;
-use std::rc::Rc;
-use std::cell::{Cell, RefCell};
-use gtk4::glib;
+use axis_domain::ports::popups::PopupProvider;
+use axis_presentation::{Presenter, View};
 use futures_util::StreamExt;
+use gtk4::glib;
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
+use std::sync::Arc;
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
 
@@ -95,7 +95,10 @@ impl AgendaPresenter {
         self.inner.add_view(view);
     }
 
-    pub async fn run_sync(&self, subscribe_popups: Arc<SubscribeUseCase<dyn PopupProvider, PopupStatus>>) {
+    pub async fn run_sync(
+        &self,
+        subscribe_popups: Arc<SubscribeUseCase<dyn PopupProvider, PopupStatus>>,
+    ) {
         self.refresh(true, true).await;
 
         let mut stream = match subscribe_popups.execute().await {
@@ -107,6 +110,9 @@ impl AgendaPresenter {
         };
         let this = self.clone();
 
+        // glib::spawn_future_local is required here because the async closure captures
+        // Rc-based state (Presenter<S>) which is !Send. This is GTK's single-threaded
+        // UI model and is architecturally intentional.
         glib::spawn_future_local(async move {
             while let Some(status) = stream.next().await {
                 if status.active_popup == Some(PopupType::Agenda) {
@@ -119,8 +125,12 @@ impl AgendaPresenter {
     }
 
     pub async fn refresh(&self, fetch_events: bool, fetch_tasks: bool) {
-        if fetch_events && self.is_syncing_events.get() { return; }
-        if fetch_tasks && self.is_syncing_tasks.get() { return; }
+        if fetch_events && self.is_syncing_events.get() {
+            return;
+        }
+        if fetch_tasks && self.is_syncing_tasks.get() {
+            return;
+        }
 
         let mut status = self.status_tx.borrow().clone();
         if fetch_events {
@@ -137,6 +147,9 @@ impl AgendaPresenter {
         let this = self.clone();
         let list_id = self.selected_list_id.borrow().clone();
 
+        // glib::spawn_future_local is required here because the async closure captures
+        // Rc-based state (Presenter<S>) which is !Send. This is GTK's single-threaded
+        // UI model and is architecturally intentional.
         glib::spawn_future_local(async move {
             let mut final_status = this.status_tx.borrow().clone();
 
@@ -173,6 +186,9 @@ impl AgendaPresenter {
         log::debug!("[agenda] Switching to list: {}", list_id);
         *self.selected_list_id.borrow_mut() = Some(list_id);
         let this = self.clone();
+        // glib::spawn_future_local is required here because the async closure captures
+        // Rc-based state (Presenter<S>) which is !Send. This is GTK's single-threaded
+        // UI model and is architecturally intentional.
         glib::spawn_future_local(async move {
             this.refresh(false, true).await;
         });
@@ -191,6 +207,9 @@ impl AgendaPresenter {
         if let Some(list_id) = list_id {
             let this = self.clone();
             let uc = self.toggle_task_uc.clone();
+            // glib::spawn_future_local is required here because the async closure captures
+            // Rc-based state (Presenter<S>) which is !Send. This is GTK's single-threaded
+            // UI model and is architecturally intentional.
             glib::spawn_future_local(async move {
                 if let Err(e) = uc.execute(&list_id, &task_id, done).await {
                     log::error!("[agenda] Failed to toggle task: {e}");
@@ -211,6 +230,9 @@ impl AgendaPresenter {
         if let Some(list_id) = list_id {
             let this = self.clone();
             let uc = self.delete_task_uc.clone();
+            // glib::spawn_future_local is required here because the async closure captures
+            // Rc-based state (Presenter<S>) which is !Send. This is GTK's single-threaded
+            // UI model and is architecturally intentional.
             glib::spawn_future_local(async move {
                 if let Err(e) = uc.execute(&list_id, &task_id).await {
                     log::error!("[agenda] Failed to delete task: {e}");
@@ -238,6 +260,9 @@ impl AgendaPresenter {
             let this = self.clone();
             let uc = self.create_task_uc.clone();
             let list_id_c = list_id.clone();
+            // glib::spawn_future_local is required here because the async closure captures
+            // Rc-based state (Presenter<S>) which is !Send. This is GTK's single-threaded
+            // UI model and is architecturally intentional.
             glib::spawn_future_local(async move {
                 if let Err(e) = uc.execute(&list_id_c, &title).await {
                     log::error!("[agenda] Failed to create task: {e}");

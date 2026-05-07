@@ -1,7 +1,7 @@
 use axis_domain::models::config::AxisConfig;
-use axis_domain::ports::config::{ConfigProvider, ConfigError};
-use std::sync::Arc;
+use axis_domain::ports::config::{ConfigError, ConfigProvider};
 use log::debug;
+use std::sync::Arc;
 
 pub struct GetConfigUseCase {
     provider: Arc<dyn ConfigProvider>,

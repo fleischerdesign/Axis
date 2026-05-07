@@ -1,4 +1,5 @@
-use axis_domain::ports::continuity::{ContinuityProvider, ContinuityError};
+use axis_domain::ports::continuity::{ContinuityError, ContinuityProvider};
+use log::info;
 use std::sync::Arc;
 
 pub struct ConfirmPinUseCase {
@@ -11,6 +12,7 @@ impl ConfirmPinUseCase {
     }
 
     pub async fn execute(&self) -> Result<(), ContinuityError> {
+        info!("[use-case] Confirming PIN");
         self.provider.confirm_pin().await
     }
 }

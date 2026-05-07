@@ -1,30 +1,37 @@
+use crate::widgets::callback::FnCell0;
+use axis_application::use_cases::launcher::execute::ExecuteLauncherActionUseCase;
+use axis_application::use_cases::launcher::search::SearchLauncherUseCase;
+use axis_domain::models::launcher::LauncherStatus;
+use axis_presentation::{Presenter, View};
+use gtk4::glib;
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use axis_application::use_cases::launcher::search::SearchLauncherUseCase;
-use axis_domain::models::launcher::{LauncherAction, LauncherStatus};
-use axis_presentation::{Presenter, View};
-use std::rc::Rc;
-use std::cell::RefCell;
-use gtk4::glib;
-use std::os::unix::process::CommandExt;
 
 pub struct LauncherPresenter {
     inner: Presenter<LauncherStatus>,
     search_use_case: Arc<SearchLauncherUseCase>,
+    executor: Arc<ExecuteLauncherActionUseCase>,
     cancel_flag: Rc<RefCell<Arc<AtomicBool>>>,
-    on_close: Rc<RefCell<Option<Box<dyn Fn() + 'static>>>>,
+    on_close: FnCell0,
 }
 
 impl LauncherPresenter {
-    pub fn new(search_use_case: Arc<SearchLauncherUseCase>) -> Self {
+    pub fn new(
+        search_use_case: Arc<SearchLauncherUseCase>,
+        executor: Arc<ExecuteLauncherActionUseCase>,
+    ) -> Self {
         let inner = Presenter::new(|| {
             // Launcher doesn't have an external status stream, it's driven by the presenter
             Box::pin(futures_util::stream::pending())
-        }).with_initial_status(LauncherStatus::default());
+        })
+        .with_initial_status(LauncherStatus::default());
 
         Self {
             inner,
             search_use_case,
+            executor,
             cancel_flag: Rc::new(RefCell::new(Arc::new(AtomicBool::new(false)))),
             on_close: Rc::new(RefCell::new(None)),
         }
@@ -56,6 +63,9 @@ impl LauncherPresenter {
         let presenter = self.inner.clone();
         let query = query.to_string();
 
+        // glib::spawn_future_local is required here because the async closure captures
+        // Rc-based state (Presenter<S>) which is !Send. This is GTK's single-threaded
+        // UI model and is architecturally intentional.
         glib::spawn_future_local(async move {
             let results = match uc.execute(&query).await {
                 Ok(r) => r,
@@ -64,7 +74,9 @@ impl LauncherPresenter {
                     Default::default()
                 }
             };
-            if flag.load(Ordering::SeqCst) { return; }
+            if flag.load(Ordering::SeqCst) {
+                return;
+            }
 
             let mut s = presenter.current().unwrap_or_default();
             s.results = results;
@@ -76,15 +88,21 @@ impl LauncherPresenter {
 
     pub fn select_next(&self) {
         let mut s = self.inner.current().unwrap_or_default();
-        if s.results.is_empty() { return; }
-        let next = s.selected_index.map_or(0, |i| (i + 1).min(s.results.len() - 1));
+        if s.results.is_empty() {
+            return;
+        }
+        let next = s
+            .selected_index
+            .map_or(0, |i| (i + 1).min(s.results.len() - 1));
         s.selected_index = Some(next);
         self.inner.update(s);
     }
 
     pub fn select_prev(&self) {
         let mut s = self.inner.current().unwrap_or_default();
-        if s.results.is_empty() { return; }
+        if s.results.is_empty() {
+            return;
+        }
         let prev = s.selected_index.map_or(0, |i| i.saturating_sub(1));
         s.selected_index = Some(prev);
         self.inner.update(s);
@@ -92,45 +110,16 @@ impl LauncherPresenter {
 
     pub fn activate(&self, maybe_idx: Option<usize>) {
         let s = self.inner.current().unwrap_or_default();
-        let idx = maybe_idx
-            .or(s.selected_index)
-            .or_else(|| if !s.results.is_empty() { Some(0) } else { None });
+        let idx =
+            maybe_idx
+                .or(s.selected_index)
+                .or(if !s.results.is_empty() { Some(0) } else { None });
 
-        if let Some(idx) = idx {
-            if let Some(item) = s.results.get(idx) {
-                match &item.action {
-                    LauncherAction::Exec(program) => {
-                        log::info!("[launcher] Executing: {program}");
-                        if let Err(e) = std::process::Command::new("sh")
-                            .arg("-c")
-                            .arg(program)
-                            .stdin(std::process::Stdio::null())
-                            .stdout(std::process::Stdio::null())
-                            .stderr(std::process::Stdio::null())
-                            .process_group(0)
-                            .spawn()
-                        {
-                            log::error!("[launcher] Failed to execute: {program} ({e})");
-                        }
-                    }
-                    LauncherAction::OpenUrl(url) => {
-                        log::info!("[launcher] Opening URL: {url}");
-                        if let Err(e) = std::process::Command::new("xdg-open")
-                            .arg(url)
-                            .stdin(std::process::Stdio::null())
-                            .stdout(std::process::Stdio::null())
-                            .stderr(std::process::Stdio::null())
-                            .process_group(0)
-                            .spawn()
-                        {
-                            log::error!("[launcher] Failed to open URL: {url} ({e})");
-                        }
-                    }
-                    LauncherAction::Internal(cmd) => {
-                        log::info!("[launcher] Internal command: {cmd}");
-                    }
-                }
-            }
+        if let Some(idx) = idx
+            && let Some(item) = s.results.get(idx)
+            && let Err(e) = self.executor.execute(&item.action)
+        {
+            log::error!("[launcher] Failed to execute action: {e}");
         }
 
         if let Some(f) = self.on_close.borrow().as_ref() {

@@ -92,6 +92,8 @@
             pkgs.cargo
             pkgs.rustc
             pkgs.rust-analyzer
+            pkgs.rustfmt
+            pkgs.clippy
           ];
           buildInputs = commonArgs.buildInputs;
           env = commonArgs.env // {

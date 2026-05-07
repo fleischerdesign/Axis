@@ -1,5 +1,5 @@
-use libadwaita::prelude::*;
 use axis_presentation::View;
+use libadwaita::prelude::*;
 
 #[derive(Clone)]
 pub struct ToggleTile {
@@ -38,7 +38,13 @@ impl ToggleTile {
         container.append(&main_btn);
         container.append(&arrow_btn);
 
-        let tile = Self { container, main_btn, arrow_btn, icon, label };
+        let tile = Self {
+            container,
+            main_btn,
+            arrow_btn,
+            icon,
+            label,
+        };
         tile.set_label(label_text);
         tile.set_icon(icon_name);
         tile.set_show_arrow(has_arrow);

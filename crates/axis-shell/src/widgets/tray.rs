@@ -1,12 +1,15 @@
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::rc::Rc;
-use libadwaita::prelude::*;
-use gtk4::glib;
-use axis_presentation::View;
 use crate::presentation::tray::TrayView;
 use crate::widgets::island::Island;
 use axis_domain::models::tray::{TrayItemStatus, TrayStatus};
+use axis_presentation::View;
+use gtk4::glib;
+use libadwaita::prelude::*;
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
+
+type ClickFnCell = Rc<RefCell<Option<Rc<dyn Fn(String, i32, i32)>>>>;
+type ScrollFnCell = Rc<RefCell<Option<Rc<dyn Fn(String, i32, String)>>>>;
 
 #[derive(Clone)]
 pub struct TrayWidget {
@@ -14,9 +17,15 @@ pub struct TrayWidget {
     island: Island,
     inner_box: gtk4::Box,
     icons: Rc<RefCell<HashMap<String, gtk4::Image>>>,
-    activate_cb: Rc<RefCell<Option<Rc<dyn Fn(String, i32, i32)>>>>,
-    context_menu_cb: Rc<RefCell<Option<Rc<dyn Fn(String, i32, i32)>>>>,
-    scroll_cb: Rc<RefCell<Option<Rc<dyn Fn(String, i32, String)>>>>,
+    activate_cb: ClickFnCell,
+    context_menu_cb: ClickFnCell,
+    scroll_cb: ScrollFnCell,
+}
+
+impl Default for TrayWidget {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TrayWidget {
@@ -98,25 +107,23 @@ impl View<TrayStatus> for TrayWidget {
                 let act = self.activate_cb.clone();
                 let ctx = self.context_menu_cb.clone();
 
-                click.connect_pressed(move |gesture, _, x, y| {
-                    match gesture.current_button() {
-                        1 => {
-                            if let Some(f) = act.borrow().as_ref() {
-                                f(bn_left.clone(), x as i32, y as i32);
-                            }
+                click.connect_pressed(move |gesture, _, x, y| match gesture.current_button() {
+                    1 => {
+                        if let Some(f) = act.borrow().as_ref() {
+                            f(bn_left.clone(), x as i32, y as i32);
                         }
-                        3 => {
-                            if let Some(f) = ctx.borrow().as_ref() {
-                                f(bn_right.clone(), x as i32, y as i32);
-                            }
-                        }
-                        2 => {
-                            if let Some(f) = act.borrow().as_ref() {
-                                f(bn_middle.clone(), x as i32, y as i32);
-                            }
-                        }
-                        _ => {}
                     }
+                    3 => {
+                        if let Some(f) = ctx.borrow().as_ref() {
+                            f(bn_right.clone(), x as i32, y as i32);
+                        }
+                    }
+                    2 => {
+                        if let Some(f) = act.borrow().as_ref() {
+                            f(bn_middle.clone(), x as i32, y as i32);
+                        }
+                    }
+                    _ => {}
                 });
 
                 img.add_controller(click);

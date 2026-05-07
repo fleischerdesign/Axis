@@ -1,16 +1,16 @@
+use axis_application::use_cases::continuity::cancel_reconnect::CancelReconnectUseCase;
+use axis_application::use_cases::continuity::confirm_pin::ConfirmPinUseCase;
+use axis_application::use_cases::continuity::connect_to_peer::ConnectToPeerUseCase;
+use axis_application::use_cases::continuity::disconnect::DisconnectUseCase;
+use axis_application::use_cases::continuity::reject_pin::RejectPinUseCase;
+use axis_application::use_cases::continuity::set_enabled::SetContinuityEnabledUseCase;
+use axis_application::use_cases::continuity::set_peer_arrangement::SetPeerArrangementUseCase;
+use axis_application::use_cases::continuity::unpair::UnpairUseCase;
+use axis_application::use_cases::continuity::update_peer_configs::UpdatePeerConfigsUseCase;
+use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
 use axis_domain::models::continuity::{ContinuityStatus, PeerArrangement, PeerConfig};
 use axis_domain::ports::continuity::ContinuityProvider;
 use axis_presentation::{Presenter, View};
-use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
-use axis_application::use_cases::continuity::set_enabled::SetContinuityEnabledUseCase;
-use axis_application::use_cases::continuity::connect_to_peer::ConnectToPeerUseCase;
-use axis_application::use_cases::continuity::confirm_pin::ConfirmPinUseCase;
-use axis_application::use_cases::continuity::reject_pin::RejectPinUseCase;
-use axis_application::use_cases::continuity::disconnect::DisconnectUseCase;
-use axis_application::use_cases::continuity::unpair::UnpairUseCase;
-use axis_application::use_cases::continuity::cancel_reconnect::CancelReconnectUseCase;
-use axis_application::use_cases::continuity::set_peer_arrangement::SetPeerArrangementUseCase;
-use axis_application::use_cases::continuity::update_peer_configs::UpdatePeerConfigsUseCase;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -28,15 +28,33 @@ pub trait ContinuitySettingsView: View<ContinuityStatus> {
 }
 
 impl<T: ContinuitySettingsView + ?Sized> ContinuitySettingsView for Rc<T> {
-    fn on_toggle_enabled(&self, f: Box<dyn Fn(bool) + 'static>) { (**self).on_toggle_enabled(f); }
-    fn on_connect_peer(&self, f: Box<dyn Fn(String) + 'static>) { (**self).on_connect_peer(f); }
-    fn on_disconnect(&self, f: Box<dyn Fn() + 'static>) { (**self).on_disconnect(f); }
-    fn on_confirm_pin(&self, f: Box<dyn Fn() + 'static>) { (**self).on_confirm_pin(f); }
-    fn on_reject_pin(&self, f: Box<dyn Fn() + 'static>) { (**self).on_reject_pin(f); }
-    fn on_cancel_reconnect(&self, f: Box<dyn Fn() + 'static>) { (**self).on_cancel_reconnect(f); }
-    fn on_unpair(&self, f: Box<dyn Fn(String) + 'static>) { (**self).on_unpair(f); }
-    fn on_set_arrangement(&self, f: Box<dyn Fn(PeerArrangement) + 'static>) { (**self).on_set_arrangement(f); }
-    fn on_update_peer_config(&self, f: Box<dyn Fn(String, PeerConfig) + 'static>) { (**self).on_update_peer_config(f); }
+    fn on_toggle_enabled(&self, f: Box<dyn Fn(bool) + 'static>) {
+        (**self).on_toggle_enabled(f);
+    }
+    fn on_connect_peer(&self, f: Box<dyn Fn(String) + 'static>) {
+        (**self).on_connect_peer(f);
+    }
+    fn on_disconnect(&self, f: Box<dyn Fn() + 'static>) {
+        (**self).on_disconnect(f);
+    }
+    fn on_confirm_pin(&self, f: Box<dyn Fn() + 'static>) {
+        (**self).on_confirm_pin(f);
+    }
+    fn on_reject_pin(&self, f: Box<dyn Fn() + 'static>) {
+        (**self).on_reject_pin(f);
+    }
+    fn on_cancel_reconnect(&self, f: Box<dyn Fn() + 'static>) {
+        (**self).on_cancel_reconnect(f);
+    }
+    fn on_unpair(&self, f: Box<dyn Fn(String) + 'static>) {
+        (**self).on_unpair(f);
+    }
+    fn on_set_arrangement(&self, f: Box<dyn Fn(PeerArrangement) + 'static>) {
+        (**self).on_set_arrangement(f);
+    }
+    fn on_update_peer_config(&self, f: Box<dyn Fn(String, PeerConfig) + 'static>) {
+        (**self).on_update_peer_config(f);
+    }
 }
 
 pub struct ContinuitySettingsPresenter {
@@ -52,21 +70,35 @@ pub struct ContinuitySettingsPresenter {
     update_configs_uc: Arc<UpdatePeerConfigsUseCase>,
 }
 
+pub struct ContinuitySettingsPresenterArgs {
+    pub subscribe_uc: Arc<SubscribeUseCase<dyn ContinuityProvider, ContinuityStatus>>,
+    pub get_status_uc: Arc<GetStatusUseCase<dyn ContinuityProvider, ContinuityStatus>>,
+    pub set_enabled_uc: Arc<SetContinuityEnabledUseCase>,
+    pub connect_uc: Arc<ConnectToPeerUseCase>,
+    pub confirm_pin_uc: Arc<ConfirmPinUseCase>,
+    pub reject_pin_uc: Arc<RejectPinUseCase>,
+    pub disconnect_uc: Arc<DisconnectUseCase>,
+    pub cancel_reconnect_uc: Arc<CancelReconnectUseCase>,
+    pub unpair_uc: Arc<UnpairUseCase>,
+    pub set_arrangement_uc: Arc<SetPeerArrangementUseCase>,
+    pub update_configs_uc: Arc<UpdatePeerConfigsUseCase>,
+}
+
 impl ContinuitySettingsPresenter {
-    pub fn new(
-        subscribe_uc: Arc<SubscribeUseCase<dyn ContinuityProvider, ContinuityStatus>>,
-        get_status_uc: Arc<GetStatusUseCase<dyn ContinuityProvider, ContinuityStatus>>,
-        set_enabled_uc: Arc<SetContinuityEnabledUseCase>,
-        connect_uc: Arc<ConnectToPeerUseCase>,
-        confirm_pin_uc: Arc<ConfirmPinUseCase>,
-        reject_pin_uc: Arc<RejectPinUseCase>,
-        disconnect_uc: Arc<DisconnectUseCase>,
-        cancel_reconnect_uc: Arc<CancelReconnectUseCase>,
-        unpair_uc: Arc<UnpairUseCase>,
-        set_arrangement_uc: Arc<SetPeerArrangementUseCase>,
-        update_configs_uc: Arc<UpdatePeerConfigsUseCase>,
-        rt: &tokio::runtime::Runtime,
-    ) -> Self {
+    pub fn new(args: ContinuitySettingsPresenterArgs, rt: &tokio::runtime::Runtime) -> Self {
+        let ContinuitySettingsPresenterArgs {
+            subscribe_uc,
+            get_status_uc,
+            set_enabled_uc,
+            connect_uc,
+            confirm_pin_uc,
+            reject_pin_uc,
+            disconnect_uc,
+            cancel_reconnect_uc,
+            unpair_uc,
+            set_arrangement_uc,
+            update_configs_uc,
+        } = args;
         let initial_status = rt.block_on(async {
             match get_status_uc.execute().await {
                 Ok(s) => s,
@@ -87,7 +119,8 @@ impl ContinuitySettingsPresenter {
                     }
                 }
             })
-        }).with_initial_status(initial_status);
+        })
+        .with_initial_status(initial_status);
 
         Self {
             inner,

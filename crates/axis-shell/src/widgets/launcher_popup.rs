@@ -1,18 +1,17 @@
-use libadwaita::prelude::*;
-use libadwaita::subclass::prelude::*;
-use gtk4::{glib, gio};
-use gtk4_layer_shell::{LayerShell, Layer, Edge, KeyboardMode};
+use crate::presentation::popups::PopupView;
+use crate::widgets::components::list_row::ListRow;
+use crate::widgets::popup_base::PopupContainer;
 use axis_domain::models::launcher::LauncherItem;
 use axis_domain::models::launcher::LauncherStatus;
-use axis_domain::models::popups::PopupType;
 use axis_domain::models::popups::PopupStatus;
-use crate::widgets::popup_base::PopupContainer;
-use crate::widgets::components::list_row::ListRow;
-use crate::presentation::popups::PopupView;
+use axis_domain::models::popups::PopupType;
 use axis_presentation::View;
+use gtk4::{gio, glib};
+use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
+use libadwaita::prelude::*;
+use libadwaita::subclass::prelude::*;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::rc::Rc;
 
 glib::wrapper! {
@@ -23,9 +22,7 @@ glib::wrapper! {
 
 impl LauncherPopupWindow {
     pub fn new(app: &libadwaita::Application) -> Self {
-        glib::Object::builder()
-            .property("application", app)
-            .build()
+        glib::Object::builder().property("application", app).build()
     }
 }
 
@@ -71,16 +68,20 @@ pub struct RowEntry {
 }
 
 pub struct Callbacks {
-    on_search: RefCell<Option<Box<dyn Fn(&str) + 'static>>>,
-    on_select_next: RefCell<Option<Box<dyn Fn() + 'static>>>,
-    on_select_prev: RefCell<Option<Box<dyn Fn() + 'static>>>,
-    on_activate: RefCell<Option<Box<dyn Fn(Option<usize>) + 'static>>>,
-    on_escape: RefCell<Option<Box<dyn Fn() + 'static>>>,
+    on_search: SearchCallback,
+    on_select_next: Callback0,
+    on_select_prev: Callback0,
+    on_activate: ActivateCallback,
+    on_escape: Callback0,
 }
 
+type Callback0 = RefCell<Option<Box<dyn Fn() + 'static>>>;
+type SearchCallback = RefCell<Option<Box<dyn Fn(&str) + 'static>>>;
+type ActivateCallback = RefCell<Option<Box<dyn Fn(Option<usize>) + 'static>>>;
+
 impl Callbacks {
-    fn new() -> Arc<Self> {
-        Arc::new(Self {
+    fn new() -> Rc<Self> {
+        Rc::new(Self {
             on_search: RefCell::new(None),
             on_select_next: RefCell::new(None),
             on_select_prev: RefCell::new(None),
@@ -101,7 +102,7 @@ pub struct LauncherPopup {
     detail_desc: gtk4::Label,
     detail_revealer: gtk4::Revealer,
     rows: Rc<RefCell<HashMap<String, RowEntry>>>,
-    callbacks: Arc<Callbacks>,
+    callbacks: Rc<Callbacks>,
 }
 
 impl LauncherPopup {
@@ -219,22 +220,32 @@ impl LauncherPopup {
             use gtk4::gdk::{Key, ModifierType};
             match key {
                 Key::Escape => {
-                    if let Some(f) = cbs.on_escape.borrow().as_ref() { f(); }
+                    if let Some(f) = cbs.on_escape.borrow().as_ref() {
+                        f();
+                    }
                     gtk4::glib::Propagation::Stop
                 }
                 Key::Down => {
-                    if let Some(f) = cbs.on_select_next.borrow().as_ref() { f(); }
+                    if let Some(f) = cbs.on_select_next.borrow().as_ref() {
+                        f();
+                    }
                     gtk4::glib::Propagation::Stop
                 }
                 Key::Up => {
-                    if let Some(f) = cbs.on_select_prev.borrow().as_ref() { f(); }
+                    if let Some(f) = cbs.on_select_prev.borrow().as_ref() {
+                        f();
+                    }
                     gtk4::glib::Propagation::Stop
                 }
                 Key::Tab => {
                     if state.contains(ModifierType::SHIFT_MASK) {
-                        if let Some(f) = cbs.on_select_prev.borrow().as_ref() { f(); }
+                        if let Some(f) = cbs.on_select_prev.borrow().as_ref() {
+                            f();
+                        }
                     } else {
-                        if let Some(f) = cbs.on_select_next.borrow().as_ref() { f(); }
+                        if let Some(f) = cbs.on_select_next.borrow().as_ref() {
+                            f();
+                        }
                     }
                     gtk4::glib::Propagation::Stop
                 }
@@ -297,7 +308,10 @@ impl LauncherPopup {
 
             rows.insert(
                 item.id.clone(),
-                RowEntry { row, list_box_row: list_box_row.clone() },
+                RowEntry {
+                    row,
+                    list_box_row: list_box_row.clone(),
+                },
             );
             self.list.insert(&list_box_row, idx as i32);
         }
@@ -325,17 +339,21 @@ impl LauncherPopup {
                 }
 
                 let adj = self.scrolled.vadjustment();
-                if let Some(point) = row.compute_point(&self.list, &gtk4::graphene::Point::new(0.0, 0.0)) {
+                if let Some(point) =
+                    row.compute_point(&self.list, &gtk4::graphene::Point::new(0.0, 0.0))
+                {
                     let row_y = point.y() as f64;
                     let row_h = row.height() as f64;
                     let page = adj.page_size();
-                    let target = (row_y - (page / 2.0) + (row_h / 2.0)).clamp(0.0, adj.upper() - page);
+                    let target =
+                        (row_y - (page / 2.0) + (row_h / 2.0)).clamp(0.0, adj.upper() - page);
                     smooth_scroll(&adj, target);
                 }
 
                 if let Some(item) = results.get(idx) {
                     self.detail_title.set_text(&item.title);
-                    self.detail_desc.set_text(item.description.as_deref().unwrap_or(""));
+                    self.detail_desc
+                        .set_text(item.description.as_deref().unwrap_or(""));
                     self.detail_revealer.set_reveal_child(true);
                     self.container.set_width_request(680);
                 }
@@ -359,7 +377,9 @@ fn smooth_scroll(adj: &gtk4::Adjustment, target: f64) {
 
     let start = adj.value();
     let delta = target - start;
-    if delta.abs() < 1.0 { return; }
+    if delta.abs() < 1.0 {
+        return;
+    }
 
     let adj = adj.clone();
     let step = Rc::new(Cell::new(0u32));
@@ -387,9 +407,15 @@ impl View<PopupStatus> for LauncherPopup {
 }
 
 impl PopupView for LauncherPopup {
-    fn get_type(&self) -> PopupType { PopupType::Launcher }
-    fn popup_container(&self) -> PopupContainer { self.container.clone() }
-    fn popup_window(&self) -> gtk4::ApplicationWindow { self.window.clone().upcast() }
+    fn get_type(&self) -> PopupType {
+        PopupType::Launcher
+    }
+    fn popup_container(&self) -> PopupContainer {
+        self.container.clone()
+    }
+    fn popup_window(&self) -> gtk4::ApplicationWindow {
+        self.window.clone().upcast()
+    }
 
     fn show(&self) {
         self.popup_container().animate_show(&self.popup_window());

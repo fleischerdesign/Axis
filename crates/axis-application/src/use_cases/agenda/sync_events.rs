@@ -1,8 +1,8 @@
 use axis_domain::models::calendar::CalendarEvent;
-use axis_domain::ports::agenda::{AgendaProvider, AgendaError};
-use std::sync::Arc;
-use chrono::{Utc, Duration};
+use axis_domain::ports::agenda::{AgendaError, AgendaProvider};
+use chrono::{Duration, Utc};
 use log::info;
+use std::sync::Arc;
 
 pub struct SyncEventsUseCase {
     provider: Arc<dyn AgendaProvider>,

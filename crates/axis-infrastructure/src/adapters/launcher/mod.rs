@@ -1,11 +1,11 @@
 pub mod apps;
 pub mod files;
-pub mod web;
 pub mod util;
+pub mod web;
 
+use async_trait::async_trait;
 use axis_domain::models::launcher::LauncherItem;
 use axis_domain::ports::launcher::{LauncherError, LauncherSearchProvider};
-use async_trait::async_trait;
 use log::warn;
 use std::sync::Arc;
 
@@ -41,7 +41,9 @@ impl LauncherSearchProvider for CompositeLauncherProvider {
                 }
             }
             all.sort_by(|a, b| {
-                b.priority.cmp(&a.priority).then_with(|| b.score.cmp(&a.score))
+                b.priority
+                    .cmp(&a.priority)
+                    .then_with(|| b.score.cmp(&a.score))
             });
             return Ok(all);
         }
@@ -63,7 +65,9 @@ impl LauncherSearchProvider for CompositeLauncherProvider {
         }
 
         all_results.sort_by(|a, b| {
-            b.priority.cmp(&a.priority).then_with(|| b.score.cmp(&a.score))
+            b.priority
+                .cmp(&a.priority)
+                .then_with(|| b.score.cmp(&a.score))
         });
 
         Ok(all_results)

@@ -1,12 +1,17 @@
-use std::cell::{Cell, RefCell};
-use std::rc::Rc;
-use std::time::Duration;
+// Auto-hide controller — manages bar window visibility based on mouse hover.
+// This is a widget-level utility, not a domain presenter.
+
+use crate::utils::animations::SlideAnimator;
 use gtk4::glib;
 use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, LayerShell};
-use crate::utils::animations::SlideAnimator;
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
+use std::time::Duration;
 
-pub trait AutoHideView: IsA<gtk4::Window> + IsA<gtk4::Widget> + LayerShell + Clone + 'static {
+pub trait AutoHideView:
+    IsA<gtk4::Window> + IsA<gtk4::Widget> + LayerShell + Clone + 'static
+{
     fn set_visible_state(&self, is_visible: bool);
 }
 
@@ -38,12 +43,7 @@ impl AutoHidePresenter {
 
         if !*self.is_visible.borrow() {
             *self.is_visible.borrow_mut() = true;
-            SlideAnimator::slide_margin(
-                view,
-                Edge::Bottom,
-                0,
-                250,
-            );
+            SlideAnimator::slide_margin(view, Edge::Bottom, 0, 250);
         }
     }
 
@@ -58,7 +58,7 @@ impl AutoHidePresenter {
         let view_c = view.clone();
         let bar_height = view.height();
         let target_margin = -(bar_height - self.peek_px);
-        
+
         let mut gen_ref = self.current_generation.borrow_mut();
         *gen_ref += 1;
         let my_gen = *gen_ref;
@@ -67,12 +67,7 @@ impl AutoHidePresenter {
         glib::timeout_add_local_once(Duration::from_millis(self.hide_delay_ms), move || {
             if *gen_state.borrow() == my_gen {
                 *is_visible_c.borrow_mut() = false;
-                SlideAnimator::slide_margin(
-                    &view_c,
-                    Edge::Bottom,
-                    target_margin,
-                    400,
-                );
+                SlideAnimator::slide_margin(&view_c, Edge::Bottom, target_margin, 400);
             }
         });
     }
@@ -85,12 +80,7 @@ impl AutoHidePresenter {
 
             if !*self.is_visible.borrow() {
                 *self.is_visible.borrow_mut() = true;
-                SlideAnimator::slide_margin(
-                    view,
-                    Edge::Bottom,
-                    0,
-                    250,
-                );
+                SlideAnimator::slide_margin(view, Edge::Bottom, 0, 250);
             }
         } else if !self.is_hovering.get() {
             self.handle_leave(view);

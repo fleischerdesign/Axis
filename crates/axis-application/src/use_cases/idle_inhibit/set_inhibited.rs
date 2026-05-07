@@ -1,6 +1,6 @@
-use axis_domain::ports::idle_inhibit::{IdleInhibitProvider, IdleInhibitError};
-use std::sync::Arc;
+use axis_domain::ports::idle_inhibit::{IdleInhibitError, IdleInhibitProvider};
 use log::info;
+use std::sync::Arc;
 
 pub struct SetIdleInhibitUseCase {
     provider: Arc<dyn IdleInhibitProvider>,

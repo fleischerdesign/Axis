@@ -1,15 +1,25 @@
-use libadwaita::prelude::*;
 use axis_domain::models::agenda::AgendaStatus;
 use axis_domain::models::calendar::CalendarEvent;
 use axis_presentation::View;
-use chrono::{Datelike, Local, NaiveDate, NaiveDateTime};
+use chrono::{Datelike, Local, NaiveDate};
+use libadwaita::prelude::*;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 const DAY_NAMES: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MONTH_NAMES: [&str; 12] = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December",
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
 ];
 
 #[derive(Clone)]
@@ -21,6 +31,16 @@ pub struct CalendarGrid {
     month: Rc<Cell<u32>>,
     selected_day: Rc<Cell<u32>>,
     events: Rc<RefCell<Vec<CalendarEvent>>>,
+}
+
+struct DayBtnArgs<'a> {
+    day: u32,
+    y: i32,
+    m: u32,
+    is_other: bool,
+    sel: u32,
+    now: &'a chrono::DateTime<Local>,
+    events: &'a [CalendarEvent],
 }
 
 impl CalendarGrid {
@@ -42,8 +62,14 @@ impl CalendarGrid {
             .spacing(8)
             .margin_bottom(8)
             .build();
-        let prev = gtk4::Button::builder().icon_name("go-previous-symbolic").css_classes(["flat"]).build();
-        let next = gtk4::Button::builder().icon_name("go-next-symbolic").css_classes(["flat"]).build();
+        let prev = gtk4::Button::builder()
+            .icon_name("go-previous-symbolic")
+            .css_classes(["flat"])
+            .build();
+        let next = gtk4::Button::builder()
+            .icon_name("go-next-symbolic")
+            .css_classes(["flat"])
+            .build();
         header.append(&prev);
         header.append(&month_label);
         header.append(&next);
@@ -67,8 +93,12 @@ impl CalendarGrid {
         prev.connect_clicked(move |_| {
             let m = cal_c.month.get();
             let y = cal_c.year.get();
-            if m == 1 { cal_c.month.set(12); cal_c.year.set(y - 1); }
-            else { cal_c.month.set(m - 1); }
+            if m == 1 {
+                cal_c.month.set(12);
+                cal_c.year.set(y - 1);
+            } else {
+                cal_c.month.set(m - 1);
+            }
             cal_c.update_grid();
         });
 
@@ -76,8 +106,12 @@ impl CalendarGrid {
         next.connect_clicked(move |_| {
             let m = cal_c.month.get();
             let y = cal_c.year.get();
-            if m == 12 { cal_c.month.set(1); cal_c.year.set(y + 1); }
-            else { cal_c.month.set(m + 1); }
+            if m == 12 {
+                cal_c.month.set(1);
+                cal_c.year.set(y + 1);
+            } else {
+                cal_c.month.set(m + 1);
+            }
             cal_c.update_grid();
         });
 
@@ -91,7 +125,8 @@ impl CalendarGrid {
         let sel = self.selected_day.get();
         let events = self.events.borrow();
 
-        self.month_label.set_text(&format!("{} {}", MONTH_NAMES[(m - 1) as usize], y));
+        self.month_label
+            .set_text(&format!("{} {}", MONTH_NAMES[(m - 1) as usize], y));
 
         while let Some(child) = self.grid.first_child() {
             self.grid.remove(&child);
@@ -132,7 +167,7 @@ impl CalendarGrid {
                     cell_m = prev_m;
                 } else if day_counter <= days_in_cur {
                     is_other = false;
-                    day_num = day_counter as u32;
+                    day_num = day_counter;
                     cell_y = y;
                     cell_m = m;
                     day_counter += 1;
@@ -144,13 +179,30 @@ impl CalendarGrid {
                     next_month_day += 1;
                 }
 
-                let btn = self.create_day_btn(day_num, cell_y, cell_m, is_other, sel, &now, &events);
+                let btn = self.create_day_btn(DayBtnArgs {
+                    day: day_num,
+                    y: cell_y,
+                    m: cell_m,
+                    is_other,
+                    sel,
+                    now: &now,
+                    events: &events,
+                });
                 self.grid.attach(&btn, col, row, 1, 1);
             }
         }
     }
 
-    fn create_day_btn(&self, day: u32, y: i32, m: u32, is_other: bool, sel: u32, now: &chrono::DateTime<Local>, events: &[CalendarEvent]) -> gtk4::Button {
+    fn create_day_btn(&self, args: DayBtnArgs) -> gtk4::Button {
+        let DayBtnArgs {
+            day,
+            y,
+            m,
+            is_other,
+            sel,
+            now,
+            events,
+        } = args;
         let mut css = vec!["calendar-day".to_string()];
         if !is_other && day == now.day() && m == now.month() && y == now.year() {
             css.push("today".to_string());
@@ -163,7 +215,7 @@ impl CalendarGrid {
         }
 
         let btn = gtk4::Button::builder()
-            .label(&day.to_string())
+            .label(day.to_string())
             .css_classes(css)
             .build();
 
@@ -196,38 +248,56 @@ fn days_in_month(year: i32, month: u32) -> u32 {
     match month {
         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
         4 | 6 | 9 | 11 => 30,
-        2 => if (year % 4 == 0 && year % 100 != 0) || year % 400 == 0 { 29 } else { 28 },
+        2 => {
+            if (year % 4 == 0 && year % 100 != 0) || year % 400 == 0 {
+                29
+            } else {
+                28
+            }
+        }
         _ => 30,
     }
 }
 
 fn events_for_day(y: i32, m: u32, d: u32, events: &[CalendarEvent]) -> Vec<&CalendarEvent> {
-    let day_start = NaiveDate::from_ymd_opt(y, m, d).unwrap().and_hms_opt(0, 0, 0).unwrap();
-    let day_end = NaiveDate::from_ymd_opt(y, m, d).unwrap().and_hms_opt(23, 59, 59).unwrap();
-    events.iter().filter(|e| {
-        let (s, e) = parse_range(e);
-        s <= day_end && e >= day_start
-    }).collect()
-}
-
-fn parse_range(e: &CalendarEvent) -> (NaiveDateTime, NaiveDateTime) {
-    let p = |s: &str| NaiveDateTime::parse_from_str(s.split('+').next().unwrap().trim_end_matches('Z'), "%Y-%m-%dT%H:%M:%S").unwrap_or_else(|_| {
-        NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap_or_default().and_hms_opt(0, 0, 0).unwrap()
-    });
-    (p(&e.start), p(&e.end))
+    let day_start = NaiveDate::from_ymd_opt(y, m, d)
+        .unwrap()
+        .and_hms_opt(0, 0, 0)
+        .unwrap();
+    let day_end = NaiveDate::from_ymd_opt(y, m, d)
+        .unwrap()
+        .and_hms_opt(23, 59, 59)
+        .unwrap();
+    events
+        .iter()
+        .filter(|e| e.start <= day_end && e.end >= day_start)
+        .collect()
 }
 
 fn color_id_to_hex(id: Option<&str>) -> &'static str {
     match id {
-        Some("1") => "#a4bdfc", Some("2") => "#7ae7bf", Some("3") => "#dbadff", Some("4") => "#ff887c",
-        Some("5") => "#fbd75b", Some("6") => "#ffb878", Some("7") => "#46d6db", Some("8") => "#e1e1e1",
-        Some("9") => "#5484ed", Some("10") => "#51b749", Some("11") => "#dc2127", _ => "#3584e4",
+        Some("1") => "#a4bdfc",
+        Some("2") => "#7ae7bf",
+        Some("3") => "#dbadff",
+        Some("4") => "#ff887c",
+        Some("5") => "#fbd75b",
+        Some("6") => "#ffb878",
+        Some("7") => "#46d6db",
+        Some("8") => "#e1e1e1",
+        Some("9") => "#5484ed",
+        Some("10") => "#51b749",
+        Some("11") => "#dc2127",
+        _ => "#3584e4",
     }
 }
 
 fn apply_btn_bg(btn: &gtk4::Button, hex: &str) {
     let provider = gtk4::CssProvider::new();
-    provider.load_from_string(&format!("button {{ background-color: alpha({}, 0.2); border-color: alpha({}, 0.4); }}", hex, hex));
+    provider.load_from_string(&format!(
+        "button {{ background-color: alpha({}, 0.2); border-color: alpha({}, 0.4); }}",
+        hex, hex
+    ));
     #[allow(deprecated)]
-    btn.style_context().add_provider(&provider, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION);
+    btn.style_context()
+        .add_provider(&provider, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION);
 }

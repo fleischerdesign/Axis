@@ -1,7 +1,5 @@
 use async_channel::Sender;
-use axis_domain::models::continuity::{
-    ContinuityStatus, PeerArrangement, PeerConfig,
-};
+use axis_domain::models::continuity::{ContinuityStatus, PeerArrangement, PeerConfig};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tokio::sync::watch;
@@ -110,11 +108,14 @@ pub fn build_snapshot(status: &ContinuityStatus) -> ContinuityStateSnapshot {
         enabled: status.enabled,
         device_name: status.device_name.clone(),
         peers: status.peers.iter().map(DbusPeerInfo::from).collect(),
-        active_connection: status.active_connection.as_ref().map(|c| DbusConnectionInfo {
-            peer_id: c.peer_id.clone(),
-            peer_name: c.peer_name.clone(),
-            connected_secs: c.connected_secs,
-        }),
+        active_connection: status
+            .active_connection
+            .as_ref()
+            .map(|c| DbusConnectionInfo {
+                peer_id: c.peer_id.clone(),
+                peer_name: c.peer_name.clone(),
+                connected_secs: c.connected_secs,
+            }),
         sharing_state: (&status.sharing_state).into(),
         pending_pin: status.pending_pin.as_ref().map(|p| DbusPendingPin {
             peer_id: p.peer_id.clone(),
@@ -140,10 +141,7 @@ pub struct ContinuityDbusServer {
 }
 
 impl ContinuityDbusServer {
-    pub fn new(
-        cmd_tx: Sender<ContinuityCmd>,
-        state_rx: watch::Receiver<ContinuityStatus>,
-    ) -> Self {
+    pub fn new(cmd_tx: Sender<ContinuityCmd>, state_rx: watch::Receiver<ContinuityStatus>) -> Self {
         Self { cmd_tx, state_rx }
     }
 }
@@ -220,5 +218,8 @@ impl ContinuityDbusServer {
     }
 
     #[zbus(signal)]
-    pub async fn state_changed(emitter: &zbus::object_server::SignalEmitter<'_>, json: &str) -> zbus::Result<()>;
+    pub async fn state_changed(
+        emitter: &zbus::object_server::SignalEmitter<'_>,
+        json: &str,
+    ) -> zbus::Result<()>;
 }
