@@ -1,7 +1,7 @@
 use axis_domain::models::appearance::AccentColor;
 use axis_domain::ports::appearance::{AppearanceError, AppearanceProvider};
 use axis_domain::ports::layout::LayoutProvider;
-use log::{info, warn};
+use log::{debug, warn};
 use std::sync::Arc;
 
 pub struct SetAccentColorUseCase {
@@ -21,7 +21,7 @@ impl SetAccentColorUseCase {
     }
 
     pub async fn execute(&self, color: AccentColor) -> Result<(), AppearanceError> {
-        info!("[use-case] Setting accent color to: {:?}", color);
+        debug!("[use-case] Setting accent color to: {:?}", color);
 
         // 1. Domain Validation
         let hex = color.hex_value().to_string();

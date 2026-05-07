@@ -224,7 +224,7 @@ impl LockAdapterInner {
 
         let adapter_c = adapter.clone();
         instance.connect_failed(move |_| {
-            warn!("[lock] Lock failed — another locker holds the lock");
+            warn!("[lock] Lock failed -- another locker holds the lock");
             let mut borrowed = adapter_c.borrow_mut();
             borrowed.instance = None;
             borrowed.windows.clear();

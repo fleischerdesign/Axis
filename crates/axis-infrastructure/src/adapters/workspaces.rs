@@ -11,7 +11,6 @@ pub struct NiriWorkspaceProvider {
 }
 
 impl NiriWorkspaceProvider {
-    #[allow(clippy::collapsible_if)]
     pub async fn new() -> Result<Arc<Self>, WorkspaceError> {
         let (initial_status, _query_sock) = {
             let mut sock =
@@ -32,37 +31,36 @@ impl NiriWorkspaceProvider {
         let provider_clone = provider.clone();
         std::thread::spawn(move || {
             loop {
-                if let Ok(mut events_sock) = Socket::connect() {
-                    if let Ok(Ok(Response::Handled)) = events_sock.send(Request::EventStream) {
-                        let mut read_event = events_sock.read_events();
-                        while let Ok(event) = read_event() {
-                            match event {
-                                Event::WorkspacesChanged { workspaces } => {
-                                    let overview_open =
-                                        provider_clone.status_tx.borrow().overview_open;
-                                    let status = WorkspaceStatus {
-                                        workspaces: workspaces
-                                            .into_iter()
-                                            .map(Self::map_workspace)
-                                            .collect(),
-                                        overview_open,
-                                    };
-                                    let _ = provider_clone.status_tx.send(status);
-                                }
-                                Event::WorkspaceActivated { id, .. } => {
-                                    let mut status = provider_clone.status_tx.borrow().clone();
-                                    for ws in &mut status.workspaces {
-                                        ws.is_active = ws.id == id as u32;
-                                    }
-                                    let _ = provider_clone.status_tx.send(status);
-                                }
-                                Event::OverviewOpenedOrClosed { is_open } => {
-                                    let mut status = provider_clone.status_tx.borrow().clone();
-                                    status.overview_open = is_open;
-                                    let _ = provider_clone.status_tx.send(status);
-                                }
-                                _ => {}
+                if let Ok(mut events_sock) = Socket::connect()
+                    && let Ok(Ok(Response::Handled)) = events_sock.send(Request::EventStream)
+                {
+                    let mut read_event = events_sock.read_events();
+                    while let Ok(event) = read_event() {
+                        match event {
+                            Event::WorkspacesChanged { workspaces } => {
+                                let overview_open = provider_clone.status_tx.borrow().overview_open;
+                                let status = WorkspaceStatus {
+                                    workspaces: workspaces
+                                        .into_iter()
+                                        .map(Self::map_workspace)
+                                        .collect(),
+                                    overview_open,
+                                };
+                                let _ = provider_clone.status_tx.send(status);
                             }
+                            Event::WorkspaceActivated { id, .. } => {
+                                let mut status = provider_clone.status_tx.borrow().clone();
+                                for ws in &mut status.workspaces {
+                                    ws.is_active = ws.id == id as u32;
+                                }
+                                let _ = provider_clone.status_tx.send(status);
+                            }
+                            Event::OverviewOpenedOrClosed { is_open } => {
+                                let mut status = provider_clone.status_tx.borrow().clone();
+                                status.overview_open = is_open;
+                                let _ = provider_clone.status_tx.send(status);
+                            }
+                            _ => {}
                         }
                     }
                 }

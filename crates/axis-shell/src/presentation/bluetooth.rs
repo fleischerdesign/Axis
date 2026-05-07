@@ -16,18 +16,28 @@ pub struct BluetoothPresenter {
     stop_scan_use_case: Arc<StopBluetoothScanUseCase>,
 }
 
+pub struct BluetoothPresenterArgs {
+    pub subscribe_uc: Arc<SubscribeUseCase<dyn BluetoothProvider, BluetoothStatus>>,
+    pub get_status_uc: Arc<GetStatusUseCase<dyn BluetoothProvider, BluetoothStatus>>,
+    pub connect_uc: Arc<ConnectBluetoothDeviceUseCase>,
+    pub disconnect_uc: Arc<DisconnectBluetoothDeviceUseCase>,
+    pub start_scan_uc: Arc<StartBluetoothScanUseCase>,
+    pub stop_scan_uc: Arc<StopBluetoothScanUseCase>,
+}
+
 impl BluetoothPresenter {
-    pub fn new(
-        subscribe_use_case: Arc<SubscribeUseCase<dyn BluetoothProvider, BluetoothStatus>>,
-        get_status_use_case: Arc<GetStatusUseCase<dyn BluetoothProvider, BluetoothStatus>>,
-        connect_use_case: Arc<ConnectBluetoothDeviceUseCase>,
-        disconnect_use_case: Arc<DisconnectBluetoothDeviceUseCase>,
-        start_scan_use_case: Arc<StartBluetoothScanUseCase>,
-        stop_scan_use_case: Arc<StopBluetoothScanUseCase>,
-        rt: &tokio::runtime::Runtime,
-    ) -> Self {
+    pub fn new(args: BluetoothPresenterArgs, rt: &tokio::runtime::Runtime) -> Self {
+        let BluetoothPresenterArgs {
+            subscribe_uc,
+            get_status_uc,
+            connect_uc,
+            disconnect_uc,
+            start_scan_uc,
+            stop_scan_uc,
+        } = args;
+
         let initial_status = rt.block_on(async {
-            match get_status_use_case.execute().await {
+            match get_status_uc.execute().await {
                 Ok(s) => s,
                 Err(e) => {
                     log::error!("[bluetooth] Failed to get initial status: {e}");
@@ -36,15 +46,15 @@ impl BluetoothPresenter {
             }
         });
 
-        let inner = Presenter::from_subscribe_use_case(subscribe_use_case.clone())
+        let inner = Presenter::from_subscribe_use_case(subscribe_uc.clone())
             .with_initial_status(initial_status);
 
         Self {
             inner,
-            connect_use_case,
-            disconnect_use_case,
-            start_scan_use_case,
-            stop_scan_use_case,
+            connect_use_case: connect_uc,
+            disconnect_use_case: disconnect_uc,
+            start_scan_use_case: start_scan_uc,
+            stop_scan_use_case: stop_scan_uc,
         }
     }
 

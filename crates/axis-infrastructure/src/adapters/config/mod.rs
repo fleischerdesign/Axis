@@ -23,7 +23,7 @@ impl FileConfigProvider {
         let (status_tx, _) = watch::channel(merged.clone());
 
         info!(
-            "[config] Initialized — wallpaper: {:?}, accent: {:?}, scheme: {:?}, font: {:?}",
+            "[config] Initialized -- wallpaper: {:?}, accent: {:?}, scheme: {:?}, font: {:?}",
             merged.appearance.wallpaper,
             merged.appearance.accent_color,
             merged.appearance.color_scheme,

@@ -14,19 +14,28 @@ pub struct MprisPresenter {
     previous_uc: Arc<PreviousTrackUseCase>,
 }
 
+pub struct MprisPresenterArgs {
+    pub subscribe_uc: Arc<SubscribeUseCase<dyn MprisProvider, MprisStatus>>,
+    pub get_status_uc: Arc<GetStatusUseCase<dyn MprisProvider, MprisStatus>>,
+    pub play_pause_uc: Arc<PlayPauseUseCase>,
+    pub next_uc: Arc<NextTrackUseCase>,
+    pub previous_uc: Arc<PreviousTrackUseCase>,
+}
+
 impl MprisPresenter {
-    pub fn new(
-        subscribe_uc: Arc<SubscribeUseCase<dyn MprisProvider, MprisStatus>>,
-        get_status_uc: Arc<GetStatusUseCase<dyn MprisProvider, MprisStatus>>,
-        play_pause_uc: Arc<PlayPauseUseCase>,
-        next_uc: Arc<NextTrackUseCase>,
-        previous_uc: Arc<PreviousTrackUseCase>,
-        rt: &tokio::runtime::Runtime,
-    ) -> Self {
+    pub fn new(args: MprisPresenterArgs, rt: &tokio::runtime::Runtime) -> Self {
+        let MprisPresenterArgs {
+            subscribe_uc,
+            get_status_uc,
+            play_pause_uc,
+            next_uc,
+            previous_uc,
+        } = args;
+
         let initial_status = rt.block_on(async {
             match get_status_uc.execute().await {
                 Ok(s) => {
-                    log::info!(
+                    log::debug!(
                         "[mpris-presenter] Initial status: {} players, active={:?}",
                         s.players.len(),
                         s.active_player_id

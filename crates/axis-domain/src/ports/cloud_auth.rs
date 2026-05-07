@@ -10,6 +10,8 @@ pub enum AuthError {
     NetworkFailed(String),
     #[error("User cancelled")]
     Cancelled,
+    #[error("Validation error: {0}")]
+    ValidationError(String),
 }
 
 #[async_trait]

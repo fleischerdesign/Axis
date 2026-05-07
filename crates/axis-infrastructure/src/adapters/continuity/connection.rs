@@ -248,7 +248,7 @@ async fn run_connection(
         .local_addr()
         .map(|a| a.to_string())
         .unwrap_or_default();
-    info!("[continuity:connection] connected {local} → {peer}");
+    info!("[continuity:connection] connected {local} -> {peer}");
 
     let (mut reader, mut writer) = split(stream);
 

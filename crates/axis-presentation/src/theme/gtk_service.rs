@@ -71,20 +71,19 @@ impl GtkThemeService {
     }
 }
 
-#[allow(clippy::collapsible_if)]
 impl View<AppearanceConfig> for GtkThemeService {
     fn render(&self, status: &AppearanceConfig) {
         match &status.accent_color {
             AccentColor::Auto => {
                 if let Some(ref path) = status.wallpaper {
-                    if self.last_wallpaper_path.borrow().as_ref() == Some(path) {
-                        if let Some(cached) = self.cached_accent_from_wallpaper.borrow().clone() {
-                            self.apply_theme(status, &cached);
-                            if let Some(ref f) = *self.on_color_extracted.borrow() {
-                                f(cached);
-                            }
-                            return;
+                    if self.last_wallpaper_path.borrow().as_ref() == Some(path)
+                        && let Some(cached) = self.cached_accent_from_wallpaper.borrow().clone()
+                    {
+                        self.apply_theme(status, &cached);
+                        if let Some(ref f) = *self.on_color_extracted.borrow() {
+                            f(cached);
                         }
+                        return;
                     }
 
                     let path_c = path.clone();

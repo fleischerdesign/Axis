@@ -14,7 +14,7 @@ where
 {
     views: Rc<RefCell<Vec<Box<dyn View<S>>>>>,
     current_status: Rc<RefCell<Option<S>>>,
-    subscribe: Arc<dyn Fn() -> Pin<Box<dyn Stream<Item = S> + Send>> + Send + Sync>,
+    subscribe: Rc<dyn Fn() -> Pin<Box<dyn Stream<Item = S> + Send>> + Send + Sync>,
 }
 
 impl<S> Clone for Presenter<S>
@@ -40,7 +40,7 @@ where
         Self {
             views: Rc::new(RefCell::new(vec![])),
             current_status: Rc::new(RefCell::new(None)),
-            subscribe: Arc::new(subscribe),
+            subscribe: Rc::new(subscribe),
         }
     }
 

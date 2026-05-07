@@ -45,11 +45,7 @@ impl AppSearchProvider {
                     title: app.name.clone(),
                     description: app.comment.clone(),
                     icon_name: app.icon.clone(),
-                    action: LauncherAction::Exec(vec![
-                        "sh".to_string(),
-                        "-c".to_string(),
-                        app.exec.clone(),
-                    ]),
+                    action: parse_desktop_exec(&app.exec),
                     score: 1,
                     priority: SearchPriority::Primary,
                 })
@@ -65,11 +61,7 @@ impl AppSearchProvider {
                     title: app.name.clone(),
                     description: app.comment.clone(),
                     icon_name: app.icon.clone(),
-                    action: LauncherAction::Exec(vec![
-                        "sh".to_string(),
-                        "-c".to_string(),
-                        app.exec.clone(),
-                    ]),
+                    action: parse_desktop_exec(&app.exec),
                     score,
                     priority: SearchPriority::Primary,
                 });
@@ -212,6 +204,82 @@ impl AppSearchProvider {
             _ => None,
         }
     }
+}
+
+fn parse_desktop_exec(exec: &str) -> LauncherAction {
+    let mut cleaned = String::new();
+    let chars: Vec<char> = exec.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == '\\' && i + 1 < chars.len() {
+            match chars[i + 1] {
+                '\\' => {
+                    cleaned.push('\\');
+                    i += 2;
+                }
+                '%' => {
+                    cleaned.push('%');
+                    i += 2;
+                }
+                _ => {
+                    cleaned.push(chars[i]);
+                    i += 1;
+                }
+            }
+        } else if chars[i] == '%' && i + 1 < chars.len() {
+            match chars[i + 1] {
+                'f' | 'u' | 'F' | 'U' | 'd' | 'D' | 'i' | 'c' | 'k' => {
+                    i += 2;
+                }
+                _ => {
+                    cleaned.push(chars[i]);
+                    i += 1;
+                }
+            }
+        } else {
+            cleaned.push(chars[i]);
+            i += 1;
+        }
+    }
+
+    let parts = shell_split(&cleaned);
+    LauncherAction::Exec(parts)
+}
+
+fn shell_split(input: &str) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    let chars: Vec<char> = input.chars().collect();
+    let mut i = 0;
+    let mut in_single = false;
+    let mut in_double = false;
+
+    while i < chars.len() {
+        match chars[i] {
+            '\'' if !in_double => {
+                in_single = !in_single;
+                i += 1;
+            }
+            '"' if !in_single => {
+                in_double = !in_double;
+                i += 1;
+            }
+            c if c.is_whitespace() && !in_single && !in_double => {
+                if !current.is_empty() {
+                    parts.push(std::mem::take(&mut current));
+                }
+                i += 1;
+            }
+            c => {
+                current.push(c);
+                i += 1;
+            }
+        }
+    }
+    if !current.is_empty() {
+        parts.push(current);
+    }
+    parts
 }
 
 #[async_trait]

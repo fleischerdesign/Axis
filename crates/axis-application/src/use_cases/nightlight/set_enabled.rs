@@ -1,5 +1,5 @@
 use axis_domain::ports::nightlight::{NightlightError, NightlightProvider};
-use log::info;
+use log::debug;
 use std::sync::Arc;
 
 pub struct SetNightlightEnabledUseCase {
@@ -12,7 +12,7 @@ impl SetNightlightEnabledUseCase {
     }
 
     pub async fn execute(&self, enabled: bool) -> Result<(), NightlightError> {
-        info!("[use-case] Setting nightlight enabled to: {}", enabled);
+        debug!("[use-case] Setting nightlight enabled to: {}", enabled);
         self.provider.set_enabled(enabled).await
     }
 }
