@@ -1,17 +1,28 @@
 use std::future::Future;
 use std::time::Duration;
 
-pub async fn retry_with_backoff<F, Fut, T, E>(mut f: F, max_delay_secs: u64) -> T
+pub async fn retry_with_backoff<F, Fut, T, E>(
+    mut f: F,
+    max_delay_secs: u64,
+    max_attempts: usize,
+) -> Result<T, E>
 where
     F: FnMut() -> Fut,
     Fut: Future<Output = Result<T, E>>,
+    E: std::fmt::Debug,
 {
-    let mut attempt = 0u64;
+    let mut attempt = 0;
     loop {
         match f().await {
-            Ok(value) => return value,
-            Err(_) => {
-                let delay = 2u64.pow(((attempt + 1).min(4)) as u32).min(max_delay_secs);
+            Ok(value) => return Ok(value),
+            Err(e) => {
+                log::warn!("[retry] attempt {}/{}: {:?}", attempt + 1, max_attempts, e);
+                if attempt + 1 >= max_attempts {
+                    return Err(e);
+                }
+                let delay = 2u64
+                    .pow(((attempt as u64 + 1).min(4)) as u32)
+                    .min(max_delay_secs);
                 tokio::time::sleep(Duration::from_secs(delay)).await;
                 attempt += 1;
             }

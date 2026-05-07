@@ -6,7 +6,18 @@ pub enum PowerProfile {
     Balanced,
     Performance,
     PowerSaver,
-    Custom(String),
+    Custom(Box<str>),
+}
+
+impl PowerProfile {
+    pub fn custom(name: &str) -> Option<Self> {
+        let trimmed = name.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(Self::Custom(trimmed.into()))
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

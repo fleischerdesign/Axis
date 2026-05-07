@@ -41,14 +41,24 @@ pub struct AgendaPresenter {
     is_syncing_tasks: Rc<Cell<bool>>,
 }
 
+pub struct AgendaPresenterArgs {
+    pub sync_events_uc: Arc<SyncEventsUseCase>,
+    pub sync_tasks_uc: Arc<SyncTasksUseCase>,
+    pub toggle_task_uc: Arc<ToggleTaskUseCase>,
+    pub delete_task_uc: Arc<DeleteTaskUseCase>,
+    pub create_task_uc: Arc<CreateTaskUseCase>,
+}
+
 impl AgendaPresenter {
-    pub fn new(
-        sync_events_uc: Arc<SyncEventsUseCase>,
-        sync_tasks_uc: Arc<SyncTasksUseCase>,
-        toggle_task_uc: Arc<ToggleTaskUseCase>,
-        delete_task_uc: Arc<DeleteTaskUseCase>,
-        create_task_uc: Arc<CreateTaskUseCase>,
-    ) -> Self {
+    pub fn new(args: AgendaPresenterArgs) -> Self {
+        let AgendaPresenterArgs {
+            sync_events_uc,
+            sync_tasks_uc,
+            toggle_task_uc,
+            delete_task_uc,
+            create_task_uc,
+        } = args;
+
         let (status_tx, _) = watch::channel(AgendaStatus::default());
         let status_tx_c = status_tx.clone();
 

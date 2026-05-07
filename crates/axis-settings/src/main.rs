@@ -15,7 +15,7 @@ use presentation::bluetooth::{BluetoothPresenter, BluetoothPresenterArgs};
 use presentation::continuity::{ContinuitySettingsPresenter, ContinuitySettingsPresenterArgs};
 use presentation::idle::IdleSettingsPresenter;
 use presentation::navigation::{NavigationPresenter, PageDescriptor};
-use presentation::network::NetworkPresenter;
+use presentation::network::{NetworkPresenter, NetworkPresenterArgs};
 
 use widgets::about_page::AboutPage;
 use widgets::accounts_page::AccountsPage;
@@ -234,11 +234,13 @@ fn build_ui(
         set_wallpaper,
     ));
     let network_presenter = Rc::new(NetworkPresenter::new(
-        subscribe_network,
-        get_network_status,
-        scan_wifi,
-        connect_to_ap,
-        disconnect_wifi,
+        NetworkPresenterArgs {
+            subscribe_uc: subscribe_network,
+            get_status_uc: get_network_status,
+            scan_uc: scan_wifi,
+            connect_uc: connect_to_ap,
+            disconnect_uc: disconnect_wifi,
+        },
         rt,
     ));
     let bluetooth_presenter = Rc::new(BluetoothPresenter::new(

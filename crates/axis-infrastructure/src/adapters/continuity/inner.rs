@@ -395,7 +395,7 @@ impl ContinuityInner {
         }
     }
 
-    // ── cmd handlers ────────────────────────────────────────────────────
+    // --- cmd handlers ----------------------------------------------------
 
     async fn handle_set_enabled(&mut self, on: bool, ctx: &mut CmdContext<'_>) {
         if self.status.enabled == on {
@@ -853,7 +853,7 @@ impl ContinuityInner {
         }
     }
 
-    // ── event handlers ──────────────────────────────────────────────────
+    // --- event handlers --------------------------------------------------
 
     async fn handle_discovery_event(&mut self, event: DiscoveryEvent) {
         match event {
@@ -961,7 +961,7 @@ impl ContinuityInner {
         }
     }
 
-    // ── connection handlers ─────────────────────────────────────────────
+    // --- connection handlers ---------------------------------------------
 
     async fn handle_connection_event(
         &mut self,
@@ -1554,7 +1554,7 @@ impl ContinuityInner {
         self.push();
     }
 
-    // ── sharing / input capture handler ─────────────────────────────────
+    // --- sharing / input capture handler ---------------------------------
 
     async fn handle_input_capture_event(
         &mut self,
@@ -1635,7 +1635,7 @@ impl ContinuityInner {
         };
     }
 
-    // ── reconnect handlers ──────────────────────────────────────────────
+    // --- reconnect handlers ----------------------------------------------
 
     fn schedule_reconnect(&mut self) -> Option<Pin<Box<tokio::time::Sleep>>> {
         let reconnect = match &self.status.reconnect {

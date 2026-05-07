@@ -66,9 +66,22 @@ impl LogindPowerProvider {
         let provider_clone = provider.clone();
         tokio::spawn(async move {
             loop {
-                let proxy =
-                    crate::utils::retry_with_backoff(|| UPowerDeviceProxy::new(&connection), 30)
-                        .await;
+                let proxy = match crate::utils::retry_with_backoff(
+                    || UPowerDeviceProxy::new(&connection),
+                    30,
+                    10,
+                )
+                .await
+                {
+                    Ok(p) => p,
+                    Err(e) => {
+                        warn!(
+                            "[power] Failed to create UPower proxy after retries: {:?}",
+                            e
+                        );
+                        continue;
+                    }
+                };
                 let mut changes = proxy.receive_percentage_changed().await;
                 let mut state_changes = proxy.receive_state_changed().await;
 

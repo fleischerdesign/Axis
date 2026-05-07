@@ -1,4 +1,4 @@
-// Auto-hide controller — manages bar window visibility based on mouse hover.
+// Auto-hide controller -- manages bar window visibility based on mouse hover.
 // This is a widget-level utility, not a domain presenter.
 
 use crate::utils::animations::SlideAnimator;

@@ -28,18 +28,28 @@ pub struct AudioPresenter {
     set_sink_input_volume_use_case: Arc<SetSinkInputVolumeUseCase>,
 }
 
+pub struct AudioPresenterArgs {
+    pub subscribe_uc: Arc<SubscribeUseCase<dyn AudioProvider, AudioStatus>>,
+    pub get_status_uc: Arc<GetStatusUseCase<dyn AudioProvider, AudioStatus>>,
+    pub set_volume_uc: Arc<SetVolumeUseCase>,
+    pub set_default_sink_uc: Arc<SetDefaultSinkUseCase>,
+    pub set_default_source_uc: Arc<SetDefaultSourceUseCase>,
+    pub set_sink_input_volume_uc: Arc<SetSinkInputVolumeUseCase>,
+}
+
 impl AudioPresenter {
-    pub fn new(
-        subscribe_use_case: Arc<SubscribeUseCase<dyn AudioProvider, AudioStatus>>,
-        get_status_use_case: Arc<GetStatusUseCase<dyn AudioProvider, AudioStatus>>,
-        set_volume_use_case: Arc<SetVolumeUseCase>,
-        set_default_sink_use_case: Arc<SetDefaultSinkUseCase>,
-        set_default_source_use_case: Arc<SetDefaultSourceUseCase>,
-        set_sink_input_volume_use_case: Arc<SetSinkInputVolumeUseCase>,
-        rt: &tokio::runtime::Runtime,
-    ) -> Self {
+    pub fn new(args: AudioPresenterArgs, rt: &tokio::runtime::Runtime) -> Self {
+        let AudioPresenterArgs {
+            subscribe_uc,
+            get_status_uc,
+            set_volume_uc,
+            set_default_sink_uc,
+            set_default_source_uc,
+            set_sink_input_volume_uc,
+        } = args;
+
         let initial_status = rt.block_on(async {
-            match get_status_use_case.execute().await {
+            match get_status_uc.execute().await {
                 Ok(s) => s,
                 Err(e) => {
                     log::error!("[audio] Failed to get initial status: {e}");
@@ -48,15 +58,15 @@ impl AudioPresenter {
             }
         });
 
-        let inner = Presenter::from_subscribe_use_case(subscribe_use_case.clone())
+        let inner = Presenter::from_subscribe_use_case(subscribe_uc.clone())
             .with_initial_status(initial_status);
 
         Self {
             inner,
-            set_volume_use_case,
-            set_default_sink_use_case,
-            set_default_source_use_case,
-            set_sink_input_volume_use_case,
+            set_volume_use_case: set_volume_uc,
+            set_default_sink_use_case: set_default_sink_uc,
+            set_default_source_use_case: set_default_source_uc,
+            set_sink_input_volume_use_case: set_sink_input_volume_uc,
         }
     }
 

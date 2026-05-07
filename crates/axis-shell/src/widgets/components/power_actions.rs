@@ -68,10 +68,13 @@ impl PowerActionStack {
 
         screenshot_btn.connect_clicked(move |_| {
             tokio::spawn(async move {
-                let _ = tokio::process::Command::new("niri")
+                if let Err(e) = tokio::process::Command::new("niri")
                     .args(["msg", "action", "screenshot"])
                     .status()
-                    .await;
+                    .await
+                {
+                    log::error!("[qs] screenshot failed: {e}");
+                }
             });
         });
 
@@ -87,7 +90,9 @@ impl PowerActionStack {
             lock_btn.connect_clicked(move |_| {
                 let uc = uc.clone();
                 tokio::spawn(async move {
-                    let _ = uc.execute().await;
+                    if let Err(e) = uc.execute().await {
+                        log::error!("[qs] lock session failed: {e}");
+                    }
                 });
             });
         }
@@ -115,7 +120,9 @@ impl PowerActionStack {
             sleep_btn.connect_clicked(move |_| {
                 let uc = uc.clone();
                 tokio::spawn(async move {
-                    let _ = uc.execute().await;
+                    if let Err(e) = uc.execute().await {
+                        log::error!("[qs] suspend failed: {e}");
+                    }
                 });
             });
         }
@@ -125,7 +132,9 @@ impl PowerActionStack {
             shutdown_btn.connect_clicked(move |_| {
                 let uc = uc.clone();
                 tokio::spawn(async move {
-                    let _ = uc.execute().await;
+                    if let Err(e) = uc.execute().await {
+                        log::error!("[qs] power off failed: {e}");
+                    }
                 });
             });
         }
@@ -135,7 +144,9 @@ impl PowerActionStack {
             restart_btn.connect_clicked(move |_| {
                 let uc = uc.clone();
                 tokio::spawn(async move {
-                    let _ = uc.execute().await;
+                    if let Err(e) = uc.execute().await {
+                        log::error!("[qs] reboot failed: {e}");
+                    }
                 });
             });
         }

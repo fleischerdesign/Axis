@@ -1,6 +1,6 @@
 use axis_domain::models::config::AxisConfig;
 use axis_domain::ports::config::{ConfigError, ConfigProvider};
-use log::info;
+use log::debug;
 use std::sync::Arc;
 
 pub struct UpdateConfigUseCase {
@@ -16,7 +16,7 @@ impl UpdateConfigUseCase {
     where
         F: FnOnce(&mut AxisConfig) + Send + 'static,
     {
-        info!("[use-case] Updating global configuration");
+        debug!("[use-case] Updating global configuration");
         self.provider.update(Box::new(update_fn))
     }
 }
