@@ -12,7 +12,7 @@ pub struct MockBrightnessProvider {
 impl MockBrightnessProvider {
     pub fn new() -> Arc<Self> {
         let (tx, _) = watch::channel(BrightnessStatus {
-            percentage: 60.0,
+            percentage: 1.0,
             has_backlight: false,
         });
         Arc::new(Self { status_tx: tx })

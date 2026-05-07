@@ -26,7 +26,7 @@ impl SysfsBrightnessProvider {
         // Read initial value immediately
         let actual = Self::read_u32(&device_path.join("actual_brightness")).unwrap_or(0);
         let max = Self::read_u32(&device_path.join("max_brightness")).unwrap_or(1);
-        let initial_pct = (actual as f64 / max as f64) * 100.0;
+        let initial_pct = actual as f64 / max as f64;
 
         let (status_tx, _) = watch::channel(BrightnessStatus {
             percentage: initial_pct,
@@ -48,7 +48,7 @@ impl SysfsBrightnessProvider {
 
                     loop {
                         if let Some(actual) = Self::read_u32(&actual_path) {
-                            let pct = (actual as f64 / max as f64) * 100.0;
+                            let pct = actual as f64 / max as f64;
                             let _ = status_tx_clone.send(BrightnessStatus {
                                 percentage: pct,
                                 has_backlight: true,
@@ -73,7 +73,7 @@ impl SysfsBrightnessProvider {
                     while let Ok(newer) = cmd_rx.try_recv() {
                         latest = newer;
                     }
-                    let _ = device.set(latest as u32);
+                    let _ = device.set((latest * 100.0) as u32);
                 }
             }
         });
