@@ -6,8 +6,7 @@ use tokio::sync::watch;
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::WatchStream;
 use std::sync::Arc;
-use std::time::Duration;
-use log::{info, warn};
+use log::warn;
 
 #[proxy(
     interface = "org.freedesktop.UPower.Device",
@@ -60,38 +59,25 @@ impl LogindPowerProvider {
 
         let provider_clone = provider.clone();
         tokio::spawn(async move {
-            let mut attempt = 0u32;
             loop {
-                match UPowerDeviceProxy::new(&connection).await {
-                    Ok(proxy) => {
-                        if attempt > 0 {
-                            info!("[power] Reconnected to UPower");
-                        }
-                        attempt = 0;
-                        let mut changes = proxy.receive_percentage_changed().await;
-                        let mut state_changes = proxy.receive_state_changed().await;
+                let proxy = crate::utils::retry_with_backoff(|| UPowerDeviceProxy::new(&connection), 30).await;
+                let mut changes = proxy.receive_percentage_changed().await;
+                let mut state_changes = proxy.receive_state_changed().await;
 
-                        loop {
-                            let alive = tokio::select! {
-                                Some(_) = changes.next() => true,
-                                Some(_) = state_changes.next() => true,
-                                else => false,
-                            };
-                            if !alive {
-                                warn!("[power] UPower stream ended, reconnecting...");
-                                break;
-                            }
-                            if let Ok(status) = Self::fetch_status(&proxy).await {
-                                let _ = provider_clone.status_tx.send(status);
-                            }
-                        }
+                loop {
+                    let alive = tokio::select! {
+                        Some(_) = changes.next() => true,
+                        Some(_) = state_changes.next() => true,
+                        else => false,
+                    };
+                    if !alive {
+                        warn!("[power] UPower stream ended, reconnecting...");
+                        break;
                     }
-                    Err(e) => {
-                        warn!("[power] Failed to connect to UPower: {e}, retrying...");
+                    if let Ok(status) = Self::fetch_status(&proxy).await {
+                        let _ = provider_clone.status_tx.send(status);
                     }
                 }
-                attempt += 1;
-                tokio::time::sleep(Duration::from_secs(2u64.pow(attempt.min(4)).min(30))).await;
             }
         });
 

@@ -391,9 +391,10 @@ impl View<BrightnessStatus> for QuickSettingsPopup {
 
             if !self.is_bright_dragging.get() {
                 let scale = slider.scale();
-                if (scale.value() - status.percentage).abs() > 1.0 {
+                let slider_pct = status.percentage * 100.0;
+                if (scale.value() - slider_pct).abs() > 1.0 {
                     self.is_bright_updating.set(true);
-                    scale.set_value(status.percentage);
+                    scale.set_value(slider_pct);
                     self.is_bright_updating.set(false);
                 }
             }

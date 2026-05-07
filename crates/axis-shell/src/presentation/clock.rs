@@ -10,17 +10,20 @@ pub struct ClockPresenter {
 
 impl ClockPresenter {
     pub fn new(use_case: Arc<SubscribeUseCase<dyn ClockProvider, ClockStatus>>) -> Self {
-        let inner = Presenter::from_subscribe({
-            let uc = use_case.clone();
-            move || {
-                let uc = uc.clone();
-                async move { uc.execute().await }
-            }
-        });
+        let inner = Presenter::from_subscribe_use_case(use_case.clone());
         Self { inner }
     }
 
+    pub fn add_view(&self, view: Box<dyn View<ClockStatus>>) {
+        self.inner.add_view(view);
+    }
+
+    pub async fn run_sync(&self) {
+        self.inner.run_sync().await;
+    }
+
     pub async fn bind(&self, view: Box<dyn View<ClockStatus>>) {
-        self.inner.bind(view).await;
+        self.add_view(view);
+        self.run_sync().await;
     }
 }

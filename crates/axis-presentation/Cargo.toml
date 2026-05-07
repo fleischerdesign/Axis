@@ -8,6 +8,7 @@ default = ["gtk"]
 gtk = ["dep:gtk4", "dep:libadwaita"]
 
 [dependencies]
+axis-application.workspace = true
 axis-domain.workspace = true
 async-stream.workspace = true
 futures-util.workspace = true

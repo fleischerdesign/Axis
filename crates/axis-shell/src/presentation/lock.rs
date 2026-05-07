@@ -24,13 +24,7 @@ impl LockPresenter {
         unlock_uc: Arc<UnlockSessionUseCase>,
         authenticate_uc: Arc<AuthenticateUseCase>,
     ) -> Self {
-        let inner = Presenter::from_subscribe({
-            let subscribe_uc = subscribe_uc.clone();
-            move || {
-                let uc = subscribe_uc.clone();
-                async move { uc.execute().await }
-            }
-        });
+        let inner = Presenter::from_subscribe_use_case(subscribe_uc.clone());
 
         Self {
             inner,
@@ -69,6 +63,9 @@ impl LockPresenter {
     pub fn authenticate(&self, password: &str, on_result: Rc<dyn Fn(bool)>) {
         let uc = self.authenticate_uc.clone();
         let password = password.to_string();
+        // glib::spawn_future_local is required here because the async closure captures
+        // Rc-based state (Presenter<S>) which is !Send. This is GTK's single-threaded
+        // UI model and is architecturally intentional.
         glib::spawn_future_local(async move {
             let success = match uc.execute(&password).await {
                 Ok(s) => s,

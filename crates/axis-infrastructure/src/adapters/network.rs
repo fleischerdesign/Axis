@@ -133,22 +133,11 @@ impl NetworkManagerProvider {
         let conn = connection.clone();
 
         tokio::spawn(async move {
-            let mut attempt = 0u32;
             loop {
-                let nm_proxy = match NetworkManagerProxy::new(&conn).await {
-                    Ok(p) => p,
-                    Err(e) => {
-                        warn!("[network] Failed to create NM proxy: {e}, retrying...");
-                        attempt += 1;
-                        tokio::time::sleep(Duration::from_secs(2u64.pow(attempt.min(4)).min(30))).await;
-                        continue;
-                    }
-                };
-
-                if attempt > 0 {
-                    info!("[network] Reconnected to NetworkManager");
-                }
-                attempt = 0;
+                let nm_proxy = crate::utils::retry_with_backoff(
+                    || NetworkManagerProxy::new(&conn),
+                    30,
+                ).await;
 
                 let wifi_device_path = Self::find_wifi_device(&nm_proxy, &conn).await;
 

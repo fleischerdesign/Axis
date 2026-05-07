@@ -12,19 +12,17 @@ impl WorkspacePresenter {
     pub fn new(
         subscribe_use_case: Arc<SubscribeUseCase<dyn WorkspaceProvider, WorkspaceStatus>>,
     ) -> Self {
-        let inner = Presenter::from_subscribe({
-            let uc = subscribe_use_case.clone();
-            move || {
-                let uc = uc.clone();
-                async move { uc.execute().await }
-            }
-        });
+        let inner = Presenter::from_subscribe_use_case(subscribe_use_case.clone());
 
         Self { inner }
     }
 
     pub fn add_view(&self, view: Box<dyn View<WorkspaceStatus>>) {
         self.inner.add_view(view);
+    }
+
+    pub async fn run_sync(&self) {
+        self.inner.run_sync().await;
     }
 
     pub async fn bind(&self, view: Box<dyn View<WorkspaceStatus>>) {

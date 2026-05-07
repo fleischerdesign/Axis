@@ -17,6 +17,7 @@ pub struct TogglePresenter {
     toggle: Arc<dyn Fn(bool) + Send + Sync>,
 }
 
+#[allow(dead_code)]
 impl TogglePresenter {
     pub fn new<F, Fut, St, E>(
         label: &str,
@@ -39,6 +40,14 @@ impl TogglePresenter {
             icon_inactive: icon_inactive.to_string(),
             toggle: Arc::new(toggle),
         }
+    }
+
+    pub fn add_view(&self, view: Box<dyn View<bool>>) {
+        self.inner.add_view(view);
+    }
+
+    pub async fn run_sync(&self) {
+        self.inner.run_sync().await;
     }
 
     pub async fn bind(&self, view: Box<dyn ToggleView>) {

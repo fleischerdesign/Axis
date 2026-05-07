@@ -48,13 +48,7 @@ impl AudioPresenter {
             }
         });
 
-        let inner = Presenter::from_subscribe({
-            let uc = subscribe_use_case.clone();
-            move || {
-                let uc = uc.clone();
-                async move { uc.execute().await }
-            }
-        }).with_initial_status(initial_status);
+        let inner = Presenter::from_subscribe_use_case(subscribe_use_case.clone()).with_initial_status(initial_status);
 
         Self {
             inner,

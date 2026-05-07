@@ -295,41 +295,19 @@ impl BlueZProvider {
 
         let provider_clone = provider.clone();
         tokio::spawn(async move {
-            let mut attempt = 0u32;
             loop {
-                let om_proxy = match ObjectManagerProxy::new(&provider_clone.connection).await {
-                    Ok(p) => p,
-                    Err(e) => {
-                        warn!("[bluetooth] Failed to create ObjectManager proxy: {e}, retrying...");
-                        attempt += 1;
-                        tokio::time::sleep(Duration::from_secs(2u64.pow(attempt.min(4)).min(30))).await;
-                        continue;
-                    }
-                };
-
-                let mut interfaces_added = match om_proxy.receive_interfaces_added().await {
-                    Ok(s) => s,
-                    Err(e) => {
-                        warn!("[bluetooth] Failed to subscribe to interfaces_added: {e}, retrying...");
-                        attempt += 1;
-                        tokio::time::sleep(Duration::from_secs(2u64.pow(attempt.min(4)).min(30))).await;
-                        continue;
-                    }
-                };
-                let mut interfaces_removed = match om_proxy.receive_interfaces_removed().await {
-                    Ok(s) => s,
-                    Err(e) => {
-                        warn!("[bluetooth] Failed to subscribe to interfaces_removed: {e}, retrying...");
-                        attempt += 1;
-                        tokio::time::sleep(Duration::from_secs(2u64.pow(attempt.min(4)).min(30))).await;
-                        continue;
-                    }
-                };
-
-                if attempt > 0 {
-                    info!("[bluetooth] Reconnected to BlueZ");
-                }
-                attempt = 0;
+                let (_om_proxy, mut interfaces_added, mut interfaces_removed) = crate::utils::retry_with_backoff(
+                    || async {
+                        let om = ObjectManagerProxy::new(&provider_clone.connection).await
+                            .map_err(|e| e.to_string())?;
+                        let added = om.receive_interfaces_added().await
+                            .map_err(|e| e.to_string())?;
+                        let removed = om.receive_interfaces_removed().await
+                            .map_err(|e| e.to_string())?;
+                        Ok::<_, String>((om, added, removed))
+                    },
+                    30,
+                ).await;
 
                 loop {
                     let alive = tokio::select! {

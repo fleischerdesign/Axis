@@ -47,13 +47,7 @@ pub struct BatteryPresenter {
 
 impl BatteryPresenter {
     pub fn new(use_case: Arc<SubscribeUseCase<dyn PowerProvider, PowerStatus>>) -> Self {
-        let inner = Presenter::from_subscribe({
-            let uc = use_case.clone();
-            move || {
-                let uc = uc.clone();
-                async move { uc.execute().await }
-            }
-        });
+        let inner = Presenter::from_subscribe_use_case(use_case.clone());
         Self { inner }
     }
 

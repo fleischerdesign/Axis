@@ -43,7 +43,7 @@ impl AppSearchProvider {
                 title: app.name.clone(),
                 description: app.comment.clone(),
                 icon_name: app.icon.clone(),
-                action: LauncherAction::Exec(app.exec.clone()),
+                action: LauncherAction::Exec(vec!["sh".to_string(), "-c".to_string(), app.exec.clone()]),
                 score: 1,
                 priority: SearchPriority::Primary,
             }).collect();
@@ -58,7 +58,7 @@ impl AppSearchProvider {
                     title: app.name.clone(),
                     description: app.comment.clone(),
                     icon_name: app.icon.clone(),
-                    action: LauncherAction::Exec(app.exec.clone()),
+                    action: LauncherAction::Exec(vec!["sh".to_string(), "-c".to_string(), app.exec.clone()]),
                     score,
                     priority: SearchPriority::Primary,
                 });

@@ -202,22 +202,17 @@ impl PulseAudioProvider {
         let cmd_tx_c = cmd_tx.clone();
 
         std::thread::spawn(move || {
-            let mut attempt = 0u32;
-            loop {
-                match Self::run_pulse_loop(&mut cmd_rx, &status_tx_c, &cmd_tx_c) {
-                    Ok(()) => {
-                        warn!("[audio] PulseAudio disconnected, reconnecting...");
+            crate::utils::retry_with_backoff_blocking(
+                || {
+                    match Self::run_pulse_loop(&mut cmd_rx, &status_tx_c, &cmd_tx_c) {
+                        Ok(()) => warn!("[audio] PulseAudio disconnected, reconnecting..."),
+                        Err(e) => warn!("[audio] PulseAudio error: {e}, reconnecting..."),
                     }
-                    Err(e) => {
-                        warn!("[audio] PulseAudio error: {e}, reconnecting...");
-                    }
-                }
-                attempt += 1;
-                let delay = 2u64.pow(attempt.min(4)).min(30);
-                warn!("[audio] Retry in {delay}s (attempt {attempt})");
-                std::thread::sleep(Duration::from_secs(delay));
-                while cmd_rx.try_recv().is_ok() {}
-            }
+                    while cmd_rx.try_recv().is_ok() {}
+                    Err::<(), String>("retry".to_string())
+                },
+                30,
+            );
         });
 
         let mut rx = status_rx;

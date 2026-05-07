@@ -18,6 +18,7 @@ use axis_application::use_cases::workspaces::toggle_overview::ToggleOverviewUseC
 use axis_application::use_cases::popups::TogglePopupUseCase;
 use axis_application::use_cases::brightness::set::SetBrightnessUseCase;
 use axis_application::use_cases::launcher::search::SearchLauncherUseCase;
+use axis_application::use_cases::launcher::execute::ExecuteLauncherActionUseCase;
 use axis_application::use_cases::network::connect_to_ap::ConnectToApUseCase;
 use axis_application::use_cases::network::disconnect_wifi::DisconnectWifiUseCase;
 use axis_application::use_cases::bluetooth::connect::ConnectBluetoothDeviceUseCase;
@@ -346,32 +347,14 @@ fn main() -> glib::ExitCode {
     let subscribe_idle_inhibit = Arc::new(SubscribeUseCase::new(idle_inhibit_provider.clone()));
     let idle_inhibit_set_uc = Arc::new(SetIdleInhibitUseCase::new(idle_inhibit_provider.clone()));
 
-    let dnd_status_presenter = Rc::new({
-        let uc = subscribe_dnd.clone();
-        Presenter::from_subscribe(move || {
-            let uc = uc.clone();
-            async move { uc.execute().await }
-        })
-    });
+    let dnd_status_presenter = Rc::new(Presenter::from_subscribe_use_case(subscribe_dnd.clone()));
 
-    let idle_inhibit_status_presenter = Rc::new({
-        let uc = subscribe_idle_inhibit.clone();
-        Presenter::from_subscribe(move || {
-            let uc = uc.clone();
-            async move { uc.execute().await }
-        })
-    });
+    let idle_inhibit_status_presenter = Rc::new(Presenter::from_subscribe_use_case(subscribe_idle_inhibit.clone()));
 
     let subscribe_airplane = Arc::new(SubscribeUseCase::new(airplane_provider.clone()));
     let ap_set_enabled_uc = Arc::new(axis_application::use_cases::airplane::set_enabled::SetAirplaneModeUseCase::new(airplane_provider.clone()));
 
-    let airplane_status_presenter = Rc::new({
-        let uc = subscribe_airplane.clone();
-        Presenter::from_subscribe(move || {
-            let uc = uc.clone();
-            async move { uc.execute().await }
-        })
-    });
+    let airplane_status_presenter = Rc::new(Presenter::from_subscribe_use_case(subscribe_airplane.clone()));
 
     let subscribe_continuity = Arc::new(SubscribeUseCase::new(continuity_provider.clone()));
     let subscribe_continuity_for_toggle = subscribe_continuity.clone();
@@ -444,7 +427,8 @@ fn main() -> glib::ExitCode {
     let config_cp: Arc<dyn ConfigProvider> = config_provider.clone();
     wire_continuity_sync(config_cp, continuity_provider.clone(), &rt);
 
-    let launcher_presenter = Rc::new(LauncherPresenter::new(search_launcher));
+    let launcher_executor = Arc::new(ExecuteLauncherActionUseCase::new());
+    let launcher_presenter = Rc::new(LauncherPresenter::new(search_launcher, launcher_executor));
     let notification_presenter = Rc::new(NotificationPresenter::new(
         subscribe_notifications, get_notifications_status,
         close_notification_uc, invoke_notification_action_uc, &rt,
@@ -872,13 +856,7 @@ fn main() -> glib::ExitCode {
 
         {
             let subscribe_dnd_clone = subscribe_dnd.clone();
-            let dnd_presenter: Rc<Presenter<DndStatus>> = Rc::new(Presenter::from_subscribe({
-                let uc = subscribe_dnd_clone.clone();
-                move || {
-                    let uc = uc.clone();
-                    async move { uc.execute().await }
-                }
-            }));
+            let dnd_presenter: Rc<Presenter<DndStatus>> = Rc::new(Presenter::from_subscribe_use_case(subscribe_dnd_clone.clone()));
             dnd_presenter.add_view(Box::new(toast.clone()));
             let dp = dnd_presenter.clone();
             glib::spawn_future_local(async move { dp.run_sync().await; });

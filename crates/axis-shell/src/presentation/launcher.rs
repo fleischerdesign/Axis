@@ -1,22 +1,26 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use axis_application::use_cases::launcher::search::SearchLauncherUseCase;
-use axis_domain::models::launcher::{LauncherAction, LauncherStatus};
+use axis_application::use_cases::launcher::execute::ExecuteLauncherActionUseCase;
+use axis_domain::models::launcher::LauncherStatus;
 use axis_presentation::{Presenter, View};
 use std::rc::Rc;
 use std::cell::RefCell;
 use gtk4::glib;
-use std::os::unix::process::CommandExt;
 
 pub struct LauncherPresenter {
     inner: Presenter<LauncherStatus>,
     search_use_case: Arc<SearchLauncherUseCase>,
+    executor: Arc<ExecuteLauncherActionUseCase>,
     cancel_flag: Rc<RefCell<Arc<AtomicBool>>>,
     on_close: Rc<RefCell<Option<Box<dyn Fn() + 'static>>>>,
 }
 
 impl LauncherPresenter {
-    pub fn new(search_use_case: Arc<SearchLauncherUseCase>) -> Self {
+    pub fn new(
+        search_use_case: Arc<SearchLauncherUseCase>,
+        executor: Arc<ExecuteLauncherActionUseCase>,
+    ) -> Self {
         let inner = Presenter::new(|| {
             // Launcher doesn't have an external status stream, it's driven by the presenter
             Box::pin(futures_util::stream::pending())
@@ -25,6 +29,7 @@ impl LauncherPresenter {
         Self {
             inner,
             search_use_case,
+            executor,
             cancel_flag: Rc::new(RefCell::new(Arc::new(AtomicBool::new(false)))),
             on_close: Rc::new(RefCell::new(None)),
         }
@@ -56,6 +61,9 @@ impl LauncherPresenter {
         let presenter = self.inner.clone();
         let query = query.to_string();
 
+        // glib::spawn_future_local is required here because the async closure captures
+        // Rc-based state (Presenter<S>) which is !Send. This is GTK's single-threaded
+        // UI model and is architecturally intentional.
         glib::spawn_future_local(async move {
             let results = match uc.execute(&query).await {
                 Ok(r) => r,
@@ -98,38 +106,8 @@ impl LauncherPresenter {
 
         if let Some(idx) = idx {
             if let Some(item) = s.results.get(idx) {
-                match &item.action {
-                    LauncherAction::Noop => {}
-                    LauncherAction::Exec(program) => {
-                        log::info!("[launcher] Executing: {program}");
-                        if let Err(e) = std::process::Command::new("sh")
-                            .arg("-c")
-                            .arg(program)
-                            .stdin(std::process::Stdio::null())
-                            .stdout(std::process::Stdio::null())
-                            .stderr(std::process::Stdio::null())
-                            .process_group(0)
-                            .spawn()
-                        {
-                            log::error!("[launcher] Failed to execute: {program} ({e})");
-                        }
-                    }
-                    LauncherAction::OpenUrl(url) => {
-                        log::info!("[launcher] Opening URL: {url}");
-                        if let Err(e) = std::process::Command::new("xdg-open")
-                            .arg(url)
-                            .stdin(std::process::Stdio::null())
-                            .stdout(std::process::Stdio::null())
-                            .stderr(std::process::Stdio::null())
-                            .process_group(0)
-                            .spawn()
-                        {
-                            log::error!("[launcher] Failed to open URL: {url} ({e})");
-                        }
-                    }
-                    LauncherAction::Internal(cmd) => {
-                        log::info!("[launcher] Internal command: {cmd}");
-                    }
+                if let Err(e) = self.executor.execute(&item.action) {
+                    log::error!("[launcher] Failed to execute action: {e}");
                 }
             }
         }

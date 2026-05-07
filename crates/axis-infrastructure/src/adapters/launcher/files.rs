@@ -99,7 +99,7 @@ impl FileSearchProvider {
                     title: name,
                     description: Some(path.to_string()),
                     icon_name: Self::file_icon(path).into(),
-                    action: LauncherAction::Exec(format!("xdg-open '{path}'")),
+                    action: LauncherAction::Exec(vec!["xdg-open".to_string(), path.to_string()]),
                     score,
                     priority: SearchPriority::Fallback,
                 })

@@ -9,7 +9,7 @@ use axis_domain::ports::brightness::BrightnessProvider;
 use axis_presentation::{Presenter, View};
 
 const FEEDBACK_SUPPRESS_SECS: f64 = 0.5;
-const FEEDBACK_TOLERANCE: f64 = 2.0;
+const FEEDBACK_TOLERANCE: f64 = 0.02;
 
 pub struct BrightnessPresenter {
     inner: Presenter<BrightnessStatus>,
@@ -22,13 +22,7 @@ impl BrightnessPresenter {
         subscribe_use_case: Arc<SubscribeUseCase<dyn BrightnessProvider, BrightnessStatus>>,
         set_use_case: Arc<SetBrightnessUseCase>,
     ) -> Self {
-        let inner = Presenter::from_subscribe({
-            let uc = subscribe_use_case.clone();
-            move || {
-                let uc = uc.clone();
-                async move { uc.execute().await }
-            }
-        });
+        let inner = Presenter::from_subscribe_use_case(subscribe_use_case.clone());
 
         Self {
             inner,
@@ -62,17 +56,18 @@ impl BrightnessPresenter {
     }
 
     pub fn handle_user_change(&self, new_pct: f64) {
+        let normalized = new_pct / 100.0;
         {
             if let Some(status) = self.inner.current() {
-                if (status.percentage - new_pct).abs() < 0.1 { return; }
+                if (status.percentage - normalized).abs() < 0.01 { return; }
             }
         }
 
-        *self.last_user_change.borrow_mut() = Some((new_pct, Instant::now()));
+        *self.last_user_change.borrow_mut() = Some((normalized, Instant::now()));
 
         let uc = self.set_use_case.clone();
         tokio::spawn(async move {
-            if let Err(e) = uc.execute(new_pct).await {
+            if let Err(e) = uc.execute(normalized).await {
                 log::error!("[brightness] set_brightness failed: {e}");
             }
         });

@@ -1,5 +1,6 @@
 use axis_domain::ports::continuity::{ContinuityProvider, ContinuityError};
 use std::sync::Arc;
+use log::info;
 
 pub struct DisconnectUseCase {
     provider: Arc<dyn ContinuityProvider>,
@@ -11,6 +12,7 @@ impl DisconnectUseCase {
     }
 
     pub async fn execute(&self) -> Result<(), ContinuityError> {
+        info!("[use-case] Disconnecting from peer");
         self.provider.disconnect().await
     }
 }

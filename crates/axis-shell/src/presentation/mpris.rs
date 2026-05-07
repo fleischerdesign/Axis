@@ -36,13 +36,7 @@ impl MprisPresenter {
             }
         });
 
-        let inner = Presenter::from_subscribe({
-            let uc = subscribe_uc.clone();
-            move || {
-                let uc = uc.clone();
-                async move { uc.execute().await }
-            }
-        }).with_initial_status(initial_status);
+        let inner = Presenter::from_subscribe_use_case(subscribe_uc.clone()).with_initial_status(initial_status);
 
         Self { inner, play_pause_uc, next_uc, previous_uc }
     }

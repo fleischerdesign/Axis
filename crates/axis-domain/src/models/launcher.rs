@@ -11,7 +11,7 @@ pub enum SearchPriority {
 pub enum LauncherAction {
     #[default]
     Noop,
-    Exec(String),
+    Exec(Vec<String>),
     OpenUrl(String),
     Internal(String),
 }
