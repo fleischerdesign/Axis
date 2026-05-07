@@ -1,6 +1,6 @@
-use axis_domain::ports::brightness::{BrightnessProvider, BrightnessError};
-use std::sync::Arc;
+use axis_domain::ports::brightness::{BrightnessError, BrightnessProvider};
 use log::debug;
+use std::sync::Arc;
 
 pub struct SetBrightnessUseCase {
     provider: Arc<dyn BrightnessProvider>,

@@ -1,20 +1,23 @@
-use libadwaita::prelude::*;
-use libadwaita as adw;
-use std::rc::Rc;
-use std::cell::RefCell;
+use crate::presentation::network::{NetworkPresenter, NetworkView};
+use crate::widgets::callback::{FnCell, FnCell0};
 use axis_domain::models::network::NetworkStatus;
-use crate::presentation::network::{NetworkView, NetworkPresenter};
 use axis_presentation::View;
+use libadwaita as adw;
+use libadwaita::prelude::*;
+use std::cell::RefCell;
+use std::rc::Rc;
+
+type ConnectFnCell = Rc<RefCell<Option<Box<dyn Fn(String, String) + 'static>>>>;
 
 pub struct NetworkPage {
     root: adw::ToolbarView,
     wifi_switch: adw::SwitchRow,
     ap_list: gtk4::ListBox,
-    
-    toggle_callback: Rc<RefCell<Option<Box<dyn Fn(bool) + 'static>>>>,
-    scan_callback: Rc<RefCell<Option<Box<dyn Fn() + 'static>>>>,
-    connect_callback: Rc<RefCell<Option<Box<dyn Fn(String, String) + 'static>>>>,
-    disconnect_callback: Rc<RefCell<Option<Box<dyn Fn() + 'static>>>>,
+
+    toggle_callback: FnCell<bool>,
+    scan_callback: FnCell0,
+    connect_callback: ConnectFnCell,
+    disconnect_callback: FnCell0,
 }
 
 impl NetworkPage {
@@ -29,14 +32,10 @@ impl NetworkPage {
             .build();
         toolbar_view.set_content(Some(&preferences_page));
 
-        let wifi_group = adw::PreferencesGroup::builder()
-            .title("Wi-Fi")
-            .build();
+        let wifi_group = adw::PreferencesGroup::builder().title("Wi-Fi").build();
         preferences_page.add(&wifi_group);
 
-        let wifi_switch = adw::SwitchRow::builder()
-            .title("Wi-Fi Enabled")
-            .build();
+        let wifi_switch = adw::SwitchRow::builder().title("Wi-Fi Enabled").build();
         wifi_group.add(&wifi_switch);
 
         let ap_group = adw::PreferencesGroup::builder()
@@ -83,13 +82,13 @@ impl NetworkPage {
             .placeholder_text("Password")
             .margin_top(12)
             .build();
-        
+
         dialog.set_extra_child(Some(&entry));
-        
+
         dialog.add_response("cancel", "Cancel");
         dialog.add_response("connect", "Connect");
         dialog.set_response_appearance("connect", adw::ResponseAppearance::Suggested);
-        
+
         let cb = self.connect_callback.clone();
         let ssid_c = ssid.clone();
         dialog.connect_response(None, move |d, response| {
@@ -113,7 +112,7 @@ impl NetworkPage {
 impl View<NetworkStatus> for NetworkPage {
     fn render(&self, status: &NetworkStatus) {
         self.wifi_switch.set_active(status.is_wifi_enabled);
-        
+
         while let Some(child) = self.ap_list.first_child() {
             self.ap_list.remove(&child);
         }
@@ -129,7 +128,11 @@ impl View<NetworkStatus> for NetworkPage {
 
         if status.access_points.is_empty() {
             let row = adw::ActionRow::builder()
-                .title(if status.is_scanning { "Scanning..." } else { "No networks found" })
+                .title(if status.is_scanning {
+                    "Scanning..."
+                } else {
+                    "No networks found"
+                })
                 .sensitive(false)
                 .build();
             self.ap_list.append(&row);
@@ -140,7 +143,7 @@ impl View<NetworkStatus> for NetworkPage {
                 .title(&ap.ssid)
                 .activatable(true)
                 .build();
-            
+
             let strength_icon = match ap.strength {
                 0..=20 => "network-wireless-signal-weak-symbolic",
                 21..=40 => "network-wireless-signal-ok-symbolic",
@@ -156,17 +159,21 @@ impl View<NetworkStatus> for NetworkPage {
                     .valign(gtk4::Align::Center)
                     .css_classes(vec!["destructive-action".to_string()])
                     .build();
-                
+
                 let cb = self.disconnect_callback.clone();
                 disconnect_btn.connect_clicked(move |_| {
-                    if let Some(f) = cb.borrow().as_ref() { f(); }
+                    if let Some(f) = cb.borrow().as_ref() {
+                        f();
+                    }
                 });
                 row.add_suffix(&disconnect_btn);
             } else {
                 if ap.needs_auth {
-                    row.add_suffix(&gtk4::Image::from_icon_name("network-wireless-encrypted-symbolic"));
+                    row.add_suffix(&gtk4::Image::from_icon_name(
+                        "network-wireless-encrypted-symbolic",
+                    ));
                 }
-                
+
                 let ssid = ap.ssid.clone();
                 let needs_auth = ap.needs_auth;
                 let page = self.clone();
@@ -180,7 +187,7 @@ impl View<NetworkStatus> for NetworkPage {
                     }
                 });
             }
-            
+
             self.ap_list.append(&row);
         }
     }

@@ -1,7 +1,7 @@
 use axis_domain::models::tasks::Task;
-use axis_domain::ports::agenda::{AgendaProvider, AgendaError};
+use axis_domain::ports::agenda::{AgendaError, AgendaProvider};
+use log::{error, info};
 use std::sync::Arc;
-use log::{info, error};
 
 pub struct CreateTaskUseCase {
     provider: Arc<dyn AgendaProvider>,

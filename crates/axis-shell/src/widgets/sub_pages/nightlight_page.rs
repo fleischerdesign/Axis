@@ -1,8 +1,8 @@
-use gtk4::prelude::*;
-use axis_domain::models::nightlight::NightlightStatus;
-use axis_presentation::View;
 use crate::presentation::nightlight::NightlightPresenter;
 use crate::widgets::components::popup_header::PopupHeader;
+use axis_domain::models::nightlight::NightlightStatus;
+use axis_presentation::View;
+use gtk4::prelude::*;
 use std::cell::Cell;
 use std::rc::Rc;
 
@@ -42,7 +42,8 @@ impl NightlightPage {
         list.append(&toggle_row);
 
         let (day_sec, day_slider, day_val) = Self::create_temp_section("Day Temperature", 6500);
-        let (night_sec, night_slider, night_val) = Self::create_temp_section("Night Temperature", 4500);
+        let (night_sec, night_slider, night_val) =
+            Self::create_temp_section("Night Temperature", 4500);
         list.append(&day_sec);
         list.append(&night_sec);
 
@@ -80,7 +81,9 @@ impl NightlightPage {
         let pres_toggle = presenter.clone();
         let upd_toggle = updating_from_service.clone();
         toggle.connect_state_notify(move |sw| {
-            if upd_toggle.get() { return; }
+            if upd_toggle.get() {
+                return;
+            }
             pres_toggle.set_enabled(sw.state());
         });
 
@@ -88,7 +91,9 @@ impl NightlightPage {
         let day_val_c = day_val.clone();
         let upd_day = updating_from_service.clone();
         day_slider.connect_value_changed(move |s| {
-            if upd_day.get() { return; }
+            if upd_day.get() {
+                return;
+            }
             let val = s.value() as u32;
             day_val_c.set_text(&format!("{} K", val));
             pres_day.set_temp_day(val);
@@ -98,7 +103,9 @@ impl NightlightPage {
         let night_val_c = night_val.clone();
         let upd_night = updating_from_service.clone();
         night_slider.connect_value_changed(move |s| {
-            if upd_night.get() { return; }
+            if upd_night.get() {
+                return;
+            }
             let val = s.value() as u32;
             night_val_c.set_text(&format!("{} K", val));
             pres_night.set_temp_night(val);
@@ -133,7 +140,10 @@ impl NightlightPage {
         Self { container }
     }
 
-    fn create_temp_section(label_text: &str, initial_val: u32) -> (gtk4::Box, gtk4::Scale, gtk4::Label) {
+    fn create_temp_section(
+        label_text: &str,
+        initial_val: u32,
+    ) -> (gtk4::Box, gtk4::Scale, gtk4::Label) {
         let section = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
         section.set_margin_start(12);
         section.set_margin_end(12);
@@ -186,13 +196,14 @@ impl View<NightlightStatus> for NightlightPageView {
         self.night_val.set_text(&format!("{} K", status.temp_night));
 
         if self.sunrise_entry.text() != status.sunrise.format("%H:%M").to_string() {
-            self.sunrise_entry.set_text(&status.sunrise.format("%H:%M").to_string());
+            self.sunrise_entry
+                .set_text(&status.sunrise.format("%H:%M").to_string());
         }
         if self.sunset_entry.text() != status.sunset.format("%H:%M").to_string() {
-            self.sunset_entry.set_text(&status.sunset.format("%H:%M").to_string());
+            self.sunset_entry
+                .set_text(&status.sunset.format("%H:%M").to_string());
         }
 
         self.updating.set(false);
     }
 }
-

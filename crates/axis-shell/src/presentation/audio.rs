@@ -1,12 +1,12 @@
-use std::sync::Arc;
-use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
-use axis_application::use_cases::audio::set_volume::SetVolumeUseCase;
 use axis_application::use_cases::audio::set_default_sink::SetDefaultSinkUseCase;
 use axis_application::use_cases::audio::set_default_source::SetDefaultSourceUseCase;
 use axis_application::use_cases::audio::set_sink_input_volume::SetSinkInputVolumeUseCase;
+use axis_application::use_cases::audio::set_volume::SetVolumeUseCase;
+use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
 use axis_domain::models::audio::AudioStatus;
 use axis_domain::ports::audio::AudioProvider;
 use axis_presentation::{Presenter, View};
+use std::sync::Arc;
 
 pub(crate) fn audio_icon(status: &AudioStatus) -> &'static str {
     if status.is_muted || status.volume <= 0.01 {
@@ -48,7 +48,8 @@ impl AudioPresenter {
             }
         });
 
-        let inner = Presenter::from_subscribe_use_case(subscribe_use_case.clone()).with_initial_status(initial_status);
+        let inner = Presenter::from_subscribe_use_case(subscribe_use_case.clone())
+            .with_initial_status(initial_status);
 
         Self {
             inner,
@@ -69,7 +70,9 @@ impl AudioPresenter {
 
     pub fn handle_user_volume_change(&self, new_vol: f64) {
         if let Some(mut status) = self.inner.current() {
-            if (status.volume - new_vol).abs() < 0.001 { return; }
+            if (status.volume - new_vol).abs() < 0.001 {
+                return;
+            }
             status.volume = new_vol;
             self.inner.update(status);
         }

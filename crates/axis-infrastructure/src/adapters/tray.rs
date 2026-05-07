@@ -1,6 +1,6 @@
+use async_trait::async_trait;
 use axis_domain::models::tray::{IconPixmap, TrayItem, TrayItemStatus, TrayStatus};
 use axis_domain::ports::tray::{TrayError, TrayProvider, TrayStream};
-use async_trait::async_trait;
 use futures_util::StreamExt;
 use log::{info, warn};
 use std::sync::Arc;
@@ -8,7 +8,7 @@ use tokio::sync::{mpsc, watch};
 use tokio_stream::wrappers::WatchStream;
 use zbus::names::BusName;
 use zbus::zvariant::ObjectPath;
-use zbus::{proxy, Connection};
+use zbus::{Connection, proxy};
 
 #[proxy(
     interface = "org.kde.StatusNotifierItem",
@@ -175,13 +175,12 @@ impl StatusNotifierTrayProvider {
         let mut items: Vec<TrayItem> = Vec::new();
 
         for name in &existing_names {
-            if name.starts_with("org.freedesktop.StatusNotifierItem-") {
-                if let Some(item) =
+            if name.starts_with("org.freedesktop.StatusNotifierItem-")
+                && let Some(item) =
                     Self::add_item(&conn, name, "/StatusNotifierItem", &event_tx).await
-                {
-                    info!("[tray] Found existing item: {}", name);
-                    items.push(item);
-                }
+            {
+                info!("[tray] Found existing item: {}", name);
+                items.push(item);
             }
         }
 
@@ -304,13 +303,19 @@ impl StatusNotifierTrayProvider {
         Some(item)
     }
 
-    async fn fetch_item_properties(proxy: &StatusNotifierItemProxy<'_>, bus_name: &str) -> TrayItem {
+    async fn fetch_item_properties(
+        proxy: &StatusNotifierItemProxy<'_>,
+        bus_name: &str,
+    ) -> TrayItem {
         let id = proxy.id().await.unwrap_or_default();
         let title = proxy.title().await.unwrap_or_default();
         let icon_name = proxy.icon_name().await.unwrap_or_default();
         let attention_icon_name = proxy.attention_icon_name().await.unwrap_or_default();
         let overlay_icon_name = proxy.overlay_icon_name().await.unwrap_or_default();
-        let status_str = proxy.status().await.unwrap_or_else(|_| "Active".to_string());
+        let status_str = proxy
+            .status()
+            .await
+            .unwrap_or_else(|_| "Active".to_string());
         let icon_pixmap = proxy
             .icon_pixmap()
             .await
@@ -356,13 +361,10 @@ impl StatusNotifierTrayProvider {
     }
 
     fn parse_registration_item(item_id: &str) -> (String, String) {
-        if item_id.contains('/') {
-            if let Some(slash) = item_id.find('/') {
-                return (
-                    item_id[..slash].to_string(),
-                    item_id[slash..].to_string(),
-                );
-            }
+        if item_id.contains('/')
+            && let Some(slash) = item_id.find('/')
+        {
+            return (item_id[..slash].to_string(), item_id[slash..].to_string());
         }
         (item_id.to_string(), "/StatusNotifierItem".to_string())
     }
@@ -391,9 +393,7 @@ impl StatusNotifierTrayProvider {
 
         let event_tx_reg = {
             let (tx, mut rx) = mpsc::unbounded_channel::<ItemEvent>();
-            tokio::spawn(async move {
-                while rx.recv().await.is_some() {}
-            });
+            tokio::spawn(async move { while rx.recv().await.is_some() {} });
             tx
         };
 

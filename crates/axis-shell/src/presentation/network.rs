@@ -1,10 +1,10 @@
-use std::sync::Arc;
 use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
 use axis_application::use_cases::network::connect_to_ap::ConnectToApUseCase;
 use axis_application::use_cases::network::disconnect_wifi::DisconnectWifiUseCase;
 use axis_domain::models::network::NetworkStatus;
 use axis_domain::ports::network::NetworkProvider;
 use axis_presentation::{Presenter, View};
+use std::sync::Arc;
 
 pub(crate) fn wifi_icon(strength: u8) -> &'static str {
     match strength {
@@ -40,9 +40,14 @@ impl NetworkPresenter {
             }
         });
 
-        let inner = Presenter::from_subscribe_use_case(subscribe_use_case.clone()).with_initial_status(initial_status);
+        let inner = Presenter::from_subscribe_use_case(subscribe_use_case.clone())
+            .with_initial_status(initial_status);
 
-        Self { inner, connect_use_case, disconnect_use_case }
+        Self {
+            inner,
+            connect_use_case,
+            disconnect_use_case,
+        }
     }
 
     pub fn add_view(&self, view: Box<dyn View<NetworkStatus>>) {

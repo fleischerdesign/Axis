@@ -1,9 +1,12 @@
-use libadwaita::prelude::*;
-use libadwaita as adw;
 use axis_domain::models::agenda::AgendaStatus;
 use axis_presentation::View;
-use std::rc::Rc;
+use libadwaita as adw;
+use libadwaita::prelude::*;
 use std::cell::{Cell, RefCell};
+use std::rc::Rc;
+
+type TaskToggleFnCell = Rc<RefCell<Option<Rc<Box<dyn Fn(String, bool) + 'static>>>>>;
+type TaskCmdFnCell = Rc<RefCell<Option<Rc<Box<dyn Fn(String) + 'static>>>>>;
 
 #[derive(Clone)]
 pub struct TaskList {
@@ -16,10 +19,10 @@ pub struct TaskList {
     add_button: gtk4::Button,
     is_updating_programmatically: Rc<Cell<bool>>,
     current_task_lists: Rc<RefCell<Vec<axis_domain::models::tasks::TaskList>>>,
-    list_changed_callback: Rc<RefCell<Option<Rc<Box<dyn Fn(String) + 'static>>>>>,
-    task_toggled_callback: Rc<RefCell<Option<Rc<Box<dyn Fn(String, bool) + 'static>>>>>,
-    task_deleted_callback: Rc<RefCell<Option<Rc<Box<dyn Fn(String) + 'static>>>>>,
-    task_created_callback: Rc<RefCell<Option<Rc<Box<dyn Fn(String) + 'static>>>>>,
+    list_changed_callback: TaskCmdFnCell,
+    task_toggled_callback: TaskToggleFnCell,
+    task_deleted_callback: TaskCmdFnCell,
+    task_created_callback: TaskCmdFnCell,
 }
 
 impl TaskList {
@@ -107,7 +110,9 @@ impl TaskList {
         let entry_c = tl.entry.clone();
         let on_add = move || {
             let title = entry_c.text().to_string();
-            if title.is_empty() { return; }
+            if title.is_empty() {
+                return;
+            }
             if let Some(cb) = tl_c.task_created_callback.borrow().as_ref() {
                 cb(title);
                 entry_c.set_text("");
@@ -130,10 +135,10 @@ impl TaskList {
             }
             let selected = dd.selected();
             let lists = tl_c.current_task_lists.borrow();
-            if let Some(list) = lists.get(selected as usize) {
-                if let Some(cb) = tl_c.list_changed_callback.borrow().as_ref() {
-                    cb(list.id.clone());
-                }
+            if let Some(list) = lists.get(selected as usize)
+                && let Some(cb) = tl_c.list_changed_callback.borrow().as_ref()
+            {
+                cb(list.id.clone());
             }
         });
 
@@ -159,17 +164,18 @@ impl TaskList {
     pub fn render(&self, status: &AgendaStatus) {
         let current_count = self.dropdown.model().map(|m| m.n_items()).unwrap_or(0);
         if current_count != status.task_lists.len() as u32 {
-            let list_names: Vec<&str> = status.task_lists.iter().map(|l| l.title.as_str()).collect();
+            let list_names: Vec<&str> =
+                status.task_lists.iter().map(|l| l.title.as_str()).collect();
             let new_model = gtk4::StringList::new(&list_names);
             self.dropdown.set_model(Some(&new_model));
         }
 
-        if let Some(selected_id) = &status.selected_list_id {
-            if let Some(idx) = status.task_lists.iter().position(|l| l.id == *selected_id) {
-                self.is_updating_programmatically.set(true);
-                self.dropdown.set_selected(idx as u32);
-                self.is_updating_programmatically.set(false);
-            }
+        if let Some(selected_id) = &status.selected_list_id
+            && let Some(idx) = status.task_lists.iter().position(|l| l.id == *selected_id)
+        {
+            self.is_updating_programmatically.set(true);
+            self.dropdown.set_selected(idx as u32);
+            self.is_updating_programmatically.set(false);
         }
 
         *self.current_task_lists.borrow_mut() = status.task_lists.clone();
@@ -202,7 +208,9 @@ impl TaskList {
                     .css_classes(["agenda-task-row"])
                     .build();
 
-                if task.done { row.add_css_class("done"); }
+                if task.done {
+                    row.add_css_class("done");
+                }
 
                 let check = gtk4::CheckButton::builder()
                     .active(task.done)

@@ -1,8 +1,8 @@
-use std::sync::Arc;
 use axis_application::use_cases::generic::SubscribeUseCase;
 use axis_domain::models::workspaces::WorkspaceStatus;
 use axis_domain::ports::workspaces::WorkspaceProvider;
 use axis_presentation::{Presenter, View};
+use std::sync::Arc;
 
 pub struct WorkspacePresenter {
     inner: Presenter<WorkspaceStatus>,

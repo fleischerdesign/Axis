@@ -1,6 +1,6 @@
-use axis_domain::ports::bluetooth::{BluetoothProvider, BluetoothError};
-use std::sync::Arc;
+use axis_domain::ports::bluetooth::{BluetoothError, BluetoothProvider};
 use log::info;
+use std::sync::Arc;
 
 pub struct UnpairBluetoothDeviceUseCase {
     provider: Arc<dyn BluetoothProvider>,
@@ -13,7 +13,9 @@ impl UnpairBluetoothDeviceUseCase {
 
     pub async fn execute(&self, id: &str) -> Result<(), BluetoothError> {
         if id.is_empty() {
-            return Err(BluetoothError::ValidationError("Bluetooth device ID cannot be empty".to_string()));
+            return Err(BluetoothError::ValidationError(
+                "Bluetooth device ID cannot be empty".to_string(),
+            ));
         }
 
         info!("[use-case] Unpairing Bluetooth device: {}", id);

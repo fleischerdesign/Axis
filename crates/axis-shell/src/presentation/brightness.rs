@@ -1,12 +1,12 @@
-use std::sync::Arc;
-use std::rc::Rc;
-use std::time::Instant;
-use std::cell::RefCell;
-use axis_application::use_cases::generic::SubscribeUseCase;
 use axis_application::use_cases::brightness::set::SetBrightnessUseCase;
+use axis_application::use_cases::generic::SubscribeUseCase;
 use axis_domain::models::brightness::BrightnessStatus;
 use axis_domain::ports::brightness::BrightnessProvider;
 use axis_presentation::{Presenter, View};
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::sync::Arc;
+use std::time::Instant;
 
 const FEEDBACK_SUPPRESS_SECS: f64 = 0.5;
 const FEEDBACK_TOLERANCE: f64 = 0.02;
@@ -37,29 +37,34 @@ impl BrightnessPresenter {
 
     pub async fn run_sync(&self) {
         let last_uc = self.last_user_change.clone();
-        self.inner.run_with_filter(move |new: &BrightnessStatus, prev: &Option<BrightnessStatus>| {
-            if let Some(p) = prev {
-                if (p.percentage - new.percentage).abs() < 0.1 {
-                    return false;
-                }
-            }
-            let last = last_uc.borrow();
-            if let Some((user_val, ts)) = *last {
-                if ts.elapsed().as_secs_f64() < FEEDBACK_SUPPRESS_SECS
-                    && (new.percentage - user_val).abs() < FEEDBACK_TOLERANCE
-                {
-                    return false;
-                }
-            }
-            true
-        }).await;
+        self.inner
+            .run_with_filter(
+                move |new: &BrightnessStatus, prev: &Option<BrightnessStatus>| {
+                    if let Some(p) = prev
+                        && (p.percentage - new.percentage).abs() < 0.1
+                    {
+                        return false;
+                    }
+                    let last = last_uc.borrow();
+                    if let Some((user_val, ts)) = *last
+                        && ts.elapsed().as_secs_f64() < FEEDBACK_SUPPRESS_SECS
+                        && (new.percentage - user_val).abs() < FEEDBACK_TOLERANCE
+                    {
+                        return false;
+                    }
+                    true
+                },
+            )
+            .await;
     }
 
     pub fn handle_user_change(&self, new_pct: f64) {
         let normalized = new_pct / 100.0;
         {
-            if let Some(status) = self.inner.current() {
-                if (status.percentage - normalized).abs() < 0.01 { return; }
+            if let Some(status) = self.inner.current()
+                && (status.percentage - normalized).abs() < 0.01
+            {
+                return;
             }
         }
 

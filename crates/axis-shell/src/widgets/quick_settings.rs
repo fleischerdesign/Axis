@@ -1,28 +1,28 @@
-use libadwaita::prelude::*;
-use libadwaita::subclass::prelude::*;
-use gtk4::{glib, gio};
-use gtk4_layer_shell::{LayerShell, Layer, Edge, KeyboardMode};
-use axis_domain::models::popups::{PopupType, PopupStatus};
-use axis_domain::models::audio::AudioStatus;
-use axis_domain::models::brightness::BrightnessStatus;
-use crate::widgets::popup_base::PopupContainer;
-use crate::widgets::components::slider::QuickSlider;
-use crate::widgets::components::toggle_tile::ToggleTile;
-use crate::widgets::components::battery_button::BatteryButton;
-use crate::widgets::components::power_actions::PowerActionStack;
-use crate::presentation::notifications::NotificationPresenter;
-use axis_presentation::View;
-use crate::presentation::popups::PopupView;
 use crate::presentation::audio::{AudioPresenter, audio_icon};
-use crate::presentation::toggle::TogglePresenter;
+use crate::presentation::battery::BatteryPresenter;
+use crate::presentation::bluetooth::BluetoothPresenter;
 use crate::presentation::brightness::BrightnessPresenter;
 use crate::presentation::network::NetworkPresenter;
-use crate::presentation::bluetooth::BluetoothPresenter;
 use crate::presentation::nightlight::NightlightPresenter;
-use crate::presentation::battery::BatteryPresenter;
-use std::sync::Arc;
-use std::rc::Rc;
+use crate::presentation::notifications::NotificationPresenter;
+use crate::presentation::popups::PopupView;
+use crate::presentation::toggle::TogglePresenter;
+use crate::widgets::callback::FnCell0;
+use crate::widgets::components::battery_button::BatteryButton;
+use crate::widgets::components::power_actions::PowerActionStack;
+use crate::widgets::components::slider::QuickSlider;
+use crate::widgets::components::toggle_tile::ToggleTile;
+use crate::widgets::popup_base::PopupContainer;
+use axis_domain::models::audio::AudioStatus;
+use axis_domain::models::brightness::BrightnessStatus;
+use axis_domain::models::popups::{PopupStatus, PopupType};
+use axis_presentation::View;
+use gtk4::{gio, glib};
+use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
+use libadwaita::prelude::*;
+use libadwaita::subclass::prelude::*;
 use std::cell::{Cell, OnceCell, RefCell};
+use std::rc::Rc;
 
 glib::wrapper! {
     pub struct QuickSettingsWindow(ObjectSubclass<imp::QuickSettingsWindow>)
@@ -32,9 +32,7 @@ glib::wrapper! {
 
 impl QuickSettingsWindow {
     pub fn new(app: &libadwaita::Application) -> Self {
-        glib::Object::builder()
-            .property("application", app)
-            .build()
+        glib::Object::builder().property("application", app).build()
     }
 }
 
@@ -88,7 +86,7 @@ pub struct QuickSettingsPopup {
     is_bright_updating: Rc<Cell<bool>>,
     is_bright_dragging: Rc<Cell<bool>>,
     notification_presenter: Rc<RefCell<Option<Rc<NotificationPresenter>>>>,
-    on_escape: Rc<RefCell<Option<Box<dyn Fn() + 'static>>>>,
+    on_escape: FnCell0,
 }
 
 impl QuickSettingsPopup {
@@ -140,26 +138,38 @@ impl QuickSettingsPopup {
 
         let vol_slider = QuickSlider::new("audio-volume-high-symbolic");
         vol_slider.set_show_arrow(true);
-        self.volume_slider.set(vol_slider.clone()).expect("Failed to store vol slider");
+        self.volume_slider
+            .set(vol_slider.clone())
+            .expect("Failed to store vol slider");
         main_page.append(&vol_slider.container);
 
         let bright_slider = QuickSlider::new("display-brightness-symbolic");
-        bright_slider.scale().set_adjustment(&gtk4::Adjustment::new(0.0, 0.0, 100.0, 1.0, 10.0, 0.0));
+        bright_slider
+            .scale()
+            .set_adjustment(&gtk4::Adjustment::new(0.0, 0.0, 100.0, 1.0, 10.0, 0.0));
 
         let is_dragging = self.is_bright_dragging.clone();
         let gesture = gtk4::GestureClick::new();
-        gesture.connect_pressed(move |_, _, _, _| { is_dragging.set(true); });
+        gesture.connect_pressed(move |_, _, _, _| {
+            is_dragging.set(true);
+        });
         let is_dragging_rel = self.is_bright_dragging.clone();
-        gesture.connect_released(move |_, _, _, _| { is_dragging_rel.set(false); });
+        gesture.connect_released(move |_, _, _, _| {
+            is_dragging_rel.set(false);
+        });
         bright_slider.scale().add_controller(gesture);
 
-        self.brightness_slider.set(bright_slider.clone()).expect("Failed to store bright slider");
+        self.brightness_slider
+            .set(bright_slider.clone())
+            .expect("Failed to store bright slider");
         main_page.append(&bright_slider.container);
 
         let bottom_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
 
         let battery_btn = BatteryButton::new();
-        self.battery_button.set(battery_btn.clone()).expect("battery button already set");
+        self.battery_button
+            .set(battery_btn.clone())
+            .expect("battery button already set");
         bottom_row.append(&battery_btn.container);
 
         let spacer = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
@@ -171,7 +181,9 @@ impl QuickSettingsPopup {
         stack.add_named(&main_page, Some("main"));
 
         self.qs_stack.set(stack.clone()).expect("stack already set");
-        self.bottom_row.set(bottom_row).expect("bottom row already set");
+        self.bottom_row
+            .set(bottom_row)
+            .expect("bottom row already set");
         self.container.set_content(&stack);
         self.window.set_child(Some(&self.container.container));
     }
@@ -184,20 +196,20 @@ impl QuickSettingsPopup {
         key_controller.connect_key_pressed(move |_, key, _, _| {
             use gtk4::gdk::Key;
             if key == Key::Escape {
-                if let Some(stack) = stack_c.get() {
-                    if stack.visible_child_name().as_deref() != Some("main") {
-                        stack.set_visible_child_name("main");
-                        if let Some(pa) = power_actions_c.get() {
-                            pa.collapse_power_menu();
-                        }
-                        return gtk4::glib::Propagation::Stop;
-                    }
-                }
-                if let Some(pa) = power_actions_c.get() {
-                    if pa.is_power_expanded() {
+                if let Some(stack) = stack_c.get()
+                    && stack.visible_child_name().as_deref() != Some("main")
+                {
+                    stack.set_visible_child_name("main");
+                    if let Some(pa) = power_actions_c.get() {
                         pa.collapse_power_menu();
-                        return gtk4::glib::Propagation::Stop;
                     }
+                    return gtk4::glib::Propagation::Stop;
+                }
+                if let Some(pa) = power_actions_c.get()
+                    && pa.is_power_expanded()
+                {
+                    pa.collapse_power_menu();
+                    return gtk4::glib::Propagation::Stop;
                 }
                 if let Some(f) = on_escape_c.borrow().as_ref() {
                     f();
@@ -226,22 +238,34 @@ impl QuickSettingsPopup {
         }));
     }
 
-    pub fn setup_battery(&self, presenter: Arc<BatteryPresenter>) {
-        let battery_btn = self.battery_button.get().expect("battery button not initialized").clone();
+    pub fn setup_battery(&self, presenter: Rc<BatteryPresenter>) {
+        let battery_btn = self
+            .battery_button
+            .get()
+            .expect("battery button not initialized")
+            .clone();
         presenter.add_view(Box::new(battery_btn));
     }
 
     pub fn setup_bottom_row(
         &self,
-        battery_presenter: Arc<BatteryPresenter>,
+        battery_presenter: Rc<BatteryPresenter>,
         power_actions: Rc<PowerActionStack>,
     ) {
         self.setup_battery(battery_presenter);
-        self.power_actions.set(power_actions.clone()).expect("power actions already set");
+        self.power_actions
+            .set(power_actions.clone())
+            .expect("power actions already set");
         self.append_power_actions(&power_actions.stack);
     }
 
-    pub fn setup_toggle(&self, row: i32, col: i32, presenter: Rc<TogglePresenter>, arrow_target: Option<&str>) {
+    pub fn setup_toggle(
+        &self,
+        row: i32,
+        col: i32,
+        presenter: Rc<TogglePresenter>,
+        arrow_target: Option<&str>,
+    ) {
         let has_arrow = arrow_target.is_some();
         let tile = ToggleTile::new("", "image-missing-symbolic", has_arrow);
         if let Some(target) = arrow_target {
@@ -253,7 +277,9 @@ impl QuickSettingsPopup {
         }
         self.grid.attach(&tile.container, col, row, 1, 1);
         let view = Box::new(tile);
-        glib::spawn_future_local(async move { presenter.bind(view).await; });
+        glib::spawn_future_local(async move {
+            presenter.bind(view).await;
+        });
     }
 
     pub fn setup_notification_archive(&self, archive_container: gtk4::Revealer) {
@@ -274,7 +300,10 @@ impl QuickSettingsPopup {
             presenter,
             move || stack.set_visible_child_name("main"),
         ));
-        self.qs_stack.get().expect("stack not initialized").add_named(&page.container, Some("wifi"));
+        self.qs_stack
+            .get()
+            .expect("stack not initialized")
+            .add_named(&page.container, Some("wifi"));
     }
 
     pub fn setup_bluetooth_sub_page(&self, presenter: Rc<BluetoothPresenter>) {
@@ -294,39 +323,50 @@ impl QuickSettingsPopup {
             }
         });
 
-        let page = crate::widgets::sub_pages::bluetooth_page::BluetoothPage::new(
-            presenter,
-            move || stack.set_visible_child_name("main"),
-        );
-        self.qs_stack.get().expect("stack not initialized").add_named(&page.container, Some("bluetooth"));
+        let page =
+            crate::widgets::sub_pages::bluetooth_page::BluetoothPage::new(presenter, move || {
+                stack.set_visible_child_name("main")
+            });
+        self.qs_stack
+            .get()
+            .expect("stack not initialized")
+            .add_named(&page.container, Some("bluetooth"));
     }
 
     pub fn setup_audio_sub_page(&self, presenter: Rc<AudioPresenter>) {
         let stack = self.qs_stack.get().expect("stack not initialized").clone();
-        let page = crate::widgets::sub_pages::audio_page::AudioPage::new(
-            presenter,
-            move || stack.set_visible_child_name("main"),
-        );
+        let page = crate::widgets::sub_pages::audio_page::AudioPage::new(presenter, move || {
+            stack.set_visible_child_name("main")
+        });
         if let Some(slider) = self.volume_slider.get().cloned() {
             let stack_nav = self.qs_stack.get().expect("stack not initialized").clone();
             slider.on_arrow_clicked(move || {
                 stack_nav.set_visible_child_name("audio");
             });
         }
-        self.qs_stack.get().expect("stack not initialized").add_named(&page.container, Some("audio"));
+        self.qs_stack
+            .get()
+            .expect("stack not initialized")
+            .add_named(&page.container, Some("audio"));
     }
 
     pub fn setup_nightlight_sub_page(&self, presenter: Rc<NightlightPresenter>) {
         let stack = self.qs_stack.get().expect("stack not initialized").clone();
-        let page = crate::widgets::sub_pages::nightlight_page::NightlightPage::new(
-            presenter,
-            move || stack.set_visible_child_name("main"),
-        );
-        self.qs_stack.get().expect("stack not initialized").add_named(&page.container, Some("nightlight"));
+        let page =
+            crate::widgets::sub_pages::nightlight_page::NightlightPage::new(presenter, move || {
+                stack.set_visible_child_name("main")
+            });
+        self.qs_stack
+            .get()
+            .expect("stack not initialized")
+            .add_named(&page.container, Some("nightlight"));
     }
 
     pub fn reset_to_main(&self) {
-        self.qs_stack.get().expect("stack not initialized").set_visible_child_name("main");
+        self.qs_stack
+            .get()
+            .expect("stack not initialized")
+            .set_visible_child_name("main");
         if let Some(pa) = self.power_actions.get() {
             pa.collapse_power_menu();
         }
@@ -342,7 +382,9 @@ impl QuickSettingsPopup {
         if let Some(slider) = self.volume_slider.get() {
             let popup = self.clone();
             slider.scale().connect_value_changed(move |scale| {
-                if !popup.is_audio_updating.get() { f(scale.value()); }
+                if !popup.is_audio_updating.get() {
+                    f(scale.value());
+                }
             });
         }
     }
@@ -351,7 +393,9 @@ impl QuickSettingsPopup {
         if let Some(slider) = self.brightness_slider.get() {
             let popup = self.clone();
             slider.scale().connect_value_changed(move |scale| {
-                if !popup.is_bright_updating.get() { f(scale.value()); }
+                if !popup.is_bright_updating.get() {
+                    f(scale.value());
+                }
             });
         }
     }
@@ -363,8 +407,11 @@ impl View<AudioStatus> for QuickSettingsPopup {
             let icon_name = audio_icon(status).to_string();
             let is_full = status.volume >= 0.99;
             slider.set_icon(&icon_name);
-            if is_full { slider.scale().remove_css_class("highlight-partial"); }
-            else { slider.scale().add_css_class("highlight-partial"); }
+            if is_full {
+                slider.scale().remove_css_class("highlight-partial");
+            } else {
+                slider.scale().add_css_class("highlight-partial");
+            }
 
             let scale = slider.scale();
             if (scale.value() - status.volume).abs() > 0.01 {
@@ -409,9 +456,15 @@ impl View<PopupStatus> for QuickSettingsPopup {
 }
 
 impl PopupView for QuickSettingsPopup {
-    fn get_type(&self) -> PopupType { PopupType::QuickSettings }
-    fn popup_container(&self) -> PopupContainer { self.container.clone() }
-    fn popup_window(&self) -> gtk4::ApplicationWindow { self.window.clone().upcast() }
+    fn get_type(&self) -> PopupType {
+        PopupType::QuickSettings
+    }
+    fn popup_container(&self) -> PopupContainer {
+        self.container.clone()
+    }
+    fn popup_window(&self) -> gtk4::ApplicationWindow {
+        self.window.clone().upcast()
+    }
 
     fn show(&self) {
         self.popup_container().animate_show(&self.popup_window());

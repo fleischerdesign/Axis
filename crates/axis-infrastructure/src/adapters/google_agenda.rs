@@ -1,7 +1,7 @@
+use async_trait::async_trait;
 use axis_domain::models::calendar::CalendarEvent;
 use axis_domain::models::tasks::{Task, TaskList};
-use axis_domain::ports::agenda::{AgendaProvider, AgendaError};
-use async_trait::async_trait;
+use axis_domain::ports::agenda::{AgendaError, AgendaProvider};
 use std::sync::Arc;
 
 pub struct GoogleAgendaProvider {

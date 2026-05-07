@@ -1,6 +1,6 @@
-use axis_domain::ports::workspaces::{WorkspaceProvider, WorkspaceError};
-use std::sync::Arc;
+use axis_domain::ports::workspaces::{WorkspaceError, WorkspaceProvider};
 use log::info;
+use std::sync::Arc;
 
 pub struct ToggleOverviewUseCase {
     provider: Arc<dyn WorkspaceProvider>,

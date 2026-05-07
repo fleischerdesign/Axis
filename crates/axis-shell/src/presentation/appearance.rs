@@ -27,7 +27,7 @@ impl AppearancePresenter {
         });
 
         let inner = Presenter::from_subscribe_use_case(subscribe_use_case.clone())
-        .with_initial_status(initial_status);
+            .with_initial_status(initial_status);
 
         Self { inner }
     }

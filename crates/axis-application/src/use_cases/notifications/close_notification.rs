@@ -1,6 +1,6 @@
-use axis_domain::ports::notifications::{NotificationProvider, NotificationError};
-use std::sync::Arc;
+use axis_domain::ports::notifications::{NotificationError, NotificationProvider};
 use log::info;
+use std::sync::Arc;
 
 pub struct CloseNotificationUseCase {
     provider: Arc<dyn NotificationProvider>,

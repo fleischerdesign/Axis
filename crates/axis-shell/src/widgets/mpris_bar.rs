@@ -1,11 +1,17 @@
-use libadwaita::prelude::*;
-use axis_presentation::View;
 use axis_domain::models::mpris::MprisStatus;
+use axis_presentation::View;
+use libadwaita::prelude::*;
 
 #[derive(Clone)]
 pub struct MprisBarWidget {
     pub container: gtk4::Box,
     label: gtk4::Label,
+}
+
+impl Default for MprisBarWidget {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MprisBarWidget {

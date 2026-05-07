@@ -1,7 +1,7 @@
 use axis_domain::ports::appearance::{AppearanceError, AppearanceProvider};
-use std::sync::Arc;
-use std::path::Path;
 use log::{info, warn};
+use std::path::Path;
+use std::sync::Arc;
 
 pub struct SetWallpaperUseCase {
     provider: Arc<dyn AppearanceProvider>,
@@ -19,7 +19,10 @@ impl SetWallpaperUseCase {
         let p = Path::new(&path);
         if !p.exists() {
             warn!("[use-case] Wallpaper path does not exist: {}", path);
-            return Err(AppearanceError::ValidationError(format!("File not found: {}", path)));
+            return Err(AppearanceError::ValidationError(format!(
+                "File not found: {}",
+                path
+            )));
         }
 
         // 2. Persist

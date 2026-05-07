@@ -1,21 +1,22 @@
-use libadwaita::prelude::*;
-use libadwaita as adw;
-use std::rc::Rc;
-use std::cell::RefCell;
+use crate::presentation::bluetooth::{BluetoothPresenter, BluetoothView};
+use crate::widgets::callback::FnCell;
 use axis_domain::models::bluetooth::BluetoothStatus;
-use crate::presentation::bluetooth::{BluetoothView, BluetoothPresenter};
 use axis_presentation::View;
+use libadwaita as adw;
+use libadwaita::prelude::*;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 pub struct BluetoothPage {
     root: adw::ToolbarView,
     power_switch: adw::SwitchRow,
     device_list: gtk4::ListBox,
-    
-    toggle_callback: Rc<RefCell<Option<Box<dyn Fn(bool) + 'static>>>>,
-    scan_callback: Rc<RefCell<Option<Box<dyn Fn(bool) + 'static>>>>,
-    connect_callback: Rc<RefCell<Option<Box<dyn Fn(String) + 'static>>>>,
-    disconnect_callback: Rc<RefCell<Option<Box<dyn Fn(String) + 'static>>>>,
-    unpair_callback: Rc<RefCell<Option<Box<dyn Fn(String) + 'static>>>>,
+
+    toggle_callback: FnCell<bool>,
+    scan_callback: FnCell<bool>,
+    connect_callback: FnCell<String>,
+    disconnect_callback: FnCell<String>,
+    unpair_callback: FnCell<String>,
 }
 
 impl BluetoothPage {
@@ -30,19 +31,13 @@ impl BluetoothPage {
             .build();
         toolbar_view.set_content(Some(&preferences_page));
 
-        let power_group = adw::PreferencesGroup::builder()
-            .title("Bluetooth")
-            .build();
+        let power_group = adw::PreferencesGroup::builder().title("Bluetooth").build();
         preferences_page.add(&power_group);
 
-        let power_switch = adw::SwitchRow::builder()
-            .title("Bluetooth Enabled")
-            .build();
+        let power_switch = adw::SwitchRow::builder().title("Bluetooth Enabled").build();
         power_group.add(&power_switch);
 
-        let device_group = adw::PreferencesGroup::builder()
-            .title("Devices")
-            .build();
+        let device_group = adw::PreferencesGroup::builder().title("Devices").build();
         preferences_page.add(&device_group);
 
         let device_list = gtk4::ListBox::builder()
@@ -80,7 +75,7 @@ impl BluetoothPage {
 impl View<BluetoothStatus> for BluetoothPage {
     fn render(&self, status: &BluetoothStatus) {
         self.power_switch.set_active(status.powered);
-        
+
         while let Some(child) = self.device_list.first_child() {
             self.device_list.remove(&child);
         }
@@ -96,7 +91,11 @@ impl View<BluetoothStatus> for BluetoothPage {
 
         if status.devices.is_empty() {
             let row = adw::ActionRow::builder()
-                .title(if status.is_scanning { "Scanning..." } else { "No devices found" })
+                .title(if status.is_scanning {
+                    "Scanning..."
+                } else {
+                    "No devices found"
+                })
                 .sensitive(false)
                 .build();
             self.device_list.append(&row);
@@ -107,14 +106,18 @@ impl View<BluetoothStatus> for BluetoothPage {
                 .title(dev.name.as_deref().unwrap_or("Unknown Device"))
                 .subtitle(&dev.id)
                 .build();
-            
+
             row.add_prefix(&gtk4::Image::from_icon_name(&dev.icon));
 
             let connect_btn = gtk4::Button::builder()
-                .label(if dev.connected { "Disconnect" } else { "Connect" })
+                .label(if dev.connected {
+                    "Disconnect"
+                } else {
+                    "Connect"
+                })
                 .valign(gtk4::Align::Center)
                 .build();
-            
+
             if dev.connected {
                 connect_btn.add_css_class("destructive-action");
             } else {
@@ -129,9 +132,13 @@ impl View<BluetoothStatus> for BluetoothPage {
 
             connect_btn.connect_clicked(move |_| {
                 if is_connected {
-                    if let Some(f) = cb_d.borrow().as_ref() { f(id.clone()); }
+                    if let Some(f) = cb_d.borrow().as_ref() {
+                        f(id.clone());
+                    }
                 } else {
-                    if let Some(f) = cb_c.borrow().as_ref() { f(id.clone()); }
+                    if let Some(f) = cb_c.borrow().as_ref() {
+                        f(id.clone());
+                    }
                 }
             });
 
@@ -147,7 +154,9 @@ impl View<BluetoothStatus> for BluetoothPage {
                 let id_forget = dev.id.clone();
                 let cb_u_forget = cb_u.clone();
                 forget_btn.connect_clicked(move |_| {
-                    if let Some(f) = cb_u_forget.borrow().as_ref() { f(id_forget.clone()); }
+                    if let Some(f) = cb_u_forget.borrow().as_ref() {
+                        f(id_forget.clone());
+                    }
                 });
 
                 row.add_suffix(&forget_btn);

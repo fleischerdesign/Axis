@@ -1,8 +1,11 @@
-use libadwaita::prelude::*;
-use libadwaita as adw;
-use std::rc::Rc;
-use std::cell::RefCell;
+use crate::widgets::callback::{FnCell, FnCell0};
 use axis_domain::models::continuity::{ContinuityStatus, PeerConfig};
+use libadwaita as adw;
+use libadwaita::prelude::*;
+use std::cell::RefCell;
+use std::rc::Rc;
+
+type ConfigFnCell = Rc<RefCell<Option<Box<dyn Fn(String, PeerConfig) + 'static>>>>;
 
 pub struct PeerDetailPage {
     root: adw::ToolbarView,
@@ -15,9 +18,9 @@ pub struct PeerDetailPage {
 
     update_silent: Rc<RefCell<bool>>,
     last_config: Rc<RefCell<Option<PeerConfig>>>,
-    disconnect_cb: Rc<RefCell<Option<Box<dyn Fn() + 'static>>>>,
-    unpair_cb: Rc<RefCell<Option<Box<dyn Fn(String) + 'static>>>>,
-    config_cb: Rc<RefCell<Option<Box<dyn Fn(String, PeerConfig) + 'static>>>>,
+    disconnect_cb: FnCell0,
+    unpair_cb: FnCell<String>,
+    config_cb: ConfigFnCell,
 }
 
 impl PeerDetailPage {
@@ -55,9 +58,7 @@ impl PeerDetailPage {
             .build();
         caps_group.add(&drag_drop_switch);
 
-        let danger_group = adw::PreferencesGroup::builder()
-            .title("")
-            .build();
+        let danger_group = adw::PreferencesGroup::builder().title("").build();
         page.add(&danger_group);
 
         let disconnect_btn = gtk4::Button::builder()
@@ -98,45 +99,64 @@ impl PeerDetailPage {
     fn wire_notifies(page: &Rc<Self>) {
         let p = page.clone();
         page.clipboard_switch.connect_active_notify(move |row| {
-            if *p.update_silent.borrow() { return; }
-            if let Some(f) = p.config_cb.borrow().as_ref() {
-                if let Some(ref current) = *p.last_config.borrow() {
-                    let config = PeerConfig { clipboard: row.is_active(), ..current.clone() };
-                    f(p.peer_id.clone(), config);
-                }
+            if *p.update_silent.borrow() {
+                return;
+            }
+            if let Some(f) = p.config_cb.borrow().as_ref()
+                && let Some(ref current) = *p.last_config.borrow()
+            {
+                let config = PeerConfig {
+                    clipboard: row.is_active(),
+                    ..current.clone()
+                };
+                f(p.peer_id.clone(), config);
             }
         });
 
         let p = page.clone();
         page.audio_switch.connect_active_notify(move |row| {
-            if *p.update_silent.borrow() { return; }
-            if let Some(f) = p.config_cb.borrow().as_ref() {
-                if let Some(ref current) = *p.last_config.borrow() {
-                    let config = PeerConfig { audio: row.is_active(), ..current.clone() };
-                    f(p.peer_id.clone(), config);
-                }
+            if *p.update_silent.borrow() {
+                return;
+            }
+            if let Some(f) = p.config_cb.borrow().as_ref()
+                && let Some(ref current) = *p.last_config.borrow()
+            {
+                let config = PeerConfig {
+                    audio: row.is_active(),
+                    ..current.clone()
+                };
+                f(p.peer_id.clone(), config);
             }
         });
 
         let p = page.clone();
         page.drag_drop_switch.connect_active_notify(move |row| {
-            if *p.update_silent.borrow() { return; }
-            if let Some(f) = p.config_cb.borrow().as_ref() {
-                if let Some(ref current) = *p.last_config.borrow() {
-                    let config = PeerConfig { drag_drop: row.is_active(), ..current.clone() };
-                    f(p.peer_id.clone(), config);
-                }
+            if *p.update_silent.borrow() {
+                return;
+            }
+            if let Some(f) = p.config_cb.borrow().as_ref()
+                && let Some(ref current) = *p.last_config.borrow()
+            {
+                let config = PeerConfig {
+                    drag_drop: row.is_active(),
+                    ..current.clone()
+                };
+                f(p.peer_id.clone(), config);
             }
         });
 
         let p = page.clone();
         page.disconnect_btn.connect_clicked(move |_| {
-            if let Some(f) = p.disconnect_cb.borrow().as_ref() { f(); }
+            if let Some(f) = p.disconnect_cb.borrow().as_ref() {
+                f();
+            }
         });
 
         let p = page.clone();
         page.unpair_btn.connect_clicked(move |_| {
-            if let Some(f) = p.unpair_cb.borrow().as_ref() { f(p.peer_id.clone()); }
+            if let Some(f) = p.unpair_cb.borrow().as_ref() {
+                f(p.peer_id.clone());
+            }
         });
     }
 
@@ -155,7 +175,8 @@ impl PeerDetailPage {
             self.drag_drop_switch.set_active(config.drag_drop);
         }
 
-        let connected = status.active_connection
+        let connected = status
+            .active_connection
             .as_ref()
             .is_some_and(|c| c.peer_id == self.peer_id);
         self.disconnect_btn.set_visible(connected);
@@ -175,4 +196,3 @@ impl PeerDetailPage {
         *self.config_cb.borrow_mut() = Some(f);
     }
 }
-

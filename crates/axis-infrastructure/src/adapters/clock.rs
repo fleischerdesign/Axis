@@ -1,11 +1,11 @@
-use axis_domain::models::clock::ClockStatus;
-use axis_domain::ports::clock::{ClockProvider, ClockError, ClockStream};
 use async_trait::async_trait;
-use tokio::sync::watch;
-use tokio_stream::wrappers::WatchStream;
+use axis_domain::models::clock::ClockStatus;
+use axis_domain::ports::clock::{ClockError, ClockProvider, ClockStream};
 use chrono::Local;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::watch;
+use tokio_stream::wrappers::WatchStream;
 
 pub struct SystemClockProvider {
     status_tx: watch::Sender<ClockStatus>,
@@ -16,7 +16,7 @@ impl SystemClockProvider {
         let (tx, _) = watch::channel(ClockStatus {
             current_time: Local::now(),
         });
-        
+
         let tx_clone = tx.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(30));

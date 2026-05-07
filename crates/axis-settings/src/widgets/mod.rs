@@ -3,6 +3,7 @@ pub mod accounts_page;
 pub mod appearance_page;
 pub mod arrangement_grid;
 pub mod bluetooth_page;
+pub mod callback;
 pub mod continuity_page;
 pub mod idle_page;
 pub mod network_page;

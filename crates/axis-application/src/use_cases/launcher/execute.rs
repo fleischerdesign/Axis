@@ -3,11 +3,12 @@ use std::os::unix::process::CommandExt;
 use axis_domain::models::launcher::LauncherAction;
 use axis_domain::ports::launcher::LauncherError;
 
+#[derive(Default)]
 pub struct ExecuteLauncherActionUseCase {}
 
 impl ExecuteLauncherActionUseCase {
     pub fn new() -> Self {
-        Self {}
+        Self::default()
     }
 
     pub fn execute(&self, action: &LauncherAction) -> Result<(), LauncherError> {
@@ -24,12 +25,9 @@ impl ExecuteLauncherActionUseCase {
                     .stdout(std::process::Stdio::null())
                     .stderr(std::process::Stdio::null())
                     .process_group(0);
-                cmd.spawn()
-                    .map(|_| ())
-                    .map_err(|e| LauncherError::ProviderError(format!(
-                        "Failed to execute {:?}: {}",
-                        args, e
-                    )))
+                cmd.spawn().map(|_| ()).map_err(|e| {
+                    LauncherError::ProviderError(format!("Failed to execute {:?}: {}", args, e))
+                })
             }
             LauncherAction::OpenUrl(url) => {
                 log::info!("[launcher] Opening URL: {url}");
@@ -41,10 +39,9 @@ impl ExecuteLauncherActionUseCase {
                     .process_group(0)
                     .spawn()
                     .map(|_| ())
-                    .map_err(|e| LauncherError::ProviderError(format!(
-                        "Failed to open URL {}: {}",
-                        url, e
-                    )))
+                    .map_err(|e| {
+                        LauncherError::ProviderError(format!("Failed to open URL {}: {}", url, e))
+                    })
             }
             LauncherAction::Internal(cmd) => {
                 log::info!("[launcher] Internal command: {cmd}");

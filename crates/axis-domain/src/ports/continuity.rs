@@ -1,10 +1,8 @@
-use crate::models::continuity::{
-    ContinuityStatus, InputEvent, PeerArrangement, PeerConfig, Side,
-};
+use super::StatusStream;
+use crate::models::continuity::{ContinuityStatus, InputEvent, PeerArrangement, PeerConfig, Side};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use thiserror::Error;
-use super::StatusStream;
 
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum ContinuityError {
@@ -41,7 +39,10 @@ pub trait ContinuityProvider: Send + Sync {
     async fn cancel_reconnect(&self) -> Result<(), ContinuityError>;
     async fn unpair(&self, peer_id: &str) -> Result<(), ContinuityError>;
 
-    async fn set_peer_arrangement(&self, arrangement: PeerArrangement) -> Result<(), ContinuityError>;
+    async fn set_peer_arrangement(
+        &self,
+        arrangement: PeerArrangement,
+    ) -> Result<(), ContinuityError>;
     async fn update_peer_configs(
         &self,
         configs: HashMap<String, PeerConfig>,

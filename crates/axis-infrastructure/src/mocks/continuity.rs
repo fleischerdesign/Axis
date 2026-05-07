@@ -1,9 +1,10 @@
-use axis_domain::models::continuity::{
-    ContinuityStatus, InputEvent, PeerArrangement,
-    PeerConfig, PeerInfo, SharingState, Side,
-};
-use axis_domain::ports::continuity::{ContinuityError, ContinuityProvider, ContinuitySharingProvider, ContinuityStream};
 use async_trait::async_trait;
+use axis_domain::models::continuity::{
+    ContinuityStatus, InputEvent, PeerArrangement, PeerConfig, PeerInfo, SharingState, Side,
+};
+use axis_domain::ports::continuity::{
+    ContinuityError, ContinuityProvider, ContinuitySharingProvider, ContinuityStream,
+};
 use futures_util::stream;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -82,11 +83,17 @@ impl ContinuityProvider for MockContinuityProvider {
         Ok(())
     }
 
-    async fn set_peer_arrangement(&self, _arrangement: PeerArrangement) -> Result<(), ContinuityError> {
+    async fn set_peer_arrangement(
+        &self,
+        _arrangement: PeerArrangement,
+    ) -> Result<(), ContinuityError> {
         Ok(())
     }
 
-    async fn update_peer_configs(&self, _configs: HashMap<String, PeerConfig>) -> Result<(), ContinuityError> {
+    async fn update_peer_configs(
+        &self,
+        _configs: HashMap<String, PeerConfig>,
+    ) -> Result<(), ContinuityError> {
         Ok(())
     }
 }

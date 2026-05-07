@@ -1,15 +1,15 @@
-use axis_domain::models::bluetooth::BluetoothStatus;
-use axis_domain::ports::bluetooth::BluetoothProvider;
-use axis_presentation::{Presenter, View};
-use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
 use axis_application::use_cases::bluetooth::connect::ConnectBluetoothDeviceUseCase;
 use axis_application::use_cases::bluetooth::disconnect::DisconnectBluetoothDeviceUseCase;
 use axis_application::use_cases::bluetooth::set_powered::SetBluetoothPoweredUseCase;
 use axis_application::use_cases::bluetooth::start_scan::StartBluetoothScanUseCase;
 use axis_application::use_cases::bluetooth::stop_scan::StopBluetoothScanUseCase;
 use axis_application::use_cases::bluetooth::unpair::UnpairBluetoothDeviceUseCase;
-use std::sync::Arc;
+use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
+use axis_domain::models::bluetooth::BluetoothStatus;
+use axis_domain::ports::bluetooth::BluetoothProvider;
+use axis_presentation::{Presenter, View};
 use std::rc::Rc;
+use std::sync::Arc;
 
 pub trait BluetoothView: View<BluetoothStatus> {
     fn on_toggle_power(&self, f: Box<dyn Fn(bool) + 'static>);
@@ -47,18 +47,29 @@ pub struct BluetoothPresenter {
     unpair_uc: Arc<UnpairBluetoothDeviceUseCase>,
 }
 
+pub struct BluetoothPresenterArgs {
+    pub subscribe_uc: Arc<SubscribeUseCase<dyn BluetoothProvider, BluetoothStatus>>,
+    pub get_status_uc: Arc<GetStatusUseCase<dyn BluetoothProvider, BluetoothStatus>>,
+    pub connect_uc: Arc<ConnectBluetoothDeviceUseCase>,
+    pub disconnect_uc: Arc<DisconnectBluetoothDeviceUseCase>,
+    pub set_powered_uc: Arc<SetBluetoothPoweredUseCase>,
+    pub start_scan_uc: Arc<StartBluetoothScanUseCase>,
+    pub stop_scan_uc: Arc<StopBluetoothScanUseCase>,
+    pub unpair_uc: Arc<UnpairBluetoothDeviceUseCase>,
+}
+
 impl BluetoothPresenter {
-    pub fn new(
-        subscribe_uc: Arc<SubscribeUseCase<dyn BluetoothProvider, BluetoothStatus>>,
-        get_status_uc: Arc<GetStatusUseCase<dyn BluetoothProvider, BluetoothStatus>>,
-        connect_uc: Arc<ConnectBluetoothDeviceUseCase>,
-        disconnect_uc: Arc<DisconnectBluetoothDeviceUseCase>,
-        set_powered_uc: Arc<SetBluetoothPoweredUseCase>,
-        start_scan_uc: Arc<StartBluetoothScanUseCase>,
-        stop_scan_uc: Arc<StopBluetoothScanUseCase>,
-        unpair_uc: Arc<UnpairBluetoothDeviceUseCase>,
-        rt: &tokio::runtime::Runtime,
-    ) -> Self {
+    pub fn new(args: BluetoothPresenterArgs, rt: &tokio::runtime::Runtime) -> Self {
+        let BluetoothPresenterArgs {
+            subscribe_uc,
+            get_status_uc,
+            connect_uc,
+            disconnect_uc,
+            set_powered_uc,
+            start_scan_uc,
+            stop_scan_uc,
+            unpair_uc,
+        } = args;
         let initial_status = rt.block_on(async {
             match get_status_uc.execute().await {
                 Ok(s) => s,
@@ -79,7 +90,8 @@ impl BluetoothPresenter {
                     }
                 }
             })
-        }).with_initial_status(initial_status);
+        })
+        .with_initial_status(initial_status);
 
         Self {
             inner,
@@ -94,7 +106,7 @@ impl BluetoothPresenter {
 
     pub async fn bind(&self, view: Box<dyn BluetoothView>) {
         let this = self.clone();
-        
+
         view.on_toggle_power(Box::new(move |powered| {
             let uc = this.set_powered_uc.clone();
             tokio::spawn(async move {

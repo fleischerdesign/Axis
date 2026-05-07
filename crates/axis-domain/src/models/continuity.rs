@@ -92,13 +92,21 @@ impl PeerArrangement {
     pub fn overlap_on_local(&self, local_len: i32, remote_len: i32) -> Option<(i32, i32)> {
         let start = self.offset.max(0);
         let end = (self.offset + remote_len).min(local_len);
-        if start < end { Some((start, end)) } else { None }
+        if start < end {
+            Some((start, end))
+        } else {
+            None
+        }
     }
 
     pub fn overlap_on_remote(&self, local_len: i32, remote_len: i32) -> Option<(i32, i32)> {
         let start = (-self.offset).max(0);
         let end = (local_len - self.offset).min(remote_len);
-        if start < end { Some((start, end)) } else { None }
+        if start < end {
+            Some((start, end))
+        } else {
+            None
+        }
     }
 
     pub fn local_to_remote_edge(&self, local_pos: f64) -> f64 {
@@ -282,9 +290,23 @@ pub enum Message {
 pub enum InputEvent {
     #[default]
     EmergencyExit,
-    CursorMove { dx: f64, dy: f64 },
-    KeyPress { key: u32, state: u8 },
-    KeyRelease { key: u32 },
-    PointerButton { button: u32, state: u8 },
-    PointerAxis { dx: f64, dy: f64 },
+    CursorMove {
+        dx: f64,
+        dy: f64,
+    },
+    KeyPress {
+        key: u32,
+        state: u8,
+    },
+    KeyRelease {
+        key: u32,
+    },
+    PointerButton {
+        button: u32,
+        state: u8,
+    },
+    PointerAxis {
+        dx: f64,
+        dy: f64,
+    },
 }

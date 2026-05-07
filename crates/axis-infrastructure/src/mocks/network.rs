@@ -1,9 +1,9 @@
-use axis_domain::models::network::{NetworkStatus, AccessPoint};
-use axis_domain::ports::network::{NetworkProvider, NetworkError, NetworkStream};
 use async_trait::async_trait;
+use axis_domain::models::network::{AccessPoint, NetworkStatus};
+use axis_domain::ports::network::{NetworkError, NetworkProvider, NetworkStream};
+use std::sync::{Arc, Mutex};
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
-use std::sync::{Arc, Mutex};
 
 pub struct MockNetworkProvider {
     status: Mutex<NetworkStatus>,

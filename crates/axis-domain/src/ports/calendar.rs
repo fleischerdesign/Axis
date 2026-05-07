@@ -12,5 +12,6 @@ pub enum CalendarError {
 
 #[async_trait]
 pub trait CalendarProvider: Send + Sync {
-    async fn get_events(&self, start: &str, end: &str) -> Result<Vec<CalendarEvent>, CalendarError>;
+    async fn get_events(&self, start: &str, end: &str)
+    -> Result<Vec<CalendarEvent>, CalendarError>;
 }

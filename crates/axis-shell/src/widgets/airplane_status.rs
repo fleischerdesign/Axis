@@ -1,11 +1,17 @@
-use libadwaita::prelude::*;
-use axis_presentation::View;
 use axis_domain::models::airplane::AirplaneStatus;
+use axis_presentation::View;
+use libadwaita::prelude::*;
 
 #[derive(Clone)]
 pub struct AirplaneStatusWidget {
     pub container: gtk4::Box,
     icon: gtk4::Image,
+}
+
+impl Default for AirplaneStatusWidget {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AirplaneStatusWidget {
@@ -24,7 +30,8 @@ impl AirplaneStatusWidget {
 
 impl View<AirplaneStatus> for AirplaneStatusWidget {
     fn render(&self, status: &AirplaneStatus) {
-        self.container.set_visible(status.enabled && status.available);
+        self.container
+            .set_visible(status.enabled && status.available);
         if status.enabled && status.available {
             self.icon.set_icon_name(Some("airplane-mode-symbolic"));
         }

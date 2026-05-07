@@ -1,8 +1,10 @@
+use async_trait::async_trait;
 use axis_domain::models::continuity::{
     ContinuityStatus, InputEvent, PeerArrangement, PeerConfig, Side,
 };
-use axis_domain::ports::continuity::{ContinuityError, ContinuityProvider, ContinuitySharingProvider, ContinuityStream};
-use async_trait::async_trait;
+use axis_domain::ports::continuity::{
+    ContinuityError, ContinuityProvider, ContinuitySharingProvider, ContinuityStream,
+};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::watch;
@@ -35,7 +37,9 @@ impl ContinuityService {
         self.cmd_tx.clone()
     }
 
-    pub fn snapshot_rx(&self) -> watch::Receiver<axis_domain::models::continuity::ContinuityStatus> {
+    pub fn snapshot_rx(
+        &self,
+    ) -> watch::Receiver<axis_domain::models::continuity::ContinuityStatus> {
         self.status_tx.subscribe()
     }
 }
@@ -92,7 +96,10 @@ impl ContinuityProvider for ContinuityService {
             .map_err(|e| ContinuityError::ProviderError(e.to_string()))
     }
 
-    async fn set_peer_arrangement(&self, arrangement: PeerArrangement) -> Result<(), ContinuityError> {
+    async fn set_peer_arrangement(
+        &self,
+        arrangement: PeerArrangement,
+    ) -> Result<(), ContinuityError> {
         self.cmd_tx
             .try_send(ContinuityCmd::SetPeerArrangement(arrangement))
             .map_err(|e| ContinuityError::ProviderError(e.to_string()))

@@ -58,7 +58,9 @@ impl ConfigDndProvider {
 #[async_trait]
 impl DndProvider for ConfigDndProvider {
     async fn get_status(&self) -> Result<DndStatus, DndError> {
-        let config = self.config_provider.get()
+        let config = self
+            .config_provider
+            .get()
             .map_err(|e| DndError::ProviderError(e.to_string()))?;
         Ok(Self::config_to_status(&config))
     }

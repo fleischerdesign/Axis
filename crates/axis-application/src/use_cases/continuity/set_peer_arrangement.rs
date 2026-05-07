@@ -1,7 +1,7 @@
 use axis_domain::models::continuity::PeerArrangement;
-use axis_domain::ports::continuity::{ContinuityProvider, ContinuityError};
-use std::sync::Arc;
+use axis_domain::ports::continuity::{ContinuityError, ContinuityProvider};
 use log::info;
+use std::sync::Arc;
 
 pub struct SetPeerArrangementUseCase {
     provider: Arc<dyn ContinuityProvider>,

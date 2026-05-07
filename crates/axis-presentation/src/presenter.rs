@@ -1,12 +1,12 @@
+use crate::view::View;
+use axis_application::use_cases::generic::SubscribeUseCase;
+use axis_domain::ports::StatusProvider;
+use futures_util::{Stream, StreamExt};
 use std::cell::RefCell;
 use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
-use futures_util::{Stream, StreamExt};
-use axis_application::use_cases::generic::SubscribeUseCase;
-use axis_domain::ports::StatusProvider;
-use crate::view::View;
 
 pub struct Presenter<S>
 where

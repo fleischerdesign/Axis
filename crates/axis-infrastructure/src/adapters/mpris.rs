@@ -1,16 +1,16 @@
+use async_trait::async_trait;
 use axis_domain::models::mpris::{MprisPlayer, MprisStatus, PlaybackState};
 use axis_domain::ports::mpris::{MprisError, MprisProvider, MprisStream};
-use async_trait::async_trait;
 use futures_util::StreamExt;
-use tokio::sync::watch;
-use tokio_stream::wrappers::WatchStream;
-use zbus::{proxy, Connection, Proxy, MessageStream, MatchRule};
-use zbus::zvariant::Value;
+use log::{info, warn};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
-use log::{info, warn};
+use tokio::sync::watch;
+use tokio_stream::wrappers::WatchStream;
+use zbus::zvariant::Value;
+use zbus::{Connection, MatchRule, MessageStream, Proxy, proxy};
 
 #[proxy(
     interface = "org.mpris.MediaPlayer2.Player",
@@ -67,13 +67,18 @@ impl MprisDBusProvider {
             let mut status = provider.status_tx.borrow().clone();
             status.players = initial_status;
             if !status.players.is_empty() {
-            let playing = status.players.iter().find(|p| p.playback == PlaybackState::Playing);
-            status.active_player_id = playing
-                .or(status.players.first())
-                .map(|p| p.id.clone());
-            info!("[mpris] Setting initial status: {} players, active={:?}", status.players.len(), status.active_player_id);
-        }
-        provider.status_tx.send_replace(status);
+                let playing = status
+                    .players
+                    .iter()
+                    .find(|p| p.playback == PlaybackState::Playing);
+                status.active_player_id = playing.or(status.players.first()).map(|p| p.id.clone());
+                info!(
+                    "[mpris] Setting initial status: {} players, active={:?}",
+                    status.players.len(),
+                    status.active_player_id
+                );
+            }
+            provider.status_tx.send_replace(status);
         }
 
         let provider_clone = provider.clone();
@@ -112,24 +117,33 @@ impl MprisDBusProvider {
         };
 
         let mut players = Vec::new();
-        let mut owners = self.name_owners.lock().unwrap();
+        let mut new_owners = Vec::new();
         for name in &names {
-            if name.starts_with("org.mpris.MediaPlayer2.") {
-                if let Some(player) = self.query_player(name).await {
-                    if let Ok(reply) = dbus_proxy.call_method("GetNameOwner", &(name.as_str())).await {
-                        if let Ok(owner) = reply.body().deserialize::<String>() {
-                            owners.insert(owner, name.clone());
-                        }
-                    }
-                    players.push(player);
+            if name.starts_with("org.mpris.MediaPlayer2.")
+                && let Some(player) = self.query_player(name).await
+            {
+                if let Ok(reply) = dbus_proxy
+                    .call_method("GetNameOwner", &(name.as_str()))
+                    .await
+                    && let Ok(owner) = reply.body().deserialize::<String>()
+                {
+                    new_owners.push((owner, name.clone()));
                 }
+                players.push(player);
             }
+        }
+        let mut owners = self.name_owners.lock().unwrap();
+        for (owner, name) in new_owners {
+            owners.insert(owner, name);
         }
         drop(owners);
 
         info!("[mpris] Discovered {} player(s)", players.len());
         for p in &players {
-            info!("[mpris]   player: id={}, title={:?}, artist={:?}, playback={:?}", p.id, p.title, p.artist, p.playback);
+            info!(
+                "[mpris]   player: id={}, title={:?}, artist={:?}, playback={:?}",
+                p.id, p.title, p.artist, p.playback
+            );
         }
         players
     }
@@ -157,7 +171,9 @@ impl MprisDBusProvider {
 
         let position_us = proxy.position().await.unwrap_or(0);
 
-        let id = bus_name.trim_start_matches("org.mpris.MediaPlayer2.").to_string();
+        let id = bus_name
+            .trim_start_matches("org.mpris.MediaPlayer2.")
+            .to_string();
 
         Some(MprisPlayer {
             id,
@@ -206,13 +222,14 @@ impl MprisDBusProvider {
             .unwrap()
             .build();
 
-        let mut name_stream = match MessageStream::for_match_rule(name_rule, &self.connection, None).await {
-            Ok(s) => s,
-            Err(e) => {
-                warn!("[mpris] Failed to subscribe to NameOwnerChanged: {e}");
-                return;
-            }
-        };
+        let mut name_stream =
+            match MessageStream::for_match_rule(name_rule, &self.connection, None).await {
+                Ok(s) => s,
+                Err(e) => {
+                    warn!("[mpris] Failed to subscribe to NameOwnerChanged: {e}");
+                    return;
+                }
+            };
 
         let props_rule = MatchRule::builder()
             .msg_type(zbus::message::Type::Signal)
@@ -224,14 +241,14 @@ impl MprisDBusProvider {
             .unwrap()
             .build();
 
-        let mut props_stream = match MessageStream::for_match_rule(props_rule, &self.connection, None).await
-        {
-            Ok(s) => s,
-            Err(e) => {
-                warn!("[mpris] Failed to subscribe to PropertiesChanged: {e}");
-                return;
-            }
-        };
+        let mut props_stream =
+            match MessageStream::for_match_rule(props_rule, &self.connection, None).await {
+                Ok(s) => s,
+                Err(e) => {
+                    warn!("[mpris] Failed to subscribe to PropertiesChanged: {e}");
+                    return;
+                }
+            };
 
         info!("[mpris] Listening for changes");
 
@@ -284,11 +301,10 @@ impl MprisDBusProvider {
                     }
 
                     let now = Instant::now();
-                    if let Some(last) = last_query.get(&bus_name) {
-                        if now.duration_since(*last) < std::time::Duration::from_millis(200) {
+                    if let Some(last) = last_query.get(&bus_name)
+                        && now.duration_since(*last) < std::time::Duration::from_millis(200) {
                             continue;
                         }
-                    }
                     last_query.insert(bus_name.clone(), now);
 
                     if let Some(player) = tokio::time::timeout(
@@ -337,7 +353,10 @@ impl MprisDBusProvider {
             }
         } else {
             if player.playback == PlaybackState::Playing || status.active_player_id.is_none() {
-                info!("[mpris] New active player: {} — {}", player.id, player.title);
+                info!(
+                    "[mpris] New active player: {} — {}",
+                    player.id, player.title
+                );
                 status.active_player_id = Some(player.id.clone());
             }
             status.players.push(player);
@@ -356,10 +375,18 @@ impl MprisDBusProvider {
     }
 }
 
-fn extract_metadata(metadata: &HashMap<String, Value<'static>>) -> (String, String, String, Option<String>, i64) {
+fn extract_metadata(
+    metadata: &HashMap<String, Value<'static>>,
+) -> (String, String, String, Option<String>, i64) {
     let title = metadata
         .get("xesam:title")
-        .and_then(|v| if let Value::Str(s) = v { Some(s.as_str()) } else { None })
+        .and_then(|v| {
+            if let Value::Str(s) = v {
+                Some(s.as_str())
+            } else {
+                None
+            }
+        })
         .unwrap_or("")
         .to_string();
 
@@ -368,7 +395,11 @@ fn extract_metadata(metadata: &HashMap<String, Value<'static>>) -> (String, Stri
         .and_then(|v| {
             if let Value::Array(arr) = v {
                 arr.iter().next().and_then(|v| {
-                    if let Value::Str(s) = v { Some(s.as_str()) } else { None }
+                    if let Value::Str(s) = v {
+                        Some(s.as_str())
+                    } else {
+                        None
+                    }
                 })
             } else {
                 None
@@ -379,20 +410,34 @@ fn extract_metadata(metadata: &HashMap<String, Value<'static>>) -> (String, Stri
 
     let album = metadata
         .get("xesam:album")
-        .and_then(|v| if let Value::Str(s) = v { Some(s.as_str()) } else { None })
+        .and_then(|v| {
+            if let Value::Str(s) = v {
+                Some(s.as_str())
+            } else {
+                None
+            }
+        })
         .unwrap_or("")
         .to_string();
 
-    let art_url = metadata
-        .get("mpris:artUrl")
-        .and_then(|v| if let Value::Str(s) = v { Some(s.as_str().to_string()) } else { None });
+    let art_url = metadata.get("mpris:artUrl").and_then(|v| {
+        if let Value::Str(s) = v {
+            Some(s.as_str().to_string())
+        } else {
+            None
+        }
+    });
 
     let length_us = metadata
         .get("mpris:length")
         .and_then(|v| {
-            if let Value::I64(n) = v { Some(*n) }
-            else if let Value::U64(n) = v { Some(*n as i64) }
-            else { None }
+            if let Value::I64(n) = v {
+                Some(*n)
+            } else if let Value::U64(n) = v {
+                Some(*n as i64)
+            } else {
+                None
+            }
         })
         .unwrap_or(0);
 
@@ -403,7 +448,11 @@ fn extract_metadata(metadata: &HashMap<String, Value<'static>>) -> (String, Stri
 impl MprisProvider for MprisDBusProvider {
     async fn get_status(&self) -> Result<MprisStatus, MprisError> {
         let s = self.status_tx.borrow().clone();
-        info!("[mpris] get_status: {} players, active={:?}", s.players.len(), s.active_player_id);
+        info!(
+            "[mpris] get_status: {} players, active={:?}",
+            s.players.len(),
+            s.active_player_id
+        );
         Ok(s)
     }
 
@@ -420,7 +469,10 @@ impl MprisProvider for MprisDBusProvider {
             .build()
             .await
             .map_err(|e| MprisError::ProviderError(format!("proxy build: {e}")))?;
-        proxy.play_pause().await.map_err(|e| MprisError::ProviderError(e.to_string()))
+        proxy
+            .play_pause()
+            .await
+            .map_err(|e| MprisError::ProviderError(e.to_string()))
     }
 
     async fn next(&self, player_id: &str) -> Result<(), MprisError> {
@@ -431,7 +483,10 @@ impl MprisProvider for MprisDBusProvider {
             .build()
             .await
             .map_err(|e| MprisError::ProviderError(format!("proxy build: {e}")))?;
-        proxy.next().await.map_err(|e| MprisError::ProviderError(e.to_string()))
+        proxy
+            .next()
+            .await
+            .map_err(|e| MprisError::ProviderError(e.to_string()))
     }
 
     async fn previous(&self, player_id: &str) -> Result<(), MprisError> {
@@ -442,6 +497,9 @@ impl MprisProvider for MprisDBusProvider {
             .build()
             .await
             .map_err(|e| MprisError::ProviderError(format!("proxy build: {e}")))?;
-        proxy.previous().await.map_err(|e| MprisError::ProviderError(e.to_string()))
+        proxy
+            .previous()
+            .await
+            .map_err(|e| MprisError::ProviderError(e.to_string()))
     }
 }

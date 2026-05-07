@@ -1,6 +1,6 @@
-use axis_domain::ports::continuity::{ContinuityProvider, ContinuityError};
-use std::sync::Arc;
+use axis_domain::ports::continuity::{ContinuityError, ContinuityProvider};
 use log::info;
+use std::sync::Arc;
 
 pub struct UnpairUseCase {
     provider: Arc<dyn ContinuityProvider>,

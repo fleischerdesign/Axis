@@ -1,8 +1,8 @@
+use async_trait::async_trait;
 use axis_domain::models::airplane::AirplaneStatus;
 use axis_domain::models::config::AxisConfig;
 use axis_domain::ports::airplane::{AirplaneError, AirplaneProvider, AirplaneStream};
 use axis_domain::ports::config::ConfigProvider;
-use async_trait::async_trait;
 use log::{error, info, warn};
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -42,7 +42,10 @@ impl DeviceMap {
 }
 
 fn is_wireless(t: u8) -> bool {
-    matches!(t, RFKILL_TYPE_WLAN | RFKILL_TYPE_WWAN | RFKILL_TYPE_BLUETOOTH)
+    matches!(
+        t,
+        RFKILL_TYPE_WLAN | RFKILL_TYPE_WWAN | RFKILL_TYPE_BLUETOOTH
+    )
 }
 
 fn compute_airplane(map: &DeviceMap) -> bool {
@@ -159,7 +162,8 @@ impl ConfigAirplaneProvider {
                         let mut map = state_reader.lock().unwrap();
                         match event.op {
                             RFKILL_OP_ADD | RFKILL_OP_CHANGE => {
-                                map.devices.insert(idx, (event.type_, event.soft, event.hard));
+                                map.devices
+                                    .insert(idx, (event.type_, event.soft, event.hard));
                             }
                             RFKILL_OP_DEL => {
                                 map.devices.remove(&idx);
@@ -179,7 +183,6 @@ impl ConfigAirplaneProvider {
                 }
             }
         });
-
 
         let status_tx_cmd = status_tx.clone();
         std::thread::spawn(move || {

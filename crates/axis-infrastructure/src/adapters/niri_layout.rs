@@ -1,10 +1,10 @@
-use axis_domain::ports::layout::{LayoutProvider, LayoutError};
 use async_trait::async_trait;
+use axis_domain::ports::layout::{LayoutError, LayoutProvider};
+use log::{error, info};
+use std::fs;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::process::Command;
-use std::fs;
-use log::{info, error};
-use std::path::PathBuf;
 
 pub struct NiriLayoutProvider {
     config_dir: PathBuf,
@@ -24,12 +24,12 @@ impl NiriLayoutProvider {
 impl LayoutProvider for NiriLayoutProvider {
     async fn set_active_border_color(&self, color_hex: String) -> Result<(), LayoutError> {
         let path = self.get_config_path();
-        
-        if let Some(parent) = path.parent() {
-            if let Err(e) = fs::create_dir_all(parent) {
-                error!("[niri-layout] Failed to create config directory: {}", e);
-                return Err(LayoutError::ProviderError(e.to_string()));
-            }
+
+        if let Some(parent) = path.parent()
+            && let Err(e) = fs::create_dir_all(parent)
+        {
+            error!("[niri-layout] Failed to create config directory: {}", e);
+            return Err(LayoutError::ProviderError(e.to_string()));
         }
 
         let kdl_content = format!(
@@ -54,11 +54,17 @@ impl LayoutProvider for NiriLayoutProvider {
             })?;
 
         if status.success() {
-            info!("[niri-layout] Border color updated to {} and config reloaded", color_hex);
+            info!(
+                "[niri-layout] Border color updated to {} and config reloaded",
+                color_hex
+            );
             Ok(())
         } else {
             error!("[niri-layout] Niri reload failed with status: {}", status);
-            Err(LayoutError::ProviderError(format!("Niri reload failed with status: {}", status)))
+            Err(LayoutError::ProviderError(format!(
+                "Niri reload failed with status: {}",
+                status
+            )))
         }
     }
 }

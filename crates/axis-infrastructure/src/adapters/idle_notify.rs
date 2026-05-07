@@ -1,7 +1,10 @@
 use log::{info, warn};
 use tokio::sync::mpsc;
-use wayland_client::{Connection, Dispatch, QueueHandle, globals::{GlobalListContents, registry_queue_init}};
 use wayland_client::protocol::{wl_registry, wl_seat};
+use wayland_client::{
+    Connection, Dispatch, QueueHandle,
+    globals::{GlobalListContents, registry_queue_init},
+};
 use wayland_protocols::ext::idle_notify::v1::client::{
     ext_idle_notification_v1::{self, ExtIdleNotificationV1},
     ext_idle_notifier_v1::ExtIdleNotifierV1,
@@ -48,7 +51,8 @@ impl Dispatch<wl_registry::WlRegistry, GlobalListContents> for IdleState {
         _data: &GlobalListContents,
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
-    ) {}
+    ) {
+    }
 }
 
 impl Dispatch<wl_seat::WlSeat, ()> for IdleState {
@@ -59,7 +63,8 @@ impl Dispatch<wl_seat::WlSeat, ()> for IdleState {
         _data: &(),
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
-    ) {}
+    ) {
+    }
 }
 
 impl Dispatch<ExtIdleNotifierV1, ()> for IdleState {
@@ -70,7 +75,8 @@ impl Dispatch<ExtIdleNotifierV1, ()> for IdleState {
         _data: &(),
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
-    ) {}
+    ) {
+    }
 }
 
 pub fn create_idle_watcher(timeout_ms: u32) -> Option<mpsc::Receiver<IdleEvent>> {
@@ -101,7 +107,8 @@ pub fn create_idle_watcher(timeout_ms: u32) -> Option<mpsc::Receiver<IdleEvent>>
         }
     };
 
-    let notifier: ExtIdleNotifierV1 = match globals.bind::<ExtIdleNotifierV1, _, _>(&qh, 1..=2, ()) {
+    let notifier: ExtIdleNotifierV1 = match globals.bind::<ExtIdleNotifierV1, _, _>(&qh, 1..=2, ())
+    {
         Ok(n) => n,
         Err(e) => {
             warn!("[idle-notify] ext_idle_notifier_v1 not available: {e}");
@@ -116,10 +123,12 @@ pub fn create_idle_watcher(timeout_ms: u32) -> Option<mpsc::Receiver<IdleEvent>>
         _notification: Some(notification),
     };
 
-    std::thread::spawn(move || loop {
-        if let Err(e) = event_queue.blocking_dispatch(&mut state) {
-            warn!("[idle-notify] Dispatch stopped: {e}");
-            break;
+    std::thread::spawn(move || {
+        loop {
+            if let Err(e) = event_queue.blocking_dispatch(&mut state) {
+                warn!("[idle-notify] Dispatch stopped: {e}");
+                break;
+            }
         }
     });
 

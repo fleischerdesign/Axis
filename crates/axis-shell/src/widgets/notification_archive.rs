@@ -1,8 +1,10 @@
-use gtk4::prelude::*;
-use axis_domain::models::notifications::NotificationStatus;
-use crate::widgets::notification_card::{NotificationCard, format_time, CloseCallback, ActionCallback};
-use axis_presentation::View;
 use crate::presentation::notifications::NotificationPopupAware;
+use crate::widgets::notification_card::{
+    ActionCallback, CloseCallback, NotificationCard, format_time,
+};
+use axis_domain::models::notifications::NotificationStatus;
+use axis_presentation::View;
+use gtk4::prelude::*;
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 
@@ -18,10 +20,7 @@ pub struct NotificationArchive {
 }
 
 impl NotificationArchive {
-    pub fn new(
-        on_close: CloseCallback,
-        on_action: ActionCallback,
-    ) -> Self {
+    pub fn new(on_close: CloseCallback, on_action: ActionCallback) -> Self {
         let container = gtk4::Revealer::builder()
             .transition_type(gtk4::RevealerTransitionType::SlideUp)
             .transition_duration(250)
@@ -63,10 +62,10 @@ impl NotificationArchive {
     }
 
     fn cleanup_timer(&self) {
-        if self.time_data.borrow().is_empty() {
-            if let Some(src) = self.refresh_timer.borrow_mut().take() {
-                src.remove();
-            }
+        if self.time_data.borrow().is_empty()
+            && let Some(src) = self.refresh_timer.borrow_mut().take()
+        {
+            src.remove();
         }
     }
 }
@@ -99,9 +98,12 @@ impl View<NotificationStatus> for NotificationArchive {
                 self.cleanup_timer();
                 revealer.set_reveal_child(false);
                 let lb = self.list_box.clone();
-                gtk4::glib::timeout_add_local_once(std::time::Duration::from_millis(260), move || {
-                    lb.remove(&revealer);
-                });
+                gtk4::glib::timeout_add_local_once(
+                    std::time::Duration::from_millis(260),
+                    move || {
+                        lb.remove(&revealer);
+                    },
+                );
             }
         }
 
@@ -110,12 +112,8 @@ impl View<NotificationStatus> for NotificationArchive {
         }
 
         for n in &status.notifications {
-            if !active_items.contains_key(&n.id) {
-                let card = NotificationCard::new(
-                    n,
-                    self.on_close.clone(),
-                    self.on_action.clone(),
-                );
+            if let std::collections::hash_map::Entry::Vacant(e) = active_items.entry(n.id) {
+                let card = NotificationCard::new(n, self.on_close.clone(), self.on_action.clone());
 
                 if card.timestamp > 0 {
                     self.time_data
@@ -132,11 +130,14 @@ impl View<NotificationStatus> for NotificationArchive {
                 revealer.set_child(Some(&card.container));
                 self.list_box.append(&revealer);
 
-                active_items.insert(n.id, revealer.clone());
+                e.insert(revealer.clone());
 
-                gtk4::glib::timeout_add_local_once(std::time::Duration::from_millis(10), move || {
-                    revealer.set_reveal_child(true);
-                });
+                gtk4::glib::timeout_add_local_once(
+                    std::time::Duration::from_millis(10),
+                    move || {
+                        revealer.set_reveal_child(true);
+                    },
+                );
             }
         }
 

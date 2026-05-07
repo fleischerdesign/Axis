@@ -1,8 +1,8 @@
-use std::sync::Arc;
 use axis_application::use_cases::generic::SubscribeUseCase;
 use axis_domain::models::clock::ClockStatus;
 use axis_domain::ports::clock::ClockProvider;
 use axis_presentation::{Presenter, View};
+use std::sync::Arc;
 
 pub struct ClockPresenter {
     inner: Presenter<ClockStatus>,

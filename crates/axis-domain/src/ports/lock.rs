@@ -1,7 +1,7 @@
+use super::StatusStream;
 use crate::models::lock::LockStatus;
 use async_trait::async_trait;
 use thiserror::Error;
-use super::StatusStream;
 
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum LockError {

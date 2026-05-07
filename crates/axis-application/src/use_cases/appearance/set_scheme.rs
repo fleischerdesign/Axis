@@ -1,7 +1,7 @@
 use axis_domain::models::appearance::ColorScheme;
 use axis_domain::ports::appearance::{AppearanceError, AppearanceProvider};
-use std::sync::Arc;
 use log::info;
+use std::sync::Arc;
 
 pub struct SetColorSchemeUseCase {
     provider: Arc<dyn AppearanceProvider>,

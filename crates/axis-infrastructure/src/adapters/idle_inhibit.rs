@@ -58,7 +58,9 @@ impl ConfigIdleInhibitProvider {
 #[async_trait]
 impl IdleInhibitProvider for ConfigIdleInhibitProvider {
     async fn get_status(&self) -> Result<IdleInhibitStatus, IdleInhibitError> {
-        let config = self.config_provider.get()
+        let config = self
+            .config_provider
+            .get()
             .map_err(|e| IdleInhibitError::ProviderError(e.to_string()))?;
         Ok(Self::config_to_status(&config))
     }

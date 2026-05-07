@@ -1,9 +1,9 @@
+use crate::presentation::audio::{AudioPresenter, audio_icon};
+use crate::widgets::components::popup_header::PopupHeader;
+use axis_domain::models::audio::{AudioDevice, AudioStatus};
+use axis_presentation::View;
 use gtk4::prelude::*;
 use libadwaita::prelude::*;
-use axis_domain::models::audio::{AudioStatus, AudioDevice};
-use crate::presentation::audio::{AudioPresenter, audio_icon};
-use axis_presentation::View;
-use crate::widgets::components::popup_header::PopupHeader;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
@@ -120,7 +120,9 @@ impl AudioPage {
         let sink_user_c = sink_user_selecting.clone();
         let sink_ids_sel = sink_ids.clone();
         sink_combo.connect_selected_notify(move |combo| {
-            if !sink_user_c.get() { return; }
+            if !sink_user_c.get() {
+                return;
+            }
             let idx = combo.selected() as usize;
             if let Some(&id) = sink_ids_sel.borrow().get(idx) {
                 pres_sink.set_default_sink(id);
@@ -131,7 +133,9 @@ impl AudioPage {
         let source_user_c = source_user_selecting.clone();
         let source_ids_sel = source_ids.clone();
         source_combo.connect_selected_notify(move |combo| {
-            if !source_user_c.get() { return; }
+            if !source_user_c.get() {
+                return;
+            }
             let idx = combo.selected() as usize;
             if let Some(&id) = source_ids_sel.borrow().get(idx) {
                 pres_source.set_default_source(id);
@@ -167,8 +171,18 @@ impl View<AudioStatus> for AudioPageView {
         let icon_name = audio_icon(status).to_string();
         self.master_icon.set_icon_name(Some(&icon_name));
 
-        self.update_combo(&self.sink_model, &self.sink_combo, &status.sinks, &self.sink_user_selecting);
-        self.update_combo(&self.source_model, &self.source_combo, &status.sources, &self.source_user_selecting);
+        self.update_combo(
+            &self.sink_model,
+            &self.sink_combo,
+            &status.sinks,
+            &self.sink_user_selecting,
+        );
+        self.update_combo(
+            &self.source_model,
+            &self.source_combo,
+            &status.sources,
+            &self.source_user_selecting,
+        );
 
         *self.sink_ids.borrow_mut() = status.sinks.iter().map(|s| s.id).collect();
         *self.source_ids.borrow_mut() = status.sources.iter().map(|s| s.id).collect();
@@ -185,7 +199,9 @@ impl View<AudioStatus> for AudioPageView {
 
         self.empty_box.set_visible(false);
 
-        if self.is_rebuilding.get() { return; }
+        if self.is_rebuilding.get() {
+            return;
+        }
         self.is_rebuilding.set(true);
 
         while let Some(child) = self.app_list.first_child() {
@@ -246,13 +262,12 @@ impl AudioPageView {
                 combo.set_selected(idx as u32);
             }
             user_selecting.set(true);
-        } else if let Some(idx) = default_idx {
-            if combo.selected() != idx as u32 {
-                user_selecting.set(false);
-                combo.set_selected(idx as u32);
-                user_selecting.set(true);
-            }
+        } else if let Some(idx) = default_idx
+            && combo.selected() != idx as u32
+        {
+            user_selecting.set(false);
+            combo.set_selected(idx as u32);
+            user_selecting.set(true);
         }
     }
 }
-

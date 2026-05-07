@@ -1,11 +1,17 @@
-use libadwaita::prelude::*;
-use axis_presentation::View;
 use axis_domain::models::bluetooth::BluetoothStatus;
+use axis_presentation::View;
+use libadwaita::prelude::*;
 
 #[derive(Clone)]
 pub struct BluetoothStatusWidget {
     pub container: gtk4::Box,
     icon: gtk4::Image,
+}
+
+impl Default for BluetoothStatusWidget {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl BluetoothStatusWidget {

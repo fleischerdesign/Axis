@@ -3,7 +3,7 @@ use std::pin::Pin;
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
-use async_channel::{bounded, Receiver, Sender};
+use async_channel::{Receiver, Sender, bounded};
 use axis_domain::models::continuity::{
     ActiveConnectionInfo, ContinuityStatus, InputEvent, Message, PeerArrangement, PeerConfig,
     PendingPin, ReconnectState, SharingState, Side,
@@ -44,6 +44,27 @@ pub enum ContinuityCmd {
     SwitchToReceiving(Side),
 }
 
+struct CmdContext<'a> {
+    discovery: &'a mut AvahiDiscovery,
+    connection: &'a mut TcpConnectionProvider,
+    clipboard: &'a mut WaylandClipboard,
+    injection: &'a mut WaylandInjection,
+    capture: &'a mut EvdevCapture,
+    discovery_tx: &'a Sender<DiscoveryEvent>,
+    conn_tx: &'a Sender<ConnectionEvent>,
+    clipboard_tx: &'a Sender<ClipboardEvent>,
+    input_tx: &'a Sender<InternalInputEvent>,
+}
+
+struct ConfigSyncArgs {
+    arrangement: Side,
+    offset: i32,
+    clipboard: bool,
+    audio: bool,
+    drag_drop: bool,
+    version: u64,
+}
+
 pub struct ContinuityInner {
     status_tx: tokio::sync::watch::Sender<ContinuityStatus>,
     status: ContinuityStatus,
@@ -66,7 +87,9 @@ impl ContinuityInner {
             ..ContinuityStatus::default()
         };
         for (id, known_peer) in &known_peers.peers {
-            status.peer_configs.insert(id.clone(), known_peer.to_peer_config());
+            status
+                .peer_configs
+                .insert(id.clone(), known_peer.to_peer_config());
         }
         Self {
             status_tx,
@@ -84,8 +107,7 @@ impl ContinuityInner {
 
     fn push(&self) {
         let mut status = self.status.clone();
-        if let (Some(conn), Some(started)) = (&mut status.active_connection, &self.connected_at)
-        {
+        if let (Some(conn), Some(started)) = (&mut status.active_connection, &self.connected_at) {
             conn.connected_secs = started.elapsed().as_secs();
         }
         let _ = self.status_tx.send(status);
@@ -97,7 +119,7 @@ impl ContinuityInner {
             .peer_configs
             .iter()
             .filter(|(_, c)| c.trusted)
-            .filter_map(|(id, config)| {
+            .map(|(id, config)| {
                 let existing = self.known_peers.peers.get(id);
                 let (device_name, hostname, address, address_v6) = existing
                     .map(|kp| {
@@ -122,23 +144,21 @@ impl ContinuityInner {
                                 )
                             })
                     })
-                    .unwrap_or_else(|| {
-                        (String::new(), String::new(), String::new(), None)
-                    });
+                    .unwrap_or_else(|| (String::new(), String::new(), String::new(), None));
 
-                let (arrangement_side, arrangement_x, arrangement_y) =
-                    match config.arrangement.side {
-                        Side::Left | Side::Right => (
-                            KnownPeerArrangementSide::from(config.arrangement.side),
-                            0,
-                            config.arrangement.offset,
-                        ),
-                        Side::Top | Side::Bottom => (
-                            KnownPeerArrangementSide::from(config.arrangement.side),
-                            config.arrangement.offset,
-                            0,
-                        ),
-                    };
+                let (arrangement_side, arrangement_x, arrangement_y) = match config.arrangement.side
+                {
+                    Side::Left | Side::Right => (
+                        KnownPeerArrangementSide::from(config.arrangement.side),
+                        0,
+                        config.arrangement.offset,
+                    ),
+                    Side::Top | Side::Bottom => (
+                        KnownPeerArrangementSide::from(config.arrangement.side),
+                        config.arrangement.offset,
+                        0,
+                    ),
+                };
 
                 let known_peer = KnownPeer {
                     device_id: id.clone(),
@@ -154,7 +174,7 @@ impl ContinuityInner {
                     arrangement_x,
                     arrangement_y,
                 };
-                Some((id.clone(), known_peer))
+                (id.clone(), known_peer)
             })
             .collect();
 
@@ -185,7 +205,7 @@ impl ContinuityInner {
 
     pub async fn run(&mut self, cmd_rx: Receiver<ContinuityCmd>) {
         use tokio::select;
-        use tokio::time::{interval, Duration};
+        use tokio::time::{Duration, interval};
 
         let (discovery_tx, discovery_rx) = bounded::<DiscoveryEvent>(32);
         let (conn_tx, conn_rx) = bounded::<ConnectionEvent>(64);
@@ -202,35 +222,32 @@ impl ContinuityInner {
         let mut heartbeat = interval(Duration::from_secs(HEARTBEAT_INTERVAL_SECS));
         let mut reconnect_sleep: Option<Pin<Box<tokio::time::Sleep>>> = None;
 
-        if let Ok(mut sock) = niri_ipc::socket::Socket::connect() {
-            if let Ok(Ok(niri_ipc::Response::Outputs(outputs))) =
+        if let Ok(mut sock) = niri_ipc::socket::Socket::connect()
+            && let Ok(Ok(niri_ipc::Response::Outputs(outputs))) =
                 sock.send(niri_ipc::Request::Outputs)
-            {
-                let mut best: Option<(i32, i32)> = None;
-                let mut best_area: u64 = 0;
-                for output in outputs.values() {
-                    if let Some(logical) = &output.logical {
-                        let w = logical.width as i32;
-                        let h = logical.height as i32;
-                        let covers_origin = logical.x <= 0
-                            && logical.y <= 0
-                            && logical.x + w > 0
-                            && logical.y + h > 0;
-                        let area = (w as u64) * (h as u64);
-                        if covers_origin || area > best_area {
-                            best = Some((w, h));
-                            best_area = area;
-                        }
+        {
+            let mut best: Option<(i32, i32)> = None;
+            let mut best_area: u64 = 0;
+            for output in outputs.values() {
+                if let Some(logical) = &output.logical {
+                    let w = logical.width as i32;
+                    let h = logical.height as i32;
+                    let covers_origin =
+                        logical.x <= 0 && logical.y <= 0 && logical.x + w > 0 && logical.y + h > 0;
+                    let area = (w as u64) * (h as u64);
+                    if covers_origin || area > best_area {
+                        best = Some((w, h));
+                        best_area = area;
                     }
                 }
-                if let Some((w, h)) = best {
-                    info!(
-                        "[continuity] detected primary output: {}x{} (logical)",
-                        w, h
-                    );
-                    self.status.screen_width = w;
-                    self.status.screen_height = h;
-                }
+            }
+            if let Some((w, h)) = best {
+                info!(
+                    "[continuity] detected primary output: {}x{} (logical)",
+                    w, h
+                );
+                self.status.screen_width = w;
+                self.status.screen_height = h;
             }
         }
 
@@ -244,44 +261,46 @@ impl ContinuityInner {
 
             select! {
                 Ok(cmd) = cmd_rx.recv() => {
-                    self.handle_cmd(
-                        cmd,
-                        &mut discovery,
-                        &mut connection,
-                        &mut clipboard,
-                        &mut injection,
-                        &mut capture,
-                        &discovery_tx,
-                        &conn_tx,
-                        &clipboard_tx,
-                    ).await;
+                    self.handle_cmd(cmd, &mut CmdContext {
+                        discovery: &mut discovery,
+                        connection: &mut connection,
+                        clipboard: &mut clipboard,
+                        injection: &mut injection,
+                        capture: &mut capture,
+                        discovery_tx: &discovery_tx,
+                        conn_tx: &conn_tx,
+                        clipboard_tx: &clipboard_tx,
+                        input_tx: &input_tx,
+                    }).await;
                 }
                 Ok(cmd) = switch_rx.recv() => {
-                    self.handle_cmd(
-                        cmd,
-                        &mut discovery,
-                        &mut connection,
-                        &mut clipboard,
-                        &mut injection,
-                        &mut capture,
-                        &discovery_tx,
-                        &conn_tx,
-                        &clipboard_tx,
-                    ).await;
+                    self.handle_cmd(cmd, &mut CmdContext {
+                        discovery: &mut discovery,
+                        connection: &mut connection,
+                        clipboard: &mut clipboard,
+                        injection: &mut injection,
+                        capture: &mut capture,
+                        discovery_tx: &discovery_tx,
+                        conn_tx: &conn_tx,
+                        clipboard_tx: &clipboard_tx,
+                        input_tx: &input_tx,
+                    }).await;
                 }
                 Ok(event) = discovery_rx.recv() => {
                     self.handle_discovery_event(event).await;
                 }
                 Ok(event) = conn_rx.recv() => {
-                    let new_sleep = self.handle_connection_event(
-                        event,
-                        &mut connection,
-                        &mut clipboard,
-                        &mut injection,
-                        &mut capture,
-                        &clipboard_tx,
-                        &input_tx,
-                    ).await;
+                    let new_sleep = self.handle_connection_event(event, &mut CmdContext {
+                        discovery: &mut discovery,
+                        connection: &mut connection,
+                        clipboard: &mut clipboard,
+                        injection: &mut injection,
+                        capture: &mut capture,
+                        discovery_tx: &discovery_tx,
+                        conn_tx: &conn_tx,
+                        clipboard_tx: &clipboard_tx,
+                        input_tx: &input_tx,
+                    }).await;
                     if let Some(sleep) = new_sleep {
                         reconnect_sleep = Some(sleep);
                     }
@@ -302,72 +321,75 @@ impl ContinuityInner {
         }
     }
 
-    async fn handle_cmd(
-        &mut self,
-        cmd: ContinuityCmd,
-        discovery: &mut AvahiDiscovery,
-        connection: &mut TcpConnectionProvider,
-        clipboard: &mut WaylandClipboard,
-        injection: &mut WaylandInjection,
-        capture: &mut EvdevCapture,
-        discovery_tx: &Sender<DiscoveryEvent>,
-        conn_tx: &Sender<ConnectionEvent>,
-        clipboard_tx: &Sender<ClipboardEvent>,
-    ) {
+    async fn handle_cmd(&mut self, cmd: ContinuityCmd, ctx: &mut CmdContext<'_>) {
         match cmd {
             ContinuityCmd::SetEnabled(on) => {
-                self.handle_set_enabled(
-                    on, discovery, connection, clipboard, injection, capture,
-                    discovery_tx, conn_tx,
+                self.handle_set_enabled(on, ctx).await;
+            }
+            ContinuityCmd::ConnectToPeer(peer_id) => {
+                self.handle_connect_to_peer(
+                    &peer_id,
+                    ctx.connection,
+                    ctx.discovery_tx,
+                    ctx.conn_tx,
                 )
                 .await;
             }
-            ContinuityCmd::ConnectToPeer(peer_id) => {
-                self.handle_connect_to_peer(&peer_id, connection, discovery_tx, conn_tx)
-                    .await;
-            }
             ContinuityCmd::ConfirmPin => {
-                self.handle_confirm_pin(connection, clipboard, injection, capture, clipboard_tx)
-                    .await;
+                self.handle_confirm_pin(
+                    ctx.connection,
+                    ctx.clipboard,
+                    ctx.injection,
+                    ctx.capture,
+                    ctx.clipboard_tx,
+                )
+                .await;
             }
             ContinuityCmd::RejectPin => {
-                self.handle_reject_pin(connection, clipboard, injection, capture)
+                self.handle_reject_pin(ctx.connection, ctx.clipboard, ctx.injection, ctx.capture)
                     .await;
             }
             ContinuityCmd::Disconnect => {
-                self.handle_disconnect(connection, clipboard, injection, capture)
+                self.handle_disconnect(ctx.connection, ctx.clipboard, ctx.injection, ctx.capture)
                     .await;
             }
             ContinuityCmd::CancelReconnect => {
                 self.handle_cancel_reconnect().await;
             }
             ContinuityCmd::Unpair(peer_id) => {
-                self.handle_unpair(&peer_id, connection, clipboard, injection, capture)
-                    .await;
+                self.handle_unpair(
+                    &peer_id,
+                    ctx.connection,
+                    ctx.clipboard,
+                    ctx.injection,
+                    ctx.capture,
+                )
+                .await;
             }
             ContinuityCmd::ForceLocal => {
-                self.handle_force_local(capture, connection).await;
+                self.handle_force_local(ctx.capture, ctx.connection).await;
             }
             ContinuityCmd::StartSharing(side, local_edge_pos) => {
-                self.handle_start_sharing(side, local_edge_pos, connection)
+                self.handle_start_sharing(side, local_edge_pos, ctx.connection)
                     .await;
             }
             ContinuityCmd::StopSharing(edge_pos) => {
-                self.handle_stop_sharing(edge_pos, connection, capture)
+                self.handle_stop_sharing(edge_pos, ctx.connection, ctx.capture)
                     .await;
             }
             ContinuityCmd::SendInput(event) => {
-                self.handle_send_input(&event, connection, capture).await;
+                self.handle_send_input(&event, ctx.connection, ctx.capture)
+                    .await;
             }
             ContinuityCmd::SetPeerArrangement(arrangement) => {
-                self.handle_set_peer_arrangement(arrangement, connection)
+                self.handle_set_peer_arrangement(arrangement, ctx.connection)
                     .await;
             }
             ContinuityCmd::UpdatePeerConfigs(configs) => {
                 self.handle_update_peer_configs(configs).await;
             }
             ContinuityCmd::SwitchToReceiving(side) => {
-                self.handle_switch_to_receiving(side, connection, injection)
+                self.handle_switch_to_receiving(side, ctx.connection, ctx.injection)
                     .await;
             }
         }
@@ -375,39 +397,32 @@ impl ContinuityInner {
 
     // ── cmd handlers ────────────────────────────────────────────────────
 
-    async fn handle_set_enabled(
-        &mut self,
-        on: bool,
-        discovery: &mut AvahiDiscovery,
-        connection: &mut TcpConnectionProvider,
-        clipboard: &mut WaylandClipboard,
-        injection: &mut WaylandInjection,
-        capture: &mut EvdevCapture,
-        discovery_tx: &Sender<DiscoveryEvent>,
-        conn_tx: &Sender<ConnectionEvent>,
-    ) {
+    async fn handle_set_enabled(&mut self, on: bool, ctx: &mut CmdContext<'_>) {
         if self.status.enabled == on {
             return;
         }
         self.status.enabled = on;
         if on {
             info!("[continuity] enabled");
-            if let Err(e) = discovery.register(&self.status.device_name, CONTINUITY_PORT) {
+            if let Err(e) = ctx
+                .discovery
+                .register(&self.status.device_name, CONTINUITY_PORT)
+            {
                 error!("[continuity] discovery register failed: {e}");
             }
-            if let Err(e) = discovery.browse(discovery_tx.clone()) {
+            if let Err(e) = ctx.discovery.browse(ctx.discovery_tx.clone()) {
                 error!("[continuity] discovery browse failed: {e}");
             }
-            if let Err(e) = connection.listen(CONTINUITY_PORT, conn_tx.clone()) {
+            if let Err(e) = ctx.connection.listen(CONTINUITY_PORT, ctx.conn_tx.clone()) {
                 error!("[continuity] listen failed: {e}");
             }
         } else {
             info!("[continuity] disabled");
-            discovery.stop();
-            connection.stop();
-            clipboard.stop_monitoring();
-            injection.stop();
-            capture.stop();
+            ctx.discovery.stop();
+            ctx.connection.stop();
+            ctx.clipboard.stop_monitoring();
+            ctx.injection.stop();
+            ctx.capture.stop();
             self.status.peers.clear();
             self.status.active_connection = None;
             self.connected_at = None;
@@ -426,12 +441,7 @@ impl ContinuityInner {
         _discovery_tx: &Sender<DiscoveryEvent>,
         conn_tx: &Sender<ConnectionEvent>,
     ) {
-        if let Some(peer) = self
-            .status
-            .peers
-            .iter()
-            .find(|p| p.device_id == peer_id)
-        {
+        if let Some(peer) = self.status.peers.iter().find(|p| p.device_id == peer_id) {
             let name = peer.device_name.clone();
             let addr_v4 = peer.address;
             let addr_v6 = peer.address_v6;
@@ -726,18 +736,13 @@ impl ContinuityInner {
     ) {
         if let Some(conn) = &self.status.active_connection {
             let peer_id = conn.peer_id.clone();
-            let config = self
-                .status
-                .peer_configs
-                .entry(peer_id.clone())
-                .or_default();
+            let config = self.status.peer_configs.entry(peer_id.clone()).or_default();
             config.arrangement = arrangement;
             config.version += 1;
             let version = config.version;
 
             if let Some(known) = self.known_peers.peers.get_mut(&peer_id) {
-                known.arrangement_side =
-                    KnownPeerArrangementSide::from(arrangement.side);
+                known.arrangement_side = KnownPeerArrangementSide::from(arrangement.side);
                 match arrangement.side {
                     Side::Left | Side::Right => {
                         known.arrangement_y = arrangement.offset;
@@ -766,16 +771,12 @@ impl ContinuityInner {
         self.push();
     }
 
-    async fn handle_update_peer_configs(
-        &mut self,
-        configs: HashMap<String, PeerConfig>,
-    ) {
+    async fn handle_update_peer_configs(&mut self, configs: HashMap<String, PeerConfig>) {
         let mut changed = false;
         for (id, config) in configs {
             let entry = self.status.peer_configs.entry(id.clone()).or_default();
             if entry.version < config.version
-                || (entry.version == config.version
-                    && entry.arrangement != config.arrangement)
+                || (entry.version == config.version && entry.arrangement != config.arrangement)
             {
                 *entry = config.clone();
                 changed = true;
@@ -793,8 +794,7 @@ impl ContinuityInner {
                 known.clipboard = config.clipboard;
                 known.audio = config.audio;
                 known.drag_drop = config.drag_drop;
-                known.arrangement_side =
-                    KnownPeerArrangementSide::from(config.arrangement.side);
+                known.arrangement_side = KnownPeerArrangementSide::from(config.arrangement.side);
                 match config.arrangement.side {
                     Side::Left | Side::Right => {
                         known.arrangement_y = config.arrangement.offset;
@@ -822,8 +822,7 @@ impl ContinuityInner {
             SharingState::PendingSwitch => None,
             _ => None,
         };
-        if virtual_pos.is_some()
-            || matches!(self.status.sharing_state, SharingState::PendingSwitch)
+        if virtual_pos.is_some() || matches!(self.status.sharing_state, SharingState::PendingSwitch)
         {
             let edge_pos = match side {
                 Side::Left | Side::Right => virtual_pos.map(|v| v.1).unwrap_or(0.0),
@@ -837,9 +836,7 @@ impl ContinuityInner {
             self.status.sharing_state = SharingState::Receiving;
 
             if let Err(e) = injection.start() {
-                error!(
-                    "[continuity] failed to start injection for switch: {e}"
-                );
+                error!("[continuity] failed to start injection for switch: {e}");
             }
 
             if let Err(e) = injection.warp(
@@ -905,23 +902,19 @@ impl ContinuityInner {
         capture: &mut EvdevCapture,
     ) {
         if let Some(last) = self.last_message_at {
-            let timeout =
-                if matches!(self.status.sharing_state, SharingState::Receiving) {
-                    Duration::from_secs(5)
-                } else if matches!(
-                    &self.status.sharing_state,
-                    SharingState::Pending { .. } | SharingState::PendingSwitch
-                ) {
-                    Duration::from_secs(5)
-                } else {
-                    Duration::from_secs(CONNECTION_TIMEOUT_SECS)
-                };
+            let timeout = if matches!(
+                self.status.sharing_state,
+                SharingState::Receiving
+                    | SharingState::Pending { .. }
+                    | SharingState::PendingSwitch
+            ) {
+                Duration::from_secs(5)
+            } else {
+                Duration::from_secs(CONNECTION_TIMEOUT_SECS)
+            };
 
             if last.elapsed() > timeout {
-                warn!(
-                    "[continuity] peer timed out (no message for {:?})",
-                    timeout
-                );
+                warn!("[continuity] peer timed out (no message for {:?})", timeout);
                 connection.disconnect_active();
                 capture.stop();
                 self.status.active_connection = None;
@@ -941,10 +934,7 @@ impl ContinuityInner {
                 .map(|t| t.elapsed())
                 .unwrap_or(Duration::ZERO);
             if elapsed > Duration::from_secs(PIN_EXPIRY_SECS) {
-                warn!(
-                    "[continuity] PIN expired ({}s timeout)",
-                    PIN_EXPIRY_SECS
-                );
+                warn!("[continuity] PIN expired ({}s timeout)", PIN_EXPIRY_SECS);
                 self.status.pending_pin = None;
                 self.pin_created_at = None;
                 connection.send_message(Message::Disconnect {
@@ -965,10 +955,7 @@ impl ContinuityInner {
             ClipboardEvent::ContentChanged { content, mime_type } => {
                 if self.status.active_connection.is_some() {
                     info!("[continuity] clipboard changed, sending to peer");
-                    connection.send_message(Message::ClipboardUpdate {
-                        content,
-                        mime_type,
-                    });
+                    connection.send_message(Message::ClipboardUpdate { content, mime_type });
                 }
             }
         }
@@ -979,16 +966,11 @@ impl ContinuityInner {
     async fn handle_connection_event(
         &mut self,
         event: ConnectionEvent,
-        connection: &mut TcpConnectionProvider,
-        clipboard: &mut WaylandClipboard,
-        injection: &mut WaylandInjection,
-        capture: &mut EvdevCapture,
-        clipboard_tx: &Sender<ClipboardEvent>,
-        input_tx: &Sender<InternalInputEvent>,
+        ctx: &mut CmdContext<'_>,
     ) -> Option<Pin<Box<tokio::time::Sleep>>> {
         match event {
             ConnectionEvent::IncomingConnection { addr, write_tx } => {
-                self.handle_incoming_connection(addr, write_tx, connection)
+                self.handle_incoming_connection(addr, write_tx, ctx.connection)
                     .await;
                 None
             }
@@ -996,24 +978,15 @@ impl ContinuityInner {
             ConnectionEvent::Disconnected { reason } => {
                 self.handle_disconnected(
                     reason,
-                    connection,
-                    clipboard,
-                    injection,
-                    capture,
+                    ctx.connection,
+                    ctx.clipboard,
+                    ctx.injection,
+                    ctx.capture,
                 )
                 .await
             }
             ConnectionEvent::MessageReceived(msg) => {
-                self.handle_message_received(
-                    msg,
-                    connection,
-                    clipboard,
-                    injection,
-                    capture,
-                    clipboard_tx,
-                    input_tx,
-                )
-                .await;
+                self.handle_message_received(msg, ctx).await;
                 None
             }
             ConnectionEvent::Error(e) => {
@@ -1071,16 +1044,7 @@ impl ContinuityInner {
         reconnect_sleep
     }
 
-    async fn handle_message_received(
-        &mut self,
-        msg: Message,
-        connection: &mut TcpConnectionProvider,
-        clipboard: &mut WaylandClipboard,
-        injection: &mut WaylandInjection,
-        capture: &mut EvdevCapture,
-        clipboard_tx: &Sender<ClipboardEvent>,
-        input_tx: &Sender<InternalInputEvent>,
-    ) {
+    async fn handle_message_received(&mut self, msg: Message, ctx: &mut CmdContext<'_>) {
         self.last_message_at = Some(Instant::now());
         match msg {
             Message::Hello {
@@ -1092,9 +1056,9 @@ impl ContinuityInner {
                     device_id,
                     device_name,
                     version,
-                    connection,
-                    injection,
-                    capture,
+                    ctx.connection,
+                    ctx.injection,
+                    ctx.capture,
                 )
                 .await;
             }
@@ -1104,19 +1068,16 @@ impl ContinuityInner {
             Message::PinConfirm { pin } => {
                 self.handle_pin_confirm(
                     pin,
-                    connection,
-                    clipboard,
-                    injection,
-                    capture,
-                    clipboard_tx,
+                    ctx.connection,
+                    ctx.clipboard,
+                    ctx.injection,
+                    ctx.capture,
+                    ctx.clipboard_tx,
                 )
                 .await;
             }
-            Message::ClipboardUpdate {
-                content,
-                mime_type,
-            } => {
-                if let Err(e) = clipboard.set_content(&content, &mime_type) {
+            Message::ClipboardUpdate { content, mime_type } => {
+                if let Err(e) = ctx.clipboard.set_content(&content, &mime_type) {
                     error!("[continuity] failed to set clipboard: {e}");
                 }
             }
@@ -1125,10 +1086,10 @@ impl ContinuityInner {
             | Message::KeyRelease { .. }
             | Message::PointerButton { .. }
             | Message::PointerAxis { .. } => {
-                let _ = injection.inject(&msg);
+                let _ = ctx.injection.inject(&msg);
             }
             Message::ScreenInfo { width, height } => {
-                self.handle_screen_info(width, height, connection, capture)
+                self.handle_screen_info(width, height, ctx.connection, ctx.capture)
                     .await;
             }
             Message::ConfigSync {
@@ -1140,42 +1101,39 @@ impl ContinuityInner {
                 version,
             } => {
                 self.handle_config_sync(
-                    arrangement,
-                    offset,
-                    cb,
-                    audio,
-                    drag_drop,
-                    version,
-                    connection,
+                    ConfigSyncArgs {
+                        arrangement,
+                        offset,
+                        clipboard: cb,
+                        audio,
+                        drag_drop,
+                        version,
+                    },
+                    ctx,
                 )
                 .await;
             }
             Message::EdgeTransition { side, edge_pos } => {
-                self.handle_edge_transition(side, edge_pos, connection, injection)
+                self.handle_edge_transition(side, edge_pos, ctx.connection, ctx.injection)
                     .await;
             }
             Message::TransitionAck { accepted } => {
-                self.handle_transition_ack(
-                    accepted,
-                    connection,
-                    capture,
-                    input_tx,
-                )
-                .await;
+                self.handle_transition_ack(accepted, ctx.connection, ctx.capture, ctx.input_tx)
+                    .await;
             }
             Message::TransitionCancel => {
                 self.handle_transition_cancel().await;
             }
             Message::SwitchTransition { side, edge_pos: _ } => {
-                self.handle_switch_transition(side, connection).await;
+                self.handle_switch_transition(side, ctx.connection).await;
             }
             Message::SwitchConfirm { side, edge_pos } => {
                 self.handle_switch_confirm(
                     side,
                     edge_pos,
-                    connection,
-                    capture,
-                    input_tx,
+                    ctx.connection,
+                    ctx.capture,
+                    ctx.input_tx,
                 )
                 .await;
             }
@@ -1186,10 +1144,10 @@ impl ContinuityInner {
             Message::Disconnect { reason } => {
                 self.handle_peer_disconnect(
                     reason,
-                    connection,
-                    clipboard,
-                    injection,
-                    capture,
+                    ctx.connection,
+                    ctx.clipboard,
+                    ctx.injection,
+                    ctx.capture,
                 )
                 .await;
             }
@@ -1241,9 +1199,7 @@ impl ContinuityInner {
                 });
 
                 if let Err(e) = injection.start() {
-                    error!(
-                        "[continuity] failed to start input injection: {e}"
-                    );
+                    error!("[continuity] failed to start input injection: {e}");
                 }
                 let _ = capture.prepare();
             } else {
@@ -1267,9 +1223,7 @@ impl ContinuityInner {
                 .map(|c| c.trusted)
                 .unwrap_or(false);
             if is_trusted {
-                info!(
-                    "[continuity] trusted peer connected (incoming), skipping PIN"
-                );
+                info!("[continuity] trusted peer connected (incoming), skipping PIN");
                 self.status.active_connection = Some(ActiveConnectionInfo {
                     peer_id: device_id,
                     peer_name: device_name,
@@ -1288,16 +1242,12 @@ impl ContinuityInner {
                 });
 
                 if let Err(e) = injection.start() {
-                    error!(
-                        "[continuity] failed to start input injection: {e}"
-                    );
+                    error!("[continuity] failed to start input injection: {e}");
                 }
                 let _ = capture.prepare();
             } else {
                 let pin = format!("{:06}", rand::random_range(0..1_000_000));
-                info!(
-                    "[continuity] incoming pairing request, generating PIN: {pin}"
-                );
+                info!("[continuity] incoming pairing request, generating PIN: {pin}");
                 self.status.pending_pin = Some(PendingPin {
                     pin: pin.clone(),
                     peer_id: device_id,
@@ -1360,17 +1310,12 @@ impl ContinuityInner {
                     height: self.status.screen_height,
                 });
 
-                if let Err(e) = clipboard.start_monitoring(clipboard_tx.clone())
-                {
-                    error!(
-                        "[continuity] failed to start clipboard monitoring: {e}"
-                    );
+                if let Err(e) = clipboard.start_monitoring(clipboard_tx.clone()) {
+                    error!("[continuity] failed to start clipboard monitoring: {e}");
                 }
 
                 if let Err(e) = injection.start() {
-                    error!(
-                        "[continuity] failed to start input injection: {e}"
-                    );
+                    error!("[continuity] failed to start input injection: {e}");
                 }
 
                 self.push();
@@ -1407,39 +1352,36 @@ impl ContinuityInner {
         let _ = capture.prepare();
     }
 
-    async fn handle_config_sync(
-        &mut self,
-        arrangement: Side,
-        offset: i32,
-        clipboard: bool,
-        audio: bool,
-        drag_drop: bool,
-        version: u64,
-        _connection: &mut TcpConnectionProvider,
-    ) {
+    async fn handle_config_sync(&mut self, args: ConfigSyncArgs, _ctx: &mut CmdContext<'_>) {
         if let Some(conn) = &self.status.active_connection {
             let peer_id = conn.peer_id.clone();
             let config = self.status.peer_configs.entry(peer_id).or_default();
 
-            if version > config.version {
+            if args.version > config.version {
                 info!(
                     "[continuity] adopting newer config from peer (v{} > v{}): {:?} offset {} clipboard={} audio={} dnd={}",
-                    version, config.version, arrangement, offset, clipboard, audio, drag_drop
+                    args.version,
+                    config.version,
+                    args.arrangement,
+                    args.offset,
+                    args.clipboard,
+                    args.audio,
+                    args.drag_drop
                 );
 
                 config.arrangement = PeerArrangement {
-                    side: arrangement.opposite(),
-                    offset: -offset,
+                    side: args.arrangement.opposite(),
+                    offset: -args.offset,
                 };
-                config.clipboard = clipboard;
-                config.audio = audio;
-                config.drag_drop = drag_drop;
-                config.version = version;
+                config.clipboard = args.clipboard;
+                config.audio = args.audio;
+                config.drag_drop = args.drag_drop;
+                config.version = args.version;
                 self.push();
             } else {
                 info!(
                     "[continuity] ignoring older/same config from peer (v{} <= v{})",
-                    version, config.version
+                    args.version, config.version
                 );
             }
         }
@@ -1501,17 +1443,14 @@ impl ContinuityInner {
                     entry_side, edge_pos
                 );
                 let (rw, rh) = self.remote_screen();
-                let virtual_pos =
-                    Self::init_virtual_pos(entry_side, edge_pos, rw, rh);
+                let virtual_pos = Self::init_virtual_pos(entry_side, edge_pos, rw, rh);
                 info!(
                     "[continuity] virtual_pos initialized to ({:.0}, {:.0})",
                     virtual_pos.0, virtual_pos.1
                 );
 
                 if let Err(e) = capture.start(input_tx.clone()) {
-                    error!(
-                        "[continuity] failed to start input capture: {e}"
-                    );
+                    error!("[continuity] failed to start input capture: {e}");
                     self.status.sharing_state = SharingState::Idle;
                     connection.send_message(Message::TransitionCancel);
                 } else {
@@ -1573,17 +1512,14 @@ impl ContinuityInner {
             );
 
             let (rw, rh) = self.remote_screen();
-            let virtual_pos =
-                Self::init_virtual_pos(side, edge_pos.max(0.0), rw, rh);
+            let virtual_pos = Self::init_virtual_pos(side, edge_pos.max(0.0), rw, rh);
             info!(
                 "[continuity] virtual_pos initialized to ({:.0}, {:.0})",
                 virtual_pos.0, virtual_pos.1
             );
 
             if let Err(e) = capture.start(input_tx.clone()) {
-                error!(
-                    "[continuity] failed to start input capture after switch: {e}"
-                );
+                error!("[continuity] failed to start input capture after switch: {e}");
                 self.status.sharing_state = SharingState::Idle;
                 connection.send_message(Message::TransitionCancel);
             } else {
@@ -1720,13 +1656,12 @@ impl ContinuityInner {
         let delay_secs = reconnect.delay_secs;
         info!(
             "[continuity] scheduling reconnect for {} (attempt {}/{}, in {}s)",
-            reconnect.peer_name,
-            reconnect.attempt,
-            reconnect.max_attempts,
-            delay_secs
+            reconnect.peer_name, reconnect.attempt, reconnect.max_attempts, delay_secs
         );
 
-        Some(Box::pin(tokio::time::sleep(Duration::from_secs(delay_secs))))
+        Some(Box::pin(tokio::time::sleep(Duration::from_secs(
+            delay_secs,
+        ))))
     }
 
     fn start_reconnect(
@@ -1761,9 +1696,7 @@ impl ContinuityInner {
 
         info!(
             "[continuity] reconnect attempt {}/{} for {}",
-            reconnect.attempt,
-            reconnect.max_attempts,
-            reconnect.peer_name
+            reconnect.attempt, reconnect.max_attempts, reconnect.peer_name
         );
 
         let peer_info = self
@@ -1775,10 +1708,7 @@ impl ContinuityInner {
 
         if let Some(peer) = peer_info {
             self.is_initiating = true;
-            self.pending_peer = Some((
-                peer.device_id.clone(),
-                peer.device_name.clone(),
-            ));
+            self.pending_peer = Some((peer.device_id.clone(), peer.device_name.clone()));
 
             connection.connect_dual(
                 peer.address,
@@ -1788,8 +1718,7 @@ impl ContinuityInner {
                 self.status.device_name.clone(),
             );
 
-            let next_delay =
-                RECONNECT_BASE_DELAY_MS * 2u64.pow(reconnect.attempt - 1) / 1000;
+            let next_delay = RECONNECT_BASE_DELAY_MS * 2u64.pow(reconnect.attempt - 1) / 1000;
             if let Some(ref mut r) = self.status.reconnect {
                 r.attempt += 1;
                 r.delay_secs = next_delay;

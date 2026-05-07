@@ -21,14 +21,6 @@ pub struct CloudStatus {
     pub accounts: Vec<CloudAccount>,
 }
 
-impl Default for CloudStatus {
-    fn default() -> Self {
-        Self {
-            accounts: vec![],
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AuthStatus {
     Authenticated,

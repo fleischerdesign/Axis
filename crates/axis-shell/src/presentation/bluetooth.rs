@@ -1,12 +1,12 @@
-use std::sync::Arc;
-use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
 use axis_application::use_cases::bluetooth::connect::ConnectBluetoothDeviceUseCase;
 use axis_application::use_cases::bluetooth::disconnect::DisconnectBluetoothDeviceUseCase;
 use axis_application::use_cases::bluetooth::start_scan::StartBluetoothScanUseCase;
 use axis_application::use_cases::bluetooth::stop_scan::StopBluetoothScanUseCase;
+use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
 use axis_domain::models::bluetooth::BluetoothStatus;
 use axis_domain::ports::bluetooth::BluetoothProvider;
 use axis_presentation::{Presenter, View};
+use std::sync::Arc;
 
 pub struct BluetoothPresenter {
     inner: Presenter<BluetoothStatus>,
@@ -36,7 +36,8 @@ impl BluetoothPresenter {
             }
         });
 
-        let inner = Presenter::from_subscribe_use_case(subscribe_use_case.clone()).with_initial_status(initial_status);
+        let inner = Presenter::from_subscribe_use_case(subscribe_use_case.clone())
+            .with_initial_status(initial_status);
 
         Self {
             inner,

@@ -1,10 +1,10 @@
-use libadwaita::prelude::*;
-use libadwaita as adw;
-use std::rc::Rc;
-use std::collections::HashMap;
-use std::cell::RefCell;
 use crate::presentation::navigation::{NavigationState, NavigationView};
 use axis_presentation::View;
+use libadwaita as adw;
+use libadwaita::prelude::*;
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
 
 pub struct SettingsWindow {
     window: adw::ApplicationWindow,
@@ -22,7 +22,7 @@ impl SettingsWindow {
             .build();
 
         let nav_view = adw::NavigationView::new();
-        
+
         let sidebar_scrolled = gtk4::ScrolledWindow::builder()
             .hscrollbar_policy(gtk4::PolicyType::Never)
             .child(sidebar)
@@ -59,11 +59,13 @@ impl SettingsWindow {
 impl View<NavigationState> for SettingsWindow {
     fn render(&self, state: &NavigationState) {
         if let Some(page) = self.pages.borrow().get(&state.active_id) {
-            let current_tag = self.nav_view.visible_page()
+            let current_tag = self
+                .nav_view
+                .visible_page()
                 .and_then(|p| p.tag().map(|t| t.to_string()));
-            
+
             if current_tag.as_deref() != Some(&state.active_id) {
-                self.nav_view.replace(&[page.clone()]);
+                self.nav_view.replace(std::slice::from_ref(page));
             }
         }
     }

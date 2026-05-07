@@ -1,14 +1,14 @@
 pub mod clipboard;
-pub mod proto;
-pub mod known_peers;
-pub mod discovery;
 pub mod connection;
-pub mod input;
 pub mod dbus;
-pub mod proxy;
+pub mod discovery;
 mod inner;
+pub mod input;
+pub mod known_peers;
+pub mod proto;
+pub mod proxy;
 mod service;
 
-pub use service::ContinuityService;
-pub use proxy::ContinuityDbusProxy;
 pub use inner::ContinuityCmd;
+pub use proxy::ContinuityDbusProxy;
+pub use service::ContinuityService;

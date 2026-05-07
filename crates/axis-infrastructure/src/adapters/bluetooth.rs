@@ -1,19 +1,18 @@
-use axis_domain::models::bluetooth::{BluetoothDevice, BluetoothStatus, PairingType, PendingPairing};
-use axis_domain::ports::bluetooth::{BluetoothStream, BluetoothError, BluetoothProvider};
 use async_trait::async_trait;
+use axis_domain::models::bluetooth::{
+    BluetoothDevice, BluetoothStatus, PairingType, PendingPairing,
+};
+use axis_domain::ports::bluetooth::{BluetoothError, BluetoothProvider, BluetoothStream};
 use futures_util::StreamExt;
-use tokio::sync::{watch, mpsc, oneshot};
-use tokio_stream::wrappers::WatchStream;
-use zbus::{proxy, zvariant::OwnedObjectPath, Connection};
+use log::{info, warn};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use log::{info, warn};
+use tokio::sync::{mpsc, oneshot, watch};
+use tokio_stream::wrappers::WatchStream;
+use zbus::{Connection, proxy, zvariant::OwnedObjectPath};
 
-#[proxy(
-    interface = "org.bluez.Device1",
-    default_service = "org.bluez"
-)]
+#[proxy(interface = "org.bluez.Device1", default_service = "org.bluez")]
 trait BluetoothDevice1 {
     #[zbus(property)]
     fn name(&self) -> zbus::Result<String>;
@@ -32,10 +31,7 @@ trait BluetoothDevice1 {
     fn disconnect(&self) -> zbus::Result<()>;
 }
 
-#[proxy(
-    interface = "org.bluez.Adapter1",
-    default_service = "org.bluez"
-)]
+#[proxy(interface = "org.bluez.Adapter1", default_service = "org.bluez")]
 trait Adapter1 {
     #[zbus(property)]
     fn powered(&self) -> zbus::Result<bool>;
@@ -47,20 +43,16 @@ trait Adapter1 {
     fn remove_device(&self, device: &OwnedObjectPath) -> zbus::Result<()>;
 }
 
+type ManagedObjects =
+    HashMap<OwnedObjectPath, HashMap<String, HashMap<String, zbus::zvariant::OwnedValue>>>;
+
 #[proxy(
     interface = "org.freedesktop.DBus.ObjectManager",
     default_service = "org.bluez",
     default_path = "/"
 )]
 trait ObjectManager {
-    fn get_managed_objects(
-        &self,
-    ) -> zbus::Result<
-        HashMap<
-            OwnedObjectPath,
-            HashMap<String, HashMap<String, zbus::zvariant::OwnedValue>>,
-        >,
-    >;
+    fn get_managed_objects(&self) -> zbus::Result<ManagedObjects>;
     #[zbus(signal)]
     fn interfaces_added(
         &self,
@@ -100,13 +92,11 @@ struct BluetoothAgent {
 impl BluetoothAgent {
     async fn release(&self) {}
 
-    async fn request_pin_code(
-        &self,
-        device: OwnedObjectPath,
-    ) -> Result<String, zbus::fdo::Error> {
-        let device_name = self.resolve_device_name(&device).await.unwrap_or_else(|| {
-            device.as_str().to_string()
-        });
+    async fn request_pin_code(&self, device: OwnedObjectPath) -> Result<String, zbus::fdo::Error> {
+        let device_name = self
+            .resolve_device_name(&device)
+            .await
+            .unwrap_or_else(|| device.as_str().to_string());
         let req = PendingPairing {
             device_path: device.to_string(),
             device_name,
@@ -120,13 +110,11 @@ impl BluetoothAgent {
 
     async fn display_pin_code(&self, _device: OwnedObjectPath, _pincode: String) {}
 
-    async fn request_passkey(
-        &self,
-        device: OwnedObjectPath,
-    ) -> Result<u32, zbus::fdo::Error> {
-        let device_name = self.resolve_device_name(&device).await.unwrap_or_else(|| {
-            device.as_str().to_string()
-        });
+    async fn request_passkey(&self, device: OwnedObjectPath) -> Result<u32, zbus::fdo::Error> {
+        let device_name = self
+            .resolve_device_name(&device)
+            .await
+            .unwrap_or_else(|| device.as_str().to_string());
         let req = PendingPairing {
             device_path: device.to_string(),
             device_name,
@@ -135,7 +123,8 @@ impl BluetoothAgent {
         };
         let bytes = self.wait_for_response(req).await?;
         let s = String::from_utf8_lossy(&bytes);
-        s.parse::<u32>().map_err(|_| zbus::fdo::Error::Failed("Invalid passkey".into()))
+        s.parse::<u32>()
+            .map_err(|_| zbus::fdo::Error::Failed("Invalid passkey".into()))
     }
 
     async fn display_passkey(&self, _device: OwnedObjectPath, _passkey: u32, _entered: u16) {}
@@ -145,9 +134,10 @@ impl BluetoothAgent {
         device: OwnedObjectPath,
         passkey: u32,
     ) -> Result<(), zbus::fdo::Error> {
-        let device_name = self.resolve_device_name(&device).await.unwrap_or_else(|| {
-            device.as_str().to_string()
-        });
+        let device_name = self
+            .resolve_device_name(&device)
+            .await
+            .unwrap_or_else(|| device.as_str().to_string());
         let req = PendingPairing {
             device_path: device.to_string(),
             device_name,
@@ -179,7 +169,8 @@ impl BluetoothAgent {
 
 impl BluetoothAgent {
     async fn resolve_device_name(&self, device: &OwnedObjectPath) -> Option<String> {
-        let Ok(builder) = BluetoothDevice1Proxy::builder(&self.connection).path(device.clone()) else {
+        let Ok(builder) = BluetoothDevice1Proxy::builder(&self.connection).path(device.clone())
+        else {
             return None;
         };
         let Ok(proxy) = builder.build().await else {
@@ -192,10 +183,7 @@ impl BluetoothAgent {
         zbus::fdo::Error::Failed("Rejected".into())
     }
 
-    async fn wait_for_response(
-        &self,
-        req: PendingPairing,
-    ) -> Result<Vec<u8>, zbus::fdo::Error> {
+    async fn wait_for_response(&self, req: PendingPairing) -> Result<Vec<u8>, zbus::fdo::Error> {
         let (resp_tx, resp_rx) = oneshot::channel();
         if self.pair_tx.send((req, resp_tx)).await.is_err() {
             return Err(Self::reject());
@@ -247,7 +235,8 @@ impl BlueZProvider {
             current_pair_response: current_pair_response.clone(),
         });
 
-        let (pair_tx, mut pair_rx) = mpsc::channel::<(PendingPairing, oneshot::Sender<PairResponse>)>(4);
+        let (pair_tx, mut pair_rx) =
+            mpsc::channel::<(PendingPairing, oneshot::Sender<PairResponse>)>(4);
 
         let status_tx_p = provider.status_tx.clone();
         let cpr_p = current_pair_response.clone();
@@ -272,21 +261,24 @@ impl BlueZProvider {
         let agent_path = OwnedObjectPath::try_from("/org/axis/bluetooth_agent")
             .map_err(|e| BluetoothError::ProviderError(e.to_string()))?;
 
-        match conn_for_agent.object_server().at("/org/axis/bluetooth_agent", agent).await {
+        match conn_for_agent
+            .object_server()
+            .at("/org/axis/bluetooth_agent", agent)
+            .await
+        {
             Ok(_) => {
-        let agent_mgr = AgentManager1Proxy::builder(&conn_for_agent)
-            .path("/org/bluez");
-        if let Ok(builder) = agent_mgr {
-            if let Ok(proxy) = builder.build().await {
-                let _ = proxy.register_agent(&agent_path, "KeyboardDisplay").await;
-                let _ = proxy.request_default_agent(&agent_path).await;
-                info!("[bluetooth] BlueZ pairing agent registered");
-            } else {
-                warn!("[bluetooth] Failed to build AgentManager1 proxy");
-            }
-        } else {
-            warn!("[bluetooth] Failed to create AgentManager1 proxy builder");
-        }
+                let agent_mgr = AgentManager1Proxy::builder(&conn_for_agent).path("/org/bluez");
+                if let Ok(builder) = agent_mgr {
+                    if let Ok(proxy) = builder.build().await {
+                        let _ = proxy.register_agent(&agent_path, "KeyboardDisplay").await;
+                        let _ = proxy.request_default_agent(&agent_path).await;
+                        info!("[bluetooth] BlueZ pairing agent registered");
+                    } else {
+                        warn!("[bluetooth] Failed to build AgentManager1 proxy");
+                    }
+                } else {
+                    warn!("[bluetooth] Failed to create AgentManager1 proxy builder");
+                }
             }
             Err(e) => {
                 warn!("[bluetooth] Failed to register agent at D-Bus: {e}");
@@ -296,18 +288,25 @@ impl BlueZProvider {
         let provider_clone = provider.clone();
         tokio::spawn(async move {
             loop {
-                let (_om_proxy, mut interfaces_added, mut interfaces_removed) = crate::utils::retry_with_backoff(
-                    || async {
-                        let om = ObjectManagerProxy::new(&provider_clone.connection).await
-                            .map_err(|e| e.to_string())?;
-                        let added = om.receive_interfaces_added().await
-                            .map_err(|e| e.to_string())?;
-                        let removed = om.receive_interfaces_removed().await
-                            .map_err(|e| e.to_string())?;
-                        Ok::<_, String>((om, added, removed))
-                    },
-                    30,
-                ).await;
+                let (_om_proxy, mut interfaces_added, mut interfaces_removed) =
+                    crate::utils::retry_with_backoff(
+                        || async {
+                            let om = ObjectManagerProxy::new(&provider_clone.connection)
+                                .await
+                                .map_err(|e| e.to_string())?;
+                            let added = om
+                                .receive_interfaces_added()
+                                .await
+                                .map_err(|e| e.to_string())?;
+                            let removed = om
+                                .receive_interfaces_removed()
+                                .await
+                                .map_err(|e| e.to_string())?;
+                            Ok::<_, String>((om, added, removed))
+                        },
+                        30,
+                    )
+                    .await;
 
                 loop {
                     let alive = tokio::select! {
@@ -354,8 +353,7 @@ impl BlueZProvider {
                     log::warn!("[bluetooth] invalid adapter path: {path_str}");
                     continue;
                 };
-                if let Ok(proxy) = builder.build().await
-                {
+                if let Ok(proxy) = builder.build().await {
                     return proxy.powered().await.unwrap_or(false);
                 }
             }
@@ -363,7 +361,12 @@ impl BlueZProvider {
         false
     }
 
-    fn find_adapter_path(objects: &HashMap<OwnedObjectPath, HashMap<String, HashMap<String, zbus::zvariant::OwnedValue>>>) -> Option<OwnedObjectPath> {
+    fn find_adapter_path(
+        objects: &HashMap<
+            OwnedObjectPath,
+            HashMap<String, HashMap<String, zbus::zvariant::OwnedValue>>,
+        >,
+    ) -> Option<OwnedObjectPath> {
         for (path, interfaces) in objects {
             if interfaces.contains_key("org.bluez.Adapter1") {
                 return Some(path.clone());
@@ -398,7 +401,10 @@ impl BlueZProvider {
             let name = proxy.name().await.ok();
             let connected = proxy.connected().await.unwrap_or(false);
             let paired = proxy.paired().await.unwrap_or(false);
-            let icon = proxy.icon().await.unwrap_or_else(|_| "bluetooth-symbolic".to_string());
+            let icon = proxy
+                .icon()
+                .await
+                .unwrap_or_else(|_| "bluetooth-symbolic".to_string());
 
             devices.push(BluetoothDevice {
                 id: path.to_string(),
@@ -494,7 +500,11 @@ impl BluetoothProvider for BlueZProvider {
 
             let prev = self.status_tx.borrow().clone();
             let is_scanning = if powered { prev.is_scanning } else { false };
-            let _ = self.status_tx.send(BluetoothStatus { powered, is_scanning, ..prev });
+            let _ = self.status_tx.send(BluetoothStatus {
+                powered,
+                is_scanning,
+                ..prev
+            });
         }
         Ok(())
     }
@@ -523,7 +533,10 @@ impl BluetoothProvider for BlueZProvider {
             info!("[bluetooth] Started scan");
 
             let prev = self.status_tx.borrow().clone();
-            let _ = self.status_tx.send(BluetoothStatus { is_scanning: true, ..prev });
+            let _ = self.status_tx.send(BluetoothStatus {
+                is_scanning: true,
+                ..prev
+            });
         }
         Ok(())
     }
@@ -552,7 +565,10 @@ impl BluetoothProvider for BlueZProvider {
             info!("[bluetooth] Stopped scan");
 
             let prev = self.status_tx.borrow().clone();
-            let _ = self.status_tx.send(BluetoothStatus { is_scanning: false, ..prev });
+            let _ = self.status_tx.send(BluetoothStatus {
+                is_scanning: false,
+                ..prev
+            });
         }
         Ok(())
     }

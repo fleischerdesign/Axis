@@ -1,12 +1,12 @@
-use axis_domain::models::power::{PowerStatus, PowerProfile};
-use axis_domain::ports::power::{PowerProvider, PowerError, PowerStream};
 use async_trait::async_trait;
-use zbus::proxy;
+use axis_domain::models::power::{PowerProfile, PowerStatus};
+use axis_domain::ports::power::{PowerError, PowerProvider, PowerStream};
+use log::warn;
+use std::sync::Arc;
 use tokio::sync::watch;
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::WatchStream;
-use std::sync::Arc;
-use log::warn;
+use zbus::proxy;
 
 #[proxy(
     interface = "org.freedesktop.UPower.Device",
@@ -44,23 +44,31 @@ pub struct LogindPowerProvider {
 
 impl LogindPowerProvider {
     pub async fn new() -> Result<Arc<Self>, PowerError> {
-        let connection = zbus::Connection::system().await
+        let connection = zbus::Connection::system()
+            .await
             .map_err(|e| PowerError::ProviderError(e.to_string()))?;
 
-        let proxy = UPowerDeviceProxy::new(&connection).await
+        let proxy = UPowerDeviceProxy::new(&connection)
+            .await
             .map_err(|e| PowerError::ProviderError(e.to_string()))?;
 
-        let login1 = Login1ManagerProxy::new(&connection).await
+        let login1 = Login1ManagerProxy::new(&connection)
+            .await
             .map_err(|e| PowerError::ProviderError(e.to_string()))?;
 
         let initial_status = Self::fetch_status(&proxy).await?;
         let (tx, _) = watch::channel(initial_status);
-        let provider = Arc::new(Self { status_tx: tx, login1 });
+        let provider = Arc::new(Self {
+            status_tx: tx,
+            login1,
+        });
 
         let provider_clone = provider.clone();
         tokio::spawn(async move {
             loop {
-                let proxy = crate::utils::retry_with_backoff(|| UPowerDeviceProxy::new(&connection), 30).await;
+                let proxy =
+                    crate::utils::retry_with_backoff(|| UPowerDeviceProxy::new(&connection), 30)
+                        .await;
                 let mut changes = proxy.receive_percentage_changed().await;
                 let mut state_changes = proxy.receive_state_changed().await;
 
@@ -85,19 +93,19 @@ impl LogindPowerProvider {
     }
 
     async fn fetch_status(proxy: &UPowerDeviceProxy<'_>) -> Result<PowerStatus, PowerError> {
-        let percentage = proxy.percentage().await
+        let percentage = proxy
+            .percentage()
+            .await
             .map_err(|e| PowerError::ProviderError(e.to_string()))?;
 
-        let state = proxy.state().await
+        let state = proxy
+            .state()
+            .await
             .map_err(|e| PowerError::ProviderError(e.to_string()))?;
 
         let is_charging = state == 1 || state == 4;
 
-        let has_battery = proxy
-            .type_()
-            .await
-            .map(|t| t == 2)
-            .unwrap_or(false);
+        let has_battery = proxy.type_().await.map(|t| t == 2).unwrap_or(false);
 
         Ok(PowerStatus {
             battery_percentage: percentage,
@@ -120,17 +128,23 @@ impl PowerProvider for LogindPowerProvider {
     }
 
     async fn suspend(&self) -> Result<(), PowerError> {
-        self.login1.suspend(true).await
+        self.login1
+            .suspend(true)
+            .await
             .map_err(|e| PowerError::ProviderError(e.to_string()))
     }
 
     async fn power_off(&self) -> Result<(), PowerError> {
-        self.login1.power_off(true).await
+        self.login1
+            .power_off(true)
+            .await
             .map_err(|e| PowerError::ProviderError(e.to_string()))
     }
 
     async fn reboot(&self) -> Result<(), PowerError> {
-        self.login1.reboot(true).await
+        self.login1
+            .reboot(true)
+            .await
             .map_err(|e| PowerError::ProviderError(e.to_string()))
     }
 }

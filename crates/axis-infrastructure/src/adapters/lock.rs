@@ -1,23 +1,29 @@
-use axis_domain::models::lock::LockStatus;
-use axis_domain::ports::lock::{LockProvider, LockError, LockStream};
-use axis_domain::ports::idle_inhibit::IdleInhibitProvider;
-use axis_domain::ports::config::ConfigProvider;
 use async_trait::async_trait;
+use axis_domain::models::lock::LockStatus;
+use axis_domain::ports::config::ConfigProvider;
+use axis_domain::ports::idle_inhibit::IdleInhibitProvider;
+use axis_domain::ports::lock::{LockError, LockProvider, LockStream};
 use gtk4::prelude::*;
 use gtk4_session_lock as session_lock;
 use log::{error, info, warn};
-use tokio::sync::{watch, mpsc, oneshot};
-use tokio::time::Duration;
-use tokio::task::JoinHandle;
-use tokio_stream::wrappers::WatchStream;
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
+use tokio::sync::{mpsc, oneshot, watch};
+use tokio::task::JoinHandle;
+use tokio::time::Duration;
+use tokio_stream::wrappers::WatchStream;
 
 enum LockCommand {
     Lock(oneshot::Sender<Result<(), LockError>>),
     Unlock(oneshot::Sender<Result<(), LockError>>),
-    Authenticate { password: String, reply: oneshot::Sender<Result<bool, LockError>> },
+    Authenticate {
+        password: String,
+        reply: oneshot::Sender<Result<bool, LockError>>,
+    },
 }
 
 pub struct SessionLockProvider {
@@ -68,7 +74,9 @@ impl SessionLockProvider {
             content_factory: None,
         }));
 
-        let handle = LockGtkHandle { inner: inner.clone() };
+        let handle = LockGtkHandle {
+            inner: inner.clone(),
+        };
 
         gtk4::glib::idle_add_local_once(move || {
             let supported = session_lock::is_supported();
@@ -99,7 +107,8 @@ impl SessionLockProvider {
                 idle_lock_timeout_seconds,
                 idle_blank_timeout_seconds,
                 idle_sleep_timeout_seconds,
-            ).await;
+            )
+            .await;
         });
 
         (provider, handle)
@@ -118,23 +127,35 @@ impl LockProvider for SessionLockProvider {
 
     async fn lock(&self) -> Result<(), LockError> {
         let (tx, rx) = oneshot::channel();
-        self.cmd_tx.send(LockCommand::Lock(tx)).await
+        self.cmd_tx
+            .send(LockCommand::Lock(tx))
+            .await
             .map_err(|e| LockError::ProviderError(e.to_string()))?;
-        rx.await.map_err(|e| LockError::ProviderError(e.to_string()))?
+        rx.await
+            .map_err(|e| LockError::ProviderError(e.to_string()))?
     }
 
     async fn unlock(&self) -> Result<(), LockError> {
         let (tx, rx) = oneshot::channel();
-        self.cmd_tx.send(LockCommand::Unlock(tx)).await
+        self.cmd_tx
+            .send(LockCommand::Unlock(tx))
+            .await
             .map_err(|e| LockError::ProviderError(e.to_string()))?;
-        rx.await.map_err(|e| LockError::ProviderError(e.to_string()))?
+        rx.await
+            .map_err(|e| LockError::ProviderError(e.to_string()))?
     }
 
     async fn authenticate(&self, password: &str) -> Result<bool, LockError> {
         let (tx, rx) = oneshot::channel();
-        self.cmd_tx.send(LockCommand::Authenticate { password: password.to_string(), reply: tx }).await
+        self.cmd_tx
+            .send(LockCommand::Authenticate {
+                password: password.to_string(),
+                reply: tx,
+            })
+            .await
             .map_err(|e| LockError::ProviderError(e.to_string()))?;
-        rx.await.map_err(|e| LockError::ProviderError(e.to_string()))?
+        rx.await
+            .map_err(|e| LockError::ProviderError(e.to_string()))?
     }
 
     async fn subscribe(&self) -> Result<LockStream, LockError> {
@@ -215,7 +236,9 @@ impl LockAdapterInner {
 
         if !instance.lock() {
             error!("[lock] Failed to acquire lock (immediate failure)");
-            return Err(LockError::ProviderError("Failed to acquire lock".to_string()));
+            return Err(LockError::ProviderError(
+                "Failed to acquire lock".to_string(),
+            ));
         }
 
         let Some(display) = gtk4::gdk::Display::default() else {
@@ -227,14 +250,16 @@ impl LockAdapterInner {
             let mut borrowed = adapter.borrow_mut();
             borrowed.windows.clear();
             for i in 0..monitors.n_items() {
-                let Some(monitor_obj) = monitors.item(i) else { continue };
-                let Some(monitor) = monitor_obj.downcast_ref::<gtk4::gdk::Monitor>() else { continue };
+                let Some(monitor_obj) = monitors.item(i) else {
+                    continue;
+                };
+                let Some(monitor) = monitor_obj.downcast_ref::<gtk4::gdk::Monitor>() else {
+                    continue;
+                };
 
                 let content = borrowed.content_factory.as_ref().map(|f| f());
 
-                let window = gtk4::Window::builder()
-                    .title("Lock Screen")
-                    .build();
+                let window = gtk4::Window::builder().title("Lock Screen").build();
 
                 if let Some(content) = content {
                     window.set_child(Some(&content));
@@ -399,8 +424,8 @@ async fn listen_logind_signals(
         if let Some(ref mut lock_stream) = lock_stream_opt {
             tokio::select! {
                 Some(msg) = sleep_stream.next() => {
-                    if let Ok(sleeping) = msg.body().deserialize::<bool>() {
-                        if sleeping && !status_tx.borrow().is_locked {
+                    if let Ok(sleeping) = msg.body().deserialize::<bool>()
+                        && sleeping && !status_tx.borrow().is_locked {
                             if is_inhibited(&idle_inhibit_provider).await {
                                 info!("[lock] Idle inhibit active, skipping PrepareForSleep lock");
                                 continue;
@@ -409,7 +434,6 @@ async fn listen_logind_signals(
                             let _ = cmd_tx.send(LockCommand::Lock(tx)).await;
                             let _ = rx.await;
                         }
-                    }
                 }
                 Some(_msg) = lock_stream.next() => {
                     if !status_tx.borrow().is_locked {
@@ -424,18 +448,18 @@ async fn listen_logind_signals(
                 }
             }
         } else {
-            if let Some(msg) = sleep_stream.next().await {
-                if let Ok(sleeping) = msg.body().deserialize::<bool>() {
-                    if sleeping && !status_tx.borrow().is_locked {
-                        if is_inhibited(&idle_inhibit_provider).await {
-                            info!("[lock] Idle inhibit active, skipping PrepareForSleep lock");
-                            continue;
-                        }
-                        let (tx, rx) = oneshot::channel();
-                        let _ = cmd_tx.send(LockCommand::Lock(tx)).await;
-                        let _ = rx.await;
-                    }
+            if let Some(msg) = sleep_stream.next().await
+                && let Ok(sleeping) = msg.body().deserialize::<bool>()
+                && sleeping
+                && !status_tx.borrow().is_locked
+            {
+                if is_inhibited(&idle_inhibit_provider).await {
+                    info!("[lock] Idle inhibit active, skipping PrepareForSleep lock");
+                    continue;
                 }
+                let (tx, rx) = oneshot::channel();
+                let _ = cmd_tx.send(LockCommand::Lock(tx)).await;
+                let _ = rx.await;
             }
         }
     }
@@ -461,10 +485,7 @@ async fn resolve_session_path(
 
     let pid = std::process::id();
     match manager_proxy
-        .call::<_, _, (String, zbus::zvariant::OwnedObjectPath)>(
-            "GetSessionByPID",
-            &(pid,),
-        )
+        .call::<_, _, (String, zbus::zvariant::OwnedObjectPath)>("GetSessionByPID", &(pid,))
         .await
     {
         Ok((_id, path)) => {
@@ -486,7 +507,10 @@ fn spawn_idle_monitor(
     blank_timeout_seconds: Option<u32>,
     sleep_timeout_seconds: Option<u32>,
 ) {
-    if lock_timeout_seconds.is_none() && blank_timeout_seconds.is_none() && sleep_timeout_seconds.is_none() {
+    if lock_timeout_seconds.is_none()
+        && blank_timeout_seconds.is_none()
+        && sleep_timeout_seconds.is_none()
+    {
         info!("[lock] No idle timeouts configured, skipping idle monitor");
         return;
     }
@@ -537,7 +561,9 @@ async fn run_idle_monitor(
         }
     };
 
-    info!("[lock] Idle monitor started (lock_timeout={lock_timeout_seconds:?}, blank_timeout={blank_timeout_seconds:?}, sleep_timeout={sleep_timeout_seconds:?})");
+    info!(
+        "[lock] Idle monitor started (lock_timeout={lock_timeout_seconds:?}, blank_timeout={blank_timeout_seconds:?}, sleep_timeout={sleep_timeout_seconds:?})"
+    );
 
     loop {
         tokio::select! {
@@ -547,17 +573,17 @@ async fn run_idle_monitor(
                 match event {
                     IdleEvent::Idled => {
                         info!("[lock] User idle, starting timers");
-                        start_timers(
-                            &mut blank_handle,
-                            &mut lock_handle,
-                            &mut sleep_handle,
-                            &monitors_blanked,
-                            &cmd_tx,
-                            &idle_inhibit_provider,
+                        start_timers(StartTimersParams {
+                            blank_handle: &mut blank_handle,
+                            lock_handle: &mut lock_handle,
+                            sleep_handle: &mut sleep_handle,
+                            monitors_blanked: &monitors_blanked,
+                            cmd_tx: &cmd_tx,
+                            idle_inhibit_provider: &idle_inhibit_provider,
                             blank_timeout_seconds,
                             lock_timeout_seconds,
                             sleep_timeout_seconds,
-                        );
+                        });
                     }
                     IdleEvent::Resumed => {
                         info!("[lock] User active, canceling timers");
@@ -591,20 +617,22 @@ async fn run_idle_monitor(
     }
 }
 
-fn start_timers(
-    blank_handle: &mut Option<JoinHandle<()>>,
-    lock_handle: &mut Option<JoinHandle<()>>,
-    sleep_handle: &mut Option<JoinHandle<()>>,
-    monitors_blanked: &Arc<AtomicBool>,
-    cmd_tx: &mpsc::Sender<LockCommand>,
-    idle_inhibit_provider: &Arc<dyn IdleInhibitProvider>,
+struct StartTimersParams<'a> {
+    blank_handle: &'a mut Option<JoinHandle<()>>,
+    lock_handle: &'a mut Option<JoinHandle<()>>,
+    sleep_handle: &'a mut Option<JoinHandle<()>>,
+    monitors_blanked: &'a Arc<AtomicBool>,
+    cmd_tx: &'a mpsc::Sender<LockCommand>,
+    idle_inhibit_provider: &'a Arc<dyn IdleInhibitProvider>,
     blank_timeout_seconds: Option<u32>,
     lock_timeout_seconds: Option<u32>,
     sleep_timeout_seconds: Option<u32>,
-) {
-    if let Some(secs) = blank_timeout_seconds {
-        let iip = idle_inhibit_provider.clone();
-        let mb = monitors_blanked.clone();
+}
+
+fn start_timers(params: StartTimersParams<'_>) {
+    if let Some(secs) = params.blank_timeout_seconds {
+        let iip = params.idle_inhibit_provider.clone();
+        let mb = params.monitors_blanked.clone();
         let handle = tokio::spawn(async move {
             tokio::time::sleep(Duration::from_secs(secs as u64)).await;
             if is_inhibited(&iip).await {
@@ -615,12 +643,12 @@ fn start_timers(
             niri_action(niri_ipc::Action::PowerOffMonitors {}).await;
             mb.store(true, Ordering::SeqCst);
         });
-        *blank_handle = Some(handle);
+        *params.blank_handle = Some(handle);
     }
 
-    if let Some(secs) = lock_timeout_seconds {
-        let iip = idle_inhibit_provider.clone();
-        let tx = cmd_tx.clone();
+    if let Some(secs) = params.lock_timeout_seconds {
+        let iip = params.idle_inhibit_provider.clone();
+        let tx = params.cmd_tx.clone();
         let handle = tokio::spawn(async move {
             tokio::time::sleep(Duration::from_secs(secs as u64)).await;
             if is_inhibited(&iip).await {
@@ -632,12 +660,12 @@ fn start_timers(
             let _ = tx.send(LockCommand::Lock(reply_tx)).await;
             let _ = reply_rx.await;
         });
-        *lock_handle = Some(handle);
+        *params.lock_handle = Some(handle);
     }
 
-    if let Some(secs) = sleep_timeout_seconds {
-        let iip = idle_inhibit_provider.clone();
-        let tx = cmd_tx.clone();
+    if let Some(secs) = params.sleep_timeout_seconds {
+        let iip = params.idle_inhibit_provider.clone();
+        let tx = params.cmd_tx.clone();
         let handle = tokio::spawn(async move {
             tokio::time::sleep(Duration::from_secs(secs as u64)).await;
             if is_inhibited(&iip).await {
@@ -651,7 +679,7 @@ fn start_timers(
             info!("[lock] Suspending system via logind");
             logind_suspend().await;
         });
-        *sleep_handle = Some(handle);
+        *params.sleep_handle = Some(handle);
     }
 }
 

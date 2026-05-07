@@ -1,8 +1,8 @@
 use axis_domain::models::continuity::PeerConfig;
-use axis_domain::ports::continuity::{ContinuityProvider, ContinuityError};
+use axis_domain::ports::continuity::{ContinuityError, ContinuityProvider};
+use log::info;
 use std::collections::HashMap;
 use std::sync::Arc;
-use log::info;
 
 pub struct UpdatePeerConfigsUseCase {
     provider: Arc<dyn ContinuityProvider>,

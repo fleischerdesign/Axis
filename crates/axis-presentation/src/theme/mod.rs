@@ -53,18 +53,24 @@ pub(crate) fn generate_css(status: &AppearanceConfig, resolved_accent: &str) -> 
 
 /// Analyzes pixel data and finds the most dominant, vibrant color.
 /// Uses histogram clustering for stability against image noise.
-pub(crate) fn find_vibrant_accent(pixels: &[u8], width: u32, height: u32, channels: u32, stride: usize) -> Option<String> {
+pub(crate) fn find_vibrant_accent(
+    pixels: &[u8],
+    width: u32,
+    height: u32,
+    channels: u32,
+    stride: usize,
+) -> Option<String> {
     // 36 bins for the color wheel (one bin every 10 degrees)
-    let mut bins = vec![0f32; 36];
-    let mut bin_colors = vec![(0f32, 0f32, 0f32); 36];
+    let mut bins = [0.0f32; 36];
+    let mut bin_colors = [(0.0f32, 0.0f32, 0.0f32); 36];
 
     for y in 0..height {
         let row_offset = y as usize * stride;
         for x in 0..width {
             let p = row_offset + x as usize * channels as usize;
             let r = pixels[p];
-            let g = pixels[p+1];
-            let b = pixels[p+2];
+            let g = pixels[p + 1];
+            let b = pixels[p + 2];
 
             let (h, s, l) = rgb_to_hsl(r, g, b);
 
@@ -73,7 +79,7 @@ pub(crate) fn find_vibrant_accent(pixels: &[u8], width: u32, height: u32, channe
                 let bin_idx = (h * 35.0) as usize;
                 // Weighting: saturation combined with brightness "goldilocks zone"
                 let weight = s * (1.0 - (l - 0.5).abs() * 2.0);
-                
+
                 bins[bin_idx] += weight;
                 bin_colors[bin_idx].0 += r as f32 * weight;
                 bin_colors[bin_idx].1 += g as f32 * weight;
@@ -83,10 +89,14 @@ pub(crate) fn find_vibrant_accent(pixels: &[u8], width: u32, height: u32, channe
     }
 
     // Find the bin with the highest accumulated weight
-    let (winner_idx, &max_weight) = bins.iter().enumerate()
+    let (winner_idx, &max_weight) = bins
+        .iter()
+        .enumerate()
         .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))?;
 
-    if max_weight <= 0.0 { return None; }
+    if max_weight <= 0.0 {
+        return None;
+    }
 
     // Compute average color of the winning bin
     let final_r = (bin_colors[winner_idx].0 / max_weight) as u8;
@@ -95,7 +105,7 @@ pub(crate) fn find_vibrant_accent(pixels: &[u8], width: u32, height: u32, channe
 
     // Normalization for UI accents
     let (h, mut s, mut l) = rgb_to_hsl(final_r, final_g, final_b);
-    
+
     // Saturation: must pop (at least 60%)
     s = s.max(0.60);
     // Lightness: not too dark, not too bright (range 0.45 - 0.65)
@@ -114,30 +124,64 @@ pub(crate) fn rgb_to_hsl(r: u8, g: u8, b: u8) -> (f32, f32, f32) {
     let max = r.max(g).max(b);
     let min = r.min(g).min(b);
     let l = (max + min) / 2.0;
-    if max == min { return (0.0, 0.0, l); }
+    if max == min {
+        return (0.0, 0.0, l);
+    }
     let d = max - min;
-    let s = if l > 0.5 { d / (2.0 - max - min) } else { d / (max + min) };
-    let h = if max == r { (g - b) / d + (if g < b { 6.0 } else { 0.0 }) }
-            else if max == g { (b - r) / d + 2.0 }
-            else { (r - g) / d + 4.0 };
+    let s = if l > 0.5 {
+        d / (2.0 - max - min)
+    } else {
+        d / (max + min)
+    };
+    let h = if max == r {
+        (g - b) / d + (if g < b { 6.0 } else { 0.0 })
+    } else if max == g {
+        (b - r) / d + 2.0
+    } else {
+        (r - g) / d + 4.0
+    };
     (h / 6.0, s, l)
 }
 
 pub(crate) fn hsl_to_rgb(h: f32, s: f32, l: f32) -> (u8, u8, u8) {
-    let (r, g, b) = if s == 0.0 { (l, l, l) } else {
-        let q = if l < 0.5 { l * (1.0 + s) } else { l + s - l * s };
+    let (r, g, b) = if s == 0.0 {
+        (l, l, l)
+    } else {
+        let q = if l < 0.5 {
+            l * (1.0 + s)
+        } else {
+            l + s - l * s
+        };
         let p = 2.0 * l - q;
-        (hue_to_rgb(p, q, h + 1.0/3.0), hue_to_rgb(p, q, h), hue_to_rgb(p, q, h - 1.0/3.0))
+        (
+            hue_to_rgb(p, q, h + 1.0 / 3.0),
+            hue_to_rgb(p, q, h),
+            hue_to_rgb(p, q, h - 1.0 / 3.0),
+        )
     };
-    ((r * 255.0).round() as u8, (g * 255.0).round() as u8, (b * 255.0).round() as u8)
+    (
+        (r * 255.0).round() as u8,
+        (g * 255.0).round() as u8,
+        (b * 255.0).round() as u8,
+    )
 }
 
 fn hue_to_rgb(p: f32, q: f32, mut t: f32) -> f32 {
-    if t < 0.0 { t += 1.0; }
-    if t > 1.0 { t -= 1.0; }
-    if t < 1.0/6.0 { return p + (q - p) * 6.0 * t; }
-    if t < 1.0/2.0 { return q; }
-    if t < 2.0/3.0 { return p + (q - p) * (2.0/3.0 - t) * 6.0; }
+    if t < 0.0 {
+        t += 1.0;
+    }
+    if t > 1.0 {
+        t -= 1.0;
+    }
+    if t < 1.0 / 6.0 {
+        return p + (q - p) * 6.0 * t;
+    }
+    if t < 1.0 / 2.0 {
+        return q;
+    }
+    if t < 2.0 / 3.0 {
+        return p + (q - p) * (2.0 / 3.0 - t) * 6.0;
+    }
     p
 }
 

@@ -5,6 +5,12 @@ pub struct Island {
     pub container: gtk4::Box,
 }
 
+impl Default for Island {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Island {
     pub fn new() -> Self {
         let container = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);

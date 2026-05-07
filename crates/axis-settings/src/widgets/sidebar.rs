@@ -1,8 +1,8 @@
-use libadwaita::prelude::*;
-use libadwaita as adw;
-use std::rc::Rc;
-use crate::presentation::navigation::{NavigationState, NavigationView, NavigationPresenter};
+use crate::presentation::navigation::{NavigationPresenter, NavigationState, NavigationView};
 use axis_presentation::View;
+use libadwaita as adw;
+use libadwaita::prelude::*;
+use std::rc::Rc;
 
 pub struct Sidebar {
     list_box: gtk4::ListBox,

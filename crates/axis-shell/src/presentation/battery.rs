@@ -1,8 +1,8 @@
-use std::sync::Arc;
 use axis_application::use_cases::generic::SubscribeUseCase;
 use axis_domain::models::power::PowerStatus;
 use axis_domain::ports::power::PowerProvider;
 use axis_presentation::{Presenter, View};
+use std::sync::Arc;
 
 pub(crate) fn battery_icon(percentage: f64, charging: bool) -> &'static str {
     let level = ((percentage / 10.0).round() * 10.0) as u32;

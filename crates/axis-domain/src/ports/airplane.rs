@@ -1,6 +1,6 @@
+use super::StatusStream;
 use crate::models::airplane::AirplaneStatus;
 use async_trait::async_trait;
-use super::StatusStream;
 use thiserror::Error;
 
 #[derive(Error, Debug, Clone, PartialEq)]

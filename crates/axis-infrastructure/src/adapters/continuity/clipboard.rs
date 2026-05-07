@@ -30,6 +30,12 @@ pub struct WaylandClipboard {
     last_hash: u64,
 }
 
+impl Default for WaylandClipboard {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WaylandClipboard {
     pub fn new() -> Self {
         Self {
@@ -79,7 +85,10 @@ impl ClipboardSync for WaylandClipboard {
                             content.extend_from_slice(&buf[..take]);
                             remaining = remaining.saturating_sub(take);
                             if remaining == 0 {
-                                warn!("[continuity:clipboard] content exceeded {} byte limit, truncated", MAX_CLIPBOARD_SIZE);
+                                warn!(
+                                    "[continuity:clipboard] content exceeded {} byte limit, truncated",
+                                    MAX_CLIPBOARD_SIZE
+                                );
                                 break;
                             }
                         }
@@ -92,10 +101,12 @@ impl ClipboardSync for WaylandClipboard {
                 if content.is_empty() {
                     break;
                 }
-                let _ = tx.send(ClipboardEvent::ContentChanged {
-                    content,
-                    mime_type: "text/plain".to_string(),
-                }).await;
+                let _ = tx
+                    .send(ClipboardEvent::ContentChanged {
+                        content,
+                        mime_type: "text/plain".to_string(),
+                    })
+                    .await;
             }
         });
 
@@ -105,7 +116,7 @@ impl ClipboardSync for WaylandClipboard {
 
     fn stop_monitoring(&mut self) {
         if let Some(mut child) = self.monitor_child.take() {
-            let _ = child.kill();
+            let _ = child.start_kill();
         }
         if let Some(task) = self.monitor_task.take() {
             task.abort();
@@ -134,7 +145,7 @@ impl ClipboardSync for WaylandClipboard {
 
         let mut stdin = child.stdin.take().ok_or("failed to take stdin")?;
         let content_owned = content.to_vec();
-        
+
         tokio::spawn(async move {
             if let Err(e) = stdin.write_all(&content_owned).await {
                 error!("[continuity:clipboard] wl-copy write error: {e}");

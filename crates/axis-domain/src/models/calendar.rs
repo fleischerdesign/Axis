@@ -1,5 +1,5 @@
+use chrono::{DateTime, NaiveDateTime};
 use serde::{Deserialize, Serialize};
-use chrono::NaiveDateTime;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct CalendarEvent {
@@ -13,7 +13,7 @@ pub struct CalendarEvent {
 
 impl Default for CalendarEvent {
     fn default() -> Self {
-        let epoch = NaiveDateTime::from_timestamp_opt(0, 0).unwrap();
+        let epoch = DateTime::from_timestamp(0, 0).unwrap().naive_utc();
         Self {
             id: String::new(),
             summary: String::new(),

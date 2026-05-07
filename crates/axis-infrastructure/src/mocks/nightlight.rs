@@ -1,9 +1,9 @@
-use axis_domain::models::nightlight::NightlightStatus;
-use axis_domain::ports::nightlight::{NightlightProvider, NightlightError, NightlightStream};
 use async_trait::async_trait;
+use axis_domain::models::nightlight::NightlightStatus;
+use axis_domain::ports::nightlight::{NightlightError, NightlightProvider, NightlightStream};
+use std::sync::Arc;
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
-use std::sync::Arc;
 
 pub struct MockNightlightProvider {
     status_tx: watch::Sender<NightlightStatus>,

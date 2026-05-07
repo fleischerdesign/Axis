@@ -1,12 +1,12 @@
+use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
+use axis_application::use_cases::network::connect_to_ap::ConnectToApUseCase;
+use axis_application::use_cases::network::disconnect_wifi::DisconnectWifiUseCase;
+use axis_application::use_cases::network::scan_wifi::ScanWifiUseCase;
 use axis_domain::models::network::NetworkStatus;
 use axis_domain::ports::network::NetworkProvider;
 use axis_presentation::{Presenter, View};
-use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
-use axis_application::use_cases::network::scan_wifi::ScanWifiUseCase;
-use axis_application::use_cases::network::connect_to_ap::ConnectToApUseCase;
-use axis_application::use_cases::network::disconnect_wifi::DisconnectWifiUseCase;
-use std::sync::Arc;
 use std::rc::Rc;
+use std::sync::Arc;
 
 pub trait NetworkView: View<NetworkStatus> {
     #[allow(dead_code)]
@@ -69,7 +69,8 @@ impl NetworkPresenter {
                     }
                 }
             })
-        }).with_initial_status(initial_status);
+        })
+        .with_initial_status(initial_status);
 
         Self {
             inner,
@@ -81,7 +82,7 @@ impl NetworkPresenter {
 
     pub async fn bind(&self, view: Box<dyn NetworkView>) {
         let this = self.clone();
-        
+
         view.on_scan_requested(Box::new(move || {
             let uc = this.scan_uc.clone();
             tokio::spawn(async move {

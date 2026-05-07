@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub enum AccentColor {
+    #[default]
     Blue,
     Teal,
     Green,
@@ -13,12 +14,6 @@ pub enum AccentColor {
     Purple,
     Auto,
     Custom(String),
-}
-
-impl Default for AccentColor {
-    fn default() -> Self {
-        Self::Blue
-    }
 }
 
 impl AccentColor {
@@ -39,7 +34,9 @@ impl AccentColor {
     }
 
     pub fn is_valid_hex(hex: &str) -> bool {
-        hex.starts_with('#') && (hex.len() == 7 || hex.len() == 4) && hex[1..].chars().all(|c| c.is_ascii_hexdigit())
+        hex.starts_with('#')
+            && (hex.len() == 7 || hex.len() == 4)
+            && hex[1..].chars().all(|c| c.is_ascii_hexdigit())
     }
 
     pub fn all_presets() -> &'static [AccentColor] {

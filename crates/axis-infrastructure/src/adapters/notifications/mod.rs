@@ -1,11 +1,18 @@
-use axis_domain::models::notifications::{Notification, NotificationAction, NotificationStatus, Urgency};
-use axis_domain::ports::notifications::{ActionHandler, NotificationError, NotificationProvider, NotificationStream};
 use async_trait::async_trait;
+use axis_domain::models::notifications::{
+    Notification, NotificationAction, NotificationStatus, Urgency,
+};
+use axis_domain::ports::notifications::{
+    ActionHandler, NotificationError, NotificationProvider, NotificationStream,
+};
 use log::info;
-use tokio::sync::{watch, mpsc};
-use tokio_stream::wrappers::WatchStream;
-use std::sync::{Arc, Mutex, atomic::{AtomicU32, Ordering}};
 use std::collections::HashMap;
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicU32, Ordering},
+};
+use tokio::sync::{mpsc, watch};
+use tokio_stream::wrappers::WatchStream;
 use zbus::connection;
 use zbus::zvariant::Value;
 
@@ -23,6 +30,7 @@ struct NotificationsIface {
 
 #[zbus::interface(name = "org.freedesktop.Notifications")]
 impl NotificationsIface {
+    #[allow(clippy::too_many_arguments)]
     fn notify(
         &self,
         app_name: String,
@@ -79,6 +87,7 @@ impl NotificationsIface {
         };
 
         let _ = self.cmd_tx.try_send(Cmd::Show(n));
+
         id
     }
 
@@ -87,10 +96,18 @@ impl NotificationsIface {
     }
 
     #[zbus(signal)]
-    async fn action_invoked(emitter: &zbus::object_server::SignalEmitter<'_>, id: u32, action_key: &str) -> zbus::Result<()>;
+    async fn action_invoked(
+        emitter: &zbus::object_server::SignalEmitter<'_>,
+        id: u32,
+        action_key: &str,
+    ) -> zbus::Result<()>;
 
     #[zbus(signal)]
-    async fn notification_closed(emitter: &zbus::object_server::SignalEmitter<'_>, id: u32, reason: u32) -> zbus::Result<()>;
+    async fn notification_closed(
+        emitter: &zbus::object_server::SignalEmitter<'_>,
+        id: u32,
+        reason: u32,
+    ) -> zbus::Result<()>;
 
     fn get_capabilities(&self) -> Vec<String> {
         vec![
@@ -175,8 +192,13 @@ impl ZbusNotificationProvider {
                             let tx = cmd_tx_bg.clone();
                             let ah = action_handlers_bg.clone();
                             tokio::spawn(async move {
-                                tokio::time::sleep(std::time::Duration::from_millis(timeout as u64)).await;
-                                ah.lock().unwrap().retain(|(nid, _), _: &mut ActionHandler| *nid != id);
+                                tokio::time::sleep(std::time::Duration::from_millis(
+                                    timeout as u64,
+                                ))
+                                .await;
+                                ah.lock()
+                                    .unwrap()
+                                    .retain(|(nid, _), _: &mut ActionHandler| *nid != id);
                                 let _ = tx.send(Cmd::Close(id)).await;
                             });
                         }
@@ -191,7 +213,10 @@ impl ZbusNotificationProvider {
 
                         let emitter = iface_ref.signal_emitter();
                         let _ = NotificationsIface::notification_closed(emitter, id, 2).await;
-                        action_handlers_bg.lock().unwrap().retain(|(nid, _), _: &mut ActionHandler| *nid != id);
+                        action_handlers_bg
+                            .lock()
+                            .unwrap()
+                            .retain(|(nid, _), _: &mut ActionHandler| *nid != id);
                     }
                     Cmd::Action(id, key, user_input) => {
                         info!("[notifications] Notification {id} action: {key}");
@@ -211,7 +236,10 @@ impl ZbusNotificationProvider {
                             notifications: history.clone(),
                             last_id: 0,
                         });
-                        action_handlers_bg.lock().unwrap().retain(|(nid, _), _: &mut ActionHandler| *nid != id);
+                        action_handlers_bg
+                            .lock()
+                            .unwrap()
+                            .retain(|(nid, _), _: &mut ActionHandler| *nid != id);
                     }
                 }
             }
@@ -242,7 +270,12 @@ impl NotificationProvider for ZbusNotificationProvider {
             .map_err(|e| NotificationError::ProviderError(e.to_string()))
     }
 
-    async fn invoke_action(&self, id: u32, action_key: &str, user_input: Option<String>) -> Result<(), NotificationError> {
+    async fn invoke_action(
+        &self,
+        id: u32,
+        action_key: &str,
+        user_input: Option<String>,
+    ) -> Result<(), NotificationError> {
         self.cmd_tx
             .send(Cmd::Action(id, action_key.to_string(), user_input))
             .await

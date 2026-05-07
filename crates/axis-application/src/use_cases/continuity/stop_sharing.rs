@@ -1,6 +1,6 @@
-use axis_domain::ports::continuity::{ContinuitySharingProvider, ContinuityError};
-use std::sync::Arc;
+use axis_domain::ports::continuity::{ContinuityError, ContinuitySharingProvider};
 use log::info;
+use std::sync::Arc;
 
 pub struct StopSharingUseCase {
     provider: Arc<dyn ContinuitySharingProvider>,

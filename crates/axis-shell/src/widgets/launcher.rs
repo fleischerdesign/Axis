@@ -4,6 +4,12 @@ pub struct LauncherWidget {
     pub container: gtk4::Box,
 }
 
+impl Default for LauncherWidget {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LauncherWidget {
     pub fn new() -> Self {
         let container = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);

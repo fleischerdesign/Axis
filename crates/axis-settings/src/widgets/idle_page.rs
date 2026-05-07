@@ -1,10 +1,11 @@
-use libadwaita::prelude::*;
-use libadwaita as adw;
-use std::rc::Rc;
-use std::cell::RefCell;
+use crate::presentation::idle::{IdleSettingsPresenter, IdleSettingsView};
+use crate::widgets::callback::FnCell;
 use axis_domain::models::config::AxisConfig;
-use crate::presentation::idle::{IdleSettingsView, IdleSettingsPresenter};
 use axis_presentation::View;
+use libadwaita as adw;
+use libadwaita::prelude::*;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 const LOCK_TIMEOUTS: &[(Option<u32>, &str)] = &[
     (None, "Off"),
@@ -31,7 +32,10 @@ const SLEEP_TIMEOUTS: &[(Option<u32>, &str)] = &[
 ];
 
 fn lock_index(value: Option<u32>) -> u32 {
-    LOCK_TIMEOUTS.iter().position(|(v, _)| *v == value).unwrap_or(0) as u32
+    LOCK_TIMEOUTS
+        .iter()
+        .position(|(v, _)| *v == value)
+        .unwrap_or(0) as u32
 }
 
 fn lock_value(index: u32) -> Option<u32> {
@@ -39,7 +43,10 @@ fn lock_value(index: u32) -> Option<u32> {
 }
 
 fn blank_index(value: Option<u32>) -> u32 {
-    BLANK_TIMEOUTS.iter().position(|(v, _)| *v == value).unwrap_or(0) as u32
+    BLANK_TIMEOUTS
+        .iter()
+        .position(|(v, _)| *v == value)
+        .unwrap_or(0) as u32
 }
 
 fn blank_value(index: u32) -> Option<u32> {
@@ -47,7 +54,10 @@ fn blank_value(index: u32) -> Option<u32> {
 }
 
 fn sleep_index(value: Option<u32>) -> u32 {
-    SLEEP_TIMEOUTS.iter().position(|(v, _)| *v == value).unwrap_or(0) as u32
+    SLEEP_TIMEOUTS
+        .iter()
+        .position(|(v, _)| *v == value)
+        .unwrap_or(0) as u32
 }
 
 fn sleep_value(index: u32) -> Option<u32> {
@@ -61,10 +71,10 @@ pub struct IdleSettingsPage {
     blank_combo: adw::ComboRow,
     sleep_combo: adw::ComboRow,
 
-    inhibit_callback: Rc<RefCell<Option<Box<dyn Fn(bool) + 'static>>>>,
-    lock_callback: Rc<RefCell<Option<Box<dyn Fn(Option<u32>) + 'static>>>>,
-    blank_callback: Rc<RefCell<Option<Box<dyn Fn(Option<u32>) + 'static>>>>,
-    sleep_callback: Rc<RefCell<Option<Box<dyn Fn(Option<u32>) + 'static>>>>,
+    inhibit_callback: FnCell<bool>,
+    lock_callback: FnCell<Option<u32>>,
+    blank_callback: FnCell<Option<u32>>,
+    sleep_callback: FnCell<Option<u32>>,
 }
 
 impl IdleSettingsPage {
@@ -169,9 +179,12 @@ impl IdleSettingsPage {
 impl View<AxisConfig> for IdleSettingsPage {
     fn render(&self, status: &AxisConfig) {
         self.inhibit_switch.set_active(status.idle_inhibit.enabled);
-        self.lock_combo.set_selected(lock_index(status.idle.lock_timeout_seconds));
-        self.blank_combo.set_selected(blank_index(status.idle.blank_timeout_seconds));
-        self.sleep_combo.set_selected(sleep_index(status.idle.sleep_timeout_seconds));
+        self.lock_combo
+            .set_selected(lock_index(status.idle.lock_timeout_seconds));
+        self.blank_combo
+            .set_selected(blank_index(status.idle.blank_timeout_seconds));
+        self.sleep_combo
+            .set_selected(sleep_index(status.idle.sleep_timeout_seconds));
     }
 }
 

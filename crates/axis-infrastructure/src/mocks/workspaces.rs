@@ -1,9 +1,9 @@
-use axis_domain::models::workspaces::{Workspace, WorkspaceStatus};
-use axis_domain::ports::workspaces::{WorkspaceProvider, WorkspaceError, WorkspaceStream};
 use async_trait::async_trait;
+use axis_domain::models::workspaces::{Workspace, WorkspaceStatus};
+use axis_domain::ports::workspaces::{WorkspaceError, WorkspaceProvider, WorkspaceStream};
+use std::sync::Arc;
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
-use std::sync::Arc;
 
 pub struct MockWorkspaceProvider {
     status_tx: watch::Sender<WorkspaceStatus>,
@@ -13,11 +13,41 @@ impl MockWorkspaceProvider {
     pub fn new() -> Arc<Self> {
         let (tx, _) = watch::channel(WorkspaceStatus {
             workspaces: vec![
-                Workspace { id: 1, name: "1".to_string(), is_active: true, is_empty: false, index: 1 },
-                Workspace { id: 2, name: "2".to_string(), is_active: false, is_empty: true, index: 2 },
-                Workspace { id: 3, name: "3".to_string(), is_active: false, is_empty: true, index: 3 },
-                Workspace { id: 4, name: "4".to_string(), is_active: false, is_empty: true, index: 4 },
-                Workspace { id: 5, name: "5".to_string(), is_active: false, is_empty: true, index: 5 },
+                Workspace {
+                    id: 1,
+                    name: "1".to_string(),
+                    is_active: true,
+                    is_empty: false,
+                    index: 1,
+                },
+                Workspace {
+                    id: 2,
+                    name: "2".to_string(),
+                    is_active: false,
+                    is_empty: true,
+                    index: 2,
+                },
+                Workspace {
+                    id: 3,
+                    name: "3".to_string(),
+                    is_active: false,
+                    is_empty: true,
+                    index: 3,
+                },
+                Workspace {
+                    id: 4,
+                    name: "4".to_string(),
+                    is_active: false,
+                    is_empty: true,
+                    index: 4,
+                },
+                Workspace {
+                    id: 5,
+                    name: "5".to_string(),
+                    is_active: false,
+                    is_empty: true,
+                    index: 5,
+                },
             ],
             overview_open: false,
         });

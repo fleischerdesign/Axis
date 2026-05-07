@@ -1,6 +1,6 @@
-use axis_domain::ports::audio::{AudioProvider, AudioError};
-use std::sync::Arc;
+use axis_domain::ports::audio::{AudioError, AudioProvider};
 use log::info;
+use std::sync::Arc;
 
 pub struct SetDefaultSinkUseCase {
     provider: Arc<dyn AudioProvider>,

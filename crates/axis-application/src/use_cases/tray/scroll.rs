@@ -1,6 +1,6 @@
-use axis_domain::ports::tray::{TrayProvider, TrayError};
-use std::sync::Arc;
+use axis_domain::ports::tray::{TrayError, TrayProvider};
 use log::debug;
+use std::sync::Arc;
 
 pub struct ScrollTrayItemUseCase {
     provider: Arc<dyn TrayProvider>,
@@ -11,8 +11,16 @@ impl ScrollTrayItemUseCase {
         Self { provider }
     }
 
-    pub async fn execute(&self, bus_name: &str, delta: i32, orientation: &str) -> Result<(), TrayError> {
-        debug!("[use-case] Scrolling tray item: {} (delta={}, orientation={})", bus_name, delta, orientation);
+    pub async fn execute(
+        &self,
+        bus_name: &str,
+        delta: i32,
+        orientation: &str,
+    ) -> Result<(), TrayError> {
+        debug!(
+            "[use-case] Scrolling tray item: {} (delta={}, orientation={})",
+            bus_name, delta, orientation
+        );
         self.provider.scroll(bus_name, delta, orientation).await
     }
 }

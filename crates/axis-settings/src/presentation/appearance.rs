@@ -1,13 +1,13 @@
+use axis_application::use_cases::appearance::set_accent::SetAccentColorUseCase;
+use axis_application::use_cases::appearance::set_scheme::SetColorSchemeUseCase;
+use axis_application::use_cases::appearance::set_wallpaper::SetWallpaperUseCase;
+use axis_application::use_cases::generic::SubscribeUseCase;
 use axis_domain::models::appearance::{AccentColor, ColorScheme};
 use axis_domain::models::config::AppearanceConfig;
 use axis_domain::ports::appearance::AppearanceProvider;
 use axis_presentation::{Presenter, View};
-use axis_application::use_cases::generic::SubscribeUseCase;
-use axis_application::use_cases::appearance::set_accent::SetAccentColorUseCase;
-use axis_application::use_cases::appearance::set_scheme::SetColorSchemeUseCase;
-use axis_application::use_cases::appearance::set_wallpaper::SetWallpaperUseCase;
-use std::sync::Arc;
 use std::rc::Rc;
+use std::sync::Arc;
 
 pub trait AppearanceView: View<AppearanceConfig> {
     fn on_scheme_changed(&self, f: Box<dyn Fn(ColorScheme) + 'static>);
@@ -127,7 +127,6 @@ impl AppearancePresenter {
             }
         });
     }
-
 }
 
 impl Clone for AppearancePresenter {

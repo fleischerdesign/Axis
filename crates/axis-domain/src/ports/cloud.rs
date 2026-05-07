@@ -1,7 +1,7 @@
-use crate::models::cloud::{CloudStatus, CloudAccount};
+use super::StatusStream;
+use crate::models::cloud::{CloudAccount, CloudStatus};
 use async_trait::async_trait;
 use thiserror::Error;
-use super::StatusStream;
 
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum CloudError {

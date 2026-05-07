@@ -1,11 +1,14 @@
 use async_channel::Sender;
 use axis_domain::models::continuity::{Message, Side};
-use log::{info, warn};
 use evdev::uinput::VirtualDevice;
-use evdev::{AttributeSet, AbsoluteAxisCode, KeyCode, RelativeAxisCode, PropType, EventSummary, KeyEvent, RelativeAxisEvent};
-use tokio::task::JoinHandle;
-use std::time::{Instant, Duration};
+use evdev::{
+    AbsoluteAxisCode, AttributeSet, EventSummary, KeyCode, KeyEvent, PropType, RelativeAxisCode,
+    RelativeAxisEvent,
+};
+use log::{info, warn};
+use std::time::{Duration, Instant};
 use tokio::io::unix::AsyncFd;
+use tokio::task::JoinHandle;
 
 #[derive(Debug)]
 pub enum InternalInputEvent {
@@ -26,7 +29,13 @@ pub trait InputCapture: Send {
 
 pub trait InputInjection: Send {
     fn inject(&mut self, msg: &Message) -> Result<(), String>;
-    fn warp(&mut self, side: Side, edge_pos: f64, screen_w: i32, screen_h: i32) -> Result<(), String>;
+    fn warp(
+        &mut self,
+        side: Side,
+        edge_pos: f64,
+        screen_w: i32,
+        screen_h: i32,
+    ) -> Result<(), String>;
     fn start(&mut self) -> Result<(), String>;
     fn stop(&mut self);
 }
@@ -36,9 +45,18 @@ pub struct WaylandInjection {
     pointer: Option<VirtualDevice>,
 }
 
+impl Default for WaylandInjection {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WaylandInjection {
     pub fn new() -> Self {
-        Self { keyboard: None, pointer: None }
+        Self {
+            keyboard: None,
+            pointer: None,
+        }
     }
 }
 
@@ -71,16 +89,12 @@ impl InputInjection for WaylandInjection {
         rel_axes.insert(RelativeAxisCode::REL_WHEEL);
         rel_axes.insert(RelativeAxisCode::REL_HWHEEL);
 
-        use evdev::{UinputAbsSetup, AbsInfo};
+        use evdev::{AbsInfo, UinputAbsSetup};
 
-        let x_setup = UinputAbsSetup::new(
-            AbsoluteAxisCode::ABS_X,
-            AbsInfo::new(0, 0, 32767, 0, 0, 0)
-        );
-        let y_setup = UinputAbsSetup::new(
-            AbsoluteAxisCode::ABS_Y,
-            AbsInfo::new(0, 0, 32767, 0, 0, 0)
-        );
+        let x_setup =
+            UinputAbsSetup::new(AbsoluteAxisCode::ABS_X, AbsInfo::new(0, 0, 32767, 0, 0, 0));
+        let y_setup =
+            UinputAbsSetup::new(AbsoluteAxisCode::ABS_Y, AbsInfo::new(0, 0, 32767, 0, 0, 0));
 
         let mut props = AttributeSet::<PropType>::new();
         props.insert(PropType::POINTER);
@@ -111,7 +125,13 @@ impl InputInjection for WaylandInjection {
         self.pointer = None;
     }
 
-    fn warp(&mut self, side: Side, edge_pos: f64, screen_w: i32, screen_h: i32) -> Result<(), String> {
+    fn warp(
+        &mut self,
+        side: Side,
+        edge_pos: f64,
+        screen_w: i32,
+        screen_h: i32,
+    ) -> Result<(), String> {
         let ptr = self.pointer.as_mut().ok_or("pointer device not started")?;
         use evdev::AbsoluteAxisEvent;
 
@@ -125,7 +145,10 @@ impl InputInjection for WaylandInjection {
         let x = (px / screen_w as f64 * 32767.0) as i32;
         let y = (py / screen_h as f64 * 32767.0) as i32;
 
-        info!("[continuity:input] warping cursor to {:?} at pixel ({:.0}, {:.0}) -> abs ({}, {})", side, px, py, x, y);
+        info!(
+            "[continuity:input] warping cursor to {:?} at pixel ({:.0}, {:.0}) -> abs ({}, {})",
+            side, px, py, x, y
+        );
 
         let events = vec![
             evdev::InputEvent::from(AbsoluteAxisEvent::new(AbsoluteAxisCode::ABS_X, x)),
@@ -149,36 +172,55 @@ impl InputInjection for WaylandInjection {
                 }
                 let mut events = Vec::with_capacity(2);
                 if dx_i != 0 {
-                    events.push(InputEvent::from(RelativeAxisEvent::new(RelativeAxisCode::REL_X, dx_i)));
+                    events.push(InputEvent::from(RelativeAxisEvent::new(
+                        RelativeAxisCode::REL_X,
+                        dx_i,
+                    )));
                 }
                 if dy_i != 0 {
-                    events.push(InputEvent::from(RelativeAxisEvent::new(RelativeAxisCode::REL_Y, dy_i)));
+                    events.push(InputEvent::from(RelativeAxisEvent::new(
+                        RelativeAxisCode::REL_Y,
+                        dy_i,
+                    )));
                 }
                 ptr.emit(&events).map_err(|e| e.to_string())?;
             }
             Message::KeyPress { key, state } => {
-                let kb = self.keyboard.as_mut().ok_or("keyboard device not started")?;
+                let kb = self
+                    .keyboard
+                    .as_mut()
+                    .ok_or("keyboard device not started")?;
                 let ev = InputEvent::from(KeyEvent::new(KeyCode::new(*key as u16), *state as i32));
                 kb.emit(&[ev]).map_err(|e| e.to_string())?;
             }
             Message::KeyRelease { key } => {
-                let kb = self.keyboard.as_mut().ok_or("keyboard device not started")?;
+                let kb = self
+                    .keyboard
+                    .as_mut()
+                    .ok_or("keyboard device not started")?;
                 let ev = InputEvent::from(KeyEvent::new(KeyCode::new(*key as u16), 0));
                 kb.emit(&[ev]).map_err(|e| e.to_string())?;
             }
             Message::PointerButton { button, state } => {
                 let ptr = self.pointer.as_mut().ok_or("pointer device not started")?;
-                let ev = InputEvent::from(KeyEvent::new(KeyCode::new(*button as u16), *state as i32));
+                let ev =
+                    InputEvent::from(KeyEvent::new(KeyCode::new(*button as u16), *state as i32));
                 ptr.emit(&[ev]).map_err(|e| e.to_string())?;
             }
             Message::PointerAxis { dx, dy } => {
                 let ptr = self.pointer.as_mut().ok_or("pointer device not started")?;
                 let mut events = Vec::new();
                 if *dx != 0.0 {
-                    events.push(InputEvent::from(RelativeAxisEvent::new(RelativeAxisCode::REL_HWHEEL, *dx as i32)));
+                    events.push(InputEvent::from(RelativeAxisEvent::new(
+                        RelativeAxisCode::REL_HWHEEL,
+                        *dx as i32,
+                    )));
                 }
                 if *dy != 0.0 {
-                    events.push(InputEvent::from(RelativeAxisEvent::new(RelativeAxisCode::REL_WHEEL, *dy as i32)));
+                    events.push(InputEvent::from(RelativeAxisEvent::new(
+                        RelativeAxisCode::REL_WHEEL,
+                        *dy as i32,
+                    )));
                 }
                 if !events.is_empty() {
                     ptr.emit(&events).map_err(|e| e.to_string())?;
@@ -197,7 +239,10 @@ struct TouchpadTracker {
 
 impl TouchpadTracker {
     fn new() -> Self {
-        Self { last_x: None, last_y: None }
+        Self {
+            last_x: None,
+            last_y: None,
+        }
     }
 
     fn update_x(&mut self, val: i32) -> Option<i32> {
@@ -223,6 +268,12 @@ pub struct EvdevCapture {
     prepared_devices: Vec<(evdev::Device, bool)>,
 }
 
+impl Default for EvdevCapture {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EvdevCapture {
     pub fn new() -> Self {
         Self {
@@ -236,10 +287,7 @@ const TOUCHPAD_SENSITIVITY: f64 = 0.75;
 const EMERGENCY_EXIT_PRESSES: u32 = 4;
 const EMERGENCY_EXIT_WINDOW_MS: u64 = 1000;
 
-const VIRTUAL_DEVICE_PREFIXES: &[&str] = &[
-    "axis continuity virtual",
-    "axis continuity",
-];
+const VIRTUAL_DEVICE_PREFIXES: &[&str] = &["axis continuity virtual", "axis continuity"];
 
 const VIRTUAL_DEVICE_EXACT: &[&str] = &[
     "axis continuity virtual keyboard",
@@ -267,13 +315,16 @@ impl InputCapture for EvdevCapture {
 
         for (_path, device) in &devices_collected {
             let name = device.name().unwrap_or("Unknown").to_string();
-            let has_mt = device.supported_absolute_axes()
+            let has_mt = device
+                .supported_absolute_axes()
                 .map(|a| a.contains(AbsoluteAxisCode::ABS_MT_POSITION_X))
                 .unwrap_or(false);
-            if has_mt {
-                if let Some(base) = name.strip_suffix(" Touchpad").or_else(|| name.strip_suffix(" Keyboard")) {
-                    touchpad_bases.push(base.to_string());
-                }
+            if has_mt
+                && let Some(base) = name
+                    .strip_suffix(" Touchpad")
+                    .or_else(|| name.strip_suffix(" Keyboard"))
+            {
+                touchpad_bases.push(base.to_string());
             }
         }
 
@@ -287,15 +338,29 @@ impl InputCapture for EvdevCapture {
             if name.ends_with(" Mouse") {
                 let base = name.strip_suffix(" Mouse").unwrap_or("");
                 if touchpad_bases.iter().any(|tb| tb == base) {
-                    info!("[continuity:input] skipping legacy touchpad mouse: {} ({})", name, path.display());
+                    info!(
+                        "[continuity:input] skipping legacy touchpad mouse: {} ({})",
+                        name,
+                        path.display()
+                    );
                     continue;
                 }
             }
 
-            let has_rel_x = device.supported_relative_axes().map(|a| a.contains(RelativeAxisCode::REL_X)).unwrap_or(false);
-            let has_enter = device.supported_keys().map(|k| k.contains(KeyCode::KEY_ENTER)).unwrap_or(false);
-            let has_mouse_btn = device.supported_keys().map(|k| k.contains(KeyCode::BTN_LEFT)).unwrap_or(false);
-            let has_mt = device.supported_absolute_axes()
+            let has_rel_x = device
+                .supported_relative_axes()
+                .map(|a| a.contains(RelativeAxisCode::REL_X))
+                .unwrap_or(false);
+            let has_enter = device
+                .supported_keys()
+                .map(|k| k.contains(KeyCode::KEY_ENTER))
+                .unwrap_or(false);
+            let has_mouse_btn = device
+                .supported_keys()
+                .map(|k| k.contains(KeyCode::BTN_LEFT))
+                .unwrap_or(false);
+            let has_mt = device
+                .supported_absolute_axes()
                 .map(|a| a.contains(AbsoluteAxisCode::ABS_MT_POSITION_X))
                 .unwrap_or(false);
 
@@ -307,7 +372,11 @@ impl InputCapture for EvdevCapture {
             self.prepared_devices.push((device, is_touchpad));
         }
 
-        info!("[continuity:input] prepared {} devices in {:?}", self.prepared_devices.len(), start_time.elapsed());
+        info!(
+            "[continuity:input] prepared {} devices in {:?}",
+            self.prepared_devices.len(),
+            start_time.elapsed()
+        );
         Ok(())
     }
 
@@ -331,12 +400,20 @@ impl InputCapture for EvdevCapture {
             let name = device.name().unwrap_or("Unknown").to_string();
 
             if let Err(e) = device.grab() {
-                warn!("[continuity:input] could not grab {}: {} (after {:?})", name, e, grab_start.elapsed());
+                warn!(
+                    "[continuity:input] could not grab {}: {} (after {:?})",
+                    name,
+                    e,
+                    grab_start.elapsed()
+                );
                 continue;
             }
 
             if let Err(e) = device.set_nonblocking(true) {
-                warn!("[continuity:input] could not set nonblocking for {}: {}", name, e);
+                warn!(
+                    "[continuity:input] could not set nonblocking for {}: {}",
+                    name, e
+                );
                 let _ = device.ungrab();
                 continue;
             }
@@ -344,7 +421,10 @@ impl InputCapture for EvdevCapture {
             let mut async_fd = match AsyncFd::new(device) {
                 Ok(fd) => fd,
                 Err(e) => {
-                    warn!("[continuity:input] could not create AsyncFd for {}: {}", name, e);
+                    warn!(
+                        "[continuity:input] could not create AsyncFd for {}: {}",
+                        name, e
+                    );
                     continue;
                 }
             };
@@ -356,7 +436,11 @@ impl InputCapture for EvdevCapture {
             let task = tokio::spawn(async move {
                 let mut esc_count = 0;
                 let mut last_esc = Instant::now();
-                let mut tp_tracker = if is_touchpad { Some(TouchpadTracker::new()) } else { None };
+                let mut tp_tracker = if is_touchpad {
+                    Some(TouchpadTracker::new())
+                } else {
+                    None
+                };
 
                 loop {
                     let mut guard = match async_fd.readable_mut().await {
@@ -364,9 +448,9 @@ impl InputCapture for EvdevCapture {
                         Err(_) => break,
                     };
 
-                    let events: Vec<_> = match guard.try_io(|fd| {
-                        fd.get_mut().fetch_events().map(|events| events.collect())
-                    }) {
+                    let events: Vec<_> = match guard
+                        .try_io(|fd| fd.get_mut().fetch_events().map(|events| events.collect()))
+                    {
                         Ok(Ok(events)) => events,
                         Ok(Err(e)) => {
                             warn!("[continuity:input] read error for {}: {}", name_c, e);
@@ -379,13 +463,33 @@ impl InputCapture for EvdevCapture {
                         match ev.destructure() {
                             EventSummary::RelativeAxis(_, axis, val) => {
                                 if axis == RelativeAxisCode::REL_X {
-                                    let _ = tx_c.send(InternalInputEvent::CursorMove { dx: val as f64, dy: 0.0 }).await;
+                                    let _ = tx_c
+                                        .send(InternalInputEvent::CursorMove {
+                                            dx: val as f64,
+                                            dy: 0.0,
+                                        })
+                                        .await;
                                 } else if axis == RelativeAxisCode::REL_Y {
-                                    let _ = tx_c.send(InternalInputEvent::CursorMove { dx: 0.0, dy: val as f64 }).await;
+                                    let _ = tx_c
+                                        .send(InternalInputEvent::CursorMove {
+                                            dx: 0.0,
+                                            dy: val as f64,
+                                        })
+                                        .await;
                                 } else if axis == RelativeAxisCode::REL_WHEEL {
-                                    let _ = tx_c.send(InternalInputEvent::PointerAxis { dx: 0.0, dy: val as f64 }).await;
+                                    let _ = tx_c
+                                        .send(InternalInputEvent::PointerAxis {
+                                            dx: 0.0,
+                                            dy: val as f64,
+                                        })
+                                        .await;
                                 } else if axis == RelativeAxisCode::REL_HWHEEL {
-                                    let _ = tx_c.send(InternalInputEvent::PointerAxis { dx: val as f64, dy: 0.0 }).await;
+                                    let _ = tx_c
+                                        .send(InternalInputEvent::PointerAxis {
+                                            dx: val as f64,
+                                            dy: 0.0,
+                                        })
+                                        .await;
                                 }
                             }
                             EventSummary::AbsoluteAxis(_, axis, val) => {
@@ -393,14 +497,26 @@ impl InputCapture for EvdevCapture {
                                     if axis == AbsoluteAxisCode::ABS_MT_POSITION_X {
                                         if let Some(dx) = tracker.update_x(val) {
                                             let scaled = dx as f64 * TOUCHPAD_SENSITIVITY;
-                                            let _ = tx_c.send(InternalInputEvent::CursorMove { dx: scaled, dy: 0.0 }).await;
+                                            let _ = tx_c
+                                                .send(InternalInputEvent::CursorMove {
+                                                    dx: scaled,
+                                                    dy: 0.0,
+                                                })
+                                                .await;
                                         }
                                     } else if axis == AbsoluteAxisCode::ABS_MT_POSITION_Y {
                                         if let Some(dy) = tracker.update_y(val) {
                                             let scaled = dy as f64 * TOUCHPAD_SENSITIVITY;
-                                            let _ = tx_c.send(InternalInputEvent::CursorMove { dx: 0.0, dy: scaled }).await;
+                                            let _ = tx_c
+                                                .send(InternalInputEvent::CursorMove {
+                                                    dx: 0.0,
+                                                    dy: scaled,
+                                                })
+                                                .await;
                                         }
-                                    } else if axis == AbsoluteAxisCode::ABS_MT_TRACKING_ID && val == -1 {
+                                    } else if axis == AbsoluteAxisCode::ABS_MT_TRACKING_ID
+                                        && val == -1
+                                    {
                                         tracker.reset();
                                     }
                                 }
@@ -410,7 +526,9 @@ impl InputCapture for EvdevCapture {
 
                                 if code == KeyCode::KEY_ESC && val == 1 {
                                     let now = Instant::now();
-                                    if now.duration_since(last_esc) < Duration::from_millis(EMERGENCY_EXIT_WINDOW_MS) {
+                                    if now.duration_since(last_esc)
+                                        < Duration::from_millis(EMERGENCY_EXIT_WINDOW_MS)
+                                    {
                                         esc_count += 1;
                                     } else {
                                         esc_count = 1;
@@ -418,24 +536,44 @@ impl InputCapture for EvdevCapture {
                                     last_esc = now;
 
                                     if esc_count >= EMERGENCY_EXIT_PRESSES {
-                                        info!("[continuity:input] KERNEL EMERGENCY EXIT triggered for {}", name_c);
+                                        info!(
+                                            "[continuity:input] KERNEL EMERGENCY EXIT triggered for {}",
+                                            name_c
+                                        );
                                         let _ = tx_c.send(InternalInputEvent::EmergencyExit).await;
                                         return;
                                     }
                                 }
 
-                                let is_mouse = code_u32 >= 272 && code_u32 <= 276;
+                                let is_mouse = (272..=276).contains(&code_u32);
                                 if is_mouse {
                                     if val == 1 {
-                                        let _ = tx_c.send(InternalInputEvent::PointerButton { button: code_u32, state: 1 }).await;
+                                        let _ = tx_c
+                                            .send(InternalInputEvent::PointerButton {
+                                                button: code_u32,
+                                                state: 1,
+                                            })
+                                            .await;
                                     } else if val == 0 {
-                                        let _ = tx_c.send(InternalInputEvent::PointerButton { button: code_u32, state: 0 }).await;
+                                        let _ = tx_c
+                                            .send(InternalInputEvent::PointerButton {
+                                                button: code_u32,
+                                                state: 0,
+                                            })
+                                            .await;
                                     }
                                 } else {
                                     if val == 1 || val == 2 {
-                                        let _ = tx_c.send(InternalInputEvent::KeyPress { key: code_u32, state: 1 }).await;
+                                        let _ = tx_c
+                                            .send(InternalInputEvent::KeyPress {
+                                                key: code_u32,
+                                                state: 1,
+                                            })
+                                            .await;
                                     } else if val == 0 {
-                                        let _ = tx_c.send(InternalInputEvent::KeyRelease { key: code_u32 }).await;
+                                        let _ = tx_c
+                                            .send(InternalInputEvent::KeyRelease { key: code_u32 })
+                                            .await;
                                     }
                                 }
                             }
@@ -446,10 +584,17 @@ impl InputCapture for EvdevCapture {
                 info!("[continuity:input] reader thread finished for {}", name_c);
             });
             self.tasks.push(task);
-            info!("[continuity:input] grabbed {} in {:?}", name, grab_start.elapsed());
+            info!(
+                "[continuity:input] grabbed {} in {:?}",
+                name,
+                grab_start.elapsed()
+            );
         }
 
-        info!("[continuity:input] total start took {:?}", start_time.elapsed());
+        info!(
+            "[continuity:input] total start took {:?}",
+            start_time.elapsed()
+        );
         if !grabbed_any {
             return Err("no suitable input devices found to grab".into());
         }
@@ -459,7 +604,10 @@ impl InputCapture for EvdevCapture {
 
     fn stop(&mut self) {
         if !self.tasks.is_empty() {
-            info!("[continuity:input] stopping {} reader tasks", self.tasks.len());
+            info!(
+                "[continuity:input] stopping {} reader tasks",
+                self.tasks.len()
+            );
             for task in self.tasks.drain(..) {
                 task.abort();
             }
