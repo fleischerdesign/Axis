@@ -1,8 +1,6 @@
-use axis_domain::models::continuity::{
-    ContinuityStatus, InputEvent, PeerArrangement, PeerConfig, Side,
-};
-use axis_domain::ports::continuity::{ContinuityError, ContinuityProvider, ContinuityStream};
 use async_trait::async_trait;
+use axis_domain::models::continuity::{ContinuityStatus, PeerArrangement, PeerConfig};
+use axis_domain::ports::continuity::{ContinuityError, ContinuityProvider, ContinuityStream};
 use log::{error, warn};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -59,10 +57,7 @@ impl ContinuityDbusProxy {
         Ok(())
     }
 
-    async fn call_get_state(
-        &self,
-        conn: &Connection,
-    ) -> Result<ContinuityStatus, ContinuityError> {
+    async fn call_get_state(&self, conn: &Connection) -> Result<ContinuityStatus, ContinuityError> {
         let result: String = conn
             .call_method(
                 Some("org.axis.Shell"),
@@ -103,7 +98,9 @@ impl ContinuityDbusProxy {
         if result {
             Ok(())
         } else {
-            Err(ContinuityError::ProviderError(format!("{method} returned false")))
+            Err(ContinuityError::ProviderError(format!(
+                "{method} returned false"
+            )))
         }
     }
 
@@ -129,7 +126,9 @@ impl ContinuityDbusProxy {
         if result {
             Ok(())
         } else {
-            Err(ContinuityError::ProviderError(format!("{method} returned false")))
+            Err(ContinuityError::ProviderError(format!(
+                "{method} returned false"
+            )))
         }
     }
 
@@ -155,7 +154,9 @@ impl ContinuityDbusProxy {
         if result {
             Ok(())
         } else {
-            Err(ContinuityError::ProviderError(format!("{method} returned false")))
+            Err(ContinuityError::ProviderError(format!(
+                "{method} returned false"
+            )))
         }
     }
 
@@ -248,23 +249,10 @@ impl ContinuityProvider for ContinuityDbusProxy {
         self.call_method_str("Unpair", peer_id).await
     }
 
-    async fn start_sharing(&self, _side: Side, _edge_pos: f64) -> Result<(), ContinuityError> {
-        Err(ContinuityError::ProviderError("start_sharing not supported via D-Bus".into()))
-    }
-
-    async fn stop_sharing(&self, _edge_pos: f64) -> Result<(), ContinuityError> {
-        Err(ContinuityError::ProviderError("stop_sharing not supported via D-Bus".into()))
-    }
-
-    async fn send_input(&self, _event: InputEvent) -> Result<(), ContinuityError> {
-        Err(ContinuityError::ProviderError("send_input not supported via D-Bus".into()))
-    }
-
-    async fn force_local(&self) -> Result<(), ContinuityError> {
-        Err(ContinuityError::ProviderError("force_local not supported via D-Bus".into()))
-    }
-
-    async fn set_peer_arrangement(&self, arrangement: PeerArrangement) -> Result<(), ContinuityError> {
+    async fn set_peer_arrangement(
+        &self,
+        arrangement: PeerArrangement,
+    ) -> Result<(), ContinuityError> {
         let json = serde_json::to_string(&arrangement)
             .map_err(|e| ContinuityError::ProviderError(format!("serialize: {e}")))?;
         self.call_method_str("SetPeerArrangement", &json).await

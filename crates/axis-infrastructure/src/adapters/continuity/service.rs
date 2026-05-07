@@ -1,8 +1,10 @@
+use async_trait::async_trait;
 use axis_domain::models::continuity::{
     ContinuityStatus, InputEvent, PeerArrangement, PeerConfig, Side,
 };
-use axis_domain::ports::continuity::{ContinuityError, ContinuityProvider, ContinuityStream};
-use async_trait::async_trait;
+use axis_domain::ports::continuity::{
+    ContinuityError, ContinuityProvider, ContinuitySharingProvider, ContinuityStream,
+};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::watch;
@@ -35,7 +37,9 @@ impl ContinuityService {
         self.cmd_tx.clone()
     }
 
-    pub fn snapshot_rx(&self) -> watch::Receiver<axis_domain::models::continuity::ContinuityStatus> {
+    pub fn snapshot_rx(
+        &self,
+    ) -> watch::Receiver<axis_domain::models::continuity::ContinuityStatus> {
         self.status_tx.subscribe()
     }
 }
@@ -92,6 +96,27 @@ impl ContinuityProvider for ContinuityService {
             .map_err(|e| ContinuityError::ProviderError(e.to_string()))
     }
 
+    async fn set_peer_arrangement(
+        &self,
+        arrangement: PeerArrangement,
+    ) -> Result<(), ContinuityError> {
+        self.cmd_tx
+            .try_send(ContinuityCmd::SetPeerArrangement(arrangement))
+            .map_err(|e| ContinuityError::ProviderError(e.to_string()))
+    }
+
+    async fn update_peer_configs(
+        &self,
+        configs: HashMap<String, PeerConfig>,
+    ) -> Result<(), ContinuityError> {
+        self.cmd_tx
+            .try_send(ContinuityCmd::UpdatePeerConfigs(configs))
+            .map_err(|e| ContinuityError::ProviderError(e.to_string()))
+    }
+}
+
+#[async_trait]
+impl ContinuitySharingProvider for ContinuityService {
     async fn start_sharing(&self, side: Side, edge_pos: f64) -> Result<(), ContinuityError> {
         self.cmd_tx
             .try_send(ContinuityCmd::StartSharing(side, edge_pos))
@@ -113,21 +138,6 @@ impl ContinuityProvider for ContinuityService {
     async fn force_local(&self) -> Result<(), ContinuityError> {
         self.cmd_tx
             .try_send(ContinuityCmd::ForceLocal)
-            .map_err(|e| ContinuityError::ProviderError(e.to_string()))
-    }
-
-    async fn set_peer_arrangement(&self, arrangement: PeerArrangement) -> Result<(), ContinuityError> {
-        self.cmd_tx
-            .try_send(ContinuityCmd::SetPeerArrangement(arrangement))
-            .map_err(|e| ContinuityError::ProviderError(e.to_string()))
-    }
-
-    async fn update_peer_configs(
-        &self,
-        configs: HashMap<String, PeerConfig>,
-    ) -> Result<(), ContinuityError> {
-        self.cmd_tx
-            .try_send(ContinuityCmd::UpdatePeerConfigs(configs))
             .map_err(|e| ContinuityError::ProviderError(e.to_string()))
     }
 }

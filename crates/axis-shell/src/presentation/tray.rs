@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
 use axis_application::use_cases::tray::activate::ActivateTrayItemUseCase;
 use axis_application::use_cases::tray::context_menu::ContextMenuTrayItemUseCase;
@@ -6,6 +5,7 @@ use axis_application::use_cases::tray::scroll::ScrollTrayItemUseCase;
 use axis_domain::models::tray::TrayStatus;
 use axis_domain::ports::tray::TrayProvider;
 use axis_presentation::{Presenter, View};
+use std::sync::Arc;
 
 pub trait TrayView: View<TrayStatus> {
     fn on_activate(&self, f: Box<dyn Fn(String, i32, i32) + 'static>);
@@ -51,14 +51,8 @@ impl TrayPresenter {
             }
         });
 
-        let inner = Presenter::from_subscribe({
-            let uc = subscribe_use_case.clone();
-            move || {
-                let uc = uc.clone();
-                async move { uc.execute().await }
-            }
-        })
-        .with_initial_status(initial_status);
+        let inner = Presenter::from_subscribe_use_case(subscribe_use_case.clone())
+            .with_initial_status(initial_status);
 
         Self {
             inner,

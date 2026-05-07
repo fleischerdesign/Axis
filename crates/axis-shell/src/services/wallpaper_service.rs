@@ -4,8 +4,8 @@ use log::{error, info};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use axis_presentation::View;
 use axis_domain::models::config::AppearanceConfig;
+use axis_presentation::View;
 
 type TextureCallback = dyn Fn(Option<gtk4::gdk::Texture>);
 
@@ -102,7 +102,6 @@ impl WallpaperService {
         self.windows.borrow_mut().clear();
         *self.texture.borrow_mut() = None;
     }
-
 }
 
 impl View<AppearanceConfig> for WallpaperService {

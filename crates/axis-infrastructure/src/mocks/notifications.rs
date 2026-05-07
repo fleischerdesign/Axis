@@ -1,10 +1,12 @@
-use axis_domain::models::notifications::{Notification, NotificationStatus};
-use axis_domain::ports::notifications::{ActionHandler, NotificationProvider, NotificationError, NotificationStream};
 use async_trait::async_trait;
-use tokio::sync::watch;
-use tokio_stream::wrappers::WatchStream;
+use axis_domain::models::notifications::{Notification, NotificationStatus, Urgency};
+use axis_domain::ports::notifications::{
+    ActionHandler, NotificationError, NotificationProvider, NotificationStream,
+};
 use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::sync::watch;
+use tokio_stream::wrappers::WatchStream;
 
 pub struct MockNotificationProvider {
     status_tx: watch::Sender<NotificationStatus>,
@@ -19,7 +21,7 @@ impl MockNotificationProvider {
                 app_icon: "system-software-update".to_string(),
                 summary: "Update Available".to_string(),
                 body: "A new version of Axis is ready.".to_string(),
-                urgency: 1,
+                urgency: Urgency::Normal,
                 actions: vec![],
                 timeout: 0,
                 timestamp: std::time::SystemTime::now()
@@ -54,7 +56,12 @@ impl NotificationProvider for MockNotificationProvider {
         Ok(())
     }
 
-    async fn invoke_action(&self, _id: u32, _action_key: &str, _user_input: Option<String>) -> Result<(), NotificationError> {
+    async fn invoke_action(
+        &self,
+        _id: u32,
+        _action_key: &str,
+        _user_input: Option<String>,
+    ) -> Result<(), NotificationError> {
         Ok(())
     }
 

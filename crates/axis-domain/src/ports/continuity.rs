@@ -1,15 +1,15 @@
-use crate::models::continuity::{
-    ContinuityStatus, InputEvent, PeerArrangement, PeerConfig, Side,
-};
+use super::StatusStream;
+use crate::models::continuity::{ContinuityStatus, InputEvent, PeerArrangement, PeerConfig, Side};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use thiserror::Error;
-use super::StatusStream;
 
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum ContinuityError {
     #[error("Continuity provider error: {0}")]
     ProviderError(String),
+    #[error("Validation error: {0}")]
+    ValidationError(String),
     #[error("Discovery failed: {0}")]
     DiscoveryFailed(String),
     #[error("Connection failed: {0}")]
@@ -39,12 +39,10 @@ pub trait ContinuityProvider: Send + Sync {
     async fn cancel_reconnect(&self) -> Result<(), ContinuityError>;
     async fn unpair(&self, peer_id: &str) -> Result<(), ContinuityError>;
 
-    async fn start_sharing(&self, side: Side, edge_pos: f64) -> Result<(), ContinuityError>;
-    async fn stop_sharing(&self, edge_pos: f64) -> Result<(), ContinuityError>;
-    async fn send_input(&self, event: InputEvent) -> Result<(), ContinuityError>;
-    async fn force_local(&self) -> Result<(), ContinuityError>;
-
-    async fn set_peer_arrangement(&self, arrangement: PeerArrangement) -> Result<(), ContinuityError>;
+    async fn set_peer_arrangement(
+        &self,
+        arrangement: PeerArrangement,
+    ) -> Result<(), ContinuityError>;
     async fn update_peer_configs(
         &self,
         configs: HashMap<String, PeerConfig>,
@@ -52,3 +50,11 @@ pub trait ContinuityProvider: Send + Sync {
 }
 
 crate::status_provider!(ContinuityProvider, ContinuityStatus, ContinuityError);
+
+#[async_trait]
+pub trait ContinuitySharingProvider: Send + Sync {
+    async fn start_sharing(&self, side: Side, edge_pos: f64) -> Result<(), ContinuityError>;
+    async fn stop_sharing(&self, edge_pos: f64) -> Result<(), ContinuityError>;
+    async fn send_input(&self, event: InputEvent) -> Result<(), ContinuityError>;
+    async fn force_local(&self) -> Result<(), ContinuityError>;
+}

@@ -1,6 +1,6 @@
-use axis_domain::ports::network::{NetworkProvider, NetworkError};
-use std::sync::Arc;
+use axis_domain::ports::network::{NetworkError, NetworkProvider};
 use log::debug;
+use std::sync::Arc;
 
 pub struct ScanWifiUseCase {
     provider: Arc<dyn NetworkProvider>,

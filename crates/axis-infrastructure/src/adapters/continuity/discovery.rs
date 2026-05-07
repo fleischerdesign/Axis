@@ -2,8 +2,8 @@ use async_channel::Sender;
 use axis_domain::models::continuity::PeerInfo;
 use futures_util::StreamExt;
 use log::{error, info, warn};
-use zbus::zvariant::OwnedObjectPath;
 use zbus::Connection;
+use zbus::zvariant::OwnedObjectPath;
 
 use super::known_peers;
 
@@ -30,6 +30,12 @@ pub struct AvahiDiscovery {
     browse_task: Option<tokio::task::JoinHandle<()>>,
 }
 
+impl Default for AvahiDiscovery {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AvahiDiscovery {
     pub fn new() -> Self {
         Self {
@@ -46,15 +52,13 @@ impl DiscoveryProvider for AvahiDiscovery {
 
         let (tx, rx) = std::sync::mpsc::channel();
 
-        std::thread::spawn(move || {
-            match tokio::runtime::Runtime::new() {
-                Ok(rt) => {
-                    let result = rt.block_on(register_service(&name, port));
-                    let _ = tx.send(result);
-                }
-                Err(e) => {
-                    let _ = tx.send(Err(format!("failed to create tokio runtime: {e}")));
-                }
+        std::thread::spawn(move || match tokio::runtime::Runtime::new() {
+            Ok(rt) => {
+                let result = rt.block_on(register_service(&name, port));
+                let _ = tx.send(result);
+            }
+            Err(e) => {
+                let _ = tx.send(Err(format!("failed to create tokio runtime: {e}")));
             }
         });
 
@@ -98,22 +102,22 @@ impl DiscoveryProvider for AvahiDiscovery {
             task.abort();
         }
 
-        if let Some(conn) = &self.conn {
-            if let Some(path) = self.entry_group_path.take() {
-                let conn = conn.clone();
-                tokio::spawn(async move {
-                    if let Ok(group) = zbus::Proxy::new(
-                        &conn,
-                        "org.freedesktop.Avahi",
-                        &path,
-                        "org.freedesktop.Avahi.EntryGroup",
-                    )
-                    .await
-                    {
-                        let _ = group.call_method("Free", &()).await;
-                    }
-                });
-            }
+        if let Some(conn) = &self.conn
+            && let Some(path) = self.entry_group_path.take()
+        {
+            let conn = conn.clone();
+            tokio::spawn(async move {
+                if let Ok(group) = zbus::Proxy::new(
+                    &conn,
+                    "org.freedesktop.Avahi",
+                    &path,
+                    "org.freedesktop.Avahi.EntryGroup",
+                )
+                .await
+                {
+                    let _ = group.call_method("Free", &()).await;
+                }
+            });
         }
 
         self.conn = None;
@@ -126,10 +130,7 @@ impl Drop for AvahiDiscovery {
     }
 }
 
-async fn register_service(
-    name: &str,
-    port: u16,
-) -> Result<(OwnedObjectPath, Connection), String> {
+async fn register_service(name: &str, port: u16) -> Result<(OwnedObjectPath, Connection), String> {
     let conn = Connection::system()
         .await
         .map_err(|e| format!("D-Bus connect: {e}"))?;
@@ -165,17 +166,7 @@ async fn register_service(
     group
         .call_method(
             "AddService",
-            &(
-                -1i32,
-                -1i32,
-                0u32,
-                name,
-                AVAHI_SERVICE,
-                "",
-                "",
-                port,
-                empty,
-            ),
+            &(-1i32, -1i32, 0u32, name, AVAHI_SERVICE, "", "", port, empty),
         )
         .await
         .map_err(|e| format!("AddService: {e}"))?;
@@ -244,7 +235,10 @@ async fn browse_services(
                 Ok(peers) => {
                     for peer in peers {
                         if seen.insert(peer.device_id.clone()) {
-                            info!("[continuity:discovery] peer: {} at {}", peer.device_name, peer.address);
+                            info!(
+                                "[continuity:discovery] peer: {} at {}",
+                                peer.device_name, peer.address
+                            );
                             let _ = tx_scan.send(DiscoveryEvent::PeerFound(peer)).await;
                         }
                     }
@@ -342,10 +336,34 @@ async fn resolve_service(
         .map_err(|e| format!("Found signal: {e}"))?;
 
     if let Some(msg) = found.next().await {
-        type AvahiFoundBody = (i32, i32, String, String, String, String, i32, String, u16, Vec<Vec<u8>>, u32);
+        type AvahiFoundBody = (
+            i32,
+            i32,
+            String,
+            String,
+            String,
+            String,
+            i32,
+            String,
+            u16,
+            Vec<Vec<u8>>,
+            u32,
+        );
         let body = msg.body();
         match body.deserialize::<AvahiFoundBody>() {
-            Ok((_if, _proto, resolved_name, _stype, _domain, host, _a, address, port, _txt, _flags)) => {
+            Ok((
+                _if,
+                _proto,
+                resolved_name,
+                _stype,
+                _domain,
+                host,
+                _a,
+                address,
+                port,
+                _txt,
+                _flags,
+            )) => {
                 info!(
                     "[continuity:discovery] resolved: name={resolved_name} host={host} addr={address} port={port}"
                 );
@@ -375,9 +393,7 @@ async fn resolve_service(
     Err("resolver timed out".into())
 }
 
-async fn scan_cached_services(
-    _conn: &Connection,
-) -> Result<Vec<PeerInfo>, String> {
+async fn scan_cached_services(_conn: &Connection) -> Result<Vec<PeerInfo>, String> {
     let output = tokio::process::Command::new("avahi-browse")
         .args(["-t", AVAHI_SERVICE, "--resolve", "-p", "-r"])
         .output()
@@ -422,7 +438,9 @@ async fn scan_cached_services(
         } else {
             format!("{address}:{port}")
         };
-        let Ok(socket_addr) = addr_str.parse() else { continue };
+        let Ok(socket_addr) = addr_str.parse() else {
+            continue;
+        };
 
         let entry = raw.entry(name.clone()).or_insert_with(|| RawEntry {
             name: name.clone(),
@@ -443,7 +461,9 @@ async fn scan_cached_services(
 
     let mut result = Vec::new();
     for (_, entry) in raw {
-        let Some(addr_v4) = entry.addr_v4 else { continue };
+        let Some(addr_v4) = entry.addr_v4 else {
+            continue;
+        };
         result.push(PeerInfo {
             device_id: entry.name,
             device_name: entry.host.clone(),

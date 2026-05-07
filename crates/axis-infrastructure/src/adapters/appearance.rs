@@ -57,7 +57,9 @@ impl ConfigAppearanceProvider {
 #[async_trait]
 impl AppearanceProvider for ConfigAppearanceProvider {
     async fn get_status(&self) -> Result<AppearanceConfig, AppearanceError> {
-        let config = self.config_provider.get()
+        let config = self
+            .config_provider
+            .get()
             .map_err(|e| AppearanceError::ProviderError(e.to_string()))?;
         Ok(Self::config_to_status(&config))
     }

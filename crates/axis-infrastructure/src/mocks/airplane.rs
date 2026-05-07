@@ -1,6 +1,6 @@
+use async_trait::async_trait;
 use axis_domain::models::airplane::AirplaneStatus;
 use axis_domain::ports::airplane::{AirplaneError, AirplaneProvider, AirplaneStream};
-use async_trait::async_trait;
 use std::sync::{Arc, Mutex};
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;

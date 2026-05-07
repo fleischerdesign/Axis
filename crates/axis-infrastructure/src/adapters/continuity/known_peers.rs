@@ -127,10 +127,10 @@ pub fn known_peers_path() -> PathBuf {
 
 pub fn load_known_peers() -> KnownPeersStore {
     let path = known_peers_path();
-    if let Ok(content) = std::fs::read_to_string(&path) {
-        if let Ok(store) = serde_json::from_str(&content) {
-            return store;
-        }
+    if let Ok(content) = std::fs::read_to_string(&path)
+        && let Ok(store) = serde_json::from_str(&content)
+    {
+        return store;
     }
     KnownPeersStore::default()
 }

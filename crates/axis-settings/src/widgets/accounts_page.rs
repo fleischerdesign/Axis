@@ -1,9 +1,9 @@
-use libadwaita::prelude::*;
-use libadwaita as adw;
-use std::rc::Rc;
-use axis_domain::models::cloud::{CloudStatus, AccountStatus};
-use crate::presentation::accounts::{AccountsView, AccountsPresenter};
+use crate::presentation::accounts::{AccountsPresenter, AccountsView};
+use axis_domain::models::cloud::{AccountStatus, CloudStatus};
 use axis_presentation::View;
+use libadwaita as adw;
+use libadwaita::prelude::*;
+use std::rc::Rc;
 
 pub struct AccountsPage {
     root: adw::ToolbarView,
@@ -38,13 +38,13 @@ impl AccountsPage {
         let add_group = adw::PreferencesGroup::builder()
             .title("Add Account")
             .build();
-        
+
         let google_row = adw::ActionRow::builder()
             .title("Google")
             .subtitle("Calendar, Tasks and more")
             .activatable(true)
             .build();
-        
+
         let google_icon = gtk4::Image::from_icon_name("google-symbolic");
         google_row.add_prefix(&google_icon);
         google_row.add_suffix(&gtk4::Image::from_icon_name("go-next-symbolic"));
@@ -89,13 +89,13 @@ impl View<CloudStatus> for AccountsPage {
                 .title(&account.display_name)
                 .subtitle(&account.provider_name)
                 .build();
-            
+
             let status_icon = match account.status {
                 AccountStatus::Online => "emblem-ok-symbolic",
                 AccountStatus::NeedsAuthentication(_) => "dialog-warning-symbolic",
                 _ => "dialog-error-symbolic",
             };
-            
+
             row.add_suffix(&gtk4::Image::from_icon_name(status_icon));
             self.accounts_list.append(&row);
         }

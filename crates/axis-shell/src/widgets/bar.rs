@@ -5,6 +5,12 @@ pub struct Bar {
     center_box: gtk4::CenterBox,
 }
 
+impl Default for Bar {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Bar {
     pub fn new() -> Self {
         let center_box = gtk4::CenterBox::new();
@@ -19,7 +25,10 @@ impl Bar {
         container.add_css_class("bar-main-widget");
         container.append(&center_box);
 
-        Self { container, center_box }
+        Self {
+            container,
+            center_box,
+        }
     }
 
     pub fn set_start_widget<P: IsA<gtk4::Widget>>(&self, widget: Option<&P>) {

@@ -1,9 +1,9 @@
-use axis_domain::models::popups::{PopupType, PopupStatus};
-use axis_domain::ports::popups::{PopupProvider, PopupError, PopupStream};
 use async_trait::async_trait;
+use axis_domain::models::popups::{PopupStatus, PopupType};
+use axis_domain::ports::popups::{PopupError, PopupProvider, PopupStream};
+use std::sync::Arc;
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
-use std::sync::Arc;
 
 pub struct LocalPopupProvider {
     status_tx: watch::Sender<PopupStatus>,
@@ -28,7 +28,9 @@ impl PopupProvider for LocalPopupProvider {
     }
 
     async fn open_popup(&self, popup_type: PopupType) -> Result<(), PopupError> {
-        let _ = self.status_tx.send(PopupStatus { active_popup: Some(popup_type) });
+        let _ = self.status_tx.send(PopupStatus {
+            active_popup: Some(popup_type),
+        });
         Ok(())
     }
 

@@ -1,9 +1,9 @@
-use gtk4::prelude::*;
-use axis_domain::models::bluetooth::BluetoothStatus;
-use axis_presentation::View;
 use crate::presentation::bluetooth::BluetoothPresenter;
 use crate::widgets::components::list_row::ListRow;
 use crate::widgets::components::popup_header::PopupHeader;
+use axis_domain::models::bluetooth::BluetoothStatus;
+use axis_presentation::View;
+use gtk4::prelude::*;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -127,4 +127,3 @@ impl View<BluetoothStatus> for BluetoothPageView {
         }
     }
 }
-

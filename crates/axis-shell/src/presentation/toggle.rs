@@ -1,7 +1,7 @@
+use axis_presentation::{Presenter, View, view::FnView};
+use futures_util::Stream;
 use std::future::Future;
 use std::sync::Arc;
-use futures_util::Stream;
-use axis_presentation::{Presenter, View, view::FnView};
 
 pub trait ToggleView: View<bool> {
     fn set_label(&self, label: &str);
@@ -17,6 +17,7 @@ pub struct TogglePresenter {
     toggle: Arc<dyn Fn(bool) + Send + Sync>,
 }
 
+#[allow(dead_code)]
 impl TogglePresenter {
     pub fn new<F, Fut, St, E>(
         label: &str,
@@ -41,9 +42,17 @@ impl TogglePresenter {
         }
     }
 
+    pub fn add_view(&self, view: Box<dyn View<bool>>) {
+        self.inner.add_view(view);
+    }
+
+    pub async fn run_sync(&self) {
+        self.inner.run_sync().await;
+    }
+
     pub async fn bind(&self, view: Box<dyn ToggleView>) {
         view.set_label(&self.label);
-        
+
         let toggle_fn = self.toggle.clone();
         view.on_toggled(Box::new(move |new_state| {
             (toggle_fn)(new_state);
@@ -51,15 +60,20 @@ impl TogglePresenter {
 
         let icon_active = self.icon_active.clone();
         let icon_inactive = self.icon_inactive.clone();
-        
+
         // Wrap the view in an Arc to share it between the FnView and the Presenter
         let view_shared: Arc<dyn ToggleView> = Arc::from(view);
         let view_c = view_shared.clone();
 
-        self.inner.add_view(Box::new(FnView::new(move |active: &bool| {
-            view_c.render(active);
-            view_c.set_icon(if *active { &icon_active } else { &icon_inactive });
-        })));
+        self.inner
+            .add_view(Box::new(FnView::new(move |active: &bool| {
+                view_c.render(active);
+                view_c.set_icon(if *active {
+                    &icon_active
+                } else {
+                    &icon_inactive
+                });
+            })));
 
         self.inner.run_sync().await;
     }

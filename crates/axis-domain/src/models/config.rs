@@ -24,7 +24,7 @@ pub struct AxisConfig {
     pub idle_inhibit: IdleInhibitConfig,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct AppearanceConfig {
     #[serde(default)]
     pub wallpaper: Option<String>,
@@ -34,17 +34,6 @@ pub struct AppearanceConfig {
     pub color_scheme: ColorScheme,
     #[serde(default)]
     pub font: Option<String>,
-}
-
-impl Default for AppearanceConfig {
-    fn default() -> Self {
-        Self {
-            wallpaper: None,
-            accent_color: AccentColor::default(),
-            color_scheme: ColorScheme::default(),
-            font: None,
-        }
-    }
 }
 
 impl AppearanceConfig {
@@ -219,19 +208,13 @@ pub struct ContinuityConfig {
     pub enabled: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct IdleInhibitConfig {
     #[serde(default)]
     pub enabled: bool,
 }
 
-impl Default for IdleInhibitConfig {
-    fn default() -> Self {
-        Self { enabled: false }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct IdleConfig {
     #[serde(default)]
     pub lock_timeout_seconds: Option<u32>,
@@ -239,14 +222,4 @@ pub struct IdleConfig {
     pub blank_timeout_seconds: Option<u32>,
     #[serde(default)]
     pub sleep_timeout_seconds: Option<u32>,
-}
-
-impl Default for IdleConfig {
-    fn default() -> Self {
-        Self {
-            lock_timeout_seconds: None,
-            blank_timeout_seconds: None,
-            sleep_timeout_seconds: None,
-        }
-    }
 }

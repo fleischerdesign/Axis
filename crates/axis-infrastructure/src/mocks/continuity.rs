@@ -1,9 +1,10 @@
-use axis_domain::models::continuity::{
-    ContinuityStatus, InputEvent, PeerArrangement,
-    PeerConfig, PeerInfo, SharingState, Side,
-};
-use axis_domain::ports::continuity::{ContinuityError, ContinuityProvider, ContinuityStream};
 use async_trait::async_trait;
+use axis_domain::models::continuity::{
+    ContinuityStatus, InputEvent, PeerArrangement, PeerConfig, PeerInfo, SharingState, Side,
+};
+use axis_domain::ports::continuity::{
+    ContinuityError, ContinuityProvider, ContinuitySharingProvider, ContinuityStream,
+};
 use futures_util::stream;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -82,6 +83,23 @@ impl ContinuityProvider for MockContinuityProvider {
         Ok(())
     }
 
+    async fn set_peer_arrangement(
+        &self,
+        _arrangement: PeerArrangement,
+    ) -> Result<(), ContinuityError> {
+        Ok(())
+    }
+
+    async fn update_peer_configs(
+        &self,
+        _configs: HashMap<String, PeerConfig>,
+    ) -> Result<(), ContinuityError> {
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl ContinuitySharingProvider for MockContinuityProvider {
     async fn start_sharing(&self, _side: Side, _edge_pos: f64) -> Result<(), ContinuityError> {
         Ok(())
     }
@@ -95,14 +113,6 @@ impl ContinuityProvider for MockContinuityProvider {
     }
 
     async fn force_local(&self) -> Result<(), ContinuityError> {
-        Ok(())
-    }
-
-    async fn set_peer_arrangement(&self, _arrangement: PeerArrangement) -> Result<(), ContinuityError> {
-        Ok(())
-    }
-
-    async fn update_peer_configs(&self, _configs: HashMap<String, PeerConfig>) -> Result<(), ContinuityError> {
         Ok(())
     }
 }

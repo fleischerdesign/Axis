@@ -1,13 +1,15 @@
+use super::StatusStream;
 use crate::models::appearance::{AccentColor, ColorScheme};
 use crate::models::config::AppearanceConfig;
 use async_trait::async_trait;
-use super::StatusStream;
 use thiserror::Error;
 
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum AppearanceError {
     #[error("Appearance provider error: {0}")]
     ProviderError(String),
+    #[error("Validation error: {0}")]
+    ValidationError(String),
 }
 
 pub type AppearanceStream = StatusStream<AppearanceConfig>;

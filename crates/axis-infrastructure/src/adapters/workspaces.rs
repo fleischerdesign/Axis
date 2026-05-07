@@ -1,25 +1,27 @@
-use axis_domain::models::workspaces::{Workspace, WorkspaceStatus};
-use axis_domain::ports::workspaces::{WorkspaceProvider, WorkspaceError, WorkspaceStream};
 use async_trait::async_trait;
+use axis_domain::models::workspaces::{Workspace, WorkspaceStatus};
+use axis_domain::ports::workspaces::{WorkspaceError, WorkspaceProvider, WorkspaceStream};
+use niri_ipc::{Action, Event, Request, Response, WorkspaceReferenceArg, socket::Socket};
+use std::sync::Arc;
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
-use std::sync::Arc;
-use niri_ipc::{socket::Socket, Event, Request, Response, Action, WorkspaceReferenceArg};
 
 pub struct NiriWorkspaceProvider {
     status_tx: watch::Sender<WorkspaceStatus>,
 }
 
 impl NiriWorkspaceProvider {
+    #[allow(clippy::collapsible_if)]
     pub async fn new() -> Result<Arc<Self>, WorkspaceError> {
         let (initial_status, _query_sock) = {
-            let mut sock = Socket::connect()
-                .map_err(|e| WorkspaceError::ProviderError(e.to_string()))?;
-            
-            let response = sock.send(Request::Workspaces)
+            let mut sock =
+                Socket::connect().map_err(|e| WorkspaceError::ProviderError(e.to_string()))?;
+
+            let response = sock
+                .send(Request::Workspaces)
                 .map_err(|e| WorkspaceError::ProviderError(e.to_string()))?
-                .map_err(|e| WorkspaceError::ProviderError(e))?;
-            
+                .map_err(WorkspaceError::ProviderError)?;
+
             let status = Self::map_workspaces_response(response)?;
             (status, sock)
         };
@@ -36,9 +38,13 @@ impl NiriWorkspaceProvider {
                         while let Ok(event) = read_event() {
                             match event {
                                 Event::WorkspacesChanged { workspaces } => {
-                                    let overview_open = provider_clone.status_tx.borrow().overview_open;
+                                    let overview_open =
+                                        provider_clone.status_tx.borrow().overview_open;
                                     let status = WorkspaceStatus {
-                                        workspaces: workspaces.into_iter().map(Self::map_workspace).collect(),
+                                        workspaces: workspaces
+                                            .into_iter()
+                                            .map(Self::map_workspace)
+                                            .collect(),
                                         overview_open,
                                     };
                                     let _ = provider_clone.status_tx.send(status);
@@ -71,9 +77,14 @@ impl NiriWorkspaceProvider {
         match response {
             Response::Workspaces(ws_list) => {
                 let workspaces = ws_list.into_iter().map(Self::map_workspace).collect();
-                Ok(WorkspaceStatus { workspaces, overview_open: false })
+                Ok(WorkspaceStatus {
+                    workspaces,
+                    overview_open: false,
+                })
             }
-            _ => Err(WorkspaceError::ProviderError("Unexpected response from Niri".to_string())),
+            _ => Err(WorkspaceError::ProviderError(
+                "Unexpected response from Niri".to_string(),
+            )),
         }
     }
 
@@ -100,22 +111,22 @@ impl WorkspaceProvider for NiriWorkspaceProvider {
     }
 
     async fn focus_workspace(&self, id: u32) -> Result<(), WorkspaceError> {
-        let mut sock = Socket::connect()
-            .map_err(|e| WorkspaceError::ProviderError(e.to_string()))?;
+        let mut sock =
+            Socket::connect().map_err(|e| WorkspaceError::ProviderError(e.to_string()))?;
         sock.send(Request::Action(Action::FocusWorkspace {
             reference: WorkspaceReferenceArg::Id(id as u64),
         }))
         .map_err(|e| WorkspaceError::ProviderError(e.to_string()))?
-        .map_err(|e| WorkspaceError::ProviderError(e))?;
+        .map_err(WorkspaceError::ProviderError)?;
         Ok(())
     }
 
     async fn toggle_overview(&self) -> Result<(), WorkspaceError> {
-        let mut sock = Socket::connect()
-            .map_err(|e| WorkspaceError::ProviderError(e.to_string()))?;
+        let mut sock =
+            Socket::connect().map_err(|e| WorkspaceError::ProviderError(e.to_string()))?;
         sock.send(Request::Action(Action::ToggleOverview {}))
             .map_err(|e| WorkspaceError::ProviderError(e.to_string()))?
-            .map_err(|e| WorkspaceError::ProviderError(e))?;
+            .map_err(WorkspaceError::ProviderError)?;
         Ok(())
     }
 }

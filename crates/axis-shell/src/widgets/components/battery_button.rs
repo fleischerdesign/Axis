@@ -1,13 +1,19 @@
-use libadwaita::prelude::*;
-use axis_domain::models::power::PowerStatus;
 use crate::presentation::battery::battery_icon;
+use axis_domain::models::power::PowerStatus;
 use axis_presentation::View;
+use libadwaita::prelude::*;
 
 #[derive(Clone, Debug)]
 pub struct BatteryButton {
     pub container: gtk4::Button,
     icon: gtk4::Image,
     label: gtk4::Label,
+}
+
+impl Default for BatteryButton {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl BatteryButton {
@@ -26,7 +32,11 @@ impl BatteryButton {
         container.add_css_class("qs-battery-btn");
         container.set_visible(false);
 
-        Self { container, icon, label }
+        Self {
+            container,
+            icon,
+            label,
+        }
     }
 }
 

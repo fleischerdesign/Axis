@@ -1,4 +1,6 @@
-#[derive(Clone, Debug, PartialEq)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 pub struct AudioStatus {
     pub volume: f64,
     pub is_muted: bool,
@@ -7,19 +9,7 @@ pub struct AudioStatus {
     pub sink_inputs: Vec<SinkInput>,
 }
 
-impl Default for AudioStatus {
-    fn default() -> Self {
-        Self {
-            volume: 0.0,
-            is_muted: false,
-            sinks: vec![],
-            sources: vec![],
-            sink_inputs: vec![],
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 pub struct AudioDevice {
     pub id: u32,
     pub name: String,
@@ -27,7 +17,7 @@ pub struct AudioDevice {
     pub is_default: bool,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 pub struct SinkInput {
     pub id: u32,
     pub name: String,

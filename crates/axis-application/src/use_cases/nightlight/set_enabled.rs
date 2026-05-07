@@ -1,6 +1,6 @@
-use axis_domain::ports::nightlight::{NightlightProvider, NightlightError};
-use std::sync::Arc;
+use axis_domain::ports::nightlight::{NightlightError, NightlightProvider};
 use log::info;
+use std::sync::Arc;
 
 pub struct SetNightlightEnabledUseCase {
     provider: Arc<dyn NightlightProvider>,

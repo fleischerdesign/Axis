@@ -2,10 +2,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum Side {
-    Left,
+    #[default]
     Right,
+    Left,
     Top,
     Bottom,
 }
@@ -21,8 +22,9 @@ impl Side {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum SharingState {
+    #[default]
     Idle,
     Pending {
         entry_side: Side,
@@ -90,13 +92,21 @@ impl PeerArrangement {
     pub fn overlap_on_local(&self, local_len: i32, remote_len: i32) -> Option<(i32, i32)> {
         let start = self.offset.max(0);
         let end = (self.offset + remote_len).min(local_len);
-        if start < end { Some((start, end)) } else { None }
+        if start < end {
+            Some((start, end))
+        } else {
+            None
+        }
     }
 
     pub fn overlap_on_remote(&self, local_len: i32, remote_len: i32) -> Option<(i32, i32)> {
         let start = (-self.offset).max(0);
         let end = (local_len - self.offset).min(remote_len);
-        if start < end { Some((start, end)) } else { None }
+        if start < end {
+            Some((start, end))
+        } else {
+            None
+        }
     }
 
     pub fn local_to_remote_edge(&self, local_pos: f64) -> f64 {
@@ -204,8 +214,10 @@ impl Default for ContinuityStatus {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum Message {
+    #[default]
+    Heartbeat,
     Hello {
         device_id: String,
         device_name: String,
@@ -269,18 +281,32 @@ pub enum Message {
         content: Vec<u8>,
         mime_type: String,
     },
-    Heartbeat,
     Disconnect {
         reason: String,
     },
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum InputEvent {
-    CursorMove { dx: f64, dy: f64 },
-    KeyPress { key: u32, state: u8 },
-    KeyRelease { key: u32 },
-    PointerButton { button: u32, state: u8 },
-    PointerAxis { dx: f64, dy: f64 },
+    #[default]
     EmergencyExit,
+    CursorMove {
+        dx: f64,
+        dy: f64,
+    },
+    KeyPress {
+        key: u32,
+        state: u8,
+    },
+    KeyRelease {
+        key: u32,
+    },
+    PointerButton {
+        button: u32,
+        state: u8,
+    },
+    PointerAxis {
+        dx: f64,
+        dy: f64,
+    },
 }

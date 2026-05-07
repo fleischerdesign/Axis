@@ -1,4 +1,4 @@
-use axis_domain::ports::mpris::{MprisProvider, MprisError};
+use axis_domain::ports::mpris::{MprisError, MprisProvider};
 use std::sync::Arc;
 
 pub struct NextTrackUseCase {

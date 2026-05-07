@@ -1,5 +1,6 @@
 use axis_domain::models::continuity::PeerArrangement;
-use axis_domain::ports::continuity::{ContinuityProvider, ContinuityError};
+use axis_domain::ports::continuity::{ContinuityError, ContinuityProvider};
+use log::info;
 use std::sync::Arc;
 
 pub struct SetPeerArrangementUseCase {
@@ -12,6 +13,7 @@ impl SetPeerArrangementUseCase {
     }
 
     pub async fn execute(&self, arrangement: PeerArrangement) -> Result<(), ContinuityError> {
+        info!("[use-case] Setting peer arrangement");
         self.provider.set_peer_arrangement(arrangement).await
     }
 }

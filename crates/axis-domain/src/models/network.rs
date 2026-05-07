@@ -9,7 +9,7 @@ pub struct AccessPoint {
     pub needs_auth: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct NetworkStatus {
     pub is_wifi_connected: bool,
     pub is_ethernet_connected: bool,
@@ -17,17 +17,4 @@ pub struct NetworkStatus {
     pub active_strength: u8,
     pub is_scanning: bool,
     pub access_points: Vec<AccessPoint>,
-}
-
-impl Default for NetworkStatus {
-    fn default() -> Self {
-        Self {
-            is_wifi_connected: false,
-            is_ethernet_connected: false,
-            is_wifi_enabled: false,
-            active_strength: 0,
-            is_scanning: false,
-            access_points: vec![],
-        }
-    }
 }

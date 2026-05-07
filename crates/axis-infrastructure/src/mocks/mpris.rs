@@ -1,9 +1,9 @@
-use axis_domain::models::mpris::{MprisStatus, MprisPlayer, PlaybackState};
-use axis_domain::ports::mpris::{MprisProvider, MprisError, MprisStream};
 use async_trait::async_trait;
+use axis_domain::models::mpris::{MprisPlayer, MprisStatus, PlaybackState};
+use axis_domain::ports::mpris::{MprisError, MprisProvider, MprisStream};
+use std::sync::Arc;
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
-use std::sync::Arc;
 
 pub struct MockMprisProvider {
     status_tx: watch::Sender<MprisStatus>,

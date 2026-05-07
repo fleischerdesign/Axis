@@ -1,11 +1,17 @@
-use libadwaita::prelude::*;
 use gtk4::glib;
+use libadwaita::prelude::*;
 
 #[derive(Clone)]
 pub struct PopupContainer {
     pub container: gtk4::Box,
     wrapper: gtk4::Box,
     revealer: gtk4::Revealer,
+}
+
+impl Default for PopupContainer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PopupContainer {
@@ -23,7 +29,11 @@ impl PopupContainer {
         container.set_valign(gtk4::Align::End);
         container.append(&wrapper);
 
-        Self { container, wrapper, revealer }
+        Self {
+            container,
+            wrapper,
+            revealer,
+        }
     }
 
     pub fn set_content(&self, widget: &impl IsA<gtk4::Widget>) {

@@ -37,21 +37,10 @@ pub struct PendingPairing {
     pub pairing_type: PairingType,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct BluetoothStatus {
     pub powered: bool,
     pub is_scanning: bool,
     pub devices: Vec<BluetoothDevice>,
     pub pending_pairing: Option<PendingPairing>,
-}
-
-impl Default for BluetoothStatus {
-    fn default() -> Self {
-        Self {
-            powered: false,
-            is_scanning: false,
-            devices: vec![],
-            pending_pairing: None,
-        }
-    }
 }

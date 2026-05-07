@@ -1,9 +1,9 @@
-use std::sync::Arc;
+use crate::widgets::popup_base::PopupContainer;
 use axis_application::use_cases::generic::SubscribeUseCase;
-use axis_domain::models::popups::{PopupType, PopupStatus};
+use axis_domain::models::popups::{PopupStatus, PopupType};
 use axis_domain::ports::popups::PopupProvider;
 use axis_presentation::{Presenter, View};
-use crate::widgets::popup_base::PopupContainer;
+use std::sync::Arc;
 
 pub trait PopupView: View<PopupStatus> {
     fn get_type(&self) -> PopupType;
@@ -33,13 +33,7 @@ pub struct PopupPresenter {
 
 impl PopupPresenter {
     pub fn new(subscribe_use_case: Arc<SubscribeUseCase<dyn PopupProvider, PopupStatus>>) -> Self {
-        let inner = Presenter::from_subscribe({
-            let uc = subscribe_use_case.clone();
-            move || {
-                let uc = uc.clone();
-                async move { uc.execute().await }
-            }
-        });
+        let inner = Presenter::from_subscribe_use_case(subscribe_use_case.clone());
 
         Self { inner }
     }

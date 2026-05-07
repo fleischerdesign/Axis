@@ -1,8 +1,8 @@
-use std::sync::Arc;
 use axis_application::use_cases::generic::SubscribeUseCase;
 use axis_domain::models::power::PowerStatus;
 use axis_domain::ports::power::PowerProvider;
 use axis_presentation::{Presenter, View};
+use std::sync::Arc;
 
 pub(crate) fn battery_icon(percentage: f64, charging: bool) -> &'static str {
     let level = ((percentage / 10.0).round() * 10.0) as u32;
@@ -47,13 +47,7 @@ pub struct BatteryPresenter {
 
 impl BatteryPresenter {
     pub fn new(use_case: Arc<SubscribeUseCase<dyn PowerProvider, PowerStatus>>) -> Self {
-        let inner = Presenter::from_subscribe({
-            let uc = use_case.clone();
-            move || {
-                let uc = uc.clone();
-                async move { uc.execute().await }
-            }
-        });
+        let inner = Presenter::from_subscribe_use_case(use_case.clone());
         Self { inner }
     }
 

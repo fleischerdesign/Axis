@@ -1,7 +1,7 @@
 use axis_domain::models::tasks::Task;
-use axis_domain::ports::agenda::{AgendaProvider, AgendaError};
+use axis_domain::ports::agenda::{AgendaError, AgendaProvider};
+use log::{error, info};
 use std::sync::Arc;
-use log::{info, error};
 
 pub struct CreateTaskUseCase {
     provider: Arc<dyn AgendaProvider>,
@@ -15,7 +15,7 @@ impl CreateTaskUseCase {
     pub async fn execute(&self, list_id: &str, title: &str) -> Result<Task, AgendaError> {
         if title.trim().is_empty() {
             error!("[use-case] Task title cannot be empty");
-            return Err(AgendaError::ProviderError(
+            return Err(AgendaError::ValidationError(
                 "Task title cannot be empty".to_string(),
             ));
         }

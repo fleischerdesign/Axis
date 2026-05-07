@@ -1,7 +1,7 @@
-use axis_domain::ports::popups::PopupProvider;
 use axis_domain::models::popups::PopupType;
-use std::sync::Arc;
+use axis_domain::ports::popups::PopupProvider;
 use log::debug;
+use std::sync::Arc;
 
 pub struct TogglePopupUseCase {
     provider: Arc<dyn PopupProvider>,
@@ -12,7 +12,10 @@ impl TogglePopupUseCase {
         Self { provider }
     }
 
-    pub async fn execute(&self, popup_type: PopupType) -> Result<(), axis_domain::ports::popups::PopupError> {
+    pub async fn execute(
+        &self,
+        popup_type: PopupType,
+    ) -> Result<(), axis_domain::ports::popups::PopupError> {
         debug!("[use-case] Toggling popup: {:?}", popup_type);
         self.provider.toggle_popup(popup_type).await
     }

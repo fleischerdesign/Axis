@@ -1,12 +1,14 @@
+use super::StatusStream;
 use crate::models::bluetooth::BluetoothStatus;
 use async_trait::async_trait;
 use thiserror::Error;
-use super::StatusStream;
 
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum BluetoothError {
     #[error("Bluetooth provider error: {0}")]
     ProviderError(String),
+    #[error("Validation error: {0}")]
+    ValidationError(String),
     #[error("Device not found: {0}")]
     DeviceNotFound(String),
     #[error("Connection failed: {0}")]

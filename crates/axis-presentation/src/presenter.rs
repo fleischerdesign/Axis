@@ -1,10 +1,12 @@
+use crate::view::View;
+use axis_application::use_cases::generic::SubscribeUseCase;
+use axis_domain::ports::StatusProvider;
+use futures_util::{Stream, StreamExt};
 use std::cell::RefCell;
 use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
-use futures_util::{Stream, StreamExt};
-use crate::view::View;
 
 pub struct Presenter<S>
 where
@@ -59,6 +61,18 @@ where
                     }
                 }
             })
+        })
+    }
+
+    pub fn from_subscribe_use_case<P>(use_case: Arc<SubscribeUseCase<P, S>>) -> Self
+    where
+        P: StatusProvider<S> + ?Sized + Send + Sync + 'static,
+        P::Error: Send + 'static,
+        S: Sync,
+    {
+        Self::from_subscribe(move || {
+            let uc = use_case.clone();
+            async move { uc.execute().await }
         })
     }
 

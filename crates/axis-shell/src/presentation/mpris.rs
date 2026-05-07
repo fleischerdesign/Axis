@@ -1,11 +1,11 @@
-use std::sync::Arc;
 use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
-use axis_application::use_cases::mpris::play_pause::PlayPauseUseCase;
 use axis_application::use_cases::mpris::next::NextTrackUseCase;
+use axis_application::use_cases::mpris::play_pause::PlayPauseUseCase;
 use axis_application::use_cases::mpris::previous::PreviousTrackUseCase;
 use axis_domain::models::mpris::MprisStatus;
 use axis_domain::ports::mpris::MprisProvider;
 use axis_presentation::{Presenter, View};
+use std::sync::Arc;
 
 pub struct MprisPresenter {
     inner: Presenter<MprisStatus>,
@@ -26,7 +26,11 @@ impl MprisPresenter {
         let initial_status = rt.block_on(async {
             match get_status_uc.execute().await {
                 Ok(s) => {
-                    log::info!("[mpris-presenter] Initial status: {} players, active={:?}", s.players.len(), s.active_player_id);
+                    log::info!(
+                        "[mpris-presenter] Initial status: {} players, active={:?}",
+                        s.players.len(),
+                        s.active_player_id
+                    );
                     s
                 }
                 Err(e) => {
@@ -36,15 +40,15 @@ impl MprisPresenter {
             }
         });
 
-        let inner = Presenter::from_subscribe({
-            let uc = subscribe_uc.clone();
-            move || {
-                let uc = uc.clone();
-                async move { uc.execute().await }
-            }
-        }).with_initial_status(initial_status);
+        let inner = Presenter::from_subscribe_use_case(subscribe_uc.clone())
+            .with_initial_status(initial_status);
 
-        Self { inner, play_pause_uc, next_uc, previous_uc }
+        Self {
+            inner,
+            play_pause_uc,
+            next_uc,
+            previous_uc,
+        }
     }
 
     pub fn add_view(&self, view: Box<dyn View<MprisStatus>>) {

@@ -1,7 +1,7 @@
-use axis_domain::models::launcher::{LauncherAction, LauncherItem, SearchPriority};
-use axis_domain::ports::launcher::{LauncherError, LauncherSearchProvider};
 use crate::adapters::launcher::util::scored_match;
 use async_trait::async_trait;
+use axis_domain::models::launcher::{LauncherAction, LauncherItem, SearchPriority};
+use axis_domain::ports::launcher::{LauncherError, LauncherSearchProvider};
 use std::path::Path;
 use std::process::{Command, Stdio};
 
@@ -23,10 +23,10 @@ impl FileSearchProvider {
             "XDG_PICTURES_DIR",
             "XDG_VIDEOS_DIR",
         ] {
-            if let Ok(dir) = std::env::var(var) {
-                if !dirs.contains(&dir) {
-                    dirs.push(dir);
-                }
+            if let Ok(dir) = std::env::var(var)
+                && !dirs.contains(&dir)
+            {
+                dirs.push(dir);
             }
         }
 
@@ -81,9 +81,7 @@ impl FileSearchProvider {
                     return None;
                 }
 
-                let name = p
-                    .file_name()
-                    .map(|n| n.to_string_lossy().to_string())?;
+                let name = p.file_name().map(|n| n.to_string_lossy().to_string())?;
 
                 if !name.to_lowercase().contains(&query_lower) {
                     return None;
@@ -99,7 +97,7 @@ impl FileSearchProvider {
                     title: name,
                     description: Some(path.to_string()),
                     icon_name: Self::file_icon(path).into(),
-                    action: LauncherAction::Exec(format!("xdg-open '{path}'")),
+                    action: LauncherAction::Exec(vec!["xdg-open".to_string(), path.to_string()]),
                     score,
                     priority: SearchPriority::Fallback,
                 })

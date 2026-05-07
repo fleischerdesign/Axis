@@ -55,7 +55,13 @@ impl QuickSlider {
         container.append(&overlay);
         container.append(&arrow_btn);
 
-        let slider = Self { container, _overlay: overlay, icon, scale, arrow_btn };
+        let slider = Self {
+            container,
+            _overlay: overlay,
+            icon,
+            scale,
+            arrow_btn,
+        };
         slider.set_icon(icon_name);
         slider
     }

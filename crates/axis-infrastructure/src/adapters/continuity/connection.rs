@@ -51,6 +51,12 @@ pub struct TcpConnectionProvider {
     stop_tx: Option<oneshot::Sender<()>>,
 }
 
+impl Default for TcpConnectionProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TcpConnectionProvider {
     pub fn new() -> Self {
         Self {
@@ -234,11 +240,15 @@ async fn run_connection(
     }
 
     use tokio::io::split;
-    let peer = stream.peer_addr().map(|a| a.to_string()).unwrap_or_default();
-    let local = stream.local_addr().map(|a| a.to_string()).unwrap_or_default();
-    info!(
-        "[continuity:connection] connected {local} → {peer}"
-    );
+    let peer = stream
+        .peer_addr()
+        .map(|a| a.to_string())
+        .unwrap_or_default();
+    let local = stream
+        .local_addr()
+        .map(|a| a.to_string())
+        .unwrap_or_default();
+    info!("[continuity:connection] connected {local} → {peer}");
 
     let (mut reader, mut writer) = split(stream);
 

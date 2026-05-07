@@ -1,9 +1,9 @@
-use axis_domain::models::audio::{AudioStatus, AudioDevice, SinkInput};
-use axis_domain::ports::audio::{AudioProvider, AudioError, AudioStream};
 use async_trait::async_trait;
+use axis_domain::models::audio::{AudioDevice, AudioStatus, SinkInput};
+use axis_domain::ports::audio::{AudioError, AudioProvider, AudioStream};
+use std::sync::Arc;
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
-use std::sync::Arc;
 
 pub struct MockAudioProvider {
     status_tx: watch::Sender<AudioStatus>,
@@ -14,13 +14,11 @@ impl MockAudioProvider {
         let (tx, _) = watch::channel(AudioStatus {
             volume: 0.5,
             is_muted: false,
-            sink_inputs: vec![
-                SinkInput {
-                    id: 1,
-                    name: "Music Player".to_string(),
-                    volume: 0.8,
-                }
-            ],
+            sink_inputs: vec![SinkInput {
+                id: 1,
+                name: "Music Player".to_string(),
+                volume: 0.8,
+            }],
             sinks: vec![
                 AudioDevice {
                     id: 1,
@@ -35,14 +33,12 @@ impl MockAudioProvider {
                     is_default: false,
                 },
             ],
-            sources: vec![
-                AudioDevice {
-                    id: 1,
-                    name: "Built-in Microphone".to_string(),
-                    description: "Internal Audio".to_string(),
-                    is_default: true,
-                }
-            ],
+            sources: vec![AudioDevice {
+                id: 1,
+                name: "Built-in Microphone".to_string(),
+                description: "Internal Audio".to_string(),
+                is_default: true,
+            }],
         });
         Arc::new(Self { status_tx: tx })
     }

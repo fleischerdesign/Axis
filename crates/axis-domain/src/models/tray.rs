@@ -1,4 +1,6 @@
-#[derive(Clone, Debug, PartialEq)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 pub struct TrayItem {
     pub bus_name: String,
     pub id: String,
@@ -11,27 +13,22 @@ pub struct TrayItem {
     pub status: TrayItemStatus,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 pub enum TrayItemStatus {
-    Passive,
+    #[default]
     Active,
+    Passive,
     NeedsAttention,
 }
 
-impl Default for TrayItemStatus {
-    fn default() -> Self {
-        Self::Active
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 pub struct IconPixmap {
     pub width: i32,
     pub height: i32,
     pub data: Vec<u8>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct TrayStatus {
     pub items: Vec<TrayItem>,
 }

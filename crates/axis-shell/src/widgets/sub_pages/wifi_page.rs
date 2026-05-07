@@ -1,9 +1,9 @@
-use gtk4::prelude::*;
-use axis_domain::models::network::{NetworkStatus, AccessPoint};
-use axis_presentation::View;
 use crate::presentation::network::NetworkPresenter;
 use crate::widgets::components::list_row::ListRow;
 use crate::widgets::components::popup_header::PopupHeader;
+use axis_domain::models::network::{AccessPoint, NetworkStatus};
+use axis_presentation::View;
+use gtk4::prelude::*;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -94,7 +94,10 @@ impl WifiPage {
         });
         presenter.add_view(view);
 
-        Self { container, _presenter: presenter }
+        Self {
+            container,
+            _presenter: presenter,
+        }
     }
 }
 
@@ -111,7 +114,11 @@ impl View<NetworkStatus> for WifiPageView {
 
         let mut rows = self.rows.borrow_mut();
 
-        let ids: Vec<&str> = status.access_points.iter().map(|ap| ap.id.as_str()).collect();
+        let ids: Vec<&str> = status
+            .access_points
+            .iter()
+            .map(|ap| ap.id.as_str())
+            .collect();
         crate::utils::reconcile::reconcile(&mut rows, &ids, |_, entry| {
             self.list.remove(&entry.list_box_row);
         });
@@ -173,9 +180,7 @@ impl View<NetworkStatus> for WifiPageView {
                 connect_btn.connect_clicked(move |_| {
                     let password = pass_e.text().to_string();
                     if !password.is_empty() {
-                        let spinner = gtk4::Spinner::builder()
-                            .spinning(true)
-                            .build();
+                        let spinner = gtk4::Spinner::builder().spinning(true).build();
                         cbtn.set_child(Some(&spinner));
                         cbtn.set_sensitive(false);
                         pres.connect_to_ap(ap_id.clone(), Some(password));
@@ -235,4 +240,3 @@ impl View<NetworkStatus> for WifiPageView {
         }
     }
 }
-

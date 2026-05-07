@@ -1,47 +1,66 @@
+use gtk4::{gio, glib};
+use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use libadwaita::prelude::*;
 use libadwaita::subclass::prelude::*;
-use gtk4::{glib, gio};
-use gtk4_layer_shell::{LayerShell, Layer, Edge};
-use std::sync::Arc;
 use std::rc::Rc;
+use std::sync::Arc;
 
-use crate::widgets::island::Island;
-use crate::widgets::status_bar::StatusBar;
-use crate::widgets::wifi_status::WifiStatusWidget;
-use crate::widgets::bluetooth_status::BluetoothStatusWidget;
-use crate::widgets::dnd_status::DndStatusWidget;
 use crate::widgets::airplane_status::AirplaneStatusWidget;
-use crate::widgets::continuity_status::ContinuityStatusWidget;
-use crate::widgets::idle_inhibit_status::IdleInhibitStatusWidget;
-use crate::widgets::clock::ClockWidget;
 use crate::widgets::audio::AudioWidget;
-use crate::widgets::workspace_dots::WorkspaceDots;
+use crate::widgets::bar::Bar;
+use crate::widgets::bluetooth_status::BluetoothStatusWidget;
+use crate::widgets::clock::ClockWidget;
+use crate::widgets::continuity_status::ContinuityStatusWidget;
+use crate::widgets::dnd_status::DndStatusWidget;
+use crate::widgets::idle_inhibit_status::IdleInhibitStatusWidget;
+use crate::widgets::island::Island;
 use crate::widgets::launcher::LauncherWidget;
 use crate::widgets::mpris_bar::MprisBarWidget;
-use crate::widgets::bar::Bar;
+use crate::widgets::status_bar::StatusBar;
 use crate::widgets::tray::TrayWidget;
+use crate::widgets::wifi_status::WifiStatusWidget;
+use crate::widgets::workspace_dots::WorkspaceDots;
 
-use crate::presentation::battery::BatteryPresenter;
-use crate::presentation::clock::ClockPresenter;
 use crate::presentation::audio::AudioPresenter;
-use crate::presentation::workspaces::WorkspacePresenter;
 use crate::presentation::auto_hide::{AutoHidePresenter, AutoHideView};
-use crate::presentation::tray::TrayPresenter;
-use crate::presentation::tray::TrayView;
-use crate::presentation::network::NetworkPresenter;
+use crate::presentation::battery::BatteryPresenter;
 use crate::presentation::bluetooth::BluetoothPresenter;
+use crate::presentation::clock::ClockPresenter;
 use crate::presentation::continuity::ContinuityPresenter;
 use crate::presentation::mpris::MprisPresenter;
+use crate::presentation::network::NetworkPresenter;
+use crate::presentation::tray::TrayPresenter;
+use crate::presentation::tray::TrayView;
+use crate::presentation::workspaces::WorkspacePresenter;
 
 use axis_application::use_cases::popups::TogglePopupUseCase;
 use axis_application::use_cases::workspaces::toggle_overview::ToggleOverviewUseCase;
-use axis_domain::models::popups::PopupType;
-use axis_domain::models::workspaces::WorkspaceStatus;
-use axis_domain::models::dnd::DndStatus;
 use axis_domain::models::airplane::AirplaneStatus;
+use axis_domain::models::dnd::DndStatus;
 use axis_domain::models::idle_inhibit::IdleInhibitStatus;
 use axis_domain::models::mpris::MprisStatus;
-use axis_presentation::{Presenter, FnView};
+use axis_domain::models::popups::PopupType;
+use axis_domain::models::workspaces::WorkspaceStatus;
+use axis_presentation::{FnView, Presenter};
+
+pub struct BarPresenters {
+    pub battery: Rc<BatteryPresenter>,
+    pub clock: Rc<ClockPresenter>,
+    pub audio: Rc<AudioPresenter>,
+    pub workspaces: Rc<WorkspacePresenter>,
+    pub auto_hide: Rc<AutoHidePresenter>,
+    pub tray: Rc<TrayPresenter>,
+    pub toggle_popup: Arc<TogglePopupUseCase>,
+    pub toggle_overview: Arc<ToggleOverviewUseCase>,
+    pub network: Rc<NetworkPresenter>,
+    pub bluetooth: Rc<BluetoothPresenter>,
+    pub dnd: Rc<Presenter<DndStatus>>,
+    pub airplane: Rc<Presenter<AirplaneStatus>>,
+    pub continuity: Rc<ContinuityPresenter>,
+    pub idle_inhibit: Rc<Presenter<IdleInhibitStatus>>,
+    pub mpris: Rc<MprisPresenter>,
+    pub show_labels: bool,
+}
 
 glib::wrapper! {
     pub struct BarWindow(ObjectSubclass<imp::BarWindow>)
@@ -51,30 +70,26 @@ glib::wrapper! {
 
 impl BarWindow {
     pub fn new(app: &libadwaita::Application) -> Self {
-        glib::Object::builder()
-            .property("application", app)
-            .build()
+        glib::Object::builder().property("application", app).build()
     }
 
-    pub fn setup_content(
-        &self, 
-        battery_presenter: Arc<BatteryPresenter>,
-        clock_presenter: Arc<ClockPresenter>,
-        audio_presenter: Rc<AudioPresenter>,
-        workspace_presenter: Arc<WorkspacePresenter>,
-        auto_hide_presenter: Arc<AutoHidePresenter>,
-        tray_presenter: Rc<TrayPresenter>,
-        toggle_popup_use_case: Arc<TogglePopupUseCase>,
-        toggle_overview_use_case: Arc<ToggleOverviewUseCase>,
-        network_presenter: Rc<NetworkPresenter>,
-        bluetooth_presenter: Rc<BluetoothPresenter>,
-        dnd_status_presenter: Rc<Presenter<DndStatus>>,
-        airplane_status_presenter: Rc<Presenter<AirplaneStatus>>,
-        continuity_presenter: Rc<ContinuityPresenter>,
-        idle_inhibit_presenter: Rc<Presenter<IdleInhibitStatus>>,
-        mpris_presenter: Rc<MprisPresenter>,
-        show_labels: bool,
-    ) {
+    pub fn setup_content(&self, p: BarPresenters) {
+        let battery_presenter = p.battery;
+        let clock_presenter = p.clock;
+        let audio_presenter = p.audio;
+        let workspace_presenter = p.workspaces;
+        let auto_hide_presenter = p.auto_hide;
+        let tray_presenter = p.tray;
+        let toggle_popup_use_case = p.toggle_popup;
+        let toggle_overview_use_case = p.toggle_overview;
+        let network_presenter = p.network;
+        let bluetooth_presenter = p.bluetooth;
+        let dnd_status_presenter = p.dnd;
+        let airplane_status_presenter = p.airplane;
+        let continuity_presenter = p.continuity;
+        let idle_inhibit_presenter = p.idle_inhibit;
+        let mpris_presenter = p.mpris;
+        let show_labels = p.show_labels;
         let bar = Bar::new();
         bar.container.set_vexpand(true);
 
@@ -85,7 +100,9 @@ impl BarWindow {
         let tp = toggle_popup_use_case.clone();
         launcher_island.on_clicked(move || {
             let uc = tp.clone();
-            tokio::spawn(async move { let _ = uc.execute(PopupType::Launcher).await; });
+            tokio::spawn(async move {
+                let _ = uc.execute(PopupType::Launcher).await;
+            });
         });
         bar.set_start_widget(Some(&launcher_island.container));
 
@@ -99,7 +116,9 @@ impl BarWindow {
         let tou = toggle_overview_use_case.clone();
         ws_island.on_clicked(move || {
             let uc = tou.clone();
-            tokio::spawn(async move { let _ = uc.execute().await; });
+            tokio::spawn(async move {
+                let _ = uc.execute().await;
+            });
         });
         center_island_box.append(&ws_island.container);
 
@@ -110,7 +129,9 @@ impl BarWindow {
         let tp = toggle_popup_use_case.clone();
         clock_island.on_clicked(move || {
             let uc = tp.clone();
-            tokio::spawn(async move { let _ = uc.execute(PopupType::Agenda).await; });
+            tokio::spawn(async move {
+                let _ = uc.execute(PopupType::Agenda).await;
+            });
         });
         center_island_box.append(&clock_island.container);
 
@@ -124,7 +145,9 @@ impl BarWindow {
         gesture_left.set_button(gtk4::gdk::BUTTON_PRIMARY);
         gesture_left.connect_released(move |_, _, _, _| {
             let uc = tp_mpris.clone();
-            tokio::spawn(async move { let _ = uc.execute(PopupType::Mpris).await; });
+            tokio::spawn(async move {
+                let _ = uc.execute(PopupType::Mpris).await;
+            });
         });
         mpris_island.container.add_controller(gesture_left);
 
@@ -180,7 +203,9 @@ impl BarWindow {
         let tp = toggle_popup_use_case.clone();
         end_island.on_clicked(move || {
             let uc = tp.clone();
-            tokio::spawn(async move { let _ = uc.execute(PopupType::QuickSettings).await; });
+            tokio::spawn(async move {
+                let _ = uc.execute(PopupType::QuickSettings).await;
+            });
         });
 
         let end_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
@@ -213,24 +238,32 @@ impl BarWindow {
 
         let cp = clock_presenter.clone();
         let cv = Box::new(clock_widget.clone());
-        glib::spawn_future_local(async move { cp.bind(cv).await; });
+        glib::spawn_future_local(async move {
+            cp.bind(cv).await;
+        });
 
         audio_presenter.add_view(Box::new(audio_widget.clone()));
 
         let wp = workspace_presenter.clone();
         let wv = Box::new(ws_dots.clone());
-        glib::spawn_future_local(async move { wp.bind(wv).await; });
+        glib::spawn_future_local(async move {
+            wp.bind(wv).await;
+        });
 
         let motion = gtk4::EventControllerMotion::new();
         {
             let ahp = auto_hide_presenter.clone();
             let view = self.clone();
-            motion.connect_enter(move |_, _, _| { ahp.handle_enter(&view); });
+            motion.connect_enter(move |_, _, _| {
+                ahp.handle_enter(&view);
+            });
         }
         {
             let ahp = auto_hide_presenter.clone();
             let view = self.clone();
-            motion.connect_leave(move |_| { ahp.handle_leave(&view); });
+            motion.connect_leave(move |_| {
+                ahp.handle_leave(&view);
+            });
         }
         self.add_controller(motion);
 
@@ -264,13 +297,13 @@ mod imp {
             obj.init_layer_shell();
             obj.set_layer(Layer::Top);
             obj.set_namespace(Some("axis-shell"));
-            
+
             obj.set_anchor(Edge::Bottom, true);
             obj.set_anchor(Edge::Left, true);
             obj.set_anchor(Edge::Right, true);
-            
+
             obj.set_exclusive_zone(-1);
-            
+
             obj.add_css_class("bar-window");
         }
     }

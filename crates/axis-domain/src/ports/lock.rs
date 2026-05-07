@@ -1,12 +1,14 @@
+use super::StatusStream;
 use crate::models::lock::LockStatus;
 use async_trait::async_trait;
 use thiserror::Error;
-use super::StatusStream;
 
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum LockError {
     #[error("Lock provider error: {0}")]
     ProviderError(String),
+    #[error("Validation error: {0}")]
+    ValidationError(String),
     #[error("Session lock protocol not supported")]
     NotSupported,
 }

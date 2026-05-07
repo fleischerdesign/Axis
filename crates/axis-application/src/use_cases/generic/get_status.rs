@@ -1,6 +1,6 @@
+use axis_domain::ports::StatusProvider;
 use std::marker::PhantomData;
 use std::sync::Arc;
-use axis_domain::ports::StatusProvider;
 
 pub struct GetStatusUseCase<P: ?Sized, S> {
     provider: Arc<P>,

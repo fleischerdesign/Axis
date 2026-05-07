@@ -1,4 +1,4 @@
-use axis_domain::ports::audio::{AudioProvider, AudioError};
+use axis_domain::ports::audio::{AudioError, AudioProvider};
 use std::sync::Arc;
 
 pub struct SetDefaultSourceUseCase {

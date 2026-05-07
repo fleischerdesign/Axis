@@ -1,8 +1,8 @@
-use std::sync::Arc;
 use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
 use axis_domain::models::continuity::ContinuityStatus;
 use axis_domain::ports::continuity::ContinuityProvider;
 use axis_presentation::{Presenter, View};
+use std::sync::Arc;
 
 pub struct ContinuityPresenter {
     inner: Presenter<ContinuityStatus>,
@@ -24,14 +24,8 @@ impl ContinuityPresenter {
             }
         });
 
-        let inner = Presenter::from_subscribe({
-            let uc = subscribe_use_case.clone();
-            move || {
-                let uc = uc.clone();
-                async move { uc.execute().await }
-            }
-        })
-        .with_initial_status(initial_status);
+        let inner = Presenter::from_subscribe_use_case(subscribe_use_case.clone())
+            .with_initial_status(initial_status);
 
         Self { inner }
     }

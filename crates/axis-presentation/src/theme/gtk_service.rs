@@ -1,18 +1,20 @@
+use super::{find_vibrant_accent, generate_css, resolve_accent_hex};
+use crate::view::View;
 use axis_domain::models::appearance::{AccentColor, ColorScheme};
 use axis_domain::models::config::AppearanceConfig;
-use crate::view::View;
-use super::{generate_css, resolve_accent_hex, find_vibrant_accent};
-use libadwaita as adw;
-use gtk4::{glib, gdk_pixbuf};
 use gdk_pixbuf::Pixbuf;
+use gtk4::{gdk_pixbuf, glib};
+use libadwaita as adw;
 use std::cell::RefCell;
 use std::rc::Rc;
+
+type FnCellString = Rc<RefCell<Option<Box<dyn Fn(String) + 'static>>>>;
 
 pub struct GtkThemeService {
     provider: Rc<gtk4::CssProvider>,
     cached_accent_from_wallpaper: Rc<RefCell<Option<String>>>,
     last_wallpaper_path: Rc<RefCell<Option<String>>>,
-    on_color_extracted: Rc<RefCell<Option<Box<dyn Fn(String) + 'static>>>>,
+    on_color_extracted: FnCellString,
 }
 
 impl GtkThemeService {
@@ -69,6 +71,7 @@ impl GtkThemeService {
     }
 }
 
+#[allow(clippy::collapsible_if)]
 impl View<AppearanceConfig> for GtkThemeService {
     fn render(&self, status: &AppearanceConfig) {
         match &status.accent_color {
@@ -118,7 +121,8 @@ impl View<AppearanceConfig> for GtkThemeService {
 const WALLPAPER_THUMBNAIL_SIZE: i32 = 128;
 
 fn extract_vibrant_color_stable(path: &str) -> Option<String> {
-    let pixbuf = Pixbuf::from_file_at_size(path, WALLPAPER_THUMBNAIL_SIZE, WALLPAPER_THUMBNAIL_SIZE).ok()?;
+    let pixbuf =
+        Pixbuf::from_file_at_size(path, WALLPAPER_THUMBNAIL_SIZE, WALLPAPER_THUMBNAIL_SIZE).ok()?;
     let pixels = unsafe { pixbuf.pixels() };
 
     find_vibrant_accent(

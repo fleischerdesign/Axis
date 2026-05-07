@@ -1,13 +1,13 @@
+use crate::presentation::agenda::AgendaCallbacks;
+use crate::presentation::popups::PopupView;
+use crate::widgets::popup_base::PopupContainer;
+use axis_domain::models::agenda::AgendaStatus;
+use axis_domain::models::popups::{PopupStatus, PopupType};
+use axis_presentation::View;
+use gtk4::{gio, glib};
+use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 use libadwaita::prelude::*;
 use libadwaita::subclass::prelude::*;
-use gtk4::{glib, gio};
-use gtk4_layer_shell::{LayerShell, Layer, Edge, KeyboardMode};
-use axis_domain::models::popups::{PopupType, PopupStatus};
-use axis_domain::models::agenda::AgendaStatus;
-use crate::widgets::popup_base::PopupContainer;
-use crate::presentation::popups::PopupView;
-use crate::presentation::agenda::AgendaCallbacks;
-use axis_presentation::View;
 
 mod calendar_grid;
 mod task_list;
@@ -23,9 +23,7 @@ glib::wrapper! {
 
 impl AgendaPopupWindow {
     pub fn new(app: &libadwaita::Application) -> Self {
-        glib::Object::builder()
-            .property("application", app)
-            .build()
+        glib::Object::builder().property("application", app).build()
     }
 }
 
@@ -95,7 +93,12 @@ impl AgendaPopup {
         container.set_content(&main_box);
         window.set_child(Some(&container.container));
 
-        Self { window, container, calendar_grid, task_list }
+        Self {
+            window,
+            container,
+            calendar_grid,
+            task_list,
+        }
     }
 }
 
@@ -106,9 +109,15 @@ impl View<PopupStatus> for AgendaPopup {
 }
 
 impl PopupView for AgendaPopup {
-    fn get_type(&self) -> PopupType { PopupType::Agenda }
-    fn popup_container(&self) -> PopupContainer { self.container.clone() }
-    fn popup_window(&self) -> gtk4::ApplicationWindow { self.window.clone().upcast() }
+    fn get_type(&self) -> PopupType {
+        PopupType::Agenda
+    }
+    fn popup_container(&self) -> PopupContainer {
+        self.container.clone()
+    }
+    fn popup_window(&self) -> gtk4::ApplicationWindow {
+        self.window.clone().upcast()
+    }
 }
 
 impl View<AgendaStatus> for AgendaPopup {

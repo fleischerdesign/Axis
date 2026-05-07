@@ -1,16 +1,16 @@
-use axis_domain::models::audio::{AudioStatus, AudioDevice, SinkInput};
-use axis_domain::ports::audio::{AudioProvider, AudioError, AudioStream};
 use async_trait::async_trait;
+use axis_domain::models::audio::{AudioDevice, AudioStatus, SinkInput};
+use axis_domain::ports::audio::{AudioError, AudioProvider, AudioStream};
+use libpulse_binding::callbacks::ListResult;
+use libpulse_binding::context::subscribe::{Facility, InterestMaskSet};
 use libpulse_binding::context::{Context, FlagSet as ContextFlagSet, State as ContextState};
 use libpulse_binding::mainloop::threaded::Mainloop;
 use libpulse_binding::volume::{ChannelVolumes, Volume};
-use libpulse_binding::context::subscribe::{Facility, InterestMaskSet};
-use libpulse_binding::callbacks::ListResult;
-use tokio::sync::{watch, mpsc};
-use tokio_stream::wrappers::WatchStream;
+use log::{info, warn};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use log::{info, warn};
+use tokio::sync::{mpsc, watch};
+use tokio_stream::wrappers::WatchStream;
 
 enum PulseCmd {
     SetVolume(f64),
@@ -71,8 +71,16 @@ impl RefreshState {
             sources.push(dev);
         }
 
-        sinks.sort_by(|a, b| b.is_default.cmp(&a.is_default).then_with(|| a.name.cmp(&b.name)));
-        sources.sort_by(|a, b| b.is_default.cmp(&a.is_default).then_with(|| a.name.cmp(&b.name)));
+        sinks.sort_by(|a, b| {
+            b.is_default
+                .cmp(&a.is_default)
+                .then_with(|| a.name.cmp(&b.name))
+        });
+        sources.sort_by(|a, b| {
+            b.is_default
+                .cmp(&a.is_default)
+                .then_with(|| a.name.cmp(&b.name))
+        });
 
         AudioStatus {
             volume,
@@ -108,8 +116,16 @@ fn refresh_devices(context: &Context, status_tx: &watch::Sender<AudioStatus>) {
         let mut s = s2.lock().unwrap();
         match res {
             ListResult::Item(sink) => {
-                let name = sink.name.as_ref().map(|n| n.to_string()).unwrap_or_default();
-                let desc = sink.description.as_ref().map(|d| d.to_string()).unwrap_or_default();
+                let name = sink
+                    .name
+                    .as_ref()
+                    .map(|n| n.to_string())
+                    .unwrap_or_default();
+                let desc = sink
+                    .description
+                    .as_ref()
+                    .map(|d| d.to_string())
+                    .unwrap_or_default();
                 let vol_raw = sink.volume.avg().0 as f64 / Volume::NORMAL.0 as f64;
                 let vol = (vol_raw * 100.0).round() / 100.0;
                 s.sinks.push((
@@ -140,8 +156,16 @@ fn refresh_devices(context: &Context, status_tx: &watch::Sender<AudioStatus>) {
         let mut s = s3.lock().unwrap();
         match res {
             ListResult::Item(source) => {
-                let name = source.name.as_ref().map(|n| n.to_string()).unwrap_or_default();
-                let desc = source.description.as_ref().map(|d| d.to_string()).unwrap_or_default();
+                let name = source
+                    .name
+                    .as_ref()
+                    .map(|n| n.to_string())
+                    .unwrap_or_default();
+                let desc = source
+                    .description
+                    .as_ref()
+                    .map(|d| d.to_string())
+                    .unwrap_or_default();
                 s.sources.push(AudioDevice {
                     id: source.index,
                     name,
@@ -202,22 +226,17 @@ impl PulseAudioProvider {
         let cmd_tx_c = cmd_tx.clone();
 
         std::thread::spawn(move || {
-            let mut attempt = 0u32;
-            loop {
-                match Self::run_pulse_loop(&mut cmd_rx, &status_tx_c, &cmd_tx_c) {
-                    Ok(()) => {
-                        warn!("[audio] PulseAudio disconnected, reconnecting...");
+            crate::utils::retry_with_backoff_blocking(
+                || {
+                    match Self::run_pulse_loop(&mut cmd_rx, &status_tx_c, &cmd_tx_c) {
+                        Ok(()) => warn!("[audio] PulseAudio disconnected, reconnecting..."),
+                        Err(e) => warn!("[audio] PulseAudio error: {e}, reconnecting..."),
                     }
-                    Err(e) => {
-                        warn!("[audio] PulseAudio error: {e}, reconnecting...");
-                    }
-                }
-                attempt += 1;
-                let delay = 2u64.pow(attempt.min(4)).min(30);
-                warn!("[audio] Retry in {delay}s (attempt {attempt})");
-                std::thread::sleep(Duration::from_secs(delay));
-                while cmd_rx.try_recv().is_ok() {}
-            }
+                    while cmd_rx.try_recv().is_ok() {}
+                    Err::<(), String>("retry".to_string())
+                },
+                30,
+            );
         });
 
         let mut rx = status_rx;
@@ -248,7 +267,8 @@ impl PulseAudioProvider {
         cmd_tx: &mpsc::Sender<PulseCmd>,
     ) -> Result<(), String> {
         let mut mainloop = Mainloop::new().ok_or("Failed to create mainloop")?;
-        let mut context = Context::new(&mainloop, "axis-shell").ok_or("Failed to create context")?;
+        let mut context =
+            Context::new(&mainloop, "axis-shell").ok_or("Failed to create context")?;
 
         {
             let ml_ptr: *mut Mainloop = &mut mainloop;
@@ -261,9 +281,7 @@ impl PulseAudioProvider {
                 (*ctx_ptr).set_state_callback(Some(Box::new(move || {
                     let state = (*ctx_ptr).get_state();
                     match state {
-                        ContextState::Ready
-                        | ContextState::Failed
-                        | ContextState::Terminated => {
+                        ContextState::Ready | ContextState::Failed | ContextState::Terminated => {
                             (*ml_ptr).signal(false);
                         }
                         _ => {}
@@ -272,7 +290,8 @@ impl PulseAudioProvider {
             }
         }
 
-        context.connect(None, ContextFlagSet::NOFLAGS, None)
+        context
+            .connect(None, ContextFlagSet::NOFLAGS, None)
             .map_err(|e| format!("Connect: {e:?}"))?;
 
         mainloop.lock();
@@ -301,14 +320,14 @@ impl PulseAudioProvider {
 
         let cmd_tx_loop = cmd_tx.clone();
         context.set_subscribe_callback(Some(Box::new(move |fac, _, _| {
-            match fac {
-                Some(Facility::Sink | Facility::Source | Facility::SinkInput) => {
-                    let _ = cmd_tx_loop.try_send(PulseCmd::UpdateStatus);
-                }
-                _ => {}
+            if let Some(Facility::Sink | Facility::Source | Facility::SinkInput) = fac {
+                let _ = cmd_tx_loop.try_send(PulseCmd::UpdateStatus);
             }
         })));
-        context.subscribe(InterestMaskSet::SINK | InterestMaskSet::SOURCE | InterestMaskSet::SINK_INPUT, |_| {});
+        context.subscribe(
+            InterestMaskSet::SINK | InterestMaskSet::SOURCE | InterestMaskSet::SINK_INPUT,
+            |_| {},
+        );
 
         mainloop.unlock();
 
@@ -319,9 +338,8 @@ impl PulseAudioProvider {
                 PulseCmd::SetVolume(v) => {
                     info!("[audio] Set volume: {:.0}%", v * 100.0);
                     let mut cv = ChannelVolumes::default();
-                    let pulse_vol = Volume(
-                        ((v * Volume::NORMAL.0 as f64) as u32).min(Volume::NORMAL.0 * 2),
-                    );
+                    let pulse_vol =
+                        Volume(((v * Volume::NORMAL.0 as f64) as u32).min(Volume::NORMAL.0 * 2));
                     cv.set(ChannelVolumes::CHANNELS_MAX, pulse_vol);
                     context
                         .introspect()
@@ -372,9 +390,8 @@ impl PulseAudioProvider {
                 PulseCmd::SetSinkInputVolume(id, vol) => {
                     info!("[audio] Set sink input {id} volume: {:.0}%", vol * 100.0);
                     let mut cv = ChannelVolumes::default();
-                    let pulse_vol = Volume(
-                        ((vol * Volume::NORMAL.0 as f64) as u32).min(Volume::NORMAL.0 * 2),
-                    );
+                    let pulse_vol =
+                        Volume(((vol * Volume::NORMAL.0 as f64) as u32).min(Volume::NORMAL.0 * 2));
                     cv.set(ChannelVolumes::CHANNELS_MAX, pulse_vol);
                     context.introspect().set_sink_input_volume(id, &cv, None);
 
@@ -405,27 +422,37 @@ impl AudioProvider for PulseAudioProvider {
     }
 
     async fn set_volume(&self, volume: f64) -> Result<(), AudioError> {
-        self.cmd_tx.send(PulseCmd::SetVolume(volume)).await
+        self.cmd_tx
+            .send(PulseCmd::SetVolume(volume))
+            .await
             .map_err(|e| AudioError::ProviderError(format!("Audio channel closed: {e}")))
     }
 
     async fn set_muted(&self, muted: bool) -> Result<(), AudioError> {
-        self.cmd_tx.send(PulseCmd::SetMute(muted)).await
+        self.cmd_tx
+            .send(PulseCmd::SetMute(muted))
+            .await
             .map_err(|e| AudioError::ProviderError(format!("Audio channel closed: {e}")))
     }
 
     async fn set_default_sink(&self, id: u32) -> Result<(), AudioError> {
-        self.cmd_tx.send(PulseCmd::SetDefaultSink(id)).await
+        self.cmd_tx
+            .send(PulseCmd::SetDefaultSink(id))
+            .await
             .map_err(|e| AudioError::ProviderError(format!("Audio channel closed: {e}")))
     }
 
     async fn set_default_source(&self, id: u32) -> Result<(), AudioError> {
-        self.cmd_tx.send(PulseCmd::SetDefaultSource(id)).await
+        self.cmd_tx
+            .send(PulseCmd::SetDefaultSource(id))
+            .await
             .map_err(|e| AudioError::ProviderError(format!("Audio channel closed: {e}")))
     }
 
     async fn set_sink_input_volume(&self, id: u32, volume: f64) -> Result<(), AudioError> {
-        self.cmd_tx.send(PulseCmd::SetSinkInputVolume(id, volume)).await
+        self.cmd_tx
+            .send(PulseCmd::SetSinkInputVolume(id, volume))
+            .await
             .map_err(|e| AudioError::ProviderError(format!("Audio channel closed: {e}")))
     }
 }

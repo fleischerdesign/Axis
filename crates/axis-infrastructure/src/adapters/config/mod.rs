@@ -120,14 +120,46 @@ impl FileConfigProvider {
     ) -> axis_domain::models::config::NightlightConfig {
         let default = axis_domain::models::config::NightlightConfig::default();
         axis_domain::models::config::NightlightConfig {
-            enabled: if cli.enabled != default.enabled { cli.enabled } else { file.enabled },
-            temp_day: if cli.temp_day != default.temp_day { cli.temp_day } else { file.temp_day },
-            temp_night: if cli.temp_night != default.temp_night { cli.temp_night } else { file.temp_night },
-            sunrise: if cli.sunrise != default.sunrise { cli.sunrise.clone() } else { file.sunrise.clone() },
-            sunset: if cli.sunset != default.sunset { cli.sunset.clone() } else { file.sunset.clone() },
-            auto_schedule: if cli.auto_schedule != default.auto_schedule { cli.auto_schedule } else { file.auto_schedule },
-            latitude: if cli.latitude != default.latitude { cli.latitude.clone() } else { file.latitude.clone() },
-            longitude: if cli.longitude != default.longitude { cli.longitude.clone() } else { file.longitude.clone() },
+            enabled: if cli.enabled != default.enabled {
+                cli.enabled
+            } else {
+                file.enabled
+            },
+            temp_day: if cli.temp_day != default.temp_day {
+                cli.temp_day
+            } else {
+                file.temp_day
+            },
+            temp_night: if cli.temp_night != default.temp_night {
+                cli.temp_night
+            } else {
+                file.temp_night
+            },
+            sunrise: if cli.sunrise != default.sunrise {
+                cli.sunrise.clone()
+            } else {
+                file.sunrise.clone()
+            },
+            sunset: if cli.sunset != default.sunset {
+                cli.sunset.clone()
+            } else {
+                file.sunset.clone()
+            },
+            auto_schedule: if cli.auto_schedule != default.auto_schedule {
+                cli.auto_schedule
+            } else {
+                file.auto_schedule
+            },
+            latitude: if cli.latitude != default.latitude {
+                cli.latitude.clone()
+            } else {
+                file.latitude.clone()
+            },
+            longitude: if cli.longitude != default.longitude {
+                cli.longitude.clone()
+            } else {
+                file.longitude.clone()
+            },
         }
     }
 
@@ -146,10 +178,22 @@ impl FileConfigProvider {
     ) -> axis_domain::models::config::BarConfig {
         let default = axis_domain::models::config::BarConfig::default();
         axis_domain::models::config::BarConfig {
-            position: if cli.position != default.position { cli.position.clone() } else { file.position.clone() },
-            autohide: if cli.autohide != default.autohide { cli.autohide } else { file.autohide },
+            position: if cli.position != default.position {
+                cli.position.clone()
+            } else {
+                file.position.clone()
+            },
+            autohide: if cli.autohide != default.autohide {
+                cli.autohide
+            } else {
+                file.autohide
+            },
             islands: Self::merge_islands(&cli.islands, &file.islands),
-            show_labels: if cli.show_labels { true } else { file.show_labels },
+            show_labels: if cli.show_labels {
+                true
+            } else {
+                file.show_labels
+            },
         }
     }
 
@@ -159,10 +203,26 @@ impl FileConfigProvider {
     ) -> axis_domain::models::config::IslandVisibility {
         let default = axis_domain::models::config::IslandVisibility::default();
         axis_domain::models::config::IslandVisibility {
-            launcher: if cli.launcher != default.launcher { cli.launcher } else { file.launcher },
-            clock: if cli.clock != default.clock { cli.clock } else { file.clock },
-            status: if cli.status != default.status { cli.status } else { file.status },
-            workspace: if cli.workspace != default.workspace { cli.workspace } else { file.workspace },
+            launcher: if cli.launcher != default.launcher {
+                cli.launcher
+            } else {
+                file.launcher
+            },
+            clock: if cli.clock != default.clock {
+                cli.clock
+            } else {
+                file.clock
+            },
+            status: if cli.status != default.status {
+                cli.status
+            } else {
+                file.status
+            },
+            workspace: if cli.workspace != default.workspace {
+                cli.workspace
+            } else {
+                file.workspace
+            },
         }
     }
 
@@ -172,10 +232,26 @@ impl FileConfigProvider {
     ) -> axis_domain::models::config::ShortcutsConfig {
         let default = axis_domain::models::config::ShortcutsConfig::default();
         axis_domain::models::config::ShortcutsConfig {
-            launcher: if cli.launcher != default.launcher { cli.launcher.clone() } else { file.launcher.clone() },
-            quick_settings: if cli.quick_settings != default.quick_settings { cli.quick_settings.clone() } else { file.quick_settings.clone() },
-            workspaces: if cli.workspaces != default.workspaces { cli.workspaces.clone() } else { file.workspaces.clone() },
-            lock: if cli.lock != default.lock { cli.lock.clone() } else { file.lock.clone() },
+            launcher: if cli.launcher != default.launcher {
+                cli.launcher.clone()
+            } else {
+                file.launcher.clone()
+            },
+            quick_settings: if cli.quick_settings != default.quick_settings {
+                cli.quick_settings.clone()
+            } else {
+                file.quick_settings.clone()
+            },
+            workspaces: if cli.workspaces != default.workspaces {
+                cli.workspaces.clone()
+            } else {
+                file.workspaces.clone()
+            },
+            lock: if cli.lock != default.lock {
+                cli.lock.clone()
+            } else {
+                file.lock.clone()
+            },
         }
     }
 
@@ -252,11 +328,11 @@ impl FileConfigProvider {
 
     fn save(config: &AxisConfig) {
         let path = Self::config_path();
-        if let Some(parent) = path.parent() {
-            if let Err(e) = std::fs::create_dir_all(parent) {
-                warn!("[config] Failed to create config dir: {e}");
-                return;
-            }
+        if let Some(parent) = path.parent()
+            && let Err(e) = std::fs::create_dir_all(parent)
+        {
+            warn!("[config] Failed to create config dir: {e}");
+            return;
         }
 
         let json = match serde_json::to_string_pretty(config) {
@@ -288,11 +364,15 @@ impl ConfigProvider for FileConfigProvider {
         Ok(Box::pin(WatchStream::new(rx)))
     }
 
-    fn update(&self, apply: Box<dyn FnOnce(&mut AxisConfig) + Send + 'static>) -> Result<(), ConfigError> {
-        let mut guard = self.base.lock().map_err(|e| {
-            ConfigError::ProviderError(format!("Lock poisoned: {e}"))
-        })?;
-        apply(&mut *guard);
+    fn update(
+        &self,
+        apply: Box<dyn FnOnce(&mut AxisConfig) + Send + 'static>,
+    ) -> Result<(), ConfigError> {
+        let mut guard = self
+            .base
+            .lock()
+            .map_err(|e| ConfigError::ProviderError(format!("Lock poisoned: {e}")))?;
+        apply(&mut guard);
         FileConfigProvider::save(&guard);
         self.suppress_reload.store(true, Ordering::SeqCst);
         let resolved = Self::merge(&self.cli_override, &guard);

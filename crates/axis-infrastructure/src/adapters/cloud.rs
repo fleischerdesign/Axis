@@ -1,9 +1,9 @@
-use axis_domain::models::cloud::{CloudStatus, CloudAccount};
-use axis_domain::ports::cloud::{CloudProvider, CloudError, CloudStream};
 use async_trait::async_trait;
-use tokio::sync::watch;
+use axis_domain::models::cloud::{CloudAccount, CloudStatus};
+use axis_domain::ports::cloud::{CloudError, CloudProvider, CloudStream};
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
 
 pub struct LocalCloudProvider {

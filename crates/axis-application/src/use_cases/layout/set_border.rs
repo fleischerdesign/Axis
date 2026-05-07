@@ -1,6 +1,6 @@
-use axis_domain::ports::layout::{LayoutProvider, LayoutError};
-use std::sync::Arc;
+use axis_domain::ports::layout::{LayoutError, LayoutProvider};
 use log::debug;
+use std::sync::Arc;
 
 pub struct SetBorderColorUseCase {
     provider: Arc<dyn LayoutProvider>,

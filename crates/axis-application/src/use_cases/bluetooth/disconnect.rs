@@ -1,6 +1,6 @@
-use axis_domain::ports::bluetooth::{BluetoothProvider, BluetoothError};
-use std::sync::Arc;
+use axis_domain::ports::bluetooth::{BluetoothError, BluetoothProvider};
 use log::info;
+use std::sync::Arc;
 
 pub struct DisconnectBluetoothDeviceUseCase {
     provider: Arc<dyn BluetoothProvider>,

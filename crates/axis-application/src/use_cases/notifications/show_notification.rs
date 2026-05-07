@@ -1,5 +1,5 @@
 use axis_domain::models::notifications::Notification;
-use axis_domain::ports::notifications::{ActionHandler, NotificationProvider, NotificationError};
+use axis_domain::ports::notifications::{ActionHandler, NotificationError, NotificationProvider};
 use std::collections::HashMap;
 use std::sync::Arc;
 

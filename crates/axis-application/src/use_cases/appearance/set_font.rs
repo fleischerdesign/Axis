@@ -1,6 +1,6 @@
 use axis_domain::ports::appearance::{AppearanceError, AppearanceProvider};
-use std::sync::Arc;
 use log::info;
+use std::sync::Arc;
 
 pub struct SetFontUseCase {
     provider: Arc<dyn AppearanceProvider>,

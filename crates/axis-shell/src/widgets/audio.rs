@@ -1,7 +1,7 @@
-use libadwaita::prelude::*;
-use axis_presentation::View;
 use crate::presentation::audio::audio_icon;
 use axis_domain::models::audio::AudioStatus;
+use axis_presentation::View;
+use libadwaita::prelude::*;
 
 #[derive(Clone)]
 pub struct AudioWidget {
@@ -25,7 +25,11 @@ impl AudioWidget {
         container.append(&label);
         container.add_css_class("audio-widget");
 
-        Self { container, icon, label }
+        Self {
+            container,
+            icon,
+            label,
+        }
     }
 }
 
@@ -34,8 +38,8 @@ impl View<AudioStatus> for AudioWidget {
         let icon_name = audio_icon(status).to_string();
         self.icon.set_icon_name(Some(&icon_name));
         if self.label.is_visible() {
-            self.label.set_label(&format!("{:.0}%", status.volume * 100.0));
+            self.label
+                .set_label(&format!("{:.0}%", status.volume * 100.0));
         }
     }
 }
-

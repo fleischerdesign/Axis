@@ -1,14 +1,14 @@
+use async_trait::async_trait;
 use axis_domain::models::network::{AccessPoint, NetworkStatus};
 use axis_domain::ports::network::{NetworkError, NetworkProvider, NetworkStream};
-use async_trait::async_trait;
 use futures_util::StreamExt;
-use tokio::sync::watch;
-use tokio_stream::wrappers::WatchStream;
-use zbus::{proxy, zvariant::OwnedObjectPath, Connection};
+use log::{info, warn};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
-use log::{info, warn};
+use tokio::sync::watch;
+use tokio_stream::wrappers::WatchStream;
+use zbus::{Connection, proxy, zvariant::OwnedObjectPath};
 
 const MAX_ACCESS_POINTS: usize = 15;
 
@@ -59,15 +59,11 @@ trait Device {
 )]
 trait WirelessDevice {
     fn get_access_points(&self) -> zbus::Result<Vec<OwnedObjectPath>>;
-    fn request_scan(
-        &self,
-        options: HashMap<String, zbus::zvariant::Value<'_>>,
-    ) -> zbus::Result<()>;
+    fn request_scan(&self, options: HashMap<String, zbus::zvariant::Value<'_>>)
+    -> zbus::Result<()>;
     #[zbus(signal)]
-    fn access_point_added(
-        &self,
-        access_point: zbus::zvariant::OwnedObjectPath,
-    ) -> zbus::Result<()>;
+    fn access_point_added(&self, access_point: zbus::zvariant::OwnedObjectPath)
+    -> zbus::Result<()>;
     #[zbus(signal)]
     fn access_point_removed(
         &self,
@@ -133,22 +129,9 @@ impl NetworkManagerProvider {
         let conn = connection.clone();
 
         tokio::spawn(async move {
-            let mut attempt = 0u32;
             loop {
-                let nm_proxy = match NetworkManagerProxy::new(&conn).await {
-                    Ok(p) => p,
-                    Err(e) => {
-                        warn!("[network] Failed to create NM proxy: {e}, retrying...");
-                        attempt += 1;
-                        tokio::time::sleep(Duration::from_secs(2u64.pow(attempt.min(4)).min(30))).await;
-                        continue;
-                    }
-                };
-
-                if attempt > 0 {
-                    info!("[network] Reconnected to NetworkManager");
-                }
-                attempt = 0;
+                let nm_proxy =
+                    crate::utils::retry_with_backoff(|| NetworkManagerProxy::new(&conn), 30).await;
 
                 let wifi_device_path = Self::find_wifi_device(&nm_proxy, &conn).await;
 
@@ -164,8 +147,7 @@ impl NetworkManagerProvider {
                         log::warn!("[network] invalid wifi path: {wp}");
                         continue;
                     };
-                    if let Ok(wifi_proxy) = builder.build().await
-                    {
+                    if let Ok(wifi_proxy) = builder.build().await {
                         ap_added_stream = wifi_proxy.receive_access_point_added().await.ok();
                         ap_removed_stream = wifi_proxy.receive_access_point_removed().await.ok();
                         last_scan_stream = Some(wifi_proxy.receive_last_scan_changed().await);
@@ -187,11 +169,8 @@ impl NetworkManagerProvider {
                         break;
                     }
 
-                    let status = Self::fetch_data(
-                        &nm_proxy,
-                        &conn,
-                        wifi_device_path.as_ref(),
-                    ).await;
+                    let status =
+                        Self::fetch_data(&nm_proxy, &conn, wifi_device_path.as_ref()).await;
                     let _ = provider_clone.status_tx.send(status);
                 }
 
@@ -213,27 +192,24 @@ impl NetworkManagerProvider {
                 continue;
             };
             if let Ok(dev_proxy) = builder.build().await
+                && let Ok(2) = dev_proxy.device_type().await
             {
-                if let Ok(2) = dev_proxy.device_type().await {
-                    info!("[network] WiFi device found: {path}");
-                    return Some(path);
-                }
+                info!("[network] WiFi device found: {path}");
+                return Some(path);
             }
         }
         None
     }
 
+    #[allow(clippy::collapsible_if)]
     async fn fetch_data(
-        nm_proxy: &NetworkManagerProxy<'_>,
+        #[allow(clippy::collapsible_if)] nm_proxy: &NetworkManagerProxy<'_>,
         conn: &Connection,
         wifi_path: Option<&OwnedObjectPath>,
     ) -> NetworkStatus {
         let state = nm_proxy.state().await.unwrap_or(0);
         let wifi_on = nm_proxy.wireless_enabled().await.unwrap_or(false);
-        let primary_type = nm_proxy
-            .primary_connection_type()
-            .await
-            .unwrap_or_default();
+        let primary_type = nm_proxy.primary_connection_type().await.unwrap_or_default();
 
         let mut active_ap_path = "/".to_string();
         let mut active_strength = 0u8;
@@ -244,29 +220,28 @@ impl NetworkManagerProvider {
                 log::warn!("[network] invalid wifi path: {path}");
                 return NetworkStatus::default();
             };
-            if let Ok(wifi_proxy) = wifi_builder.build().await
-            {
+            if let Ok(wifi_proxy) = wifi_builder.build().await {
                 if let Ok(ap_path) = wifi_proxy.active_access_point().await {
-                        active_ap_path = ap_path.to_string();
-                        let ap_path_str = active_ap_path.clone();
-                        match AccessPointProxy::builder(conn).path(ap_path) {
-                            Ok(builder) => {
-                                if let Ok(ap_proxy) = builder.build().await {
-                                    active_strength = ap_proxy.strength().await.unwrap_or(0);
-                                }
+                    active_ap_path = ap_path.to_string();
+                    let ap_path_str = active_ap_path.clone();
+                    match AccessPointProxy::builder(conn).path(ap_path) {
+                        Ok(builder) => {
+                            if let Ok(ap_proxy) = builder.build().await {
+                                active_strength = ap_proxy.strength().await.unwrap_or(0);
                             }
-                            Err(e) => log::warn!("[network] invalid ap path {ap_path_str}: {e}"),
                         }
+                        Err(e) => log::warn!("[network] invalid ap path {ap_path_str}: {e}"),
+                    }
                 }
 
                 if let Ok(ap_paths) = wifi_proxy.get_access_points().await {
                     for ap_path in ap_paths.into_iter().take(MAX_ACCESS_POINTS) {
-                        let Ok(ap_builder) = AccessPointProxy::builder(conn).path(ap_path.clone()) else {
+                        let Ok(ap_builder) = AccessPointProxy::builder(conn).path(ap_path.clone())
+                        else {
                             log::warn!("[network] invalid ap path: {ap_path}");
                             continue;
                         };
-                        if let Ok(ap_proxy) = ap_builder.build().await
-                        {
+                        if let Ok(ap_proxy) = ap_builder.build().await {
                             if let Ok(ssid_bytes) = ap_proxy.ssid().await {
                                 let ssid = String::from_utf8_lossy(&ssid_bytes).to_string();
                                 if !ssid.is_empty() {
@@ -293,7 +268,7 @@ impl NetworkManagerProvider {
             }
         }
 
-        let is_connected = state >= 50 && state <= 70;
+        let is_connected = (50..=70).contains(&state);
         NetworkStatus {
             is_wifi_connected: is_connected
                 && (primary_type == "802-11-wireless" || active_ap_path != "/"),
@@ -345,11 +320,7 @@ impl NetworkProvider for NetworkManagerProvider {
         Ok(())
     }
 
-    async fn connect_to_ap(
-        &self,
-        id: &str,
-        password: Option<&str>,
-    ) -> Result<(), NetworkError> {
+    async fn connect_to_ap(&self, id: &str, password: Option<&str>) -> Result<(), NetworkError> {
         let dev_path = self
             .wifi_device_path
             .clone()
@@ -396,14 +367,14 @@ impl NetworkProvider for NetworkManagerProvider {
                 .build()
                 .await
                 .map_err(|e| NetworkError::ProviderError(format!("Device proxy: {e}")))?;
-            if let Ok(active_conn_path) = dev_proxy.active_connection().await {
-                if active_conn_path.to_string() != "/" {
-                    self.nm_proxy
-                        .deactivate_connection(active_conn_path)
-                        .await
-                        .map_err(|e| NetworkError::ProviderError(format!("Disconnect: {e}")))?;
-                    info!("[network] Disconnected from WiFi");
-                }
+            if let Ok(active_conn_path) = dev_proxy.active_connection().await
+                && active_conn_path.to_string() != "/"
+            {
+                self.nm_proxy
+                    .deactivate_connection(active_conn_path)
+                    .await
+                    .map_err(|e| NetworkError::ProviderError(format!("Disconnect: {e}")))?;
+                info!("[network] Disconnected from WiFi");
             }
         }
         Ok(())

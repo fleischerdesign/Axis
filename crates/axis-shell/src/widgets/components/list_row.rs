@@ -41,7 +41,12 @@ impl ListRow {
         container.append(&icon);
         container.append(&label_box);
 
-        let row = Self { container, icon, title: title_label, subtitle };
+        let row = Self {
+            container,
+            icon,
+            title: title_label,
+            subtitle,
+        };
         row.set_title(title);
         row.set_icon(icon_name);
         row
@@ -71,5 +76,4 @@ impl ListRow {
             self.container.remove_css_class("active");
         }
     }
-
 }
