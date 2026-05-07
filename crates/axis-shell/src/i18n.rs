@@ -6,7 +6,8 @@ pub mod de {
     pub const REJECT: &str = "Ablehnen";
     pub const CONNECTED: &str = "Verbunden";
     pub const CONNECTED_TO: &str = "Verbunden mit {}";
-    pub const PAIRING_CONFIRM_MSG: &str = "Geben Sie die Kopplung frei, wenn der PIN auf dem Gerät übereinstimmt.";
+    pub const PAIRING_CONFIRM_MSG: &str =
+        "Geben Sie die Kopplung frei, wenn der PIN auf dem Gerät übereinstimmt.";
     pub const PAIRING_CONFIRM: &str = "Bestätigen Sie die Kopplung.";
     pub const PAIRING_PIN_PROMPT: &str = "PIN-Code";
     pub const PAIRING_PASSKEY_PROMPT: &str = "Passkey";

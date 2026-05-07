@@ -17,13 +17,22 @@ pub struct LockPresenter {
     authenticate_uc: Arc<AuthenticateUseCase>,
 }
 
+pub struct LockPresenterArgs {
+    pub subscribe_uc: Arc<SubscribeUseCase<dyn LockProvider, LockStatus>>,
+    pub lock_uc: Arc<LockSessionUseCase>,
+    pub unlock_uc: Arc<UnlockSessionUseCase>,
+    pub authenticate_uc: Arc<AuthenticateUseCase>,
+}
+
 impl LockPresenter {
-    pub fn new(
-        subscribe_uc: Arc<SubscribeUseCase<dyn LockProvider, LockStatus>>,
-        lock_uc: Arc<LockSessionUseCase>,
-        unlock_uc: Arc<UnlockSessionUseCase>,
-        authenticate_uc: Arc<AuthenticateUseCase>,
-    ) -> Self {
+    pub fn new(args: LockPresenterArgs) -> Self {
+        let LockPresenterArgs {
+            subscribe_uc,
+            lock_uc,
+            unlock_uc,
+            authenticate_uc,
+        } = args;
+
         let inner = Presenter::from_subscribe_use_case(subscribe_uc.clone());
 
         Self {

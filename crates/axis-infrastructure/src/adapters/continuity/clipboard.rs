@@ -7,14 +7,14 @@ use tokio::task::JoinHandle;
 
 const MAX_CLIPBOARD_SIZE: usize = 10 * 1024 * 1024;
 
-// ── Clipboard Events ──────────────────────────────────────────────────
+// --- Clipboard Events --------------------------------------------------
 
 #[derive(Debug)]
 pub enum ClipboardEvent {
     ContentChanged { content: Vec<u8>, mime_type: String },
 }
 
-// ── Clipboard Provider Trait ──────────────────────────────────────────
+// --- Clipboard Provider Trait ------------------------------------------
 
 pub trait ClipboardSync: Send {
     fn start_monitoring(&mut self, tx: Sender<ClipboardEvent>) -> Result<(), String>;
@@ -22,7 +22,7 @@ pub trait ClipboardSync: Send {
     fn set_content(&mut self, content: &[u8], mime_type: &str) -> Result<(), String>;
 }
 
-// ── Wayland Implementation ─────────────────────────────────────────────
+// --- Wayland Implementation ---------------------------------------------
 
 pub struct WaylandClipboard {
     monitor_task: Option<JoinHandle<()>>,

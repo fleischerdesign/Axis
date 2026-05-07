@@ -130,8 +130,20 @@ impl NetworkManagerProvider {
 
         tokio::spawn(async move {
             loop {
-                let nm_proxy =
-                    crate::utils::retry_with_backoff(|| NetworkManagerProxy::new(&conn), 30).await;
+                let nm_proxy = match crate::utils::retry_with_backoff(
+                    || NetworkManagerProxy::new(&conn),
+                    30,
+                    10,
+                )
+                .await
+                {
+                    Ok(p) => p,
+                    Err(e) => {
+                        warn!("[network] Failed to create NM proxy after retries: {:?}", e);
+                        tokio::time::sleep(Duration::from_secs(2)).await;
+                        continue;
+                    }
+                };
 
                 let wifi_device_path = Self::find_wifi_device(&nm_proxy, &conn).await;
 
@@ -201,9 +213,8 @@ impl NetworkManagerProvider {
         None
     }
 
-    #[allow(clippy::collapsible_if)]
     async fn fetch_data(
-        #[allow(clippy::collapsible_if)] nm_proxy: &NetworkManagerProxy<'_>,
+        nm_proxy: &NetworkManagerProxy<'_>,
         conn: &Connection,
         wifi_path: Option<&OwnedObjectPath>,
     ) -> NetworkStatus {
@@ -241,19 +252,19 @@ impl NetworkManagerProvider {
                             log::warn!("[network] invalid ap path: {ap_path}");
                             continue;
                         };
-                        if let Ok(ap_proxy) = ap_builder.build().await {
-                            if let Ok(ssid_bytes) = ap_proxy.ssid().await {
-                                let ssid = String::from_utf8_lossy(&ssid_bytes).to_string();
-                                if !ssid.is_empty() {
-                                    let ap_path_str = ap_path.to_string();
-                                    aps.push(AccessPoint {
-                                        id: ap_path_str.clone(),
-                                        ssid,
-                                        strength: ap_proxy.strength().await.unwrap_or(0),
-                                        is_active: ap_path_str == active_ap_path,
-                                        needs_auth: ap_proxy.flags().await.unwrap_or(0) != 0,
-                                    });
-                                }
+                        if let Ok(ap_proxy) = ap_builder.build().await
+                            && let Ok(ssid_bytes) = ap_proxy.ssid().await
+                        {
+                            let ssid = String::from_utf8_lossy(&ssid_bytes).to_string();
+                            if !ssid.is_empty() {
+                                let ap_path_str = ap_path.to_string();
+                                aps.push(AccessPoint {
+                                    id: ap_path_str.clone(),
+                                    ssid,
+                                    strength: ap_proxy.strength().await.unwrap_or(0),
+                                    is_active: ap_path_str == active_ap_path,
+                                    needs_auth: ap_proxy.flags().await.unwrap_or(0) != 0,
+                                });
                             }
                         }
                     }

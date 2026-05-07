@@ -9,6 +9,8 @@ pub enum CloudError {
     ProviderError(String),
     #[error("Authentication failed: {0}")]
     AuthFailed(String),
+    #[error("Validation error: {0}")]
+    ValidationError(String),
 }
 
 pub type CloudStream = StatusStream<CloudStatus>;

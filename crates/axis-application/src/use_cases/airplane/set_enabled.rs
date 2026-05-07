@@ -1,5 +1,5 @@
 use axis_domain::ports::airplane::{AirplaneError, AirplaneProvider};
-use log::info;
+use log::debug;
 use std::sync::Arc;
 
 pub struct SetAirplaneModeUseCase {
@@ -12,7 +12,7 @@ impl SetAirplaneModeUseCase {
     }
 
     pub async fn execute(&self, enabled: bool) -> Result<(), AirplaneError> {
-        info!("[use-case] Setting airplane mode to: {}", enabled);
+        debug!("[use-case] Setting airplane mode to: {}", enabled);
         self.provider.set_enabled(enabled).await
     }
 }

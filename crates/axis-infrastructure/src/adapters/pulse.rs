@@ -260,7 +260,6 @@ impl PulseAudioProvider {
         Ok(Arc::new(Self { status_tx, cmd_tx }))
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn run_pulse_loop(
         cmd_rx: &mut mpsc::Receiver<PulseCmd>,
         status_tx: &watch::Sender<AudioStatus>,

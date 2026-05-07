@@ -288,7 +288,7 @@ impl BlueZProvider {
         let provider_clone = provider.clone();
         tokio::spawn(async move {
             loop {
-                let (_om_proxy, mut interfaces_added, mut interfaces_removed) =
+                let Ok((_om_proxy, mut interfaces_added, mut interfaces_removed)) =
                     crate::utils::retry_with_backoff(
                         || async {
                             let om = ObjectManagerProxy::new(&provider_clone.connection)
@@ -305,8 +305,14 @@ impl BlueZProvider {
                             Ok::<_, String>((om, added, removed))
                         },
                         30,
+                        10,
                     )
-                    .await;
+                    .await
+                else {
+                    warn!("[bluetooth] BlueZ stream ended, reconnecting...");
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                    continue;
+                };
 
                 loop {
                     let alive = tokio::select! {

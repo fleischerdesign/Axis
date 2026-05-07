@@ -348,13 +348,13 @@ impl MprisDBusProvider {
             let was_playing = existing.playback == PlaybackState::Playing;
             *existing = player.clone();
             if player.playback == PlaybackState::Playing && !was_playing {
-                info!("[mpris] Now playing: {} — {}", player.artist, player.title);
+                info!("[mpris] Now playing: {} -- {}", player.artist, player.title);
                 status.active_player_id = Some(player.id.clone());
             }
         } else {
             if player.playback == PlaybackState::Playing || status.active_player_id.is_none() {
                 info!(
-                    "[mpris] New active player: {} — {}",
+                    "[mpris] New active player: {} -- {}",
                     player.id, player.title
                 );
                 status.active_player_id = Some(player.id.clone());

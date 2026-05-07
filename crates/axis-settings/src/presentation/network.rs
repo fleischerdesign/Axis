@@ -36,19 +36,26 @@ pub struct NetworkPresenter {
     scan_uc: Arc<ScanWifiUseCase>,
     connect_uc: Arc<ConnectToApUseCase>,
     disconnect_uc: Arc<DisconnectWifiUseCase>,
-    // We would need a set_enabled use case, but for now we assume the provider handles it or we mock it.
-    // Let's assume we need to add a ToggleWifiUseCase if it doesn't exist.
+}
+
+pub struct NetworkPresenterArgs {
+    pub subscribe_uc: Arc<SubscribeUseCase<dyn NetworkProvider, NetworkStatus>>,
+    pub get_status_uc: Arc<GetStatusUseCase<dyn NetworkProvider, NetworkStatus>>,
+    pub scan_uc: Arc<ScanWifiUseCase>,
+    pub connect_uc: Arc<ConnectToApUseCase>,
+    pub disconnect_uc: Arc<DisconnectWifiUseCase>,
 }
 
 impl NetworkPresenter {
-    pub fn new(
-        subscribe_uc: Arc<SubscribeUseCase<dyn NetworkProvider, NetworkStatus>>,
-        get_status_uc: Arc<GetStatusUseCase<dyn NetworkProvider, NetworkStatus>>,
-        scan_uc: Arc<ScanWifiUseCase>,
-        connect_uc: Arc<ConnectToApUseCase>,
-        disconnect_uc: Arc<DisconnectWifiUseCase>,
-        rt: &tokio::runtime::Runtime,
-    ) -> Self {
+    pub fn new(args: NetworkPresenterArgs, rt: &tokio::runtime::Runtime) -> Self {
+        let NetworkPresenterArgs {
+            subscribe_uc,
+            get_status_uc,
+            scan_uc,
+            connect_uc,
+            disconnect_uc,
+        } = args;
+
         let initial_status = rt.block_on(async {
             match get_status_uc.execute().await {
                 Ok(s) => s,

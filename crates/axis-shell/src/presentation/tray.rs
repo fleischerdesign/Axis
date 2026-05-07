@@ -32,17 +32,26 @@ pub struct TrayPresenter {
     scroll_use_case: Arc<ScrollTrayItemUseCase>,
 }
 
+pub struct TrayPresenterArgs {
+    pub subscribe_uc: Arc<SubscribeUseCase<dyn TrayProvider, TrayStatus>>,
+    pub get_status_uc: Arc<GetStatusUseCase<dyn TrayProvider, TrayStatus>>,
+    pub activate_uc: Arc<ActivateTrayItemUseCase>,
+    pub context_menu_uc: Arc<ContextMenuTrayItemUseCase>,
+    pub scroll_uc: Arc<ScrollTrayItemUseCase>,
+}
+
 impl TrayPresenter {
-    pub fn new(
-        subscribe_use_case: Arc<SubscribeUseCase<dyn TrayProvider, TrayStatus>>,
-        get_status_use_case: Arc<GetStatusUseCase<dyn TrayProvider, TrayStatus>>,
-        activate_use_case: Arc<ActivateTrayItemUseCase>,
-        context_menu_use_case: Arc<ContextMenuTrayItemUseCase>,
-        scroll_use_case: Arc<ScrollTrayItemUseCase>,
-        rt: &tokio::runtime::Runtime,
-    ) -> Self {
+    pub fn new(args: TrayPresenterArgs, rt: &tokio::runtime::Runtime) -> Self {
+        let TrayPresenterArgs {
+            subscribe_uc,
+            get_status_uc,
+            activate_uc,
+            context_menu_uc,
+            scroll_uc,
+        } = args;
+
         let initial_status = rt.block_on(async {
-            match get_status_use_case.execute().await {
+            match get_status_uc.execute().await {
                 Ok(s) => s,
                 Err(e) => {
                     log::error!("[tray] Failed to get initial status: {e}");
@@ -51,14 +60,14 @@ impl TrayPresenter {
             }
         });
 
-        let inner = Presenter::from_subscribe_use_case(subscribe_use_case.clone())
+        let inner = Presenter::from_subscribe_use_case(subscribe_uc.clone())
             .with_initial_status(initial_status);
 
         Self {
             inner,
-            activate_use_case,
-            context_menu_use_case,
-            scroll_use_case,
+            activate_use_case: activate_uc,
+            context_menu_use_case: context_menu_uc,
+            scroll_use_case: scroll_uc,
         }
     }
 

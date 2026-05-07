@@ -1,4 +1,6 @@
 pub mod composition;
+pub mod config;
+pub mod i18n;
 pub mod presentation;
 pub mod services;
 pub mod utils;

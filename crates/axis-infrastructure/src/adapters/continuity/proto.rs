@@ -6,7 +6,7 @@ pub const PROTOCOL_VERSION: u32 = 1;
 pub const MAGIC: &[u8; 4] = b"AXIS";
 pub const MAX_MESSAGE_SIZE: usize = 10 * 1024 * 1024;
 
-// ── Framing: length-prefixed JSON ──────────────────────────────────────
+// --- Framing: length-prefixed JSON --------------------------------------
 // Wire format: [4 bytes magic][4 bytes version][4 bytes length][JSON payload]
 
 pub async fn write_message<W: AsyncWriteExt + Unpin>(

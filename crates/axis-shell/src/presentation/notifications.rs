@@ -20,16 +20,24 @@ pub trait NotificationPopupAware {
     fn set_popup_open(&self, open: bool);
 }
 
+pub struct NotificationPresenterArgs {
+    pub subscribe_uc: Arc<SubscribeUseCase<dyn NotificationProvider, NotificationStatus>>,
+    pub get_status_uc: Arc<GetStatusUseCase<dyn NotificationProvider, NotificationStatus>>,
+    pub close_uc: Arc<CloseNotificationUseCase>,
+    pub invoke_action_uc: Arc<InvokeNotificationActionUseCase>,
+}
+
 impl NotificationPresenter {
-    pub fn new(
-        subscribe_use_case: Arc<SubscribeUseCase<dyn NotificationProvider, NotificationStatus>>,
-        get_status_use_case: Arc<GetStatusUseCase<dyn NotificationProvider, NotificationStatus>>,
-        close_use_case: Arc<CloseNotificationUseCase>,
-        invoke_action_use_case: Arc<InvokeNotificationActionUseCase>,
-        rt: &tokio::runtime::Runtime,
-    ) -> Self {
+    pub fn new(args: NotificationPresenterArgs, rt: &tokio::runtime::Runtime) -> Self {
+        let NotificationPresenterArgs {
+            subscribe_uc,
+            get_status_uc,
+            close_uc,
+            invoke_action_uc,
+        } = args;
+
         let initial_status = rt.block_on(async {
-            match get_status_use_case.execute().await {
+            match get_status_uc.execute().await {
                 Ok(s) => s,
                 Err(e) => {
                     log::error!("[notifications] Failed to get initial status: {e}");
@@ -38,13 +46,13 @@ impl NotificationPresenter {
             }
         });
 
-        let inner = Presenter::from_subscribe_use_case(subscribe_use_case.clone())
+        let inner = Presenter::from_subscribe_use_case(subscribe_uc.clone())
             .with_initial_status(initial_status);
 
         Self {
             inner,
-            close_use_case,
-            invoke_action_use_case,
+            close_use_case: close_uc,
+            invoke_action_use_case: invoke_action_uc,
             toast_view: RefCell::new(None),
             archive_view: RefCell::new(None),
         }

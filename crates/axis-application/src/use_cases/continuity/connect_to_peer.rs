@@ -1,5 +1,5 @@
 use axis_domain::ports::continuity::{ContinuityError, ContinuityProvider};
-use log::info;
+use log::debug;
 use std::sync::Arc;
 
 pub struct ConnectToPeerUseCase {
@@ -12,7 +12,7 @@ impl ConnectToPeerUseCase {
     }
 
     pub async fn execute(&self, peer_id: &str) -> Result<(), ContinuityError> {
-        info!("[use-case] Connecting to peer: {}", peer_id);
+        debug!("[use-case] Connecting to peer: {}", peer_id);
         self.provider.connect_to_peer(peer_id).await
     }
 }

@@ -1,5 +1,5 @@
 use axis_domain::ports::dnd::{DndError, DndProvider};
-use log::info;
+use log::debug;
 use std::sync::Arc;
 
 pub struct SetDndEnabledUseCase {
@@ -12,7 +12,7 @@ impl SetDndEnabledUseCase {
     }
 
     pub async fn execute(&self, enabled: bool) -> Result<(), DndError> {
-        info!(
+        debug!(
             "[use-case] Setting Do-Not-Disturb (DND) mode to: {}",
             enabled
         );

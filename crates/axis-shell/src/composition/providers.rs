@@ -68,11 +68,10 @@ pub struct Providers {
     pub google_auth: Arc<GoogleCloudAuthProvider>,
     pub google_agenda: Arc<axis_infrastructure::adapters::google_agenda::GoogleAgendaProvider>,
     pub continuity_service: Arc<ContinuityService>,
-    pub lock_gtk_handle: LockGtkHandle,
     pub mpris_dbus: Option<Arc<axis_infrastructure::adapters::mpris::MprisDBusProvider>>,
 }
 
-pub fn setup(cli: &Cli, rt: &tokio::runtime::Runtime) -> Providers {
+pub fn setup(cli: &Cli, rt: &tokio::runtime::Runtime) -> (Providers, LockGtkHandle) {
     let power_provider: Arc<dyn PowerProvider> = rt.block_on(async {
         match LogindPowerProvider::new().await {
             Ok(p) => p as Arc<dyn PowerProvider>,
@@ -219,32 +218,34 @@ pub fn setup(cli: &Cli, rt: &tokio::runtime::Runtime) -> Providers {
         google_calendar,
         google_tasks,
     );
-    Providers {
-        power: power_provider,
-        audio: audio_provider,
-        workspace: workspace_provider,
-        brightness: brightness_provider,
-        network: network_provider,
-        bluetooth: bluetooth_provider,
-        config: config_provider,
-        nightlight: nightlight_provider,
-        airplane: airplane_provider,
-        appearance: appearance_provider,
-        dnd: dnd_provider,
-        idle_inhibit: idle_inhibit_provider,
-        clock: clock_provider,
-        popup: popup_provider,
-        notification: notification_provider,
-        tray: tray_provider,
-        continuity: continuity_provider,
-        continuity_sharing: continuity_sharing_provider,
-        mpris: mpris_provider,
-        lock: lock_provider,
-        launcher: launcher_provider,
-        google_auth,
-        google_agenda,
-        continuity_service,
+    (
+        Providers {
+            power: power_provider,
+            audio: audio_provider,
+            workspace: workspace_provider,
+            brightness: brightness_provider,
+            network: network_provider,
+            bluetooth: bluetooth_provider,
+            config: config_provider,
+            nightlight: nightlight_provider,
+            airplane: airplane_provider,
+            appearance: appearance_provider,
+            dnd: dnd_provider,
+            idle_inhibit: idle_inhibit_provider,
+            clock: clock_provider,
+            popup: popup_provider,
+            notification: notification_provider,
+            tray: tray_provider,
+            continuity: continuity_provider,
+            continuity_sharing: continuity_sharing_provider,
+            mpris: mpris_provider,
+            lock: lock_provider,
+            launcher: launcher_provider,
+            google_auth,
+            google_agenda,
+            continuity_service,
+            mpris_dbus: mpris_dbus_provider,
+        },
         lock_gtk_handle,
-        mpris_dbus: mpris_dbus_provider,
-    }
+    )
 }
