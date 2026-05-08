@@ -103,9 +103,7 @@ impl BarWindow {
         });
         center_island_box.append(&clock_island.container);
 
-        let mpris_island = Island::new();
         let mpris_bar_widget = MprisBarWidget::new();
-        mpris_island.container.append(&mpris_bar_widget.container);
 
         let tp_mpris = toggle_popup_use_case.clone();
         let mp_pp = mpris_presenter.clone();
@@ -119,7 +117,7 @@ impl BarWindow {
                 }
             });
         });
-        mpris_island.container.add_controller(gesture_left);
+        mpris_bar_widget.container.add_controller(gesture_left);
 
         let gesture_right = gtk4::GestureClick::new();
         gesture_right.set_button(gtk4::gdk::BUTTON_SECONDARY);
@@ -128,10 +126,10 @@ impl BarWindow {
                 mp_pp.play_pause(&id);
             }
         });
-        mpris_island.container.add_controller(gesture_right);
-        mpris_island.container.set_cursor_from_name(Some("pointer"));
+        mpris_bar_widget.container.add_controller(gesture_right);
+        mpris_bar_widget.container.set_cursor_from_name(Some("pointer"));
 
-        center_island_box.append(&mpris_island.container);
+        center_island_box.append(&mpris_bar_widget.container);
 
         bar.set_center_widget(Some(&center_island_box));
 
