@@ -255,6 +255,8 @@ impl MprisDBusProvider {
         let mut last_query: HashMap<String, Instant> = HashMap::new();
         let mut pos_tick = tokio::time::interval(std::time::Duration::from_millis(250));
         pos_tick.tick().await;
+        let mut requery_tick = tokio::time::interval(std::time::Duration::from_secs(5));
+        requery_tick.tick().await;
 
         loop {
             tokio::select! {
@@ -338,6 +340,23 @@ impl MprisDBusProvider {
                     let Ok(pos) = proxy.position().await else { continue };
                     self.position_tx.send_replace((id, pos, length_us));
                 }
+                _ = requery_tick.tick() => {
+                    let stopped: Vec<String> = {
+                        let s = self.status_tx.borrow();
+                        s.players
+                            .iter()
+                            .filter(|p| p.playback == PlaybackState::Stopped)
+                            .map(|p| format!("org.mpris.MediaPlayer2.{}", p.id))
+                            .collect()
+                    };
+                    for bus_name in stopped {
+                        if let Some(player) = self.query_player(&bus_name).await {
+                            if player.playback != PlaybackState::Stopped {
+                                self.update_player(player);
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -350,12 +369,15 @@ impl MprisDBusProvider {
             if player.playback == PlaybackState::Playing && !was_playing {
                 info!("[mpris] Now playing: {} -- {}", player.artist, player.title);
                 status.active_player_id = Some(player.id.clone());
-            } else if was_playing && player.playback == PlaybackState::Stopped {
-                status.active_player_id = status
-                    .players
-                    .iter()
-                    .find(|p| p.playback != PlaybackState::Stopped)
-                    .map(|p| p.id.clone());
+            } else if was_playing && player.playback != PlaybackState::Playing {
+                let has_content = !player.title.is_empty() || !player.artist.is_empty();
+                if player.playback == PlaybackState::Stopped || !has_content {
+                    status.active_player_id = status
+                        .players
+                        .iter()
+                        .find(|p| p.playback != PlaybackState::Stopped && p.id != player.id)
+                        .map(|p| p.id.clone());
+                }
             }
         } else {
             if player.playback != PlaybackState::Stopped {
