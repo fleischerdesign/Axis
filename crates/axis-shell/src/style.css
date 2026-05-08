@@ -240,6 +240,7 @@ window.popup-window {
     background-color: @window_bg_color;
     color: @window_fg_color;
     border-radius: 16px;
+    border: 1px solid @border_color;
     padding: 8px 16px;
     margin: 0 10px;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
