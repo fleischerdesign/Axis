@@ -515,7 +515,7 @@ fn spawn_idle_monitor(
         return;
     }
 
-    let idle_rx = match crate::adapters::idle_notify::create_idle_watcher(500) {
+    let idle_rx = match crate::adapters::idle_notify::create_idle_watcher(5000) {
         Some(rx) => rx,
         None => {
             info!("[lock] Wayland idle notify not available, skipping idle monitor");
@@ -630,7 +630,15 @@ struct StartTimersParams<'a> {
 }
 
 fn start_timers(params: StartTimersParams<'_>) {
+    info!(
+        "[lock] Starting timers (blank={:?}s, lock={:?}s, sleep={:?}s)",
+        params.blank_timeout_seconds, params.lock_timeout_seconds, params.sleep_timeout_seconds
+    );
+
     if let Some(secs) = params.blank_timeout_seconds {
+        if let Some(h) = params.blank_handle.take() {
+            h.abort();
+        }
         let iip = params.idle_inhibit_provider.clone();
         let mb = params.monitors_blanked.clone();
         let handle = tokio::spawn(async move {
@@ -647,6 +655,9 @@ fn start_timers(params: StartTimersParams<'_>) {
     }
 
     if let Some(secs) = params.lock_timeout_seconds {
+        if let Some(h) = params.lock_handle.take() {
+            h.abort();
+        }
         let iip = params.idle_inhibit_provider.clone();
         let tx = params.cmd_tx.clone();
         let handle = tokio::spawn(async move {
@@ -664,6 +675,9 @@ fn start_timers(params: StartTimersParams<'_>) {
     }
 
     if let Some(secs) = params.sleep_timeout_seconds {
+        if let Some(h) = params.sleep_handle.take() {
+            h.abort();
+        }
         let iip = params.idle_inhibit_provider.clone();
         let tx = params.cmd_tx.clone();
         let handle = tokio::spawn(async move {
