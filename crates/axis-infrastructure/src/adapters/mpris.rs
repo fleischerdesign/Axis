@@ -71,7 +71,7 @@ impl MprisDBusProvider {
                     .players
                     .iter()
                     .find(|p| p.playback == PlaybackState::Playing);
-                status.active_player_id = playing.or(status.players.first()).map(|p| p.id.clone());
+                status.active_player_id = playing.map(|p| p.id.clone());
                 info!(
                     "[mpris] Setting initial status: {} players, active={:?}",
                     status.players.len(),
@@ -352,7 +352,7 @@ impl MprisDBusProvider {
                 status.active_player_id = Some(player.id.clone());
             }
         } else {
-            if player.playback == PlaybackState::Playing || status.active_player_id.is_none() {
+            if player.playback == PlaybackState::Playing {
                 info!(
                     "[mpris] New active player: {} -- {}",
                     player.id, player.title
@@ -369,7 +369,11 @@ impl MprisDBusProvider {
         let mut status = self.status_tx.borrow().clone();
         status.players.retain(|p| p.id != id);
         if status.active_player_id.as_deref() == Some(id) {
-            status.active_player_id = status.players.first().map(|p| p.id.clone());
+            status.active_player_id = status
+                .players
+                .iter()
+                .find(|p| p.playback == PlaybackState::Playing)
+                .map(|p| p.id.clone());
         }
         self.status_tx.send_replace(status);
     }
