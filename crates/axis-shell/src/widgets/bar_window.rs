@@ -127,7 +127,9 @@ impl BarWindow {
             }
         });
         mpris_bar_widget.container.add_controller(gesture_right);
-        mpris_bar_widget.container.set_cursor_from_name(Some("pointer"));
+        mpris_bar_widget
+            .container
+            .set_cursor_from_name(Some("pointer"));
 
         center_island_box.append(&mpris_bar_widget.container);
 
