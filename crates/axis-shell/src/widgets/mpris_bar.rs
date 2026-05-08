@@ -16,6 +16,13 @@ impl Default for MprisBarWidget {
 
 impl MprisBarWidget {
     pub fn new() -> Self {
+        let container = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+        container.add_css_class("island");
+        container.set_visible(false);
+
+        let inner = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
+        inner.add_css_class("mpris-bar");
+
         let icon = gtk4::Image::from_icon_name("audio-x-generic-symbolic");
         icon.set_pixel_size(16);
         icon.add_css_class("status-icon");
@@ -25,11 +32,9 @@ impl MprisBarWidget {
         label.set_max_width_chars(30);
         label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
 
-        let container = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
-        container.append(&icon);
-        container.append(&label);
-        container.add_css_class("mpris-bar");
-        container.set_visible(false);
+        inner.append(&icon);
+        inner.append(&label);
+        container.append(&inner);
 
         Self { container, label }
     }
