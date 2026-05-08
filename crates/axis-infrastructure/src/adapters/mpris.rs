@@ -350,10 +350,10 @@ impl MprisDBusProvider {
                             .collect()
                     };
                     for bus_name in stopped {
-                        if let Some(player) = self.query_player(&bus_name).await {
-                            if player.playback != PlaybackState::Stopped {
-                                self.update_player(player);
-                            }
+                        if let Some(player) = self.query_player(&bus_name).await
+                            && player.playback != PlaybackState::Stopped
+                        {
+                            self.update_player(player);
                         }
                     }
                 }
@@ -369,15 +369,16 @@ impl MprisDBusProvider {
             if player.playback == PlaybackState::Playing && !was_playing {
                 info!("[mpris] Now playing: {} -- {}", player.artist, player.title);
                 status.active_player_id = Some(player.id.clone());
-            } else if was_playing && player.playback != PlaybackState::Playing {
-                let has_content = !player.title.is_empty() || !player.artist.is_empty();
-                if player.playback == PlaybackState::Stopped || !has_content {
-                    status.active_player_id = status
-                        .players
-                        .iter()
-                        .find(|p| p.playback != PlaybackState::Stopped && p.id != player.id)
-                        .map(|p| p.id.clone());
-                }
+            } else if was_playing
+                && player.playback != PlaybackState::Playing
+                && (player.playback == PlaybackState::Stopped
+                    || (player.title.is_empty() && player.artist.is_empty()))
+            {
+                status.active_player_id = status
+                    .players
+                    .iter()
+                    .find(|p| p.playback != PlaybackState::Stopped && p.id != player.id)
+                    .map(|p| p.id.clone());
             }
         } else {
             if player.playback != PlaybackState::Stopped {
