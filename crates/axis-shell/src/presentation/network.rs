@@ -1,6 +1,7 @@
 use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
 use axis_application::use_cases::network::connect_to_ap::ConnectToApUseCase;
 use axis_application::use_cases::network::disconnect_wifi::DisconnectWifiUseCase;
+use axis_application::use_cases::network::scan_wifi::ScanWifiUseCase;
 use axis_domain::models::network::NetworkStatus;
 use axis_domain::ports::network::NetworkProvider;
 use axis_presentation::{Presenter, View};
@@ -20,6 +21,7 @@ pub struct NetworkPresenter {
     inner: Presenter<NetworkStatus>,
     connect_use_case: Arc<ConnectToApUseCase>,
     disconnect_use_case: Arc<DisconnectWifiUseCase>,
+    start_scan_use_case: Arc<ScanWifiUseCase>,
 }
 
 pub struct NetworkPresenterArgs {
@@ -27,6 +29,7 @@ pub struct NetworkPresenterArgs {
     pub get_status_uc: Arc<GetStatusUseCase<dyn NetworkProvider, NetworkStatus>>,
     pub connect_uc: Arc<ConnectToApUseCase>,
     pub disconnect_uc: Arc<DisconnectWifiUseCase>,
+    pub start_scan_uc: Arc<ScanWifiUseCase>,
 }
 
 impl NetworkPresenter {
@@ -36,6 +39,7 @@ impl NetworkPresenter {
             get_status_uc,
             connect_uc,
             disconnect_uc,
+            start_scan_uc,
         } = args;
 
         let initial_status = rt.block_on(async {
@@ -55,6 +59,7 @@ impl NetworkPresenter {
             inner,
             connect_use_case: connect_uc,
             disconnect_use_case: disconnect_uc,
+            start_scan_use_case: start_scan_uc,
         }
     }
 
@@ -80,6 +85,15 @@ impl NetworkPresenter {
         tokio::spawn(async move {
             if let Err(e) = uc.execute().await {
                 log::error!("[network] disconnect_wifi failed: {e}");
+            }
+        });
+    }
+
+    pub fn start_scan(&self) {
+        let uc = self.start_scan_use_case.clone();
+        tokio::spawn(async move {
+            if let Err(e) = uc.execute().await {
+                log::error!("[network] start_scan failed: {e}");
             }
         });
     }

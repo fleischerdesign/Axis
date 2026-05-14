@@ -117,6 +117,7 @@ pub fn setup(uc: &UseCases, rt: &tokio::runtime::Runtime) -> Presenters {
             get_status_uc: uc.get_network_status.clone(),
             connect_uc: uc.connect_to_ap.clone(),
             disconnect_uc: uc.disconnect_wifi.clone(),
+            start_scan_uc: uc.scan_wifi.clone(),
         },
         rt,
     ));

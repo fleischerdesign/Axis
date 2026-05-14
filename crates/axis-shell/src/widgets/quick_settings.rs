@@ -296,6 +296,20 @@ impl QuickSettingsPopup {
 
     pub fn setup_wifi_sub_page(&self, presenter: Rc<NetworkPresenter>) {
         let stack = self.qs_stack.get().expect("stack not initialized").clone();
+
+        let pres = presenter.clone();
+        let scanned: Rc<Cell<bool>> = Rc::new(Cell::new(false));
+        stack.connect_visible_child_name_notify(move |s| {
+            if s.visible_child_name().as_deref() == Some("wifi") {
+                if !scanned.get() {
+                    pres.start_scan();
+                    scanned.set(true);
+                }
+            } else {
+                scanned.set(false);
+            }
+        });
+
         let page = Rc::new(crate::widgets::sub_pages::wifi_page::WifiPage::new(
             presenter,
             move || stack.set_visible_child_name("main"),
