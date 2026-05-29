@@ -1,4 +1,5 @@
 pub mod presenter;
+#[cfg(feature = "gtk")]
 pub mod theme;
 pub mod view;
 
