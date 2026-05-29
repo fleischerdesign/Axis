@@ -1,4 +1,4 @@
-use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
+use axis_application::use_cases::generic::SubscribeUseCase;
 use axis_application::use_cases::notifications::close_notification::CloseNotificationUseCase;
 use axis_application::use_cases::notifications::invoke_action::InvokeNotificationActionUseCase;
 use axis_domain::models::notifications::NotificationStatus;
@@ -22,32 +22,19 @@ pub trait NotificationPopupAware {
 
 pub struct NotificationPresenterArgs {
     pub subscribe_uc: Arc<SubscribeUseCase<dyn NotificationProvider, NotificationStatus>>,
-    pub get_status_uc: Arc<GetStatusUseCase<dyn NotificationProvider, NotificationStatus>>,
     pub close_uc: Arc<CloseNotificationUseCase>,
     pub invoke_action_uc: Arc<InvokeNotificationActionUseCase>,
 }
 
 impl NotificationPresenter {
-    pub fn new(args: NotificationPresenterArgs, rt: &tokio::runtime::Runtime) -> Self {
+    pub fn new(args: NotificationPresenterArgs) -> Self {
         let NotificationPresenterArgs {
             subscribe_uc,
-            get_status_uc,
             close_uc,
             invoke_action_uc,
         } = args;
 
-        let initial_status = rt.block_on(async {
-            match get_status_uc.execute().await {
-                Ok(s) => s,
-                Err(e) => {
-                    log::error!("[notifications] Failed to get initial status: {e}");
-                    Default::default()
-                }
-            }
-        });
-
-        let inner = Presenter::from_subscribe_use_case(subscribe_uc.clone())
-            .with_initial_status(initial_status);
+        let inner = Presenter::from_subscribe_use_case(subscribe_uc);
 
         Self {
             inner,

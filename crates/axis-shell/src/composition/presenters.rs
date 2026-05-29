@@ -102,24 +102,20 @@ macro_rules! toggle_presenter {
     };
 }
 
-pub fn setup(uc: &UseCases, rt: &tokio::runtime::Runtime) -> Presenters {
+pub fn setup(uc: &UseCases) -> Presenters {
     let battery = Rc::new(BatteryPresenter::new(uc.subscribe_power.clone()));
     let clock = Rc::new(ClockPresenter::new(uc.subscribe_clock.clone()));
     let workspace = Rc::new(WorkspacePresenter::new(uc.subscribe_ws.clone()));
     let popup = Rc::new(PopupPresenter::new(uc.subscribe_popups.clone()));
     let auto_hide = Rc::new(AutoHidePresenter::new(1, 500));
 
-    let audio = Rc::new(AudioPresenter::new(
-        AudioPresenterArgs {
-            subscribe_uc: uc.subscribe_audio.clone(),
-            get_status_uc: uc.get_audio_status.clone(),
-            set_volume_uc: uc.set_volume.clone(),
-            set_default_sink_uc: uc.set_default_sink.clone(),
-            set_default_source_uc: uc.set_default_source.clone(),
-            set_sink_input_volume_uc: uc.set_sink_input_volume.clone(),
-        },
-        rt,
-    ));
+    let audio = Rc::new(AudioPresenter::new(AudioPresenterArgs {
+        subscribe_uc: uc.subscribe_audio.clone(),
+        set_volume_uc: uc.set_volume.clone(),
+        set_default_sink_uc: uc.set_default_sink.clone(),
+        set_default_source_uc: uc.set_default_source.clone(),
+        set_sink_input_volume_uc: uc.set_sink_input_volume.clone(),
+    }));
 
     let brightness = Rc::new(BrightnessPresenter::new(
         uc.subscribe_brightness.clone(),
@@ -142,67 +138,43 @@ pub fn setup(uc: &UseCases, rt: &tokio::runtime::Runtime) -> Presenters {
         launcher_executor,
     ));
 
-    let notification = Rc::new(NotificationPresenter::new(
-        NotificationPresenterArgs {
-            subscribe_uc: uc.subscribe_notifications.clone(),
-            get_status_uc: uc.get_notifications_status.clone(),
-            close_uc: uc.close_notification.clone(),
-            invoke_action_uc: uc.invoke_notification_action.clone(),
-        },
-        rt,
-    ));
+    let notification = Rc::new(NotificationPresenter::new(NotificationPresenterArgs {
+        subscribe_uc: uc.subscribe_notifications.clone(),
+        close_uc: uc.close_notification.clone(),
+        invoke_action_uc: uc.invoke_notification_action.clone(),
+    }));
 
-    let network = Rc::new(NetworkPresenter::new(
-        NetworkPresenterArgs {
-            subscribe_uc: uc.subscribe_network.clone(),
-            get_status_uc: uc.get_network_status.clone(),
-            connect_uc: uc.connect_to_ap.clone(),
-            disconnect_uc: uc.disconnect_wifi.clone(),
-            start_scan_uc: uc.scan_wifi.clone(),
-        },
-        rt,
-    ));
+    let network = Rc::new(NetworkPresenter::new(NetworkPresenterArgs {
+        subscribe_uc: uc.subscribe_network.clone(),
+        connect_uc: uc.connect_to_ap.clone(),
+        disconnect_uc: uc.disconnect_wifi.clone(),
+        start_scan_uc: uc.scan_wifi.clone(),
+    }));
 
-    let bluetooth = Rc::new(BluetoothPresenter::new(
-        BluetoothPresenterArgs {
-            subscribe_uc: uc.subscribe_bluetooth.clone(),
-            get_status_uc: uc.get_bluetooth_status.clone(),
-            connect_uc: uc.bt_connect.clone(),
-            disconnect_uc: uc.bt_disconnect.clone(),
-            start_scan_uc: uc.bt_start_scan.clone(),
-            stop_scan_uc: uc.bt_stop_scan.clone(),
-        },
-        rt,
-    ));
+    let bluetooth = Rc::new(BluetoothPresenter::new(BluetoothPresenterArgs {
+        subscribe_uc: uc.subscribe_bluetooth.clone(),
+        connect_uc: uc.bt_connect.clone(),
+        disconnect_uc: uc.bt_disconnect.clone(),
+        start_scan_uc: uc.bt_start_scan.clone(),
+        stop_scan_uc: uc.bt_stop_scan.clone(),
+    }));
 
-    let nightlight = Rc::new(NightlightPresenter::new(
-        NightlightPresenterArgs {
-            subscribe_uc: uc.subscribe_nightlight.clone(),
-            get_status_uc: uc.get_nightlight_status.clone(),
-            set_enabled_uc: uc.nl_set_enabled.clone(),
-            set_temp_day_uc: uc.nl_set_temp_day.clone(),
-            set_temp_night_uc: uc.nl_set_temp_night.clone(),
-            set_schedule_uc: uc.nl_set_schedule.clone(),
-        },
-        rt,
-    ));
+    let nightlight = Rc::new(NightlightPresenter::new(NightlightPresenterArgs {
+        subscribe_uc: uc.subscribe_nightlight.clone(),
+        set_enabled_uc: uc.nl_set_enabled.clone(),
+        set_temp_day_uc: uc.nl_set_temp_day.clone(),
+        set_temp_night_uc: uc.nl_set_temp_night.clone(),
+        set_schedule_uc: uc.nl_set_schedule.clone(),
+    }));
 
-    let appearance = Rc::new(AppearancePresenter::new(
-        uc.subscribe_appearance.clone(),
-        uc.get_appearance_status.clone(),
-        rt,
-    ));
+    let appearance = Rc::new(AppearancePresenter::new(uc.subscribe_appearance.clone()));
 
-    let tray = Rc::new(TrayPresenter::new(
-        TrayPresenterArgs {
-            subscribe_uc: uc.subscribe_tray.clone(),
-            get_status_uc: uc.get_tray_status.clone(),
-            activate_uc: uc.tray_activate.clone(),
-            context_menu_uc: uc.tray_context_menu.clone(),
-            scroll_uc: uc.tray_scroll.clone(),
-        },
-        rt,
-    ));
+    let tray = Rc::new(TrayPresenter::new(TrayPresenterArgs {
+        subscribe_uc: uc.subscribe_tray.clone(),
+        activate_uc: uc.tray_activate.clone(),
+        context_menu_uc: uc.tray_context_menu.clone(),
+        scroll_uc: uc.tray_scroll.clone(),
+    }));
 
     let lock = Rc::new(LockPresenter::new(LockPresenterArgs {
         subscribe_uc: uc.subscribe_lock.clone(),
@@ -211,22 +183,14 @@ pub fn setup(uc: &UseCases, rt: &tokio::runtime::Runtime) -> Presenters {
         authenticate_uc: uc.authenticate.clone(),
     }));
 
-    let continuity = Rc::new(ContinuityPresenter::new(
-        uc.subscribe_continuity.clone(),
-        uc.get_continuity_status.clone(),
-        rt,
-    ));
+    let continuity = Rc::new(ContinuityPresenter::new(uc.subscribe_continuity.clone()));
 
-    let mpris = Rc::new(MprisPresenter::new(
-        MprisPresenterArgs {
-            subscribe_uc: uc.subscribe_mpris.clone(),
-            get_status_uc: uc.get_mpris_status.clone(),
-            play_pause_uc: uc.mpris_play_pause.clone(),
-            next_uc: uc.mpris_next.clone(),
-            previous_uc: uc.mpris_previous.clone(),
-        },
-        rt,
-    ));
+    let mpris = Rc::new(MprisPresenter::new(MprisPresenterArgs {
+        subscribe_uc: uc.subscribe_mpris.clone(),
+        play_pause_uc: uc.mpris_play_pause.clone(),
+        next_uc: uc.mpris_next.clone(),
+        previous_uc: uc.mpris_previous.clone(),
+    }));
 
     let wifi_toggle = toggle_presenter!(
         uc,
