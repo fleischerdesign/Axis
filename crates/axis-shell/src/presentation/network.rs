@@ -98,3 +98,42 @@ impl NetworkPresenter {
         });
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wifi_icon_none() {
+        for s in 0..=20 {
+            assert!(wifi_icon(s).contains("none"), "signal {s}");
+        }
+    }
+
+    #[test]
+    fn wifi_icon_weak() {
+        for s in 21..=40 {
+            assert!(wifi_icon(s).contains("weak"), "signal {s}");
+        }
+    }
+
+    #[test]
+    fn wifi_icon_ok() {
+        for s in 41..=60 {
+            assert!(wifi_icon(s).contains("ok"), "signal {s}");
+        }
+    }
+
+    #[test]
+    fn wifi_icon_good() {
+        for s in 61..=80 {
+            assert!(wifi_icon(s).contains("good"), "signal {s}");
+        }
+    }
+
+    #[test]
+    fn wifi_icon_excellent() {
+        assert!(wifi_icon(81).contains("excellent"));
+        assert!(wifi_icon(100).contains("excellent"));
+    }
+}

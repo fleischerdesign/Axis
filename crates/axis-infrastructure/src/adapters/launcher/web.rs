@@ -54,3 +54,36 @@ impl LauncherSearchProvider for WebSearchProvider {
         Ok(self.build_result(query).into_iter().collect())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn url_encode_preserves_alphanumeric() {
+        assert_eq!(url_encode("hello"), "hello");
+        assert_eq!(url_encode("Test123"), "Test123");
+    }
+
+    #[test]
+    fn url_encode_space_becomes_plus() {
+        assert_eq!(url_encode("hello world"), "hello+world");
+    }
+
+    #[test]
+    fn url_encode_special_chars() {
+        let encoded = url_encode("rust & go");
+        assert!(encoded.contains("%26"));
+    }
+
+    #[test]
+    fn url_encode_empty_string() {
+        assert_eq!(url_encode(""), "");
+    }
+
+    #[test]
+    fn url_encode_preserves_safe_chars() {
+        let encoded = url_encode("test-file_name.ext~");
+        assert_eq!(encoded, "test-file_name.ext~");
+    }
+}

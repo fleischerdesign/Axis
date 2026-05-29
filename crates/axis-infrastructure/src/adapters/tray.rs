@@ -128,6 +128,23 @@ pub struct StatusNotifierTrayProvider {
     connection: Connection,
 }
 
+fn parse_status(s: &str) -> TrayItemStatus {
+    match s {
+        "Passive" => TrayItemStatus::Passive,
+        "NeedsAttention" => TrayItemStatus::NeedsAttention,
+        _ => TrayItemStatus::Active,
+    }
+}
+
+fn parse_registration_item(item_id: &str) -> (String, String) {
+    if item_id.contains('/')
+        && let Some(slash) = item_id.find('/')
+    {
+        return (item_id[..slash].to_string(), item_id[slash..].to_string());
+    }
+    (item_id.to_string(), "/StatusNotifierItem".to_string())
+}
+
 impl StatusNotifierTrayProvider {
     pub async fn new() -> Result<Arc<Self>, TrayError> {
         let (status_tx, _) = watch::channel(TrayStatus::default());
@@ -348,25 +365,8 @@ impl StatusNotifierTrayProvider {
             overlay_icon_name,
             icon_pixmap,
             attention_icon_pixmap,
-            status: Self::parse_status(&status_str),
+            status: parse_status(&status_str),
         }
-    }
-
-    fn parse_status(s: &str) -> TrayItemStatus {
-        match s {
-            "Passive" => TrayItemStatus::Passive,
-            "NeedsAttention" => TrayItemStatus::NeedsAttention,
-            _ => TrayItemStatus::Active,
-        }
-    }
-
-    fn parse_registration_item(item_id: &str) -> (String, String) {
-        if item_id.contains('/')
-            && let Some(slash) = item_id.find('/')
-        {
-            return (item_id[..slash].to_string(), item_id[slash..].to_string());
-        }
-        (item_id.to_string(), "/StatusNotifierItem".to_string())
     }
 
     async fn run_event_loop(
@@ -400,7 +400,7 @@ impl StatusNotifierTrayProvider {
         loop {
             tokio::select! {
                 Some(reg_item) = reg_rx.recv() => {
-                    let (destination, path) = Self::parse_registration_item(&reg_item);
+                    let (destination, path) = parse_registration_item(&reg_item);
 
                     let is_dup = status_tx.borrow().items.iter().any(|i| i.bus_name == destination);
                     if is_dup {
@@ -539,5 +539,58 @@ impl TrayProvider for StatusNotifierTrayProvider {
             .await
             .map_err(|e| TrayError::ProviderError(format!("Scroll: {e}")))?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_status_passive() {
+        assert_eq!(parse_status("Passive"), TrayItemStatus::Passive);
+    }
+
+    #[test]
+    fn parse_status_needs_attention() {
+        assert_eq!(
+            parse_status("NeedsAttention"),
+            TrayItemStatus::NeedsAttention
+        );
+    }
+
+    #[test]
+    fn parse_status_defaults_to_active() {
+        assert_eq!(parse_status("Active"), TrayItemStatus::Active);
+        assert_eq!(parse_status("unknown"), TrayItemStatus::Active);
+        assert_eq!(parse_status(""), TrayItemStatus::Active);
+    }
+
+    #[test]
+    fn parse_registration_item_with_path() {
+        let (bus, path) = parse_registration_item("org.app/item");
+        assert_eq!(bus, "org.app");
+        assert_eq!(path, "/item");
+    }
+
+    #[test]
+    fn parse_registration_item_without_path() {
+        let (bus, path) = parse_registration_item("org.example.Example");
+        assert_eq!(bus, "org.example.Example");
+        assert_eq!(path, "/StatusNotifierItem");
+    }
+
+    #[test]
+    fn parse_registration_item_deep_path() {
+        let (bus, path) = parse_registration_item("org.app/a/b/c");
+        assert_eq!(bus, "org.app");
+        assert_eq!(path, "/a/b/c");
+    }
+
+    #[test]
+    fn parse_registration_item_empty_string() {
+        let (bus, path) = parse_registration_item("");
+        assert_eq!(bus, "");
+        assert_eq!(path, "/StatusNotifierItem");
     }
 }

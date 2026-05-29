@@ -32,3 +32,29 @@ pub struct IconPixmap {
 pub struct TrayStatus {
     pub items: Vec<TrayItem>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tray_item_default() {
+        let t = TrayItem::default();
+        assert_eq!(t.status, TrayItemStatus::Active);
+        assert!(t.title.is_empty());
+    }
+
+    #[test]
+    fn tray_item_status_serde_roundtrip() {
+        let statuses = vec![
+            TrayItemStatus::Active,
+            TrayItemStatus::Passive,
+            TrayItemStatus::NeedsAttention,
+        ];
+        for s in statuses {
+            let json = serde_json::to_string(&s).unwrap();
+            let back: TrayItemStatus = serde_json::from_str(&json).unwrap();
+            assert_eq!(s, back);
+        }
+    }
+}
