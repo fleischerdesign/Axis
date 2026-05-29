@@ -17,7 +17,6 @@ pub struct TogglePresenter {
     toggle: Arc<dyn Fn(bool) + Send + Sync>,
 }
 
-#[allow(dead_code)]
 impl TogglePresenter {
     pub fn new<F, Fut, St, E>(
         label: &str,
