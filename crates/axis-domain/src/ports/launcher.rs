@@ -10,6 +10,7 @@ pub enum LauncherError {
     ValidationError(String),
 }
 
+/// Provides desktop application search over .desktop entries.
 #[async_trait]
 pub trait LauncherSearchProvider: Send + Sync {
     async fn search(&self, query: &str) -> Result<Vec<LauncherItem>, LauncherError>;

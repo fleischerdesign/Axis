@@ -13,6 +13,7 @@ pub enum PowerError {
 
 pub type PowerStream = StatusStream<PowerStatus>;
 
+/// Provides battery status, power profiles, and system power actions (suspend, reboot, power off).
 #[async_trait]
 pub trait PowerProvider: Send + Sync {
     async fn get_status(&self) -> Result<PowerStatus, PowerError>;

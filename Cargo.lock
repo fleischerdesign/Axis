@@ -358,6 +358,7 @@ dependencies = [
  "chrono",
  "futures-util",
  "serde",
+ "serde_json",
  "thiserror 2.0.18",
 ]
 
@@ -408,6 +409,7 @@ dependencies = [
  "gtk4",
  "libadwaita",
  "log",
+ "tokio",
 ]
 
 [[package]]

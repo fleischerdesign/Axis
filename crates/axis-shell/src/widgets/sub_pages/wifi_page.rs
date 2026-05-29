@@ -5,7 +5,7 @@ use axis_domain::models::network::{AccessPoint, NetworkStatus};
 use axis_presentation::View;
 use gtk4::prelude::*;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 struct RowEntry {
@@ -114,10 +114,10 @@ impl View<NetworkStatus> for WifiPageView {
 
         let mut rows = self.rows.borrow_mut();
 
-        let ids: Vec<&str> = status
+        let ids: HashSet<String> = status
             .access_points
             .iter()
-            .map(|ap| ap.id.as_str())
+            .map(|ap| ap.id.clone())
             .collect();
         crate::utils::reconcile::reconcile(&mut rows, &ids, |_, entry| {
             self.list.remove(&entry.list_box_row);

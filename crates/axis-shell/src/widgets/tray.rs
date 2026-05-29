@@ -5,7 +5,7 @@ use axis_presentation::View;
 use gtk4::glib;
 use libadwaita::prelude::*;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 type ClickFnCell = Rc<RefCell<Option<Rc<dyn Fn(String, i32, i32)>>>>;
@@ -65,7 +65,7 @@ impl View<TrayStatus> for TrayWidget {
     fn render(&self, status: &TrayStatus) {
         let items = &status.items;
 
-        let keys: Vec<&str> = items.iter().map(|i| i.bus_name.as_str()).collect();
+        let keys: HashSet<String> = items.iter().map(|i| i.bus_name.clone()).collect();
         {
             let mut icons = self.icons.borrow_mut();
             crate::utils::reconcile::reconcile(&mut icons, &keys, |_, img| {

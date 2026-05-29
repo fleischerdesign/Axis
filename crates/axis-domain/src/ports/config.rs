@@ -12,6 +12,7 @@ pub enum ConfigError {
 
 pub type ConfigStream = StatusStream<AxisConfig>;
 
+/// Provides application configuration with reactive subscription and mutation via closure.
 pub trait ConfigProvider: Send + Sync {
     fn get(&self) -> Result<AxisConfig, ConfigError>;
     fn subscribe(&self) -> Result<ConfigStream, ConfigError>;
