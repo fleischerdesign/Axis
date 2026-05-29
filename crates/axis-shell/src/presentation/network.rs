@@ -1,4 +1,4 @@
-use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
+use axis_application::use_cases::generic::SubscribeUseCase;
 use axis_application::use_cases::network::connect_to_ap::ConnectToApUseCase;
 use axis_application::use_cases::network::disconnect_wifi::DisconnectWifiUseCase;
 use axis_application::use_cases::network::scan_wifi::ScanWifiUseCase;
@@ -26,34 +26,21 @@ pub struct NetworkPresenter {
 
 pub struct NetworkPresenterArgs {
     pub subscribe_uc: Arc<SubscribeUseCase<dyn NetworkProvider, NetworkStatus>>,
-    pub get_status_uc: Arc<GetStatusUseCase<dyn NetworkProvider, NetworkStatus>>,
     pub connect_uc: Arc<ConnectToApUseCase>,
     pub disconnect_uc: Arc<DisconnectWifiUseCase>,
     pub start_scan_uc: Arc<ScanWifiUseCase>,
 }
 
 impl NetworkPresenter {
-    pub fn new(args: NetworkPresenterArgs, rt: &tokio::runtime::Runtime) -> Self {
+    pub fn new(args: NetworkPresenterArgs) -> Self {
         let NetworkPresenterArgs {
             subscribe_uc,
-            get_status_uc,
             connect_uc,
             disconnect_uc,
             start_scan_uc,
         } = args;
 
-        let initial_status = rt.block_on(async {
-            match get_status_uc.execute().await {
-                Ok(s) => s,
-                Err(e) => {
-                    log::error!("[network] Failed to get initial status: {e}");
-                    Default::default()
-                }
-            }
-        });
-
-        let inner = Presenter::from_subscribe_use_case(subscribe_uc.clone())
-            .with_initial_status(initial_status);
+        let inner = Presenter::from_subscribe_use_case(subscribe_uc);
 
         Self {
             inner,

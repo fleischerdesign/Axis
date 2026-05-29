@@ -2,7 +2,7 @@ use axis_application::use_cases::audio::set_default_sink::SetDefaultSinkUseCase;
 use axis_application::use_cases::audio::set_default_source::SetDefaultSourceUseCase;
 use axis_application::use_cases::audio::set_sink_input_volume::SetSinkInputVolumeUseCase;
 use axis_application::use_cases::audio::set_volume::SetVolumeUseCase;
-use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
+use axis_application::use_cases::generic::SubscribeUseCase;
 use axis_domain::models::audio::AudioStatus;
 use axis_domain::ports::audio::AudioProvider;
 use axis_presentation::{Presenter, View};
@@ -30,7 +30,6 @@ pub struct AudioPresenter {
 
 pub struct AudioPresenterArgs {
     pub subscribe_uc: Arc<SubscribeUseCase<dyn AudioProvider, AudioStatus>>,
-    pub get_status_uc: Arc<GetStatusUseCase<dyn AudioProvider, AudioStatus>>,
     pub set_volume_uc: Arc<SetVolumeUseCase>,
     pub set_default_sink_uc: Arc<SetDefaultSinkUseCase>,
     pub set_default_source_uc: Arc<SetDefaultSourceUseCase>,
@@ -38,28 +37,16 @@ pub struct AudioPresenterArgs {
 }
 
 impl AudioPresenter {
-    pub fn new(args: AudioPresenterArgs, rt: &tokio::runtime::Runtime) -> Self {
+    pub fn new(args: AudioPresenterArgs) -> Self {
         let AudioPresenterArgs {
             subscribe_uc,
-            get_status_uc,
             set_volume_uc,
             set_default_sink_uc,
             set_default_source_uc,
             set_sink_input_volume_uc,
         } = args;
 
-        let initial_status = rt.block_on(async {
-            match get_status_uc.execute().await {
-                Ok(s) => s,
-                Err(e) => {
-                    log::error!("[audio] Failed to get initial status: {e}");
-                    Default::default()
-                }
-            }
-        });
-
-        let inner = Presenter::from_subscribe_use_case(subscribe_uc.clone())
-            .with_initial_status(initial_status);
+        let inner = Presenter::from_subscribe_use_case(subscribe_uc);
 
         Self {
             inner,
