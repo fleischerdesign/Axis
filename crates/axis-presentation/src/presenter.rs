@@ -180,7 +180,12 @@ mod tests {
     impl Spy {
         fn new() -> (Self, Rc<RefCell<Vec<String>>>) {
             let calls = Rc::new(RefCell::new(Vec::new()));
-            (Self { calls: calls.clone() }, calls)
+            (
+                Self {
+                    calls: calls.clone(),
+                },
+                calls,
+            )
         }
     }
 

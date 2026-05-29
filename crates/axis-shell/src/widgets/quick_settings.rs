@@ -376,9 +376,13 @@ impl View<AudioStatus> for QuickSettingsPopup {
         let is_full = status.volume >= 0.99;
         self.volume_slider.set_icon(&icon_name);
         if is_full {
-            self.volume_slider.scale().remove_css_class("highlight-partial");
+            self.volume_slider
+                .scale()
+                .remove_css_class("highlight-partial");
         } else {
-            self.volume_slider.scale().add_css_class("highlight-partial");
+            self.volume_slider
+                .scale()
+                .add_css_class("highlight-partial");
         }
 
         let scale = self.volume_slider.scale();
@@ -398,7 +402,8 @@ impl View<BrightnessStatus> for QuickSettingsPopup {
         }
 
         self.brightness_slider.container.set_visible(true);
-        self.brightness_slider.set_icon("display-brightness-symbolic");
+        self.brightness_slider
+            .set_icon("display-brightness-symbolic");
 
         if !self.is_bright_dragging.get() {
             let scale = self.brightness_slider.scale();

@@ -245,9 +245,21 @@ pub fn wire(args: WiringArgs) {
         lp_act.activate(idx);
     }));
 
-    lp.on_close(make_popup_toggle(pres.toggle_popup.clone(), PopupType::Launcher, "launcher close"));
-    launcher_popup.on_escape(make_popup_toggle(pres.toggle_popup.clone(), PopupType::Launcher, "launcher escape"));
-    qs_popup.on_escape(make_popup_toggle(pres.toggle_popup.clone(), PopupType::QuickSettings, "QS escape"));
+    lp.on_close(make_popup_toggle(
+        pres.toggle_popup.clone(),
+        PopupType::Launcher,
+        "launcher close",
+    ));
+    launcher_popup.on_escape(make_popup_toggle(
+        pres.toggle_popup.clone(),
+        PopupType::Launcher,
+        "launcher escape",
+    ));
+    qs_popup.on_escape(make_popup_toggle(
+        pres.toggle_popup.clone(),
+        PopupType::QuickSettings,
+        "QS escape",
+    ));
 
     // Agenda popup
     let agenda_popup = AgendaPopup::new(app);
