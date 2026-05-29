@@ -8,3 +8,8 @@ axis-domain.workspace = true
 async-trait.workspace = true
 chrono.workspace = true
 log.workspace = true
+
+[dev-dependencies]
+axis-infrastructure = { workspace = true, features = ["mocks"] }
+tokio = { workspace = true, features = ["full"] }
+tokio-stream.workspace = true

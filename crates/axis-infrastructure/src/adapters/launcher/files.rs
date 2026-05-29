@@ -7,6 +7,24 @@ use std::process::{Command, Stdio};
 
 pub struct FileSearchProvider;
 
+fn file_icon(path: &str) -> &'static str {
+    let ext = Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_lowercase());
+
+    match ext.as_deref() {
+        Some("pdf") => "application-pdf-symbolic",
+        Some("png" | "jpg" | "jpeg" | "gif" | "svg" | "webp") => "image-x-generic-symbolic",
+        Some("mp4" | "mkv" | "avi" | "webm") => "video-x-generic-symbolic",
+        Some("mp3" | "ogg" | "flac" | "wav") => "audio-x-generic-symbolic",
+        Some("zip" | "tar" | "gz" | "xz" | "7z" | "rar") => "package-x-generic-symbolic",
+        Some("rs" | "py" | "js" | "ts" | "c" | "cpp" | "h") => "text-x-script-symbolic",
+        Some("txt" | "md" | "log") => "text-x-generic-symbolic",
+        _ => "text-x-generic-symbolic",
+    }
+}
+
 impl FileSearchProvider {
     fn search_dirs() -> Vec<String> {
         let mut dirs = Vec::new();
@@ -31,24 +49,6 @@ impl FileSearchProvider {
         }
 
         dirs
-    }
-
-    fn file_icon(path: &str) -> &'static str {
-        let ext = Path::new(path)
-            .extension()
-            .and_then(|e| e.to_str())
-            .map(|e| e.to_lowercase());
-
-        match ext.as_deref() {
-            Some("pdf") => "application-pdf-symbolic",
-            Some("png" | "jpg" | "jpeg" | "gif" | "svg" | "webp") => "image-x-generic-symbolic",
-            Some("mp4" | "mkv" | "avi" | "webm") => "video-x-generic-symbolic",
-            Some("mp3" | "ogg" | "flac" | "wav") => "audio-x-generic-symbolic",
-            Some("zip" | "tar" | "gz" | "xz" | "7z" | "rar") => "package-x-generic-symbolic",
-            Some("rs" | "py" | "js" | "ts" | "c" | "cpp" | "h") => "text-x-script-symbolic",
-            Some("txt" | "md" | "log") => "text-x-generic-symbolic",
-            _ => "text-x-generic-symbolic",
-        }
     }
 
     fn do_search(query: String) -> Vec<LauncherItem> {
@@ -96,7 +96,7 @@ impl FileSearchProvider {
                     id: format!("file-{path}"),
                     title: name,
                     description: Some(path.to_string()),
-                    icon_name: Self::file_icon(path).into(),
+                    icon_name: file_icon(path).into(),
                     action: LauncherAction::Exec(vec!["xdg-open".to_string(), path.to_string()]),
                     score,
                     priority: SearchPriority::Fallback,
@@ -126,5 +126,70 @@ impl LauncherSearchProvider for FileSearchProvider {
             Ok(results) => Ok(results),
             Err(_) => Ok(Vec::new()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn file_icon_pdf() {
+        assert_eq!(file_icon("document.pdf"), "application-pdf-symbolic");
+    }
+
+    #[test]
+    fn file_icon_images() {
+        for ext in &["png", "jpg", "jpeg", "gif", "svg", "webp"] {
+            assert_eq!(
+                file_icon(&format!("photo.{ext}")),
+                "image-x-generic-symbolic"
+            );
+        }
+    }
+
+    #[test]
+    fn file_icon_video() {
+        for ext in &["mp4", "mkv", "avi", "webm"] {
+            assert_eq!(
+                file_icon(&format!("video.{ext}")),
+                "video-x-generic-symbolic"
+            );
+        }
+    }
+
+    #[test]
+    fn file_icon_audio() {
+        assert_eq!(file_icon("song.mp3"), "audio-x-generic-symbolic");
+        assert_eq!(file_icon("track.flac"), "audio-x-generic-symbolic");
+    }
+
+    #[test]
+    fn file_icon_archive() {
+        assert_eq!(file_icon("archive.zip"), "package-x-generic-symbolic");
+        assert_eq!(file_icon("backup.tar.gz"), "package-x-generic-symbolic");
+    }
+
+    #[test]
+    fn file_icon_script_source() {
+        assert_eq!(file_icon("main.rs"), "text-x-script-symbolic");
+        assert_eq!(file_icon("app.py"), "text-x-script-symbolic");
+        assert_eq!(file_icon("lib.c"), "text-x-script-symbolic");
+    }
+
+    #[test]
+    fn file_icon_plain_text() {
+        assert_eq!(file_icon("readme.md"), "text-x-generic-symbolic");
+        assert_eq!(file_icon("notes.txt"), "text-x-generic-symbolic");
+    }
+
+    #[test]
+    fn file_icon_unknown_extension() {
+        assert_eq!(file_icon("data.xyz"), "text-x-generic-symbolic");
+    }
+
+    #[test]
+    fn file_icon_no_extension() {
+        assert_eq!(file_icon("Makefile"), "text-x-generic-symbolic");
     }
 }

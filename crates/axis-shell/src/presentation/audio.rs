@@ -122,3 +122,40 @@ impl AudioPresenter {
         });
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn audio_status(volume: f64, is_muted: bool) -> AudioStatus {
+        AudioStatus {
+            volume,
+            is_muted,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn audio_icon_muted() {
+        assert!(audio_icon(&audio_status(0.5, true)).contains("muted"));
+        assert!(audio_icon(&audio_status(0.0, false)).contains("muted"));
+    }
+
+    #[test]
+    fn audio_icon_low() {
+        assert!(audio_icon(&audio_status(0.1, false)).contains("low"));
+        assert!(audio_icon(&audio_status(0.32, false)).contains("low"));
+    }
+
+    #[test]
+    fn audio_icon_medium() {
+        assert!(audio_icon(&audio_status(0.33, false)).contains("medium"));
+        assert!(audio_icon(&audio_status(0.65, false)).contains("medium"));
+    }
+
+    #[test]
+    fn audio_icon_high() {
+        assert!(audio_icon(&audio_status(0.66, false)).contains("high"));
+        assert!(audio_icon(&audio_status(1.0, false)).contains("high"));
+    }
+}
