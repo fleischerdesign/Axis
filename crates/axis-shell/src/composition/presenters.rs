@@ -84,9 +84,7 @@ macro_rules! toggle_presenter {
                 let sub = $uc.$sub_field.clone();
                 move || {
                     let sub = sub.clone();
-                    async move {
-                        sub.execute().await.map(|s| s.map(|st| st.$extract))
-                    }
+                    async move { sub.execute().await.map(|s| s.map(|st| st.$extract)) }
                 }
             },
             {
@@ -230,20 +228,38 @@ pub fn setup(uc: &UseCases, rt: &tokio::runtime::Runtime) -> Presenters {
         rt,
     ));
 
-    let wifi_toggle = toggle_presenter!(uc, "Wi-Fi",
+    let wifi_toggle = toggle_presenter!(
+        uc,
+        "Wi-Fi",
         "network-wireless-signal-excellent-symbolic",
         "network-wireless-offline-symbolic",
-        subscribe_network, set_wifi, is_wifi_enabled, "wifi");
+        subscribe_network,
+        set_wifi,
+        is_wifi_enabled,
+        "wifi"
+    );
 
-    let bluetooth_toggle = toggle_presenter!(uc, "Bluetooth",
+    let bluetooth_toggle = toggle_presenter!(
+        uc,
+        "Bluetooth",
         "bluetooth-active-symbolic",
         "bluetooth-disabled-symbolic",
-        subscribe_bluetooth, bt_set_powered, powered, "bluetooth");
+        subscribe_bluetooth,
+        bt_set_powered,
+        powered,
+        "bluetooth"
+    );
 
-    let nightlight_toggle = toggle_presenter!(uc, "Nightlight",
+    let nightlight_toggle = toggle_presenter!(
+        uc,
+        "Nightlight",
         "weather-clear-night-symbolic",
         "weather-clear-night-symbolic",
-        subscribe_nightlight, nl_set_enabled, enabled, "nightlight");
+        subscribe_nightlight,
+        nl_set_enabled,
+        enabled,
+        "nightlight"
+    );
 
     let dnd_status = Rc::new(Presenter::from_subscribe_use_case(uc.subscribe_dnd.clone()));
     let idle_inhibit_status = Rc::new(Presenter::from_subscribe_use_case(
@@ -253,25 +269,49 @@ pub fn setup(uc: &UseCases, rt: &tokio::runtime::Runtime) -> Presenters {
         uc.subscribe_airplane.clone(),
     ));
 
-    let dnd_toggle = toggle_presenter!(uc, "DND",
+    let dnd_toggle = toggle_presenter!(
+        uc,
+        "DND",
         "preferences-system-notifications-symbolic",
         "notifications-disabled-symbolic",
-        subscribe_dnd, dnd_set_enabled, enabled, "dnd");
+        subscribe_dnd,
+        dnd_set_enabled,
+        enabled,
+        "dnd"
+    );
 
-    let airplane_toggle = toggle_presenter!(uc, "Airplane",
+    let airplane_toggle = toggle_presenter!(
+        uc,
+        "Airplane",
         "airplane-mode-symbolic",
         "airplane-mode-symbolic",
-        subscribe_airplane, ap_set_enabled, enabled, "airplane");
+        subscribe_airplane,
+        ap_set_enabled,
+        enabled,
+        "airplane"
+    );
 
-    let continuity_toggle = toggle_presenter!(uc, "Continuity",
+    let continuity_toggle = toggle_presenter!(
+        uc,
+        "Continuity",
         "input-mouse-symbolic",
         "input-mouse-symbolic",
-        subscribe_continuity, continuity_set_enabled, enabled, "continuity");
+        subscribe_continuity,
+        continuity_set_enabled,
+        enabled,
+        "continuity"
+    );
 
-    let idle_inhibit_toggle = toggle_presenter!(uc, "Idle Inhibit",
+    let idle_inhibit_toggle = toggle_presenter!(
+        uc,
+        "Idle Inhibit",
         "changes-prevent-symbolic",
         "changes-allow-symbolic",
-        subscribe_idle_inhibit, idle_inhibit_set, inhibited, "idle inhibit");
+        subscribe_idle_inhibit,
+        idle_inhibit_set,
+        inhibited,
+        "idle inhibit"
+    );
 
     Presenters {
         battery,
