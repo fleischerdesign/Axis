@@ -16,6 +16,7 @@ use crate::widgets::notification_toast::NotificationToastManager;
 use crate::widgets::osd::OsdManager;
 use crate::widgets::quick_settings::QuickSettingsPopup;
 use axis_application::use_cases::layout::set_border::SetBorderColorUseCase;
+use axis_application::use_cases::popups::TogglePopupUseCase;
 use axis_domain::models::appearance::AccentColor;
 use axis_domain::models::dnd::DndStatus;
 use axis_domain::models::popups::PopupType;
@@ -244,36 +245,9 @@ pub fn wire(args: WiringArgs) {
         lp_act.activate(idx);
     }));
 
-    let tp_close = pres.toggle_popup.clone();
-    lp.on_close(Box::new(move || {
-        let tp = tp_close.clone();
-        tokio::spawn(async move {
-            if let Err(e) = tp.execute(PopupType::Launcher).await {
-                log::error!("[popup] launcher close failed: {e}");
-            }
-        });
-    }));
-
-    let tp_esc = pres.toggle_popup.clone();
-    launcher_popup.on_escape(Box::new(move || {
-        let tp = tp_esc.clone();
-        tokio::spawn(async move {
-            if let Err(e) = tp.execute(PopupType::Launcher).await {
-                log::error!("[popup] launcher escape failed: {e}");
-            }
-        });
-    }));
-
-    // QS escape
-    let tp_esc_qs = pres.toggle_popup.clone();
-    qs_popup.on_escape(Box::new(move || {
-        let tp = tp_esc_qs.clone();
-        tokio::spawn(async move {
-            if let Err(e) = tp.execute(PopupType::QuickSettings).await {
-                log::error!("[popup] QS escape failed: {e}");
-            }
-        });
-    }));
+    lp.on_close(make_popup_toggle(pres.toggle_popup.clone(), PopupType::Launcher, "launcher close"));
+    launcher_popup.on_escape(make_popup_toggle(pres.toggle_popup.clone(), PopupType::Launcher, "launcher escape"));
+    qs_popup.on_escape(make_popup_toggle(pres.toggle_popup.clone(), PopupType::QuickSettings, "QS escape"));
 
     // Agenda popup
     let agenda_popup = AgendaPopup::new(app);
@@ -321,15 +295,11 @@ pub fn wire(args: WiringArgs) {
         }
     }));
 
-    let tp_esc_mpris = pres.toggle_popup.clone();
-    mpris_popup.on_escape(Box::new(move || {
-        let tp = tp_esc_mpris.clone();
-        tokio::spawn(async move {
-            if let Err(e) = tp.execute(PopupType::Mpris).await {
-                log::error!("[popup] MPRIS escape failed: {e}");
-            }
-        });
-    }));
+    mpris_popup.on_escape(make_popup_toggle(
+        pres.toggle_popup.clone(),
+        PopupType::Mpris,
+        "MPRIS escape",
+    ));
 
     if let Some(ref dbus) = p.mpris_dbus {
         let dbus_clone = dbus.clone();
@@ -420,51 +390,41 @@ pub fn wire(args: WiringArgs) {
 }
 
 fn spawn_run_sync(pres: &Presenters) {
-    let p = pres.clock.clone();
-    glib::spawn_future_local(async move { p.run_sync().await });
+    macro_rules! spawn {
+        ($field:ident) => {
+            let p = pres.$field.clone();
+            glib::spawn_future_local(async move { p.run_sync().await });
+        };
+    }
+    spawn!(clock);
+    spawn!(workspace);
+    spawn!(audio);
+    spawn!(brightness);
+    spawn!(battery);
+    spawn!(network);
+    spawn!(bluetooth);
+    spawn!(nightlight);
+    spawn!(tray);
+    spawn!(lock);
+    spawn!(continuity);
+    spawn!(mpris);
+    spawn!(dnd_status);
+    spawn!(airplane_status);
+    spawn!(idle_inhibit_status);
+    spawn!(notification);
+}
 
-    let p = pres.workspace.clone();
-    glib::spawn_future_local(async move { p.run_sync().await });
-
-    let p = pres.audio.clone();
-    glib::spawn_future_local(async move { p.run_sync().await });
-
-    let p = pres.brightness.clone();
-    glib::spawn_future_local(async move { p.run_sync().await });
-
-    let p = pres.battery.clone();
-    glib::spawn_future_local(async move { p.run_sync().await });
-
-    let p = pres.network.clone();
-    glib::spawn_future_local(async move { p.run_sync().await });
-
-    let p = pres.bluetooth.clone();
-    glib::spawn_future_local(async move { p.run_sync().await });
-
-    let p = pres.nightlight.clone();
-    glib::spawn_future_local(async move { p.run_sync().await });
-
-    let p = pres.tray.clone();
-    glib::spawn_future_local(async move { p.run_sync().await });
-
-    let p = pres.lock.clone();
-    glib::spawn_future_local(async move { p.run_sync().await });
-
-    let p = pres.continuity.clone();
-    glib::spawn_future_local(async move { p.run_sync().await });
-
-    let p = pres.mpris.clone();
-    glib::spawn_future_local(async move { p.run_sync().await });
-
-    let p = pres.dnd_status.clone();
-    glib::spawn_future_local(async move { p.run_sync().await });
-
-    let p = pres.airplane_status.clone();
-    glib::spawn_future_local(async move { p.run_sync().await });
-
-    let p = pres.idle_inhibit_status.clone();
-    glib::spawn_future_local(async move { p.run_sync().await });
-
-    let p = pres.notification.clone();
-    glib::spawn_future_local(async move { p.run_sync().await });
+fn make_popup_toggle(
+    tp: Arc<TogglePopupUseCase>,
+    pt: PopupType,
+    label: &'static str,
+) -> Box<dyn Fn() + 'static> {
+    Box::new(move || {
+        let tp = tp.clone();
+        tokio::spawn(async move {
+            if let Err(e) = tp.execute(pt).await {
+                log::error!("[popup] {label} failed: {e}");
+            }
+        });
+    })
 }

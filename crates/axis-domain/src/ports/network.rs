@@ -17,6 +17,7 @@ pub enum NetworkError {
 
 pub type NetworkStream = StatusStream<NetworkStatus>;
 
+/// Provides WiFi network state (scan results, connection status) and allows connect/disconnect/scan.
 #[async_trait]
 pub trait NetworkProvider: Send + Sync {
     async fn get_status(&self) -> Result<NetworkStatus, NetworkError>;

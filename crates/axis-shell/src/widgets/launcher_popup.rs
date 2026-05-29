@@ -11,7 +11,7 @@ use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 use libadwaita::prelude::*;
 use libadwaita::subclass::prelude::*;
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 glib::wrapper! {
@@ -285,7 +285,7 @@ impl LauncherPopup {
     pub fn update_results(&self, results: &[LauncherItem], selected_index: Option<usize>) {
         let mut rows = self.rows.borrow_mut();
 
-        let ids: Vec<&str> = results.iter().map(|r| r.id.as_str()).collect();
+        let ids: HashSet<String> = results.iter().map(|r| r.id.clone()).collect();
         crate::utils::reconcile::reconcile(&mut rows, &ids, |_, entry| {
             self.list.remove(&entry.list_box_row);
         });

@@ -15,6 +15,7 @@ pub enum LockError {
 
 pub type LockStream = StatusStream<LockStatus>;
 
+/// Provides session lock state and authentication (lock, unlock, authenticate via PAM).
 #[async_trait]
 pub trait LockProvider: Send + Sync {
     async fn get_status(&self) -> Result<LockStatus, LockError>;

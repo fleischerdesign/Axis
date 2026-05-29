@@ -54,8 +54,12 @@ impl WallpaperService {
         let mut windows = Vec::new();
 
         for i in 0..monitors.n_items() {
-            let monitor = monitors.item(i).unwrap();
-            let monitor = monitor.downcast_ref::<gtk4::gdk::Monitor>().unwrap();
+            let Some(monitor_obj) = monitors.item(i) else {
+                continue;
+            };
+            let Some(monitor) = monitor_obj.downcast_ref::<gtk4::gdk::Monitor>() else {
+                continue;
+            };
 
             let picture = gtk4::Picture::for_paintable(&texture);
             picture.set_content_fit(gtk4::ContentFit::Cover);

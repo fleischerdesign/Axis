@@ -223,3 +223,24 @@ pub struct IdleConfig {
     #[serde(default)]
     pub sleep_timeout_seconds: Option<u32>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn axis_config_default_is_empty_json() {
+        let config = AxisConfig::default();
+        let json = serde_json::to_string_pretty(&config).unwrap();
+        let back: AxisConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(config, back);
+    }
+
+    #[test]
+    fn appearance_config_is_default_accent() {
+        let c = AppearanceConfig::default();
+        assert!(c.is_default_accent());
+        assert!(c.is_default_scheme());
+        assert!(c.wallpaper.is_none());
+    }
+}
