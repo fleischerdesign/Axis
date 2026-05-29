@@ -61,6 +61,49 @@ pub struct Presenters {
     pub toggle_overview: Arc<ToggleOverviewUseCase>,
 }
 
+/// Creates a `TogglePresenter` from a subscribe use case (to observe state)
+/// and a setter use case (to toggle on user action).
+///
+/// Parameters:
+/// - `$uc`       : the `UseCases` struct
+/// - `$label`    : human-readable toggle name
+/// - `$active`   : icon when ON
+/// - `$inactive` : icon when OFF
+/// - `$sub_field`: field on `UseCases` holding the `SubscribeUseCase`
+/// - `$set_field`: field on `UseCases` holding the setter use case
+/// - `$extract`  : field on the status struct to extract `bool` from
+/// - `$log_tag`  : label for error log messages
+macro_rules! toggle_presenter {
+    ($uc:ident, $label:literal, $active:literal, $inactive:literal,
+     $sub_field:ident, $set_field:ident, $extract:ident, $log_tag:literal) => {
+        Rc::new(TogglePresenter::new(
+            $label,
+            $active,
+            $inactive,
+            {
+                let sub = $uc.$sub_field.clone();
+                move || {
+                    let sub = sub.clone();
+                    async move {
+                        sub.execute().await.map(|s| s.map(|st| st.$extract))
+                    }
+                }
+            },
+            {
+                let toggle = $uc.$set_field.clone();
+                move |enabled| {
+                    let toggle = toggle.clone();
+                    tokio::spawn(async move {
+                        if let Err(e) = toggle.execute(enabled).await {
+                            log::error!("[toggle] {} set failed: {e}", $log_tag);
+                        }
+                    });
+                }
+            },
+        ))
+    };
+}
+
 pub fn setup(uc: &UseCases, rt: &tokio::runtime::Runtime) -> Presenters {
     let battery = Rc::new(BatteryPresenter::new(uc.subscribe_power.clone()));
     let clock = Rc::new(ClockPresenter::new(uc.subscribe_clock.clone()));
@@ -187,77 +230,20 @@ pub fn setup(uc: &UseCases, rt: &tokio::runtime::Runtime) -> Presenters {
         rt,
     ));
 
-    let wifi_toggle = Rc::new(TogglePresenter::new(
-        "Wi-Fi",
+    let wifi_toggle = toggle_presenter!(uc, "Wi-Fi",
         "network-wireless-signal-excellent-symbolic",
         "network-wireless-offline-symbolic",
-        {
-            let sub = uc.subscribe_network.clone();
-            move || {
-                let sub = sub.clone();
-                async move { sub.execute().await.map(|s| s.map(|st| st.is_wifi_enabled)) }
-            }
-        },
-        {
-            let toggle = uc.set_wifi.clone();
-            move |enabled| {
-                let toggle = toggle.clone();
-                tokio::spawn(async move {
-                    if let Err(e) = toggle.execute(enabled).await {
-                        log::error!("[toggle] wifi set_enabled failed: {e}");
-                    }
-                });
-            }
-        },
-    ));
+        subscribe_network, set_wifi, is_wifi_enabled, "wifi");
 
-    let bluetooth_toggle = Rc::new(TogglePresenter::new(
-        "Bluetooth",
+    let bluetooth_toggle = toggle_presenter!(uc, "Bluetooth",
         "bluetooth-active-symbolic",
         "bluetooth-disabled-symbolic",
-        {
-            let sub = uc.subscribe_bluetooth.clone();
-            move || {
-                let sub = sub.clone();
-                async move { sub.execute().await.map(|s| s.map(|st| st.powered)) }
-            }
-        },
-        {
-            let toggle = uc.bt_set_powered.clone();
-            move |enabled| {
-                let toggle = toggle.clone();
-                tokio::spawn(async move {
-                    if let Err(e) = toggle.execute(enabled).await {
-                        log::error!("[toggle] bluetooth set_powered failed: {e}");
-                    }
-                });
-            }
-        },
-    ));
+        subscribe_bluetooth, bt_set_powered, powered, "bluetooth");
 
-    let nightlight_toggle = Rc::new(TogglePresenter::new(
-        "Nightlight",
+    let nightlight_toggle = toggle_presenter!(uc, "Nightlight",
         "weather-clear-night-symbolic",
         "weather-clear-night-symbolic",
-        {
-            let sub = uc.subscribe_nightlight.clone();
-            move || {
-                let sub = sub.clone();
-                async move { sub.execute().await.map(|s| s.map(|st| st.enabled)) }
-            }
-        },
-        {
-            let toggle = uc.nl_set_enabled.clone();
-            move |enabled| {
-                let toggle = toggle.clone();
-                tokio::spawn(async move {
-                    if let Err(e) = toggle.execute(enabled).await {
-                        log::error!("[toggle] nightlight set_enabled failed: {e}");
-                    }
-                });
-            }
-        },
-    ));
+        subscribe_nightlight, nl_set_enabled, enabled, "nightlight");
 
     let dnd_status = Rc::new(Presenter::from_subscribe_use_case(uc.subscribe_dnd.clone()));
     let idle_inhibit_status = Rc::new(Presenter::from_subscribe_use_case(
@@ -267,101 +253,25 @@ pub fn setup(uc: &UseCases, rt: &tokio::runtime::Runtime) -> Presenters {
         uc.subscribe_airplane.clone(),
     ));
 
-    let dnd_toggle = Rc::new(TogglePresenter::new(
-        "DND",
+    let dnd_toggle = toggle_presenter!(uc, "DND",
         "preferences-system-notifications-symbolic",
         "notifications-disabled-symbolic",
-        {
-            let sub = uc.subscribe_dnd.clone();
-            move || {
-                let sub = sub.clone();
-                async move { sub.execute().await.map(|s| s.map(|st| st.enabled)) }
-            }
-        },
-        {
-            let toggle = uc.dnd_set_enabled.clone();
-            move |enabled| {
-                let toggle = toggle.clone();
-                tokio::spawn(async move {
-                    if let Err(e) = toggle.execute(enabled).await {
-                        log::error!("[toggle] dnd set_enabled failed: {e}");
-                    }
-                });
-            }
-        },
-    ));
+        subscribe_dnd, dnd_set_enabled, enabled, "dnd");
 
-    let airplane_toggle = Rc::new(TogglePresenter::new(
-        "Airplane",
+    let airplane_toggle = toggle_presenter!(uc, "Airplane",
         "airplane-mode-symbolic",
         "airplane-mode-symbolic",
-        {
-            let sub = uc.subscribe_airplane.clone();
-            move || {
-                let sub = sub.clone();
-                async move { sub.execute().await.map(|s| s.map(|st| st.enabled)) }
-            }
-        },
-        {
-            let toggle = uc.ap_set_enabled.clone();
-            move |enabled| {
-                let toggle = toggle.clone();
-                tokio::spawn(async move {
-                    if let Err(e) = toggle.execute(enabled).await {
-                        log::error!("[toggle] airplane set_enabled failed: {e}");
-                    }
-                });
-            }
-        },
-    ));
+        subscribe_airplane, ap_set_enabled, enabled, "airplane");
 
-    let continuity_toggle = Rc::new(TogglePresenter::new(
-        "Continuity",
+    let continuity_toggle = toggle_presenter!(uc, "Continuity",
         "input-mouse-symbolic",
         "input-mouse-symbolic",
-        {
-            let sub = uc.subscribe_continuity.clone();
-            move || {
-                let sub = sub.clone();
-                async move { sub.execute().await.map(|s| s.map(|st| st.enabled)) }
-            }
-        },
-        {
-            let toggle = uc.continuity_set_enabled.clone();
-            move |enabled| {
-                let toggle = toggle.clone();
-                tokio::spawn(async move {
-                    if let Err(e) = toggle.execute(enabled).await {
-                        log::error!("[toggle] continuity set_enabled failed: {e}");
-                    }
-                });
-            }
-        },
-    ));
+        subscribe_continuity, continuity_set_enabled, enabled, "continuity");
 
-    let idle_inhibit_toggle = Rc::new(TogglePresenter::new(
-        "Idle Inhibit",
+    let idle_inhibit_toggle = toggle_presenter!(uc, "Idle Inhibit",
         "changes-prevent-symbolic",
         "changes-allow-symbolic",
-        {
-            let sub = uc.subscribe_idle_inhibit.clone();
-            move || {
-                let sub = sub.clone();
-                async move { sub.execute().await.map(|s| s.map(|st| st.inhibited)) }
-            }
-        },
-        {
-            let toggle = uc.idle_inhibit_set.clone();
-            move |inhibited| {
-                let toggle = toggle.clone();
-                tokio::spawn(async move {
-                    if let Err(e) = toggle.execute(inhibited).await {
-                        log::error!("[toggle] idle inhibit set failed: {e}");
-                    }
-                });
-            }
-        },
-    ));
+        subscribe_idle_inhibit, idle_inhibit_set, inhibited, "idle inhibit");
 
     Presenters {
         battery,
