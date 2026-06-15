@@ -82,7 +82,7 @@ impl AppSearchProvider {
         }
 
         let mut apps = self.scan_apps();
-        apps.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        apps.sort_by_key(|a| a.name.to_lowercase());
         info!("[launcher] Found {} apps", apps.len());
         let dir_mtimes = self.get_dir_mtimes();
         *self.cache.write().unwrap() = Some(Cache {

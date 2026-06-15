@@ -170,10 +170,7 @@ impl StatusNotifierTrayProvider {
             reg_tx: reg_tx.clone(),
             unreg_tx: unreg_tx.clone(),
         };
-        let watcher_kde = StatusNotifierWatcherKdeIface {
-            reg_tx,
-            unreg_tx,
-        };
+        let watcher_kde = StatusNotifierWatcherKdeIface { reg_tx, unreg_tx };
 
         conn.object_server()
             .at("/StatusNotifierWatcher", watcher)

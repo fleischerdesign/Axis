@@ -200,7 +200,7 @@ impl CalendarProvider for GoogleCalendarProvider {
             "[google-calendar] Total events fetched: {} (Parallel)",
             all_events.len()
         );
-        all_events.sort_by(|a, b| a.start.cmp(&b.start));
+        all_events.sort_by_key(|a| a.start);
         Ok(all_events)
     }
 }
