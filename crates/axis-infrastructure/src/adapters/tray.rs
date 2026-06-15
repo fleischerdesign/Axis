@@ -64,12 +64,17 @@ trait DBus {
 
 struct StatusNotifierWatcherIface {
     reg_tx: mpsc::Sender<String>,
+    unreg_tx: mpsc::Sender<String>,
 }
 
 #[zbus::interface(name = "org.freedesktop.StatusNotifierWatcher")]
 impl StatusNotifierWatcherIface {
     fn register_status_notifier_item(&self, service: &str) {
         let _ = self.reg_tx.try_send(service.to_string());
+    }
+
+    fn unregister_status_notifier_item(&self, service: &str) {
+        let _ = self.unreg_tx.try_send(service.to_string());
     }
 
     fn register_status_notifier_host(&self, _service: &str) {}
@@ -92,12 +97,17 @@ impl StatusNotifierWatcherIface {
 
 struct StatusNotifierWatcherKdeIface {
     reg_tx: mpsc::Sender<String>,
+    unreg_tx: mpsc::Sender<String>,
 }
 
 #[zbus::interface(name = "org.kde.StatusNotifierWatcher")]
 impl StatusNotifierWatcherKdeIface {
     fn register_status_notifier_item(&self, service: &str) {
         let _ = self.reg_tx.try_send(service.to_string());
+    }
+
+    fn unregister_status_notifier_item(&self, service: &str) {
+        let _ = self.unreg_tx.try_send(service.to_string());
     }
 
     fn register_status_notifier_host(&self, _service: &str) {}
@@ -149,6 +159,7 @@ impl StatusNotifierTrayProvider {
     pub async fn new() -> Result<Arc<Self>, TrayError> {
         let (status_tx, _) = watch::channel(TrayStatus::default());
         let (reg_tx, reg_rx) = mpsc::channel::<String>(64);
+        let (unreg_tx, unreg_rx) = mpsc::channel::<String>(64);
         let (event_tx, event_rx) = mpsc::unbounded_channel::<ItemEvent>();
 
         let conn = Connection::session()
@@ -157,8 +168,12 @@ impl StatusNotifierTrayProvider {
 
         let watcher = StatusNotifierWatcherIface {
             reg_tx: reg_tx.clone(),
+            unreg_tx: unreg_tx.clone(),
         };
-        let watcher_kde = StatusNotifierWatcherKdeIface { reg_tx };
+        let watcher_kde = StatusNotifierWatcherKdeIface {
+            reg_tx,
+            unreg_tx,
+        };
 
         conn.object_server()
             .at("/StatusNotifierWatcher", watcher)
@@ -213,7 +228,9 @@ impl StatusNotifierTrayProvider {
             Self::run_event_loop(
                 &provider_clone.connection,
                 reg_rx,
+                unreg_rx,
                 event_rx,
+                event_tx,
                 &provider_clone.status_tx,
             )
             .await;
@@ -372,7 +389,9 @@ impl StatusNotifierTrayProvider {
     async fn run_event_loop(
         conn: &Connection,
         mut reg_rx: mpsc::Receiver<String>,
+        mut unreg_rx: mpsc::Receiver<String>,
         mut event_rx: mpsc::UnboundedReceiver<ItemEvent>,
+        event_tx: mpsc::UnboundedSender<ItemEvent>,
         status_tx: &watch::Sender<TrayStatus>,
     ) {
         let dbus_proxy = match DBusProxy::new(conn).await {
@@ -391,12 +410,6 @@ impl StatusNotifierTrayProvider {
             }
         };
 
-        let event_tx_reg = {
-            let (tx, mut rx) = mpsc::unbounded_channel::<ItemEvent>();
-            tokio::spawn(async move { while rx.recv().await.is_some() {} });
-            tx
-        };
-
         loop {
             tokio::select! {
                 Some(reg_item) = reg_rx.recv() => {
@@ -407,10 +420,21 @@ impl StatusNotifierTrayProvider {
                         continue;
                     }
 
-                    if let Some(item) = Self::add_item(conn, &destination, &path, &event_tx_reg).await {
+                    if let Some(item) = Self::add_item(conn, &destination, &path, &event_tx).await {
                         info!("[tray] Registered item: {destination}");
                         let mut current = status_tx.borrow().clone();
                         current.items.push(item);
+                        let _ = status_tx.send(current);
+                    }
+                }
+
+                Some(unreg_item) = unreg_rx.recv() => {
+                    let (destination, _) = parse_registration_item(&unreg_item);
+                    let mut current = status_tx.borrow().clone();
+                    let before = current.items.len();
+                    current.items.retain(|i| i.bus_name != destination);
+                    if current.items.len() < before {
+                        info!("[tray] Item unregistered: {destination}");
                         let _ = status_tx.send(current);
                     }
                 }
@@ -423,14 +447,12 @@ impl StatusNotifierTrayProvider {
                     let name = args.name();
                     let new_owner = args.new_owner();
 
-                    if name.starts_with("org.freedesktop.StatusNotifierItem-")
-                        && new_owner.is_empty()
-                    {
+                    if new_owner.is_empty() {
                         let mut current = status_tx.borrow().clone();
                         let before = current.items.len();
                         current.items.retain(|i| i.bus_name.as_str() != name);
                         if current.items.len() < before {
-                            info!("[tray] Item disconnected: {name}");
+                            info!("[tray] Item disconnected (name owner lost): {name}");
                             let _ = status_tx.send(current);
                         }
                     }
@@ -450,7 +472,7 @@ impl StatusNotifierTrayProvider {
                             let before = current.items.len();
                             current.items.retain(|i| i.bus_name != bus_name);
                             if current.items.len() < before {
-                                info!("[tray] Item disconnected: {bus_name}");
+                                info!("[tray] Item disconnected (signal stream ended): {bus_name}");
                                 let _ = status_tx.send(current);
                             }
                         }
