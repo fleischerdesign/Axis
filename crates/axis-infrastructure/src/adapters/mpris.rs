@@ -193,26 +193,22 @@ impl MprisDBusProvider {
             _ => PlaybackState::Stopped,
         };
 
-        let metadata = match tokio::time::timeout(
-            std::time::Duration::from_millis(150),
-            proxy.metadata(),
-        )
-        .await
-        {
-            Ok(Ok(m)) => m,
-            _ => HashMap::new(),
-        };
+        let metadata =
+            match tokio::time::timeout(std::time::Duration::from_millis(150), proxy.metadata())
+                .await
+            {
+                Ok(Ok(m)) => m,
+                _ => HashMap::new(),
+            };
         let (title, artist, album, art_url, length_us) = extract_metadata(&metadata);
 
-        let position_us = match tokio::time::timeout(
-            std::time::Duration::from_millis(150),
-            proxy.position(),
-        )
-        .await
-        {
-            Ok(Ok(p)) => p,
-            _ => 0,
-        };
+        let position_us =
+            match tokio::time::timeout(std::time::Duration::from_millis(150), proxy.position())
+                .await
+            {
+                Ok(Ok(p)) => p,
+                _ => 0,
+            };
 
         let id = bus_name
             .trim_start_matches("org.mpris.MediaPlayer2.")
@@ -231,8 +227,11 @@ impl MprisDBusProvider {
             Ok(Ok(true))
         );
         let can_go_previous = matches!(
-            tokio::time::timeout(std::time::Duration::from_millis(150), proxy.can_go_previous())
-                .await,
+            tokio::time::timeout(
+                std::time::Duration::from_millis(150),
+                proxy.can_go_previous()
+            )
+            .await,
             Ok(Ok(true))
         );
 
@@ -439,7 +438,8 @@ impl MprisDBusProvider {
         } else {
             status.players.push(player);
         }
-        status.active_player_id = self.determine_active_player(&status.players, status.active_player_id.as_deref());
+        status.active_player_id =
+            self.determine_active_player(&status.players, status.active_player_id.as_deref());
         self.status_tx.send_replace(status);
     }
 
@@ -447,15 +447,23 @@ impl MprisDBusProvider {
         let id = bus_name.trim_start_matches("org.mpris.MediaPlayer2.");
         let mut status = self.status_tx.borrow().clone();
         status.players.retain(|p| p.id != id);
-        status.active_player_id = self.determine_active_player(&status.players, status.active_player_id.as_deref());
+        status.active_player_id =
+            self.determine_active_player(&status.players, status.active_player_id.as_deref());
         self.status_tx.send_replace(status);
     }
 
-    fn determine_active_player(&self, players: &[MprisPlayer], current_active: Option<&str>) -> Option<String> {
+    fn determine_active_player(
+        &self,
+        players: &[MprisPlayer],
+        current_active: Option<&str>,
+    ) -> Option<String> {
         if players.is_empty() {
             return None;
         }
-        let playing: Vec<&MprisPlayer> = players.iter().filter(|p| p.playback == PlaybackState::Playing).collect();
+        let playing: Vec<&MprisPlayer> = players
+            .iter()
+            .filter(|p| p.playback == PlaybackState::Playing)
+            .collect();
         if !playing.is_empty() {
             if let Some(active) = current_active
                 && playing.iter().any(|p| p.id == active)
@@ -464,7 +472,10 @@ impl MprisDBusProvider {
             }
             return Some(playing[0].id.clone());
         }
-        let paused: Vec<&MprisPlayer> = players.iter().filter(|p| p.playback == PlaybackState::Paused).collect();
+        let paused: Vec<&MprisPlayer> = players
+            .iter()
+            .filter(|p| p.playback == PlaybackState::Paused)
+            .collect();
         if !paused.is_empty() {
             if let Some(active) = current_active
                 && paused.iter().any(|p| p.id == active)
@@ -473,7 +484,10 @@ impl MprisDBusProvider {
             }
             return Some(paused[0].id.clone());
         }
-        let stopped: Vec<&MprisPlayer> = players.iter().filter(|p| p.playback == PlaybackState::Stopped).collect();
+        let stopped: Vec<&MprisPlayer> = players
+            .iter()
+            .filter(|p| p.playback == PlaybackState::Stopped)
+            .collect();
         if !stopped.is_empty() {
             if let Some(active) = current_active
                 && stopped.iter().any(|p| p.id == active)
