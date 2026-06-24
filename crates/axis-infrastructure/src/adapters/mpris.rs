@@ -6,7 +6,6 @@ use log::{info, warn};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Instant;
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
 use zbus::zvariant::Value;
@@ -43,6 +42,7 @@ pub struct MprisDBusProvider {
     connection: Connection,
     name_owners: std::sync::Mutex<HashMap<String, String>>,
     position_polling: AtomicBool,
+    pending_queries: std::sync::Mutex<HashMap<String, tokio::task::JoinHandle<()>>>,
 }
 
 impl MprisDBusProvider {
@@ -60,6 +60,7 @@ impl MprisDBusProvider {
             connection: connection.clone(),
             name_owners: std::sync::Mutex::new(HashMap::new()),
             position_polling: AtomicBool::new(false),
+            pending_queries: std::sync::Mutex::new(HashMap::new()),
         });
 
         let initial_status = provider.discover_players().await;
@@ -116,27 +117,27 @@ impl MprisDBusProvider {
             Err(_) => return vec![],
         };
 
-        let mut players = Vec::new();
-        let mut new_owners = Vec::new();
+        let mut futures = Vec::new();
         for name in &names {
-            if name.starts_with("org.mpris.MediaPlayer2.")
-                && let Some(player) = self.query_player(name).await
-            {
-                if let Ok(reply) = dbus_proxy
-                    .call_method("GetNameOwner", &(name.as_str()))
+            if name.starts_with("org.mpris.MediaPlayer2.") {
+                let name_clone = name.clone();
+                futures.push(async move {
+                    tokio::time::timeout(
+                        std::time::Duration::from_millis(500),
+                        self.query_player(&name_clone),
+                    )
                     .await
-                    && let Ok(owner) = reply.body().deserialize::<String>()
-                {
-                    new_owners.push((owner, name.clone()));
-                }
-                players.push(player);
+                    .ok()
+                    .flatten()
+                });
             }
         }
-        let mut owners = self.name_owners.lock().unwrap();
-        for (owner, name) in new_owners {
-            owners.insert(owner, name);
+
+        let queried_players = futures_util::future::join_all(futures).await;
+        let mut players = Vec::new();
+        for player in queried_players.into_iter().flatten() {
+            players.push(player);
         }
-        drop(owners);
 
         info!("[mpris] Discovered {} player(s)", players.len());
         for p in &players {
@@ -149,6 +150,24 @@ impl MprisDBusProvider {
     }
 
     async fn query_player(&self, bus_name: &str) -> Option<MprisPlayer> {
+        if let Ok(dbus_proxy) = Proxy::new(
+            &self.connection,
+            "org.freedesktop.DBus",
+            "/org/freedesktop/DBus",
+            "org.freedesktop.DBus",
+        )
+        .await
+            && let Ok(Ok(reply)) = tokio::time::timeout(
+                std::time::Duration::from_millis(150),
+                dbus_proxy.call_method("GetNameOwner", &(bus_name)),
+            )
+            .await
+            && let Ok(owner) = reply.body().deserialize::<String>()
+        {
+            let mut owners = self.name_owners.lock().unwrap();
+            owners.insert(owner, bus_name.to_string());
+        }
+
         let proxy = match MprisPlayerProxyProxy::builder(&self.connection)
             .destination(bus_name)
             .ok()?
@@ -159,21 +178,62 @@ impl MprisDBusProvider {
             Err(_) => return None,
         };
 
-        let playback_str = proxy.playback_status().await.ok()?;
-        let playback = match playback_str.as_str() {
-            "Playing" => PlaybackState::Playing,
-            "Paused" => PlaybackState::Paused,
+        let playback_str = match tokio::time::timeout(
+            std::time::Duration::from_millis(150),
+            proxy.playback_status(),
+        )
+        .await
+        {
+            Ok(Ok(s)) => s,
+            _ => return None,
+        };
+        let playback = match playback_str.to_lowercase().as_str() {
+            "playing" => PlaybackState::Playing,
+            "paused" => PlaybackState::Paused,
             _ => PlaybackState::Stopped,
         };
 
-        let metadata = proxy.metadata().await.ok().unwrap_or_default();
+        let metadata =
+            match tokio::time::timeout(std::time::Duration::from_millis(150), proxy.metadata())
+                .await
+            {
+                Ok(Ok(m)) => m,
+                _ => HashMap::new(),
+            };
         let (title, artist, album, art_url, length_us) = extract_metadata(&metadata);
 
-        let position_us = proxy.position().await.unwrap_or(0);
+        let position_us =
+            match tokio::time::timeout(std::time::Duration::from_millis(150), proxy.position())
+                .await
+            {
+                Ok(Ok(p)) => p,
+                _ => 0,
+            };
 
         let id = bus_name
             .trim_start_matches("org.mpris.MediaPlayer2.")
             .to_string();
+
+        let can_play = matches!(
+            tokio::time::timeout(std::time::Duration::from_millis(150), proxy.can_play()).await,
+            Ok(Ok(true))
+        );
+        let can_pause = matches!(
+            tokio::time::timeout(std::time::Duration::from_millis(150), proxy.can_pause()).await,
+            Ok(Ok(true))
+        );
+        let can_go_next = matches!(
+            tokio::time::timeout(std::time::Duration::from_millis(150), proxy.can_go_next()).await,
+            Ok(Ok(true))
+        );
+        let can_go_previous = matches!(
+            tokio::time::timeout(
+                std::time::Duration::from_millis(150),
+                proxy.can_go_previous()
+            )
+            .await,
+            Ok(Ok(true))
+        );
 
         Some(MprisPlayer {
             id,
@@ -184,10 +244,10 @@ impl MprisDBusProvider {
             playback,
             position_us,
             length_us,
-            can_play: proxy.can_play().await.unwrap_or(false),
-            can_pause: proxy.can_pause().await.unwrap_or(false),
-            can_go_next: proxy.can_go_next().await.unwrap_or(false),
-            can_go_previous: proxy.can_go_previous().await.unwrap_or(false),
+            can_play,
+            can_pause,
+            can_go_next,
+            can_go_previous,
         })
     }
 
@@ -203,6 +263,34 @@ impl MprisDBusProvider {
             .unwrap_or_else(|| name.to_string())
     }
 
+    fn trigger_query(self: &Arc<Self>, bus_name: String) {
+        let provider = self.clone();
+        let mut pending = self.pending_queries.lock().unwrap();
+        if let Some(handle) = pending.get(&bus_name) {
+            handle.abort();
+        }
+        let bus_name_clone = bus_name.clone();
+        let handle = tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            if let Some(player) = tokio::time::timeout(
+                std::time::Duration::from_millis(500),
+                provider.query_player(&bus_name_clone),
+            )
+            .await
+            .ok()
+            .flatten()
+            {
+                provider.update_player(player);
+            }
+            provider
+                .pending_queries
+                .lock()
+                .unwrap()
+                .remove(&bus_name_clone);
+        });
+        pending.insert(bus_name, handle);
+    }
+
     pub fn set_position_polling(&self, enabled: bool) {
         self.position_polling.store(enabled, Ordering::Relaxed);
     }
@@ -211,7 +299,7 @@ impl MprisDBusProvider {
         self.position_tx.subscribe()
     }
 
-    async fn listen_for_changes(&self) {
+    async fn listen_for_changes(self: Arc<Self>) {
         let name_rule = MatchRule::builder()
             .msg_type(zbus::message::Type::Signal)
             .interface("org.freedesktop.DBus")
@@ -252,7 +340,6 @@ impl MprisDBusProvider {
 
         info!("[mpris] Listening for changes");
 
-        let mut last_query: HashMap<String, Instant> = HashMap::new();
         let mut pos_tick = tokio::time::interval(std::time::Duration::from_millis(250));
         pos_tick.tick().await;
         let mut requery_tick = tokio::time::interval(std::time::Duration::from_secs(5));
@@ -267,25 +354,25 @@ impl MprisDBusProvider {
                     };
                     let body = msg.body();
                     let result: Result<(&str, &str, &str), _> = body.deserialize();
-                    let Ok((name, _old, new)) = result else { continue; };
+                    let Ok((name, old, new)) = result else { continue; };
 
                     if new.is_empty() {
                         info!("[mpris] Player disappeared: {name}");
-                        last_query.remove(name);
+                        {
+                            let mut owners = self.name_owners.lock().unwrap();
+                            owners.remove(old);
+                        }
                         self.remove_player(name);
                     } else {
                         info!("[mpris] Player appeared: {name}");
                         {
                             let mut owners = self.name_owners.lock().unwrap();
+                            if !old.is_empty() {
+                                owners.remove(old);
+                            }
                             owners.insert(new.to_string(), name.to_string());
                         }
-                        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-                        if let Some(player) = tokio::time::timeout(
-                            std::time::Duration::from_secs(5),
-                            self.query_player(name)
-                        ).await.ok().flatten() {
-                            self.update_player(player);
-                        }
+                        self.trigger_query(name.to_string());
                     }
                 }
                 Some(msg) = props_stream.next() => {
@@ -298,24 +385,8 @@ impl MprisDBusProvider {
                     let sender_str = sender.as_str().to_string();
 
                     let bus_name = self.resolve_bus_name(&sender_str);
-                    if !bus_name.starts_with("org.mpris.MediaPlayer2.") {
-                        continue;
-                    }
-
-                    let now = Instant::now();
-                    if let Some(last) = last_query.get(&bus_name)
-                        && now.duration_since(*last) < std::time::Duration::from_millis(200) {
-                            continue;
-                        }
-                    last_query.insert(bus_name.clone(), now);
-
-                    if let Some(player) = tokio::time::timeout(
-                        std::time::Duration::from_secs(5),
-                        self.query_player(&bus_name)
-                    ).await.ok().flatten() {
-                        self.update_player(player);
-                    } else {
-                        warn!("[mpris] query_player timed out for {bus_name}");
+                    if bus_name.starts_with("org.mpris.MediaPlayer2.") {
+                        self.trigger_query(bus_name);
                     }
                 }
                 _ = pos_tick.tick() => {
@@ -325,7 +396,7 @@ impl MprisDBusProvider {
                     let (bus_name, id, length_us) = {
                         let s = self.status_tx.borrow();
                         match s.active_player() {
-                            Some(p) if p.playback == PlaybackState::Playing && p.length_us > 0 => {
+                            Some(p) if p.playback == PlaybackState::Playing => {
                                 (format!("org.mpris.MediaPlayer2.{}", p.id), p.id.clone(), p.length_us)
                             }
                             _ => continue,
@@ -337,7 +408,10 @@ impl MprisDBusProvider {
                         .build()
                         .await
                     else { continue };
-                    let Ok(pos) = proxy.position().await else { continue };
+                    let Ok(Ok(pos)) = tokio::time::timeout(
+                        std::time::Duration::from_millis(150),
+                        proxy.position()
+                    ).await else { continue };
                     self.position_tx.send_replace((id, pos, length_us));
                 }
                 _ = requery_tick.tick() => {
@@ -350,11 +424,7 @@ impl MprisDBusProvider {
                             .collect()
                     };
                     for bus_name in stopped {
-                        if let Some(player) = self.query_player(&bus_name).await
-                            && player.playback != PlaybackState::Stopped
-                        {
-                            self.update_player(player);
-                        }
+                        self.trigger_query(bus_name);
                     }
                 }
             }
@@ -364,32 +434,12 @@ impl MprisDBusProvider {
     fn update_player(&self, player: MprisPlayer) {
         let mut status = self.status_tx.borrow().clone();
         if let Some(existing) = status.players.iter_mut().find(|p| p.id == player.id) {
-            let was_playing = existing.playback == PlaybackState::Playing;
-            *existing = player.clone();
-            if player.playback == PlaybackState::Playing && !was_playing {
-                info!("[mpris] Now playing: {} -- {}", player.artist, player.title);
-                status.active_player_id = Some(player.id.clone());
-            } else if was_playing
-                && player.playback != PlaybackState::Playing
-                && (player.playback == PlaybackState::Stopped
-                    || (player.title.is_empty() && player.artist.is_empty()))
-            {
-                status.active_player_id = status
-                    .players
-                    .iter()
-                    .find(|p| p.playback != PlaybackState::Stopped && p.id != player.id)
-                    .map(|p| p.id.clone());
-            }
+            *existing = player;
         } else {
-            if player.playback != PlaybackState::Stopped {
-                info!(
-                    "[mpris] New active player: {} -- {}",
-                    player.id, player.title
-                );
-                status.active_player_id = Some(player.id.clone());
-            }
             status.players.push(player);
         }
+        status.active_player_id =
+            self.determine_active_player(&status.players, status.active_player_id.as_deref());
         self.status_tx.send_replace(status);
     }
 
@@ -397,14 +447,56 @@ impl MprisDBusProvider {
         let id = bus_name.trim_start_matches("org.mpris.MediaPlayer2.");
         let mut status = self.status_tx.borrow().clone();
         status.players.retain(|p| p.id != id);
-        if status.active_player_id.as_deref() == Some(id) {
-            status.active_player_id = status
-                .players
-                .iter()
-                .find(|p| p.playback != PlaybackState::Stopped)
-                .map(|p| p.id.clone());
-        }
+        status.active_player_id =
+            self.determine_active_player(&status.players, status.active_player_id.as_deref());
         self.status_tx.send_replace(status);
+    }
+
+    fn determine_active_player(
+        &self,
+        players: &[MprisPlayer],
+        current_active: Option<&str>,
+    ) -> Option<String> {
+        if players.is_empty() {
+            return None;
+        }
+        let playing: Vec<&MprisPlayer> = players
+            .iter()
+            .filter(|p| p.playback == PlaybackState::Playing)
+            .collect();
+        if !playing.is_empty() {
+            if let Some(active) = current_active
+                && playing.iter().any(|p| p.id == active)
+            {
+                return Some(active.to_string());
+            }
+            return Some(playing[0].id.clone());
+        }
+        let paused: Vec<&MprisPlayer> = players
+            .iter()
+            .filter(|p| p.playback == PlaybackState::Paused)
+            .collect();
+        if !paused.is_empty() {
+            if let Some(active) = current_active
+                && paused.iter().any(|p| p.id == active)
+            {
+                return Some(active.to_string());
+            }
+            return Some(paused[0].id.clone());
+        }
+        let stopped: Vec<&MprisPlayer> = players
+            .iter()
+            .filter(|p| p.playback == PlaybackState::Stopped)
+            .collect();
+        if !stopped.is_empty() {
+            if let Some(active) = current_active
+                && stopped.iter().any(|p| p.id == active)
+            {
+                return Some(active.to_string());
+            }
+            return Some(stopped[0].id.clone());
+        }
+        None
     }
 }
 
@@ -427,19 +519,26 @@ fn extract_metadata(
         .get("xesam:artist")
         .and_then(|v| {
             if let Value::Array(arr) = v {
-                arr.iter().next().and_then(|v| {
-                    if let Value::Str(s) = v {
-                        Some(s.as_str())
-                    } else {
-                        None
-                    }
-                })
+                let artists: Vec<&str> = arr
+                    .iter()
+                    .filter_map(|val| {
+                        if let Value::Str(s) = val {
+                            Some(s.as_str())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                if artists.is_empty() {
+                    None
+                } else {
+                    Some(artists.join(", "))
+                }
             } else {
                 None
             }
         })
-        .unwrap_or("")
-        .to_string();
+        .unwrap_or_default();
 
     let album = metadata
         .get("xesam:album")
@@ -568,7 +667,7 @@ mod tests {
         let artists: Value = vec!["First Artist", "Second"].into();
         m.insert("xesam:artist".into(), artists);
         let (_, artist, _, _, _) = extract_metadata(&m);
-        assert_eq!(artist, "First Artist");
+        assert_eq!(artist, "First Artist, Second");
     }
 
     #[test]
