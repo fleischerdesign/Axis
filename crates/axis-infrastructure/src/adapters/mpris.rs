@@ -667,7 +667,7 @@ mod tests {
         let artists: Value = vec!["First Artist", "Second"].into();
         m.insert("xesam:artist".into(), artists);
         let (_, artist, _, _, _) = extract_metadata(&m);
-        assert_eq!(artist, "First Artist");
+        assert_eq!(artist, "First Artist, Second");
     }
 
     #[test]
