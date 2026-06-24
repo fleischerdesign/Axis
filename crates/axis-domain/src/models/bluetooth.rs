@@ -44,3 +44,29 @@ pub struct BluetoothStatus {
     pub devices: Vec<BluetoothDevice>,
     pub pending_pairing: Option<PendingPairing>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bluetooth_device_default_icon() {
+        let d = BluetoothDevice::default();
+        assert_eq!(d.icon, "bluetooth-symbolic");
+        assert!(!d.connected);
+        assert!(!d.paired);
+    }
+
+    #[test]
+    fn pending_pairing_serde_roundtrip() {
+        let p = PendingPairing {
+            device_path: "/org/bluez/hci0/dev_AA_BB".into(),
+            device_name: "Headphones".into(),
+            passkey: Some("123456".into()),
+            pairing_type: PairingType::Passkey,
+        };
+        let json = serde_json::to_string(&p).unwrap();
+        let back: PendingPairing = serde_json::from_str(&json).unwrap();
+        assert_eq!(p, back);
+    }
+}

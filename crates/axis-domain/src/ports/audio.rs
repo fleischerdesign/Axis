@@ -13,6 +13,7 @@ pub enum AudioError {
 
 pub type AudioStream = StatusStream<AudioStatus>;
 
+/// Reactively provides audio device state (volume, mute, sinks, sources) and allows volume mutation.
 #[async_trait]
 pub trait AudioProvider: Send + Sync {
     async fn get_status(&self) -> Result<AudioStatus, AudioError>;

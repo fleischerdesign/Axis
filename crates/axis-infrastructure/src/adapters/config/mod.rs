@@ -381,3 +381,112 @@ impl ConfigProvider for FileConfigProvider {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axis_domain::models::appearance::{AccentColor, ColorScheme};
+    use axis_domain::models::config::*;
+
+    fn cli_appearance() -> AppearanceConfig {
+        AppearanceConfig {
+            wallpaper: Some("/cli/wall.jpg".into()),
+            accent_color: AccentColor::Red,
+            color_scheme: ColorScheme::Light,
+            font: None,
+        }
+    }
+
+    fn file_appearance() -> AppearanceConfig {
+        AppearanceConfig {
+            wallpaper: Some("/file/wall.jpg".into()),
+            accent_color: AccentColor::Blue,
+            color_scheme: ColorScheme::Dark,
+            font: Some("Fira Code".into()),
+        }
+    }
+
+    #[test]
+    fn merge_appearance_cli_overrides_wallpaper() {
+        let cli = cli_appearance();
+        let file = file_appearance();
+        let merged = FileConfigProvider::merge_appearance(&cli, &file);
+        assert_eq!(merged.wallpaper.as_deref(), Some("/cli/wall.jpg"));
+    }
+
+    #[test]
+    fn merge_appearance_file_fallback_wallpaper() {
+        let cli = AppearanceConfig::default();
+        let file = file_appearance();
+        let merged = FileConfigProvider::merge_appearance(&cli, &file);
+        assert_eq!(merged.wallpaper.as_deref(), Some("/file/wall.jpg"));
+    }
+
+    #[test]
+    fn merge_appearance_cli_overrides_accent() {
+        let cli = cli_appearance();
+        let file = file_appearance();
+        let merged = FileConfigProvider::merge_appearance(&cli, &file);
+        assert_eq!(merged.accent_color, AccentColor::Red);
+    }
+
+    #[test]
+    fn merge_appearance_default_accent_falls_back_to_file() {
+        let mut cli = cli_appearance();
+        cli.accent_color = AccentColor::Blue; // Blue is default
+        let file = file_appearance();
+        let merged = FileConfigProvider::merge_appearance(&cli, &file);
+        assert_eq!(merged.accent_color, file.accent_color);
+    }
+
+    #[test]
+    fn merge_dnd_cli_true_overrides_file() {
+        let cli = DndConfig { enabled: true };
+        let file = DndConfig { enabled: false };
+        let merged = FileConfigProvider::merge_dnd(&cli, &file);
+        assert!(merged.enabled);
+    }
+
+    #[test]
+    fn merge_dnd_cli_false_falls_back_to_file() {
+        let cli = DndConfig { enabled: false };
+        let file = DndConfig { enabled: true };
+        let merged = FileConfigProvider::merge_dnd(&cli, &file);
+        assert!(merged.enabled);
+    }
+
+    #[test]
+    fn merge_nightlight_overrides_non_default_fields() {
+        let mut cli = NightlightConfig::default();
+        cli.temp_day = 5000;
+        let file = NightlightConfig::default();
+        let merged = FileConfigProvider::merge_nightlight(&cli, &file);
+        assert_eq!(merged.temp_day, 5000);
+    }
+
+    #[test]
+    fn merge_nightlight_default_fields_fall_back_to_file() {
+        let cli = NightlightConfig::default();
+        let mut file = NightlightConfig::default();
+        file.temp_night = 3500;
+        let merged = FileConfigProvider::merge_nightlight(&cli, &file);
+        assert_eq!(merged.temp_night, 3500);
+    }
+
+    #[test]
+    fn merge_idle_cli_overrides_file() {
+        let cli = IdleConfig {
+            lock_timeout_seconds: Some(60),
+            blank_timeout_seconds: None,
+            sleep_timeout_seconds: None,
+        };
+        let file = IdleConfig {
+            lock_timeout_seconds: Some(120),
+            blank_timeout_seconds: Some(300),
+            sleep_timeout_seconds: Some(600),
+        };
+        let merged = FileConfigProvider::merge_idle(&cli, &file);
+        assert_eq!(merged.lock_timeout_seconds, Some(60));
+        assert_eq!(merged.blank_timeout_seconds, Some(300));
+    }
+}

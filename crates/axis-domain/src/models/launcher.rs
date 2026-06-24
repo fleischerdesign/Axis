@@ -34,3 +34,28 @@ pub struct LauncherStatus {
     pub selected_index: Option<usize>,
     pub is_searching: bool,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn launcher_action_exec() {
+        let a = LauncherAction::Exec(vec!["firefox".into()]);
+        match a {
+            LauncherAction::Exec(args) => assert_eq!(args, vec!["firefox"]),
+            _ => panic!("expected Exec"),
+        }
+    }
+
+    #[test]
+    fn launcher_action_open_url() {
+        let a = LauncherAction::OpenUrl("https://example.com".into());
+        assert_eq!(format!("{a:?}"), "OpenUrl(\"https://example.com\")");
+    }
+
+    #[test]
+    fn search_priority_ordering() {
+        assert!(SearchPriority::Primary > SearchPriority::Fallback);
+    }
+}

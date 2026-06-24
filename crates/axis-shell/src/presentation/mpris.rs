@@ -1,4 +1,4 @@
-use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
+use axis_application::use_cases::generic::SubscribeUseCase;
 use axis_application::use_cases::mpris::next::NextTrackUseCase;
 use axis_application::use_cases::mpris::play_pause::PlayPauseUseCase;
 use axis_application::use_cases::mpris::previous::PreviousTrackUseCase;
@@ -16,41 +16,21 @@ pub struct MprisPresenter {
 
 pub struct MprisPresenterArgs {
     pub subscribe_uc: Arc<SubscribeUseCase<dyn MprisProvider, MprisStatus>>,
-    pub get_status_uc: Arc<GetStatusUseCase<dyn MprisProvider, MprisStatus>>,
     pub play_pause_uc: Arc<PlayPauseUseCase>,
     pub next_uc: Arc<NextTrackUseCase>,
     pub previous_uc: Arc<PreviousTrackUseCase>,
 }
 
 impl MprisPresenter {
-    pub fn new(args: MprisPresenterArgs, rt: &tokio::runtime::Runtime) -> Self {
+    pub fn new(args: MprisPresenterArgs) -> Self {
         let MprisPresenterArgs {
             subscribe_uc,
-            get_status_uc,
             play_pause_uc,
             next_uc,
             previous_uc,
         } = args;
 
-        let initial_status = rt.block_on(async {
-            match get_status_uc.execute().await {
-                Ok(s) => {
-                    log::debug!(
-                        "[mpris-presenter] Initial status: {} players, active={:?}",
-                        s.players.len(),
-                        s.active_player_id
-                    );
-                    s
-                }
-                Err(e) => {
-                    log::error!("[mpris] Failed to get initial status: {e}");
-                    Default::default()
-                }
-            }
-        });
-
-        let inner = Presenter::from_subscribe_use_case(subscribe_uc.clone())
-            .with_initial_status(initial_status);
+        let inner = Presenter::from_subscribe_use_case(subscribe_uc);
 
         Self {
             inner,

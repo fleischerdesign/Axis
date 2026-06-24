@@ -26,6 +26,7 @@ use axis_application::use_cases::mpris::play_pause::PlayPauseUseCase;
 use axis_application::use_cases::mpris::previous::PreviousTrackUseCase;
 use axis_application::use_cases::network::connect_to_ap::ConnectToApUseCase;
 use axis_application::use_cases::network::disconnect_wifi::DisconnectWifiUseCase;
+use axis_application::use_cases::network::scan_wifi::ScanWifiUseCase;
 use axis_application::use_cases::nightlight::set_enabled::SetNightlightEnabledUseCase;
 use axis_application::use_cases::nightlight::set_schedule::SetNightlightScheduleUseCase;
 use axis_application::use_cases::nightlight::set_temp_day::SetNightlightTempDayUseCase;
@@ -85,6 +86,7 @@ pub struct UseCases {
     pub execute_launcher: Arc<ExecuteLauncherActionUseCase>,
     pub subscribe_network: Arc<SubscribeUseCase<dyn NetworkProvider, NetworkStatus>>,
     pub get_network_status: Arc<GetStatusUseCase<dyn NetworkProvider, NetworkStatus>>,
+    pub scan_wifi: Arc<ScanWifiUseCase>,
     pub connect_to_ap: Arc<ConnectToApUseCase>,
     pub disconnect_wifi: Arc<DisconnectWifiUseCase>,
     pub set_wifi: Arc<axis_application::use_cases::network::set_wifi::SetWifiEnabledUseCase>,
@@ -168,6 +170,7 @@ pub fn setup(p: &Providers) -> UseCases {
     let execute_launcher = Arc::new(ExecuteLauncherActionUseCase::new());
     let subscribe_network = Arc::new(SubscribeUseCase::new(p.network.clone()));
     let get_network_status = Arc::new(GetStatusUseCase::new(p.network.clone()));
+    let scan_wifi = Arc::new(ScanWifiUseCase::new(p.network.clone()));
     let connect_to_ap = Arc::new(ConnectToApUseCase::new(p.network.clone()));
     let disconnect_wifi = Arc::new(DisconnectWifiUseCase::new(p.network.clone()));
     let set_wifi = Arc::new(
@@ -278,6 +281,7 @@ pub fn setup(p: &Providers) -> UseCases {
         execute_launcher,
         subscribe_network,
         get_network_status,
+        scan_wifi,
         connect_to_ap,
         disconnect_wifi,
         set_wifi,

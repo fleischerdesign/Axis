@@ -30,6 +30,27 @@ pub struct Notification {
     pub input_placeholder: Option<String>,
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn urgency_default_is_normal() {
+        assert_eq!(Urgency::default(), Urgency::Normal);
+    }
+
+    #[test]
+    fn notification_action_serde_roundtrip() {
+        let a = NotificationAction {
+            key: "default".into(),
+            label: "Open".into(),
+        };
+        let json = serde_json::to_string(&a).unwrap();
+        let back: NotificationAction = serde_json::from_str(&json).unwrap();
+        assert_eq!(a.label, back.label);
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct NotificationStatus {
     pub notifications: Vec<Notification>,

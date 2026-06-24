@@ -82,7 +82,7 @@ impl AppSearchProvider {
         }
 
         let mut apps = self.scan_apps();
-        apps.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        apps.sort_by_key(|a| a.name.to_lowercase());
         info!("[launcher] Found {} apps", apps.len());
         let dir_mtimes = self.get_dir_mtimes();
         *self.cache.write().unwrap() = Some(Cache {
@@ -300,5 +300,95 @@ impl LauncherSearchProvider for AppSearchProvider {
             Ok(results) => Ok(results),
             Err(_) => Ok(Vec::new()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shell_split_simple() {
+        assert_eq!(shell_split("firefox"), vec!["firefox"]);
+        assert_eq!(shell_split("a b c"), vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn shell_split_single_quotes() {
+        assert_eq!(
+            shell_split("echo 'hello world'"),
+            vec!["echo", "hello world"]
+        );
+    }
+
+    #[test]
+    fn shell_split_double_quotes() {
+        assert_eq!(
+            shell_split("echo \"hello world\""),
+            vec!["echo", "hello world"]
+        );
+    }
+
+    #[test]
+    fn shell_split_mixed_quotes() {
+        assert_eq!(shell_split("echo 'a' \"b\""), vec!["echo", "a", "b"]);
+    }
+
+    #[test]
+    fn shell_split_empty_string() {
+        assert!(shell_split("").is_empty());
+    }
+
+    #[test]
+    fn shell_split_multiple_spaces() {
+        assert_eq!(shell_split("a   b"), vec!["a", "b"]);
+    }
+
+    #[test]
+    fn parse_desktop_exec_simple() {
+        let action = parse_desktop_exec("firefox");
+        assert_eq!(action, LauncherAction::Exec(vec!["firefox".into()]));
+    }
+
+    #[test]
+    fn parse_desktop_exec_strips_field_codes() {
+        let action = parse_desktop_exec("firefox %u");
+        assert_eq!(action, LauncherAction::Exec(vec!["firefox".into()]));
+
+        let action = parse_desktop_exec("gvim -f %f");
+        assert_eq!(
+            action,
+            LauncherAction::Exec(vec!["gvim".into(), "-f".into()])
+        );
+
+        let action = parse_desktop_exec("app %f %u %F %U %d %D %i %c %k");
+        assert_eq!(action, LauncherAction::Exec(vec!["app".into()]));
+    }
+
+    #[test]
+    fn parse_desktop_exec_preserves_escaped_percent() {
+        let action = parse_desktop_exec("echo \\%s");
+        assert_eq!(
+            action,
+            LauncherAction::Exec(vec!["echo".into(), "%s".into()])
+        );
+    }
+
+    #[test]
+    fn parse_desktop_exec_preserves_escaped_backslash() {
+        let action = parse_desktop_exec("echo \\\\");
+        assert_eq!(
+            action,
+            LauncherAction::Exec(vec!["echo".into(), "\\".into()])
+        );
+    }
+
+    #[test]
+    fn parse_desktop_exec_with_quoted_args() {
+        let action = parse_desktop_exec("app --arg \"hello world\" %u");
+        assert_eq!(
+            action,
+            LauncherAction::Exec(vec!["app".into(), "--arg".into(), "hello world".into()])
+        );
     }
 }

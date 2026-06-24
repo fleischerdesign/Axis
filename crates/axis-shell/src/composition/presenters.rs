@@ -61,24 +61,61 @@ pub struct Presenters {
     pub toggle_overview: Arc<ToggleOverviewUseCase>,
 }
 
-pub fn setup(uc: &UseCases, rt: &tokio::runtime::Runtime) -> Presenters {
+/// Creates a `TogglePresenter` from a subscribe use case (to observe state)
+/// and a setter use case (to toggle on user action).
+///
+/// Parameters:
+/// - `$uc`       : the `UseCases` struct
+/// - `$label`    : human-readable toggle name
+/// - `$active`   : icon when ON
+/// - `$inactive` : icon when OFF
+/// - `$sub_field`: field on `UseCases` holding the `SubscribeUseCase`
+/// - `$set_field`: field on `UseCases` holding the setter use case
+/// - `$extract`  : field on the status struct to extract `bool` from
+/// - `$log_tag`  : label for error log messages
+macro_rules! toggle_presenter {
+    ($uc:ident, $label:literal, $active:literal, $inactive:literal,
+     $sub_field:ident, $set_field:ident, $extract:ident, $log_tag:literal) => {
+        Rc::new(TogglePresenter::new(
+            $label,
+            $active,
+            $inactive,
+            {
+                let sub = $uc.$sub_field.clone();
+                move || {
+                    let sub = sub.clone();
+                    async move { sub.execute().await.map(|s| s.map(|st| st.$extract)) }
+                }
+            },
+            {
+                let toggle = $uc.$set_field.clone();
+                move |enabled| {
+                    let toggle = toggle.clone();
+                    tokio::spawn(async move {
+                        if let Err(e) = toggle.execute(enabled).await {
+                            log::error!("[toggle] {} set failed: {e}", $log_tag);
+                        }
+                    });
+                }
+            },
+        ))
+    };
+}
+
+pub fn setup(uc: &UseCases) -> Presenters {
     let battery = Rc::new(BatteryPresenter::new(uc.subscribe_power.clone()));
     let clock = Rc::new(ClockPresenter::new(uc.subscribe_clock.clone()));
     let workspace = Rc::new(WorkspacePresenter::new(uc.subscribe_ws.clone()));
     let popup = Rc::new(PopupPresenter::new(uc.subscribe_popups.clone()));
     let auto_hide = Rc::new(AutoHidePresenter::new(1, 500));
 
-    let audio = Rc::new(AudioPresenter::new(
-        AudioPresenterArgs {
-            subscribe_uc: uc.subscribe_audio.clone(),
-            get_status_uc: uc.get_audio_status.clone(),
-            set_volume_uc: uc.set_volume.clone(),
-            set_default_sink_uc: uc.set_default_sink.clone(),
-            set_default_source_uc: uc.set_default_source.clone(),
-            set_sink_input_volume_uc: uc.set_sink_input_volume.clone(),
-        },
-        rt,
-    ));
+    let audio = Rc::new(AudioPresenter::new(AudioPresenterArgs {
+        subscribe_uc: uc.subscribe_audio.clone(),
+        set_volume_uc: uc.set_volume.clone(),
+        set_default_sink_uc: uc.set_default_sink.clone(),
+        set_default_source_uc: uc.set_default_source.clone(),
+        set_sink_input_volume_uc: uc.set_sink_input_volume.clone(),
+    }));
 
     let brightness = Rc::new(BrightnessPresenter::new(
         uc.subscribe_brightness.clone(),
@@ -101,66 +138,43 @@ pub fn setup(uc: &UseCases, rt: &tokio::runtime::Runtime) -> Presenters {
         launcher_executor,
     ));
 
-    let notification = Rc::new(NotificationPresenter::new(
-        NotificationPresenterArgs {
-            subscribe_uc: uc.subscribe_notifications.clone(),
-            get_status_uc: uc.get_notifications_status.clone(),
-            close_uc: uc.close_notification.clone(),
-            invoke_action_uc: uc.invoke_notification_action.clone(),
-        },
-        rt,
-    ));
+    let notification = Rc::new(NotificationPresenter::new(NotificationPresenterArgs {
+        subscribe_uc: uc.subscribe_notifications.clone(),
+        close_uc: uc.close_notification.clone(),
+        invoke_action_uc: uc.invoke_notification_action.clone(),
+    }));
 
-    let network = Rc::new(NetworkPresenter::new(
-        NetworkPresenterArgs {
-            subscribe_uc: uc.subscribe_network.clone(),
-            get_status_uc: uc.get_network_status.clone(),
-            connect_uc: uc.connect_to_ap.clone(),
-            disconnect_uc: uc.disconnect_wifi.clone(),
-        },
-        rt,
-    ));
+    let network = Rc::new(NetworkPresenter::new(NetworkPresenterArgs {
+        subscribe_uc: uc.subscribe_network.clone(),
+        connect_uc: uc.connect_to_ap.clone(),
+        disconnect_uc: uc.disconnect_wifi.clone(),
+        start_scan_uc: uc.scan_wifi.clone(),
+    }));
 
-    let bluetooth = Rc::new(BluetoothPresenter::new(
-        BluetoothPresenterArgs {
-            subscribe_uc: uc.subscribe_bluetooth.clone(),
-            get_status_uc: uc.get_bluetooth_status.clone(),
-            connect_uc: uc.bt_connect.clone(),
-            disconnect_uc: uc.bt_disconnect.clone(),
-            start_scan_uc: uc.bt_start_scan.clone(),
-            stop_scan_uc: uc.bt_stop_scan.clone(),
-        },
-        rt,
-    ));
+    let bluetooth = Rc::new(BluetoothPresenter::new(BluetoothPresenterArgs {
+        subscribe_uc: uc.subscribe_bluetooth.clone(),
+        connect_uc: uc.bt_connect.clone(),
+        disconnect_uc: uc.bt_disconnect.clone(),
+        start_scan_uc: uc.bt_start_scan.clone(),
+        stop_scan_uc: uc.bt_stop_scan.clone(),
+    }));
 
-    let nightlight = Rc::new(NightlightPresenter::new(
-        NightlightPresenterArgs {
-            subscribe_uc: uc.subscribe_nightlight.clone(),
-            get_status_uc: uc.get_nightlight_status.clone(),
-            set_enabled_uc: uc.nl_set_enabled.clone(),
-            set_temp_day_uc: uc.nl_set_temp_day.clone(),
-            set_temp_night_uc: uc.nl_set_temp_night.clone(),
-            set_schedule_uc: uc.nl_set_schedule.clone(),
-        },
-        rt,
-    ));
+    let nightlight = Rc::new(NightlightPresenter::new(NightlightPresenterArgs {
+        subscribe_uc: uc.subscribe_nightlight.clone(),
+        set_enabled_uc: uc.nl_set_enabled.clone(),
+        set_temp_day_uc: uc.nl_set_temp_day.clone(),
+        set_temp_night_uc: uc.nl_set_temp_night.clone(),
+        set_schedule_uc: uc.nl_set_schedule.clone(),
+    }));
 
-    let appearance = Rc::new(AppearancePresenter::new(
-        uc.subscribe_appearance.clone(),
-        uc.get_appearance_status.clone(),
-        rt,
-    ));
+    let appearance = Rc::new(AppearancePresenter::new(uc.subscribe_appearance.clone()));
 
-    let tray = Rc::new(TrayPresenter::new(
-        TrayPresenterArgs {
-            subscribe_uc: uc.subscribe_tray.clone(),
-            get_status_uc: uc.get_tray_status.clone(),
-            activate_uc: uc.tray_activate.clone(),
-            context_menu_uc: uc.tray_context_menu.clone(),
-            scroll_uc: uc.tray_scroll.clone(),
-        },
-        rt,
-    ));
+    let tray = Rc::new(TrayPresenter::new(TrayPresenterArgs {
+        subscribe_uc: uc.subscribe_tray.clone(),
+        activate_uc: uc.tray_activate.clone(),
+        context_menu_uc: uc.tray_context_menu.clone(),
+        scroll_uc: uc.tray_scroll.clone(),
+    }));
 
     let lock = Rc::new(LockPresenter::new(LockPresenterArgs {
         subscribe_uc: uc.subscribe_lock.clone(),
@@ -169,94 +183,47 @@ pub fn setup(uc: &UseCases, rt: &tokio::runtime::Runtime) -> Presenters {
         authenticate_uc: uc.authenticate.clone(),
     }));
 
-    let continuity = Rc::new(ContinuityPresenter::new(
-        uc.subscribe_continuity.clone(),
-        uc.get_continuity_status.clone(),
-        rt,
-    ));
+    let continuity = Rc::new(ContinuityPresenter::new(uc.subscribe_continuity.clone()));
 
-    let mpris = Rc::new(MprisPresenter::new(
-        MprisPresenterArgs {
-            subscribe_uc: uc.subscribe_mpris.clone(),
-            get_status_uc: uc.get_mpris_status.clone(),
-            play_pause_uc: uc.mpris_play_pause.clone(),
-            next_uc: uc.mpris_next.clone(),
-            previous_uc: uc.mpris_previous.clone(),
-        },
-        rt,
-    ));
+    let mpris = Rc::new(MprisPresenter::new(MprisPresenterArgs {
+        subscribe_uc: uc.subscribe_mpris.clone(),
+        play_pause_uc: uc.mpris_play_pause.clone(),
+        next_uc: uc.mpris_next.clone(),
+        previous_uc: uc.mpris_previous.clone(),
+    }));
 
-    let wifi_toggle = Rc::new(TogglePresenter::new(
+    let wifi_toggle = toggle_presenter!(
+        uc,
         "Wi-Fi",
         "network-wireless-signal-excellent-symbolic",
         "network-wireless-offline-symbolic",
-        {
-            let sub = uc.subscribe_network.clone();
-            move || {
-                let sub = sub.clone();
-                async move { sub.execute().await.map(|s| s.map(|st| st.is_wifi_enabled)) }
-            }
-        },
-        {
-            let toggle = uc.set_wifi.clone();
-            move |enabled| {
-                let toggle = toggle.clone();
-                tokio::spawn(async move {
-                    if let Err(e) = toggle.execute(enabled).await {
-                        log::error!("[toggle] wifi set_enabled failed: {e}");
-                    }
-                });
-            }
-        },
-    ));
+        subscribe_network,
+        set_wifi,
+        is_wifi_enabled,
+        "wifi"
+    );
 
-    let bluetooth_toggle = Rc::new(TogglePresenter::new(
+    let bluetooth_toggle = toggle_presenter!(
+        uc,
         "Bluetooth",
         "bluetooth-active-symbolic",
         "bluetooth-disabled-symbolic",
-        {
-            let sub = uc.subscribe_bluetooth.clone();
-            move || {
-                let sub = sub.clone();
-                async move { sub.execute().await.map(|s| s.map(|st| st.powered)) }
-            }
-        },
-        {
-            let toggle = uc.bt_set_powered.clone();
-            move |enabled| {
-                let toggle = toggle.clone();
-                tokio::spawn(async move {
-                    if let Err(e) = toggle.execute(enabled).await {
-                        log::error!("[toggle] bluetooth set_powered failed: {e}");
-                    }
-                });
-            }
-        },
-    ));
+        subscribe_bluetooth,
+        bt_set_powered,
+        powered,
+        "bluetooth"
+    );
 
-    let nightlight_toggle = Rc::new(TogglePresenter::new(
+    let nightlight_toggle = toggle_presenter!(
+        uc,
         "Nightlight",
         "weather-clear-night-symbolic",
         "weather-clear-night-symbolic",
-        {
-            let sub = uc.subscribe_nightlight.clone();
-            move || {
-                let sub = sub.clone();
-                async move { sub.execute().await.map(|s| s.map(|st| st.enabled)) }
-            }
-        },
-        {
-            let toggle = uc.nl_set_enabled.clone();
-            move |enabled| {
-                let toggle = toggle.clone();
-                tokio::spawn(async move {
-                    if let Err(e) = toggle.execute(enabled).await {
-                        log::error!("[toggle] nightlight set_enabled failed: {e}");
-                    }
-                });
-            }
-        },
-    ));
+        subscribe_nightlight,
+        nl_set_enabled,
+        enabled,
+        "nightlight"
+    );
 
     let dnd_status = Rc::new(Presenter::from_subscribe_use_case(uc.subscribe_dnd.clone()));
     let idle_inhibit_status = Rc::new(Presenter::from_subscribe_use_case(
@@ -266,101 +233,49 @@ pub fn setup(uc: &UseCases, rt: &tokio::runtime::Runtime) -> Presenters {
         uc.subscribe_airplane.clone(),
     ));
 
-    let dnd_toggle = Rc::new(TogglePresenter::new(
+    let dnd_toggle = toggle_presenter!(
+        uc,
         "DND",
         "preferences-system-notifications-symbolic",
         "notifications-disabled-symbolic",
-        {
-            let sub = uc.subscribe_dnd.clone();
-            move || {
-                let sub = sub.clone();
-                async move { sub.execute().await.map(|s| s.map(|st| st.enabled)) }
-            }
-        },
-        {
-            let toggle = uc.dnd_set_enabled.clone();
-            move |enabled| {
-                let toggle = toggle.clone();
-                tokio::spawn(async move {
-                    if let Err(e) = toggle.execute(enabled).await {
-                        log::error!("[toggle] dnd set_enabled failed: {e}");
-                    }
-                });
-            }
-        },
-    ));
+        subscribe_dnd,
+        dnd_set_enabled,
+        enabled,
+        "dnd"
+    );
 
-    let airplane_toggle = Rc::new(TogglePresenter::new(
+    let airplane_toggle = toggle_presenter!(
+        uc,
         "Airplane",
         "airplane-mode-symbolic",
         "airplane-mode-symbolic",
-        {
-            let sub = uc.subscribe_airplane.clone();
-            move || {
-                let sub = sub.clone();
-                async move { sub.execute().await.map(|s| s.map(|st| st.enabled)) }
-            }
-        },
-        {
-            let toggle = uc.ap_set_enabled.clone();
-            move |enabled| {
-                let toggle = toggle.clone();
-                tokio::spawn(async move {
-                    if let Err(e) = toggle.execute(enabled).await {
-                        log::error!("[toggle] airplane set_enabled failed: {e}");
-                    }
-                });
-            }
-        },
-    ));
+        subscribe_airplane,
+        ap_set_enabled,
+        enabled,
+        "airplane"
+    );
 
-    let continuity_toggle = Rc::new(TogglePresenter::new(
+    let continuity_toggle = toggle_presenter!(
+        uc,
         "Continuity",
         "input-mouse-symbolic",
         "input-mouse-symbolic",
-        {
-            let sub = uc.subscribe_continuity.clone();
-            move || {
-                let sub = sub.clone();
-                async move { sub.execute().await.map(|s| s.map(|st| st.enabled)) }
-            }
-        },
-        {
-            let toggle = uc.continuity_set_enabled.clone();
-            move |enabled| {
-                let toggle = toggle.clone();
-                tokio::spawn(async move {
-                    if let Err(e) = toggle.execute(enabled).await {
-                        log::error!("[toggle] continuity set_enabled failed: {e}");
-                    }
-                });
-            }
-        },
-    ));
+        subscribe_continuity,
+        continuity_set_enabled,
+        enabled,
+        "continuity"
+    );
 
-    let idle_inhibit_toggle = Rc::new(TogglePresenter::new(
+    let idle_inhibit_toggle = toggle_presenter!(
+        uc,
         "Idle Inhibit",
         "changes-prevent-symbolic",
         "changes-allow-symbolic",
-        {
-            let sub = uc.subscribe_idle_inhibit.clone();
-            move || {
-                let sub = sub.clone();
-                async move { sub.execute().await.map(|s| s.map(|st| st.inhibited)) }
-            }
-        },
-        {
-            let toggle = uc.idle_inhibit_set.clone();
-            move |inhibited| {
-                let toggle = toggle.clone();
-                tokio::spawn(async move {
-                    if let Err(e) = toggle.execute(inhibited).await {
-                        log::error!("[toggle] idle inhibit set failed: {e}");
-                    }
-                });
-            }
-        },
-    ));
+        subscribe_idle_inhibit,
+        idle_inhibit_set,
+        inhibited,
+        "idle inhibit"
+    );
 
     Presenters {
         battery,

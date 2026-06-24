@@ -251,3 +251,66 @@ impl AirplaneProvider for ConfigAirplaneProvider {
             .map_err(|e| AirplaneError::ProviderError(e.to_string()))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn device_map(entries: Vec<(u32, (u8, u8, u8))>) -> DeviceMap {
+        DeviceMap {
+            devices: entries.into_iter().collect(),
+        }
+    }
+
+    #[test]
+    fn is_wireless_wlan() {
+        assert!(is_wireless(RFKILL_TYPE_WLAN));
+    }
+
+    #[test]
+    fn is_wireless_bluetooth() {
+        assert!(is_wireless(RFKILL_TYPE_BLUETOOTH));
+    }
+
+    #[test]
+    fn is_wireless_wwan() {
+        assert!(is_wireless(RFKILL_TYPE_WWAN));
+    }
+
+    #[test]
+    fn is_wireless_other_type() {
+        assert!(!is_wireless(0));
+        assert!(!is_wireless(3));
+        assert!(!is_wireless(99));
+    }
+
+    #[test]
+    fn compute_airplane_no_devices() {
+        let map = device_map(vec![]);
+        assert!(!compute_airplane(&map));
+    }
+
+    #[test]
+    fn compute_airplane_all_blocked() {
+        let map = device_map(vec![
+            (1, (RFKILL_TYPE_WLAN, 1, 0)),
+            (2, (RFKILL_TYPE_WWAN, 1, 0)),
+        ]);
+        assert!(compute_airplane(&map));
+    }
+
+    #[test]
+    fn compute_airplane_one_unblocked() {
+        let map = device_map(vec![
+            (1, (RFKILL_TYPE_WLAN, 1, 0)),
+            (2, (RFKILL_TYPE_WWAN, 0, 0)),
+        ]);
+        assert!(!compute_airplane(&map));
+    }
+
+    #[test]
+    fn compute_airplane_ignores_bluetooth() {
+        let map = device_map(vec![(1, (RFKILL_TYPE_BLUETOOTH, 0, 0))]);
+        assert!(!compute_airplane(&map));
+    }
+}

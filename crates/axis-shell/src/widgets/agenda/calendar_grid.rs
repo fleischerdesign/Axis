@@ -260,14 +260,14 @@ fn days_in_month(year: i32, month: u32) -> u32 {
 }
 
 fn events_for_day(y: i32, m: u32, d: u32, events: &[CalendarEvent]) -> Vec<&CalendarEvent> {
-    let day_start = NaiveDate::from_ymd_opt(y, m, d)
-        .unwrap()
-        .and_hms_opt(0, 0, 0)
-        .unwrap();
-    let day_end = NaiveDate::from_ymd_opt(y, m, d)
-        .unwrap()
-        .and_hms_opt(23, 59, 59)
-        .unwrap();
+    let Some(day_start) = NaiveDate::from_ymd_opt(y, m, d).and_then(|dt| dt.and_hms_opt(0, 0, 0))
+    else {
+        return vec![];
+    };
+    let Some(day_end) = NaiveDate::from_ymd_opt(y, m, d).and_then(|dt| dt.and_hms_opt(23, 59, 59))
+    else {
+        return vec![];
+    };
     events
         .iter()
         .filter(|e| e.start <= day_end && e.end >= day_start)

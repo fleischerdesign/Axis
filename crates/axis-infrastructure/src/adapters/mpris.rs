@@ -635,3 +635,70 @@ impl MprisProvider for MprisDBusProvider {
             .map_err(|e| MprisError::ProviderError(e.to_string()))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn metadata_entry(k: &str, v: Value<'static>) -> HashMap<String, Value<'static>> {
+        let mut m = HashMap::new();
+        m.insert(k.to_string(), v);
+        m
+    }
+
+    #[test]
+    fn extract_metadata_basic_fields() {
+        let mut m = HashMap::new();
+        let artists: Value = vec!["Artist"].into();
+        m.insert("xesam:title".into(), Value::Str("My Song".into()));
+        m.insert("xesam:artist".into(), artists);
+        m.insert("xesam:album".into(), Value::Str("Album".into()));
+        let (title, artist, album, art_url, length) = extract_metadata(&m);
+        assert_eq!(title, "My Song");
+        assert_eq!(artist, "Artist");
+        assert_eq!(album, "Album");
+        assert!(art_url.is_none());
+        assert_eq!(length, 0);
+    }
+
+    #[test]
+    fn extract_metadata_artist_array() {
+        let mut m = HashMap::new();
+        let artists: Value = vec!["First Artist", "Second"].into();
+        m.insert("xesam:artist".into(), artists);
+        let (_, artist, _, _, _) = extract_metadata(&m);
+        assert_eq!(artist, "First Artist");
+    }
+
+    #[test]
+    fn extract_metadata_length_i64() {
+        let m = metadata_entry("mpris:length", Value::I64(5000000));
+        let (_, _, _, _, length) = extract_metadata(&m);
+        assert_eq!(length, 5000000);
+    }
+
+    #[test]
+    fn extract_metadata_length_u64() {
+        let m = metadata_entry("mpris:length", Value::U64(3000000));
+        let (_, _, _, _, length) = extract_metadata(&m);
+        assert_eq!(length, 3000000);
+    }
+
+    #[test]
+    fn extract_metadata_art_url() {
+        let m = metadata_entry("mpris:artUrl", Value::Str("file://cover.jpg".into()));
+        let (_, _, _, art_url, _) = extract_metadata(&m);
+        assert_eq!(art_url, Some("file://cover.jpg".into()));
+    }
+
+    #[test]
+    fn extract_metadata_empty_map() {
+        let m: HashMap<String, Value<'static>> = HashMap::new();
+        let (title, artist, album, art_url, length) = extract_metadata(&m);
+        assert!(title.is_empty());
+        assert!(artist.is_empty());
+        assert!(album.is_empty());
+        assert!(art_url.is_none());
+        assert_eq!(length, 0);
+    }
+}

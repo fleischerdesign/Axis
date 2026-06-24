@@ -5,7 +5,7 @@ use axis_domain::models::network::{AccessPoint, NetworkStatus};
 use axis_presentation::View;
 use gtk4::prelude::*;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 struct RowEntry {
@@ -114,10 +114,10 @@ impl View<NetworkStatus> for WifiPageView {
 
         let mut rows = self.rows.borrow_mut();
 
-        let ids: Vec<&str> = status
+        let ids: HashSet<String> = status
             .access_points
             .iter()
-            .map(|ap| ap.id.as_str())
+            .map(|ap| ap.id.clone())
             .collect();
         crate::utils::reconcile::reconcile(&mut rows, &ids, |_, entry| {
             self.list.remove(&entry.list_box_row);
@@ -238,5 +238,77 @@ impl View<NetworkStatus> for WifiPageView {
             );
             self.list.append(&rows[&ap.id].list_box_row);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ap(strength: u8, is_active: bool, needs_auth: bool) -> AccessPoint {
+        AccessPoint {
+            id: "test".into(),
+            ssid: "TestNet".into(),
+            strength,
+            is_active,
+            needs_auth,
+        }
+    }
+
+    #[test]
+    fn wifi_signal_excellent() {
+        assert!(wifi_signal_icon(76).contains("excellent"));
+        assert!(wifi_signal_icon(100).contains("excellent"));
+    }
+
+    #[test]
+    fn wifi_signal_good() {
+        assert!(wifi_signal_icon(51).contains("good"));
+        assert!(wifi_signal_icon(75).contains("good"));
+    }
+
+    #[test]
+    fn wifi_signal_ok() {
+        assert!(wifi_signal_icon(26).contains("ok"));
+        assert!(wifi_signal_icon(50).contains("ok"));
+    }
+
+    #[test]
+    fn wifi_signal_weak() {
+        assert!(wifi_signal_icon(0).contains("weak"));
+        assert!(wifi_signal_icon(25).contains("weak"));
+    }
+
+    #[test]
+    fn ap_icon_active() {
+        assert!(ap_icon(&ap(80, true, false)).contains("connected"));
+    }
+
+    #[test]
+    fn ap_icon_secured() {
+        assert!(ap_icon(&ap(40, false, true)).contains("encrypted"));
+    }
+
+    #[test]
+    fn ap_icon_signal_based() {
+        assert!(ap_icon(&ap(80, false, false)).contains("excellent"));
+    }
+
+    #[test]
+    fn ap_subtitle_connected() {
+        let s = ap_subtitle(&ap(80, true, false));
+        assert!(s.unwrap().contains("Connected"));
+    }
+
+    #[test]
+    fn ap_subtitle_secured() {
+        let s = ap_subtitle(&ap(40, false, true));
+        assert!(s.unwrap().contains("Secured"));
+    }
+
+    #[test]
+    fn ap_subtitle_none() {
+        let s = ap_subtitle(&ap(0, false, false));
+        assert!(s.is_none());
     }
 }

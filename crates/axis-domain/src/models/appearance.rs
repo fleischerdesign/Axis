@@ -61,3 +61,63 @@ pub enum ColorScheme {
     Light,
     System,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hex_value_blue() {
+        assert_eq!(AccentColor::Blue.hex_value(), "#3584e4");
+    }
+
+    #[test]
+    fn hex_value_custom() {
+        assert_eq!(AccentColor::Custom("#123abc".into()).hex_value(), "#123abc");
+    }
+
+    #[test]
+    fn is_valid_hex_6_digit() {
+        assert!(AccentColor::is_valid_hex("#123abc"));
+        assert!(AccentColor::is_valid_hex("#ABCDEF"));
+    }
+
+    #[test]
+    fn is_valid_hex_3_digit() {
+        assert!(AccentColor::is_valid_hex("#fff"));
+        assert!(AccentColor::is_valid_hex("#1a3"));
+    }
+
+    #[test]
+    fn is_valid_hex_invalid() {
+        assert!(!AccentColor::is_valid_hex("123abc"));
+        assert!(!AccentColor::is_valid_hex("#12345"));
+        assert!(!AccentColor::is_valid_hex("#12345g"));
+        assert!(!AccentColor::is_valid_hex(""));
+    }
+
+    #[test]
+    fn all_presets_count() {
+        assert_eq!(AccentColor::all_presets().len(), 9);
+    }
+
+    #[test]
+    fn color_scheme_default_is_dark() {
+        assert_eq!(ColorScheme::default(), ColorScheme::Dark);
+    }
+
+    #[test]
+    fn accent_color_serde_roundtrip() {
+        let colors = vec![
+            AccentColor::Blue,
+            AccentColor::Teal,
+            AccentColor::Custom("#ff8800".into()),
+            AccentColor::Auto,
+        ];
+        for c in colors {
+            let json = serde_json::to_string(&c).unwrap();
+            let back: AccentColor = serde_json::from_str(&json).unwrap();
+            assert_eq!(c, back);
+        }
+    }
+}

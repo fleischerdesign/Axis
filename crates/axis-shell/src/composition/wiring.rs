@@ -7,7 +7,6 @@ use crate::services::wallpaper_service::WallpaperService;
 use crate::widgets::agenda::AgendaPopup;
 use crate::widgets::bar_window::BarWindow;
 use crate::widgets::components::power_actions::PowerActionStack;
-use crate::widgets::continuity_capture::ContinuityCaptureController;
 use crate::widgets::launcher_popup::LauncherPopup;
 use crate::widgets::lock_screen::LockScreenFactory;
 use crate::widgets::mpris_popup::MprisPopup;
@@ -16,6 +15,7 @@ use crate::widgets::notification_toast::NotificationToastManager;
 use crate::widgets::osd::OsdManager;
 use crate::widgets::quick_settings::QuickSettingsPopup;
 use axis_application::use_cases::layout::set_border::SetBorderColorUseCase;
+use axis_application::use_cases::popups::TogglePopupUseCase;
 use axis_domain::models::appearance::AccentColor;
 use axis_domain::models::dnd::DndStatus;
 use axis_domain::models::popups::PopupType;
@@ -65,6 +65,51 @@ pub fn wire(args: WiringArgs) {
     let niri_layout = NiriLayoutProvider::new(config_dir);
     let set_border_color = Arc::new(SetBorderColorUseCase::new(niri_layout.clone()));
 
+    wire_appearance(pres, set_border_color, &theme_svc, &wallpaper_svc);
+
+    spawn_run_sync(pres);
+
+    let lock_factory = LockScreenFactory::new();
+    wire_lock_screen(
+        pres,
+        lock_factory,
+        &wallpaper_svc,
+        lock_gtk_handle,
+        start_locked,
+    );
+
+    let bar_window = wire_bar(app, pres, uc);
+
+    let qs_popup = wire_quick_settings(app, pres, uc);
+    wire_notifications(app, pres, uc, &qs_popup);
+    wire_osd(app, pres);
+
+    let launcher_popup = wire_launcher(app, pres, &qs_popup);
+    let agenda_popup = wire_agenda(app, pres, uc);
+    let mpris_popup = wire_mpris(app, pres, p);
+
+    let pp = pres.popup.clone();
+    pp.add_popup(Box::new(qs_popup));
+    pp.add_popup(Box::new(launcher_popup));
+    pp.add_popup(Box::new(agenda_popup));
+    pp.add_popup(Box::new(mpris_popup));
+
+    let pp_sync = pp.clone();
+    glib::spawn_future_local(async move {
+        pp_sync.run_sync().await;
+    });
+
+    wire_auto_hide(pres, uc, &bar_window);
+    bar_window.present();
+    wire_dbus_host(pres, uc, p, rt);
+}
+
+fn wire_appearance(
+    pres: &Presenters,
+    set_border_color: Arc<SetBorderColorUseCase>,
+    theme_svc: &Rc<ThemeService>,
+    wallpaper_svc: &Rc<WallpaperService>,
+) {
     let border_auto = set_border_color.clone();
     theme_svc.on_color_extracted(move |hex| {
         let uc = border_auto.clone();
@@ -75,7 +120,7 @@ pub fn wire(args: WiringArgs) {
         });
     });
 
-    pres.appearance.add_view(Box::new(theme_svc));
+    pres.appearance.add_view(Box::new(theme_svc.clone()));
     pres.appearance.add_view(Box::new(wallpaper_svc.clone()));
 
     let border_manual = set_border_color.clone();
@@ -105,12 +150,15 @@ pub fn wire(args: WiringArgs) {
     glib::spawn_future_local(async move {
         app_sync.run_sync().await;
     });
+}
 
-    // Spawn run_sync for all presenters that need it
-    spawn_run_sync(pres);
-
-    let lock_factory = LockScreenFactory::new();
-
+fn wire_lock_screen(
+    pres: &Presenters,
+    lock_factory: Rc<LockScreenFactory>,
+    wallpaper_svc: &Rc<WallpaperService>,
+    lock_gtk_handle: LockGtkHandle,
+    start_locked: bool,
+) {
     let lf_texture = lock_factory.clone();
     wallpaper_svc.on_texture_change(Rc::new(move |texture| {
         lf_texture.set_wallpaper(texture);
@@ -135,12 +183,19 @@ pub fn wire(args: WiringArgs) {
     pres.lock.add_view(Box::new(lock_factory.clone()));
     pres.battery.add_view(Box::new(lock_factory.clone()));
 
-    let capture_controller = ContinuityCaptureController::new(app, p.continuity_sharing.clone());
-    pres.continuity.add_view(Box::new(capture_controller));
-
     let lf = lock_factory.clone();
     lock_gtk_handle.set_content_factory(Box::new(move || lf.build_overlay()));
 
+    if start_locked {
+        log::info!("--locked flag detected, locking session");
+        let lp = pres.lock.clone();
+        glib::idle_add_local_once(move || {
+            lp.lock();
+        });
+    }
+}
+
+fn wire_bar(app: &libadwaita::Application, pres: &Presenters, uc: &UseCases) -> BarWindow {
     let show_labels = uc
         .get_config
         .execute()
@@ -149,8 +204,14 @@ pub fn wire(args: WiringArgs) {
 
     let bar_window = BarWindow::new(app);
     bar_window.setup_content(pres, show_labels);
+    bar_window
+}
 
-    // Quick Settings popup
+fn wire_quick_settings(
+    app: &libadwaita::Application,
+    pres: &Presenters,
+    uc: &UseCases,
+) -> QuickSettingsPopup {
     let qs_popup = QuickSettingsPopup::new(app);
     qs_popup.setup_audio(pres.audio.clone());
     qs_popup.setup_brightness(pres.brightness.clone());
@@ -175,8 +236,15 @@ pub fn wire(args: WiringArgs) {
     qs_popup.setup_bluetooth_sub_page(pres.bluetooth.clone());
     qs_popup.setup_audio_sub_page(pres.audio.clone());
     qs_popup.setup_nightlight_sub_page(pres.nightlight.clone());
+    qs_popup
+}
 
-    // Notifications — toast and archive
+fn wire_notifications(
+    app: &libadwaita::Application,
+    pres: &Presenters,
+    uc: &UseCases,
+    qs_popup: &QuickSettingsPopup,
+) {
     let np = pres.notification.clone();
     let on_close: Rc<dyn Fn(u32)> = Rc::new(move |id| {
         np.close_notification(id);
@@ -213,13 +281,19 @@ pub fn wire(args: WiringArgs) {
     pres.notification.add_view(Box::new(archive));
 
     qs_popup.set_notification_presenter(pres.notification.clone());
+}
 
-    // OSD
+fn wire_osd(app: &libadwaita::Application, pres: &Presenters) {
     let osd = Rc::new(OsdManager::new(app));
     pres.audio.add_view(Box::new(osd.clone()));
     pres.brightness.add_view(Box::new(osd.clone()));
+}
 
-    // Launcher popup
+fn wire_launcher(
+    app: &libadwaita::Application,
+    pres: &Presenters,
+    qs_popup: &QuickSettingsPopup,
+) -> LauncherPopup {
     let launcher_popup = LauncherPopup::new(app);
     let lp = pres.launcher.clone();
     lp.add_view(Box::new(launcher_popup.clone()));
@@ -244,38 +318,26 @@ pub fn wire(args: WiringArgs) {
         lp_act.activate(idx);
     }));
 
-    let tp_close = pres.toggle_popup.clone();
-    lp.on_close(Box::new(move || {
-        let tp = tp_close.clone();
-        tokio::spawn(async move {
-            if let Err(e) = tp.execute(PopupType::Launcher).await {
-                log::error!("[popup] launcher close failed: {e}");
-            }
-        });
-    }));
+    lp.on_close(make_popup_toggle(
+        pres.toggle_popup.clone(),
+        PopupType::Launcher,
+        "launcher close",
+    ));
+    launcher_popup.on_escape(make_popup_toggle(
+        pres.toggle_popup.clone(),
+        PopupType::Launcher,
+        "launcher escape",
+    ));
+    qs_popup.on_escape(make_popup_toggle(
+        pres.toggle_popup.clone(),
+        PopupType::QuickSettings,
+        "QS escape",
+    ));
 
-    let tp_esc = pres.toggle_popup.clone();
-    launcher_popup.on_escape(Box::new(move || {
-        let tp = tp_esc.clone();
-        tokio::spawn(async move {
-            if let Err(e) = tp.execute(PopupType::Launcher).await {
-                log::error!("[popup] launcher escape failed: {e}");
-            }
-        });
-    }));
+    launcher_popup
+}
 
-    // QS escape
-    let tp_esc_qs = pres.toggle_popup.clone();
-    qs_popup.on_escape(Box::new(move || {
-        let tp = tp_esc_qs.clone();
-        tokio::spawn(async move {
-            if let Err(e) = tp.execute(PopupType::QuickSettings).await {
-                log::error!("[popup] QS escape failed: {e}");
-            }
-        });
-    }));
-
-    // Agenda popup
+fn wire_agenda(app: &libadwaita::Application, pres: &Presenters, uc: &UseCases) -> AgendaPopup {
     let agenda_popup = AgendaPopup::new(app);
     let ap = pres.agenda.clone();
     let agenda_popup_c = agenda_popup.clone();
@@ -291,12 +353,10 @@ pub fn wire(args: WiringArgs) {
         ap_sync.run_sync(subscribe_popups).await;
     });
 
-    let pp = pres.popup.clone();
-    pp.add_popup(Box::new(qs_popup));
-    pp.add_popup(Box::new(launcher_popup));
-    pp.add_popup(Box::new(agenda_popup));
+    agenda_popup
+}
 
-    // MPRIS popup
+fn wire_mpris(app: &libadwaita::Application, pres: &Presenters, p: &Providers) -> MprisPopup {
     let mpris_popup = MprisPopup::new(app);
     pres.mpris.add_view(Box::new(mpris_popup.clone()));
 
@@ -321,15 +381,11 @@ pub fn wire(args: WiringArgs) {
         }
     }));
 
-    let tp_esc_mpris = pres.toggle_popup.clone();
-    mpris_popup.on_escape(Box::new(move || {
-        let tp = tp_esc_mpris.clone();
-        tokio::spawn(async move {
-            if let Err(e) = tp.execute(PopupType::Mpris).await {
-                log::error!("[popup] MPRIS escape failed: {e}");
-            }
-        });
-    }));
+    mpris_popup.on_escape(make_popup_toggle(
+        pres.toggle_popup.clone(),
+        PopupType::Mpris,
+        "MPRIS escape",
+    ));
 
     if let Some(ref dbus) = p.mpris_dbus {
         let dbus_clone = dbus.clone();
@@ -352,29 +408,23 @@ pub fn wire(args: WiringArgs) {
         });
     }
 
-    pp.add_popup(Box::new(mpris_popup));
+    mpris_popup
+}
 
-    // Popup presenter sync
-    let pp_sync = pp.clone();
-    glib::spawn_future_local(async move {
-        pp_sync.run_sync().await;
-    });
-
-    // Auto-hide wiring
+fn wire_auto_hide(pres: &Presenters, uc: &UseCases, bar_window: &BarWindow) {
     let ahp = pres.auto_hide.clone();
     let bar_win = bar_window.clone();
-    let subscribe_popups2 = uc.subscribe_popups.clone();
+    let subscribe_popups = uc.subscribe_popups.clone();
     glib::spawn_future_local(async move {
-        if let Ok(mut stream) = subscribe_popups2.execute().await {
+        if let Ok(mut stream) = subscribe_popups.execute().await {
             while let Some(status) = futures_util::StreamExt::next(&mut stream).await {
                 ahp.set_force_visible(&bar_win, status.active_popup.is_some());
             }
         }
     });
+}
 
-    bar_window.present();
-
-    // D-Bus host
+fn wire_dbus_host(pres: &Presenters, uc: &UseCases, p: &Providers, rt: &tokio::runtime::Runtime) {
     let dbus_tp = pres.toggle_popup.clone();
     let dbus_lock_uc = uc.lock_session.clone();
     let cont_cmd_tx = p.continuity_service.cmd_tx();
@@ -408,63 +458,44 @@ pub fn wire(args: WiringArgs) {
         )
         .await;
     });
-
-    // Start-locked
-    if start_locked {
-        log::info!("--locked flag detected, locking session");
-        let lp = pres.lock.clone();
-        glib::idle_add_local_once(move || {
-            lp.lock();
-        });
-    }
 }
 
 fn spawn_run_sync(pres: &Presenters) {
-    let p = pres.clock.clone();
-    glib::spawn_future_local(async move { p.run_sync().await });
+    macro_rules! spawn {
+        ($field:ident) => {
+            let p = pres.$field.clone();
+            glib::spawn_future_local(async move { p.run_sync().await });
+        };
+    }
+    spawn!(clock);
+    spawn!(workspace);
+    spawn!(audio);
+    spawn!(brightness);
+    spawn!(battery);
+    spawn!(network);
+    spawn!(bluetooth);
+    spawn!(nightlight);
+    spawn!(tray);
+    spawn!(lock);
+    spawn!(continuity);
+    spawn!(mpris);
+    spawn!(dnd_status);
+    spawn!(airplane_status);
+    spawn!(idle_inhibit_status);
+    spawn!(notification);
+}
 
-    let p = pres.workspace.clone();
-    glib::spawn_future_local(async move { p.run_sync().await });
-
-    let p = pres.audio.clone();
-    glib::spawn_future_local(async move { p.run_sync().await });
-
-    let p = pres.brightness.clone();
-    glib::spawn_future_local(async move { p.run_sync().await });
-
-    let p = pres.battery.clone();
-    glib::spawn_future_local(async move { p.run_sync().await });
-
-    let p = pres.network.clone();
-    glib::spawn_future_local(async move { p.run_sync().await });
-
-    let p = pres.bluetooth.clone();
-    glib::spawn_future_local(async move { p.run_sync().await });
-
-    let p = pres.nightlight.clone();
-    glib::spawn_future_local(async move { p.run_sync().await });
-
-    let p = pres.tray.clone();
-    glib::spawn_future_local(async move { p.run_sync().await });
-
-    let p = pres.lock.clone();
-    glib::spawn_future_local(async move { p.run_sync().await });
-
-    let p = pres.continuity.clone();
-    glib::spawn_future_local(async move { p.run_sync().await });
-
-    let p = pres.mpris.clone();
-    glib::spawn_future_local(async move { p.run_sync().await });
-
-    let p = pres.dnd_status.clone();
-    glib::spawn_future_local(async move { p.run_sync().await });
-
-    let p = pres.airplane_status.clone();
-    glib::spawn_future_local(async move { p.run_sync().await });
-
-    let p = pres.idle_inhibit_status.clone();
-    glib::spawn_future_local(async move { p.run_sync().await });
-
-    let p = pres.notification.clone();
-    glib::spawn_future_local(async move { p.run_sync().await });
+fn make_popup_toggle(
+    tp: Arc<TogglePopupUseCase>,
+    pt: PopupType,
+    label: &'static str,
+) -> Box<dyn Fn() + 'static> {
+    Box::new(move || {
+        let tp = tp.clone();
+        tokio::spawn(async move {
+            if let Err(e) = tp.execute(pt).await {
+                log::error!("[popup] {label} failed: {e}");
+            }
+        });
+    })
 }

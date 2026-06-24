@@ -1,4 +1,4 @@
-use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
+use axis_application::use_cases::generic::SubscribeUseCase;
 use axis_application::use_cases::tray::activate::ActivateTrayItemUseCase;
 use axis_application::use_cases::tray::context_menu::ContextMenuTrayItemUseCase;
 use axis_application::use_cases::tray::scroll::ScrollTrayItemUseCase;
@@ -34,34 +34,21 @@ pub struct TrayPresenter {
 
 pub struct TrayPresenterArgs {
     pub subscribe_uc: Arc<SubscribeUseCase<dyn TrayProvider, TrayStatus>>,
-    pub get_status_uc: Arc<GetStatusUseCase<dyn TrayProvider, TrayStatus>>,
     pub activate_uc: Arc<ActivateTrayItemUseCase>,
     pub context_menu_uc: Arc<ContextMenuTrayItemUseCase>,
     pub scroll_uc: Arc<ScrollTrayItemUseCase>,
 }
 
 impl TrayPresenter {
-    pub fn new(args: TrayPresenterArgs, rt: &tokio::runtime::Runtime) -> Self {
+    pub fn new(args: TrayPresenterArgs) -> Self {
         let TrayPresenterArgs {
             subscribe_uc,
-            get_status_uc,
             activate_uc,
             context_menu_uc,
             scroll_uc,
         } = args;
 
-        let initial_status = rt.block_on(async {
-            match get_status_uc.execute().await {
-                Ok(s) => s,
-                Err(e) => {
-                    log::error!("[tray] Failed to get initial status: {e}");
-                    Default::default()
-                }
-            }
-        });
-
-        let inner = Presenter::from_subscribe_use_case(subscribe_uc.clone())
-            .with_initial_status(initial_status);
+        let inner = Presenter::from_subscribe_use_case(subscribe_uc);
 
         Self {
             inner,

@@ -37,3 +37,51 @@ impl MprisStatus {
             .and_then(|id| self.players.iter().find(|p| &p.id == id))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn active_player_returns_matching_player() {
+        let status = MprisStatus {
+            players: vec![MprisPlayer {
+                id: "spotify".into(),
+                playback: PlaybackState::Playing,
+                ..Default::default()
+            }],
+            active_player_id: Some("spotify".into()),
+        };
+        let p = status.active_player();
+        assert!(p.is_some());
+        assert_eq!(p.unwrap().id, "spotify");
+    }
+
+    #[test]
+    fn active_player_returns_none_when_no_match() {
+        let status = MprisStatus {
+            players: vec![],
+            active_player_id: Some("missing".into()),
+        };
+        assert!(status.active_player().is_none());
+    }
+
+    #[test]
+    fn playback_state_default_is_stopped() {
+        assert_eq!(PlaybackState::default(), PlaybackState::Stopped);
+    }
+
+    #[test]
+    fn playback_state_serde_roundtrip() {
+        let states = vec![
+            PlaybackState::Stopped,
+            PlaybackState::Playing,
+            PlaybackState::Paused,
+        ];
+        for s in states {
+            let json = serde_json::to_string(&s).unwrap();
+            let back: PlaybackState = serde_json::from_str(&json).unwrap();
+            assert_eq!(s, back);
+        }
+    }
+}

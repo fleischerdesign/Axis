@@ -44,7 +44,7 @@ fn main() -> glib::ExitCode {
 
     let (prov, lock_gtk_handle) = composition::providers::setup(&cli, &rt);
     let uc = composition::use_cases::setup(&prov);
-    let pres = composition::presenters::setup(&uc, &rt);
+    let pres = composition::presenters::setup(&uc);
 
     composition::notifications::setup(&prov, &uc, &rt);
 

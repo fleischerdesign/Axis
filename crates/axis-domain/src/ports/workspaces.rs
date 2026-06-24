@@ -13,6 +13,7 @@ pub enum WorkspaceError {
 
 pub type WorkspaceStream = StatusStream<WorkspaceStatus>;
 
+/// Provides Niri workspace state and allows workspace focus/overview toggling.
 #[async_trait]
 pub trait WorkspaceProvider: Send + Sync {
     async fn get_status(&self) -> Result<WorkspaceStatus, WorkspaceError>;
