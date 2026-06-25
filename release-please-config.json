@@ -1,10 +1,13 @@
 {
   "packages": {
     ".": {
-      "release-type": "rust",
+      "release-type": "simple",
       "changelog-path": "CHANGELOG.md",
       "bump-minor-pre-major": true,
-      "bump-patch-pre-major": true
+      "bump-patch-pre-major": true,
+      "extra-files": [
+        "Cargo.toml"
+      ]
     }
   },
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json"
