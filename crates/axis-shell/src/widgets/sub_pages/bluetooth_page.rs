@@ -5,7 +5,7 @@ use axis_domain::models::bluetooth::BluetoothStatus;
 use axis_presentation::View;
 use gtk4::prelude::*;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 struct DeviceEntry {
@@ -69,7 +69,7 @@ impl View<BluetoothStatus> for BluetoothPageView {
     fn render(&self, status: &BluetoothStatus) {
         let mut rows = self.rows.borrow_mut();
 
-        let ids: Vec<&str> = status.devices.iter().map(|d| d.id.as_str()).collect();
+        let ids: HashSet<String> = status.devices.iter().map(|d| d.id.clone()).collect();
         crate::utils::reconcile::reconcile(&mut rows, &ids, |_, entry| {
             self.list.remove(&entry.list_box_row);
         });

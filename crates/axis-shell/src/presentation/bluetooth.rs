@@ -2,7 +2,7 @@ use axis_application::use_cases::bluetooth::connect::ConnectBluetoothDeviceUseCa
 use axis_application::use_cases::bluetooth::disconnect::DisconnectBluetoothDeviceUseCase;
 use axis_application::use_cases::bluetooth::start_scan::StartBluetoothScanUseCase;
 use axis_application::use_cases::bluetooth::stop_scan::StopBluetoothScanUseCase;
-use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
+use axis_application::use_cases::generic::SubscribeUseCase;
 use axis_domain::models::bluetooth::BluetoothStatus;
 use axis_domain::ports::bluetooth::BluetoothProvider;
 use axis_presentation::{Presenter, View};
@@ -18,7 +18,6 @@ pub struct BluetoothPresenter {
 
 pub struct BluetoothPresenterArgs {
     pub subscribe_uc: Arc<SubscribeUseCase<dyn BluetoothProvider, BluetoothStatus>>,
-    pub get_status_uc: Arc<GetStatusUseCase<dyn BluetoothProvider, BluetoothStatus>>,
     pub connect_uc: Arc<ConnectBluetoothDeviceUseCase>,
     pub disconnect_uc: Arc<DisconnectBluetoothDeviceUseCase>,
     pub start_scan_uc: Arc<StartBluetoothScanUseCase>,
@@ -26,28 +25,16 @@ pub struct BluetoothPresenterArgs {
 }
 
 impl BluetoothPresenter {
-    pub fn new(args: BluetoothPresenterArgs, rt: &tokio::runtime::Runtime) -> Self {
+    pub fn new(args: BluetoothPresenterArgs) -> Self {
         let BluetoothPresenterArgs {
             subscribe_uc,
-            get_status_uc,
             connect_uc,
             disconnect_uc,
             start_scan_uc,
             stop_scan_uc,
         } = args;
 
-        let initial_status = rt.block_on(async {
-            match get_status_uc.execute().await {
-                Ok(s) => s,
-                Err(e) => {
-                    log::error!("[bluetooth] Failed to get initial status: {e}");
-                    Default::default()
-                }
-            }
-        });
-
-        let inner = Presenter::from_subscribe_use_case(subscribe_uc.clone())
-            .with_initial_status(initial_status);
+        let inner = Presenter::from_subscribe_use_case(subscribe_uc);
 
         Self {
             inner,

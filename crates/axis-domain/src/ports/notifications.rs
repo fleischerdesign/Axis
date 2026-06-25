@@ -17,6 +17,7 @@ pub enum NotificationError {
 
 pub type NotificationStream = StatusStream<NotificationStatus>;
 
+/// Provides desktop notification state and allows closing/activating notifications.
 #[async_trait]
 pub trait NotificationProvider: Send + Sync {
     async fn get_status(&self) -> Result<NotificationStatus, NotificationError>;

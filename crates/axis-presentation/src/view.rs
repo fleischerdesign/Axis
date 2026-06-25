@@ -1,6 +1,11 @@
 use std::rc::Rc;
 use std::sync::Arc;
 
+/// A widget or component that can render itself from a status snapshot.
+///
+/// Called by `Presenter` whenever the status changes. The entire status is
+/// passed each time; views should update their widgets unconditionally.
+/// GTK4 widgets are efficient enough that fine-grained diffing is unnecessary.
 pub trait View<S> {
     fn render(&self, status: &S);
 }

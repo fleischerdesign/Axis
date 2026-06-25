@@ -1,4 +1,4 @@
-use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
+use axis_application::use_cases::generic::SubscribeUseCase;
 use axis_domain::models::continuity::ContinuityStatus;
 use axis_domain::ports::continuity::ContinuityProvider;
 use axis_presentation::{Presenter, View};
@@ -11,21 +11,8 @@ pub struct ContinuityPresenter {
 impl ContinuityPresenter {
     pub fn new(
         subscribe_use_case: Arc<SubscribeUseCase<dyn ContinuityProvider, ContinuityStatus>>,
-        get_status_use_case: Arc<GetStatusUseCase<dyn ContinuityProvider, ContinuityStatus>>,
-        rt: &tokio::runtime::Runtime,
     ) -> Self {
-        let initial_status = rt.block_on(async {
-            match get_status_use_case.execute().await {
-                Ok(s) => s,
-                Err(e) => {
-                    log::error!("[continuity] Failed to get initial status: {e}");
-                    Default::default()
-                }
-            }
-        });
-
-        let inner = Presenter::from_subscribe_use_case(subscribe_use_case.clone())
-            .with_initial_status(initial_status);
+        let inner = Presenter::from_subscribe_use_case(subscribe_use_case);
 
         Self { inner }
     }

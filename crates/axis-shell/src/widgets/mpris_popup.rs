@@ -312,14 +312,23 @@ impl View<MprisStatus> for MprisPopup {
                         .set_label(&format_duration(player.length_us));
                 } else {
                     self.progress_bar.set_fraction(0.0);
-                    self.position_label.set_label("0:00");
-                    self.length_label.set_label("0:00");
+                    if player.position_us > 0 {
+                        self.position_label
+                            .set_label(&format_duration(player.position_us));
+                    } else {
+                        self.position_label.set_label("0:00");
+                    }
+                    self.length_label.set_label("--:--");
                 }
 
                 self.art.set_file(None::<&gio::File>);
                 if let Some(ref art_url) = player.art_url {
                     if !art_url.is_empty() {
-                        let file = gio::File::for_uri(art_url);
+                        let file = if art_url.starts_with('/') {
+                            gio::File::for_path(art_url)
+                        } else {
+                            gio::File::for_uri(art_url)
+                        };
                         self.art.set_file(Some(&file));
                         self.art.set_visible(true);
                     } else {

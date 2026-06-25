@@ -200,7 +200,7 @@ impl CalendarProvider for GoogleCalendarProvider {
             "[google-calendar] Total events fetched: {} (Parallel)",
             all_events.len()
         );
-        all_events.sort_by(|a, b| a.start.cmp(&b.start));
+        all_events.sort_by_key(|a| a.start);
         Ok(all_events)
     }
 }
@@ -226,4 +226,76 @@ fn parse_date(s: &str) -> NaiveDateTime {
         .ok()
         .and_then(|d| d.and_hms_opt(0, 0, 0))
         .unwrap_or_else(|| chrono::DateTime::from_timestamp(0, 0).unwrap().naive_utc())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::NaiveDateTime;
+
+    #[test]
+    fn parse_datetime_rfc3339_with_tz() {
+        let dt = parse_datetime("2024-01-15T14:30:00+01:00");
+        assert_eq!(
+            dt,
+            NaiveDateTime::new(
+                chrono::NaiveDate::from_ymd_opt(2024, 1, 15).unwrap(),
+                chrono::NaiveTime::from_hms_opt(13, 30, 0).unwrap(),
+            )
+        );
+    }
+
+    #[test]
+    fn parse_datetime_rfc3339_utc() {
+        let dt = parse_datetime("2024-06-01T10:00:00Z");
+        assert_eq!(
+            dt,
+            NaiveDateTime::new(
+                chrono::NaiveDate::from_ymd_opt(2024, 6, 1).unwrap(),
+                chrono::NaiveTime::from_hms_opt(10, 0, 0).unwrap(),
+            )
+        );
+    }
+
+    #[test]
+    fn parse_datetime_iso_without_tz() {
+        let dt = parse_datetime("2024-01-15T14:30:00");
+        assert_eq!(
+            dt,
+            NaiveDateTime::new(
+                chrono::NaiveDate::from_ymd_opt(2024, 1, 15).unwrap(),
+                chrono::NaiveTime::from_hms_opt(14, 30, 0).unwrap(),
+            )
+        );
+    }
+
+    #[test]
+    fn parse_datetime_invalid_falls_back_to_epoch() {
+        let dt = parse_datetime("not-a-date");
+        assert_eq!(
+            dt,
+            chrono::DateTime::from_timestamp(0, 0).unwrap().naive_utc()
+        );
+    }
+
+    #[test]
+    fn parse_date_valid() {
+        let dt = parse_date("2024-12-25");
+        assert_eq!(
+            dt,
+            NaiveDateTime::new(
+                chrono::NaiveDate::from_ymd_opt(2024, 12, 25).unwrap(),
+                chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap(),
+            )
+        );
+    }
+
+    #[test]
+    fn parse_date_invalid_falls_back_to_epoch() {
+        let dt = parse_date("bad-input");
+        assert_eq!(
+            dt,
+            chrono::DateTime::from_timestamp(0, 0).unwrap().naive_utc()
+        );
+    }
 }

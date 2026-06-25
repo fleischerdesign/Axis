@@ -19,6 +19,31 @@ pub struct ConfigNightlightProvider {
     cmd_tx: mpsc::Sender<NightlightCmd>,
 }
 
+fn config_to_status(config: &NightlightConfig, available: bool) -> NightlightStatus {
+    NightlightStatus {
+        enabled: config.enabled,
+        available,
+        temp_day: config.temp_day,
+        temp_night: config.temp_night,
+        schedule_enabled: config.auto_schedule
+            || (!config.sunrise.is_empty() && !config.sunset.is_empty()),
+        sunrise: chrono::NaiveTime::parse_from_str(&config.sunrise, "%H:%M")
+            .unwrap_or_else(|_| chrono::NaiveTime::from_hms_opt(6, 0, 0).unwrap()),
+        sunset: chrono::NaiveTime::parse_from_str(&config.sunset, "%H:%M")
+            .unwrap_or_else(|_| chrono::NaiveTime::from_hms_opt(18, 0, 0).unwrap()),
+    }
+}
+
+fn params_differ(a: &NightlightConfig, b: &NightlightConfig) -> bool {
+    a.temp_day != b.temp_day
+        || a.temp_night != b.temp_night
+        || a.sunrise != b.sunrise
+        || a.sunset != b.sunset
+        || a.auto_schedule != b.auto_schedule
+        || a.latitude != b.latitude
+        || a.longitude != b.longitude
+}
+
 impl ConfigNightlightProvider {
     pub async fn new(config_provider: Arc<dyn ConfigProvider>) -> Arc<Self> {
         let available = Self::check_available();
@@ -27,7 +52,7 @@ impl ConfigNightlightProvider {
             AxisConfig::default()
         });
         let initial_config = config.nightlight.clone();
-        let initial_status = Self::config_to_status(&initial_config, available);
+        let initial_status = config_to_status(&initial_config, available);
 
         let (status_tx, _) = watch::channel(initial_status.clone());
         let (cmd_tx, mut cmd_rx) = mpsc::channel::<NightlightCmd>(32);
@@ -45,7 +70,7 @@ impl ConfigNightlightProvider {
                 match cmd {
                     NightlightCmd::Sync(config) => {
                         let want_running = config.enabled;
-                        let params_changed = Self::params_differ(&current_config, &config);
+                        let params_changed = params_differ(&current_config, &config);
 
                         if want_running {
                             if child.is_none() || params_changed {
@@ -63,7 +88,7 @@ impl ConfigNightlightProvider {
                         current_config = config;
                         let enabled = child.is_some();
                         let _ = status_tx_bg.send(with_enabled(
-                            Self::config_to_status(&current_config, available),
+                            config_to_status(&current_config, available),
                             enabled,
                         ));
 
@@ -73,7 +98,7 @@ impl ConfigNightlightProvider {
                                     warn!("[nightlight] wlsunset exited");
                                     child = None;
                                     let _ = status_tx_bg.send(with_enabled(
-                                        Self::config_to_status(&current_config, available),
+                                        config_to_status(&current_config, available),
                                         false,
                                     ));
                                 }
@@ -81,7 +106,7 @@ impl ConfigNightlightProvider {
                                     error!("[nightlight] Error checking wlsunset: {e}");
                                     child = None;
                                     let _ = status_tx_bg.send(with_enabled(
-                                        Self::config_to_status(&current_config, available),
+                                        config_to_status(&current_config, available),
                                         false,
                                     ));
                                 }
@@ -124,31 +149,6 @@ impl ConfigNightlightProvider {
         });
 
         provider
-    }
-
-    fn config_to_status(config: &NightlightConfig, available: bool) -> NightlightStatus {
-        NightlightStatus {
-            enabled: config.enabled,
-            available,
-            temp_day: config.temp_day,
-            temp_night: config.temp_night,
-            schedule_enabled: config.auto_schedule
-                || (!config.sunrise.is_empty() && !config.sunset.is_empty()),
-            sunrise: chrono::NaiveTime::parse_from_str(&config.sunrise, "%H:%M")
-                .unwrap_or_else(|_| chrono::NaiveTime::from_hms_opt(6, 0, 0).unwrap()),
-            sunset: chrono::NaiveTime::parse_from_str(&config.sunset, "%H:%M")
-                .unwrap_or_else(|_| chrono::NaiveTime::from_hms_opt(18, 0, 0).unwrap()),
-        }
-    }
-
-    fn params_differ(a: &NightlightConfig, b: &NightlightConfig) -> bool {
-        a.temp_day != b.temp_day
-            || a.temp_night != b.temp_night
-            || a.sunrise != b.sunrise
-            || a.sunset != b.sunset
-            || a.auto_schedule != b.auto_schedule
-            || a.latitude != b.latitude
-            || a.longitude != b.longitude
     }
 
     fn check_available() -> bool {
@@ -239,5 +239,85 @@ impl NightlightProvider for ConfigNightlightProvider {
                 cfg.nightlight.sunset = sunset;
             }))
             .map_err(|e| NightlightError::ProviderError(e.to_string()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::NaiveTime;
+
+    #[test]
+    fn config_to_status_parses_valid_sunrise_sunset() {
+        let config = NightlightConfig {
+            enabled: true,
+            temp_day: 6500,
+            temp_night: 4500,
+            sunrise: "06:30".into(),
+            sunset: "18:45".into(),
+            ..Default::default()
+        };
+        let status = config_to_status(&config, true);
+        assert!(status.available);
+        assert!(status.enabled);
+        assert_eq!(status.temp_day, 6500);
+        assert_eq!(status.temp_night, 4500);
+        assert_eq!(status.sunrise, NaiveTime::from_hms_opt(6, 30, 0).unwrap());
+        assert_eq!(status.sunset, NaiveTime::from_hms_opt(18, 45, 0).unwrap());
+    }
+
+    #[test]
+    fn config_to_status_invalid_sunrise_falls_back_to_default() {
+        let config = NightlightConfig {
+            sunrise: "bad".into(),
+            ..Default::default()
+        };
+        let status = config_to_status(&config, false);
+        assert_eq!(status.sunrise, NaiveTime::from_hms_opt(6, 0, 0).unwrap());
+    }
+
+    #[test]
+    fn config_to_status_schedule_from_sunrise_sunset() {
+        let config = NightlightConfig {
+            sunrise: "07:00".into(),
+            sunset: "19:00".into(),
+            auto_schedule: false,
+            ..Default::default()
+        };
+        let status = config_to_status(&config, true);
+        assert!(status.schedule_enabled);
+    }
+
+    #[test]
+    fn config_to_status_schedule_from_auto_schedule() {
+        let config = NightlightConfig {
+            auto_schedule: true,
+            ..Default::default()
+        };
+        let status = config_to_status(&config, true);
+        assert!(status.schedule_enabled);
+    }
+
+    #[test]
+    fn params_differ_identical_returns_false() {
+        let a = NightlightConfig::default();
+        let b = NightlightConfig::default();
+        assert!(!params_differ(&a, &b));
+    }
+
+    #[test]
+    fn params_differ_different_temp_day_returns_true() {
+        let mut a = NightlightConfig::default();
+        let b = NightlightConfig::default();
+        a.temp_day = 5000;
+        assert!(params_differ(&a, &b));
+    }
+
+    #[test]
+    fn params_differ_different_sunrise_returns_true() {
+        let mut a = NightlightConfig::default();
+        let b = NightlightConfig::default();
+        a.sunrise = "08:00".into();
+        assert!(params_differ(&a, &b));
     }
 }

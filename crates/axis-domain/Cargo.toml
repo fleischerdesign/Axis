@@ -1,6 +1,6 @@
 [package]
 name = "axis-domain"
-version = "0.1.0"
+version.workspace = true
 edition = "2024"
 
 [dependencies]
@@ -9,3 +9,6 @@ chrono.workspace = true
 thiserror.workspace = true
 serde.workspace = true
 futures-util.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

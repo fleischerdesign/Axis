@@ -32,11 +32,15 @@ impl Dispatch<ExtIdleNotificationV1, ()> for IdleState {
         match event {
             ext_idle_notification_v1::Event::Idled => {
                 info!("[idle-notify] User idled");
-                let _ = state.tx.try_send(IdleEvent::Idled);
+                if let Err(e) = state.tx.try_send(IdleEvent::Idled) {
+                    warn!("[idle-notify] Failed to send Idled event: {e}");
+                }
             }
             ext_idle_notification_v1::Event::Resumed => {
                 info!("[idle-notify] User resumed");
-                let _ = state.tx.try_send(IdleEvent::Resumed);
+                if let Err(e) = state.tx.try_send(IdleEvent::Resumed) {
+                    warn!("[idle-notify] Failed to send Resumed event: {e}");
+                }
             }
             _ => {}
         }
@@ -80,7 +84,7 @@ impl Dispatch<ExtIdleNotifierV1, ()> for IdleState {
 }
 
 pub fn create_idle_watcher(timeout_ms: u32) -> Option<mpsc::Receiver<IdleEvent>> {
-    let (tx, rx) = mpsc::channel(1);
+    let (tx, rx) = mpsc::channel(16);
 
     let conn = match Connection::connect_to_env() {
         Ok(c) => c,
