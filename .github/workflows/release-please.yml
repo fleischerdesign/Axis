@@ -1,0 +1,24 @@
+name: Release Please
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: google-github-actions/release-please-action@v4
+        id: release
+        with:
+          # Note: Replace GITHUB_TOKEN with a custom PAT (Personal Access Token) or GitHub App token
+          # (e.g. ${{ secrets.RELEASE_PLEASE_TOKEN }}) if you want the merge-back workflow
+          # to be triggered automatically on the release commit / merge.
+          token: ${{ secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
