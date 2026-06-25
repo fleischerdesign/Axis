@@ -1,0 +1,38 @@
+name: Publish Release Assets
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  publish-assets:
+    name: Build & Upload Nix Release Assets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v22
+
+      - name: Magic Nix Cache
+        uses: DeterminateSystems/magic-nix-cache-action@v14
+
+      - name: Build Nix Package
+        run: nix build .#default
+
+      - name: Package Binaries into Tarball
+        run: |
+          # Package the compiled binaries into a tar.gz archive
+          tar -czf axis-linux-x86_64.tar.gz -C result/bin/ axis-shell axis-settings
+
+      - name: Upload Release Asset
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: axis-linux-x86_64.tar.gz
+          asset_name: axis-linux-x86_64.tar.gz
+          tag: ${{ github.event.release.tag_name }}
+          overwrite: true
