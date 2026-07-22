@@ -1,27 +1,6 @@
 /* Axis Settings - Modern Semantic Styling */
 
-/* We use variables provided by ThemeService.
-   This makes the app fully reactive. */
-
-.accent-button {
-    border-radius: 999px;
-    min-width: 32px;
-    min-height: 32px;
-    margin: 4px;
-    border: 2px solid transparent;
-    transition: transform 0.2s ease, border-color 0.2s ease;
-}
-
-.accent-button:hover {
-    transform: scale(1.1);
-}
-
-/* When a button is active, show a white ring (or black in light mode) */
-.accent-button.active {
-    border-color: @window_fg_color;
-}
-
-/* Sidebar styling consistent with the shell */
+/* --- Sidebar Styling --- */
 .sidebar-list {
     padding: 8px;
     background-color: transparent;
@@ -34,7 +13,6 @@
     transition: background-color 0.2s ease;
 }
 
-/* Use accent color for the selected row in the sidebar */
 .sidebar-list row:selected {
     background-color: alpha(@accent_bg_color, 0.2);
     color: @accent_bg_color;
@@ -44,14 +22,131 @@
     background-color: @hover_bg_color;
 }
 
-.accent-auto {
-    background: alpha(@window_fg_color, 0.1);
+/* --- Accent Swatches (Abgerundete Rechtecke) --- */
+.accent-swatch {
+    border-radius: 10px;
+    min-width: 44px;
+    min-height: 32px;
+    margin: 4px;
+    border: 2px solid transparent;
+    transition: transform 0.15s ease, border-color 0.2s ease;
 }
 
-.accent-auto:hover {
-    background: alpha(@window_fg_color, 0.15);
+.accent-swatch:hover {
+    transform: scale(1.08);
 }
 
-.accent-auto image {
-    opacity: 0.8;
+/* Active accent swatch gets a ring/border of window foreground color */
+.accent-swatch.active {
+    border-color: @window_fg_color;
 }
+
+.accent-auto-swatch {
+    background: alpha(@window_fg_color, 0.12);
+}
+
+.accent-auto-swatch:hover {
+    background: alpha(@window_fg_color, 0.2);
+}
+
+.accent-auto-swatch image {
+    opacity: 0.85;
+}
+
+/* --- Color Scheme Cards (Dark / Light / System) --- */
+.scheme-box {
+    margin: 4px 0;
+}
+
+.scheme-card {
+    border-radius: 16px;
+    padding: 12px;
+    background-color: @card_bg_color;
+    border: 2px solid transparent;
+    transition: border-color 0.2s ease, transform 0.15s ease, background-color 0.2s ease;
+    min-width: 130px;
+}
+
+.scheme-card:hover {
+    border-color: alpha(@window_fg_color, 0.25);
+    transform: translateY(-2px);
+}
+
+.scheme-card.active {
+    border-color: @accent_bg_color;
+    background-color: alpha(@accent_bg_color, 0.12);
+}
+
+.scheme-preview {
+    border-radius: 8px;
+    height: 64px;
+    margin-bottom: 8px;
+    border: 1px solid @border_color;
+    padding: 6px;
+    box-sizing: border-box;
+}
+
+.scheme-preview-dark {
+    background-color: #1e1e1e;
+    color: #ffffff;
+}
+
+.scheme-preview-light {
+    background-color: #f6f6f6;
+    color: #1c1c1c;
+}
+
+.scheme-preview-system {
+    background: linear-gradient(135deg, #1e1e1e 50%, #f6f6f6 50%);
+}
+
+.scheme-preview-header {
+    height: 8px;
+    border-radius: 3px;
+    background-color: alpha(@window_fg_color, 0.2);
+    margin-bottom: 6px;
+}
+
+.scheme-preview-body {
+    height: 36px;
+    border-radius: 3px;
+    background-color: alpha(@window_fg_color, 0.1);
+}
+
+.scheme-card label {
+    font-weight: 600;
+    font-size: 13px;
+}
+
+/* --- Wallpaper Preview Card --- */
+.wallpaper-preview-card {
+    background-color: @card_bg_color;
+    border-radius: 16px;
+    padding: 16px;
+    border: 1px solid @border_color;
+    margin-top: 4px;
+}
+
+.wallpaper-picture-frame {
+    border-radius: 12px;
+    overflow: hidden;
+    height: 160px;
+    background-color: alpha(@window_fg_color, 0.05);
+    margin-bottom: 12px;
+    border: 1px solid @border_color;
+}
+
+.wallpaper-picture {
+    border-radius: 12px;
+}
+
+.wallpaper-title {
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.wallpaper-subtitle {
+    font-size: 12px;
+    opacity: 0.6;
+}
+

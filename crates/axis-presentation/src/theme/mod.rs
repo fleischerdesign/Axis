@@ -24,6 +24,24 @@ pub(crate) const LIGHT_THEME_COLORS: &str = "\
 @define-color ws_dot_hover_color rgba(0, 0, 0, 0.45);
 ";
 
+pub(crate) const DARK_THEME_COLORS: &str = "\
+@define-color window_bg_color #242424;
+@define-color window_fg_color #ffffff;
+@define-color card_bg_color #303030;
+@define-color border_color rgba(255, 255, 255, 0.1);
+@define-color dim_label_color rgba(255, 255, 255, 0.5);
+@define-color faint_label_color rgba(255, 255, 255, 0.3);
+@define-color muted_label_color rgba(255, 255, 255, 0.4);
+@define-color hover_bg_color rgba(255, 255, 255, 0.05);
+@define-color hover_bg_color_strong rgba(255, 255, 255, 0.1);
+@define-color body_text_color rgba(255, 255, 255, 0.75);
+@define-color title_text_color rgba(255, 255, 255, 0.9);
+@define-color section_label_color rgba(255, 255, 255, 0.6);
+@define-color slider_trough_color #303030;
+@define-color ws_dot_inactive_color rgba(255, 255, 255, 0.25);
+@define-color ws_dot_hover_color rgba(255, 255, 255, 0.5);
+";
+
 pub(crate) fn resolve_accent_hex(accent: &AccentColor) -> String {
     accent.hex_value().into_owned()
 }
@@ -37,8 +55,9 @@ pub(crate) fn generate_css(status: &AppearanceConfig, resolved_accent: &str) -> 
          @define-color accent_hover_color {hover};\n"
     );
 
-    if matches!(status.color_scheme, ColorScheme::Light) {
-        css.push_str(LIGHT_THEME_COLORS);
+    match status.color_scheme {
+        ColorScheme::Light => css.push_str(LIGHT_THEME_COLORS),
+        _ => css.push_str(DARK_THEME_COLORS),
     }
 
     if let Some(ref font) = status.font {

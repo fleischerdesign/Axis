@@ -8,6 +8,8 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
+use crate::widgets::components::scan_button::ScanButton;
+
 struct RowEntry {
     list_box_row: gtk4::ListBoxRow,
     outer: gtk4::Box,
@@ -59,9 +61,15 @@ impl WifiPage {
     pub fn new(presenter: Rc<NetworkPresenter>, on_back: impl Fn() + 'static) -> Self {
         let container = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
 
-        let spinner = gtk4::Spinner::builder().spinning(true).build();
-        let header = PopupHeader::with_spinner("Wi-Fi Networks", &spinner);
+        let scan_btn = Rc::new(ScanButton::new());
+        let header = PopupHeader::new("Wi-Fi Networks");
+        header.append_suffix(scan_btn.widget());
         container.append(&header.container);
+
+        let pres_scan = presenter.clone();
+        scan_btn.connect_clicked(move || {
+            pres_scan.scan_wifi();
+        });
 
         let list = gtk4::ListBox::builder()
             .css_classes(vec!["qs-list".to_string()])
@@ -84,12 +92,12 @@ impl WifiPage {
         let list_c = list.clone();
         let rows: Rc<RefCell<HashMap<String, RowEntry>>> = Rc::new(RefCell::new(HashMap::new()));
         let rows_c = rows.clone();
-        let spinner_c = spinner.clone();
+        let scan_btn_c = scan_btn.clone();
 
         let view = Box::new(WifiPageView {
             rows: rows_c,
             list: list_c,
-            spinner: spinner_c,
+            scan_btn: scan_btn_c,
             presenter: presenter_c,
         });
         presenter.add_view(view);
@@ -104,13 +112,13 @@ impl WifiPage {
 struct WifiPageView {
     rows: Rc<RefCell<HashMap<String, RowEntry>>>,
     list: gtk4::ListBox,
-    spinner: gtk4::Spinner,
+    scan_btn: Rc<ScanButton>,
     presenter: Rc<NetworkPresenter>,
 }
 
 impl View<NetworkStatus> for WifiPageView {
     fn render(&self, status: &NetworkStatus) {
-        self.spinner.set_spinning(status.is_scanning);
+        self.scan_btn.set_scanning(status.is_scanning);
 
         let mut rows = self.rows.borrow_mut();
 

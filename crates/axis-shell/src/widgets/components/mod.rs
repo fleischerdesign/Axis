@@ -3,6 +3,7 @@ pub mod blurred_picture;
 pub mod list_row;
 pub mod popup_header;
 pub mod power_actions;
+pub mod scan_button;
 pub mod slider;
 pub mod swipe_dismiss;
 pub mod toggle_tile;

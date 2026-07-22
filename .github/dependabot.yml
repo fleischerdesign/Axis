@@ -12,3 +12,17 @@ updates:
       - automated
     reviewers:
       - fleischerdesign
+
+  - package-ecosystem: cargo
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+    labels:
+      - dependencies
+      - automated
+      - rust
+    reviewers:
+      - fleischerdesign

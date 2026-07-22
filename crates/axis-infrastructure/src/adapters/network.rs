@@ -108,7 +108,7 @@ impl NetworkManagerProvider {
         let wifi_device_path = Self::find_wifi_device(&nm_proxy, &connection).await;
 
         let initial_status =
-            Self::fetch_data(&nm_proxy, &connection, wifi_device_path.as_ref()).await;
+            Self::fetch_data(&nm_proxy, &connection, wifi_device_path.as_ref(), false).await;
         info!(
             "[network] Initialized: wifi={}, ethernet={}, aps={}",
             initial_status.is_wifi_connected,
@@ -181,8 +181,10 @@ impl NetworkManagerProvider {
                         break;
                     }
 
+                    let is_scanning = provider_clone.status_tx.borrow().is_scanning;
                     let status =
-                        Self::fetch_data(&nm_proxy, &conn, wifi_device_path.as_ref()).await;
+                        Self::fetch_data(&nm_proxy, &conn, wifi_device_path.as_ref(), is_scanning)
+                            .await;
                     let _ = provider_clone.status_tx.send(status);
                 }
 
@@ -217,6 +219,7 @@ impl NetworkManagerProvider {
         nm_proxy: &NetworkManagerProxy<'_>,
         conn: &Connection,
         wifi_path: Option<&OwnedObjectPath>,
+        is_scanning: bool,
     ) -> NetworkStatus {
         let state = nm_proxy.state().await.unwrap_or(0);
         let wifi_on = nm_proxy.wireless_enabled().await.unwrap_or(false);
@@ -286,7 +289,7 @@ impl NetworkManagerProvider {
             is_ethernet_connected: is_connected && primary_type == "802-3-ethernet",
             is_wifi_enabled: wifi_on,
             active_strength,
-            is_scanning: false,
+            is_scanning,
             access_points: aps,
         }
     }
@@ -326,6 +329,19 @@ impl NetworkProvider for NetworkManagerProvider {
                 .request_scan(HashMap::new())
                 .await
                 .map_err(|e| NetworkError::ProviderError(format!("Scan: {e}")))?;
+
+            let mut status = self.status_tx.borrow().clone();
+            status.is_scanning = true;
+            let _ = self.status_tx.send(status);
+
+            let tx = self.status_tx.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_secs(3)).await;
+                let mut current = tx.borrow().clone();
+                current.is_scanning = false;
+                let _ = tx.send(current);
+            });
+
             info!("[network] WiFi scan initiated");
         }
         Ok(())

@@ -8,5 +8,6 @@ pub mod continuity_page;
 pub mod idle_page;
 pub mod network_page;
 pub mod peer_detail_page;
+pub mod scan_button;
 pub mod sidebar;
 pub mod window;

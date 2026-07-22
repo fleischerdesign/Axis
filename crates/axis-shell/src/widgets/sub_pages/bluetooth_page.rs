@@ -1,6 +1,7 @@
 use crate::presentation::bluetooth::BluetoothPresenter;
 use crate::widgets::components::list_row::ListRow;
 use crate::widgets::components::popup_header::PopupHeader;
+use crate::widgets::components::scan_button::ScanButton;
 use axis_domain::models::bluetooth::BluetoothStatus;
 use axis_presentation::View;
 use gtk4::prelude::*;
@@ -21,8 +22,22 @@ impl BluetoothPage {
     pub fn new(presenter: Rc<BluetoothPresenter>, on_back: impl Fn() + 'static) -> Self {
         let container = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
 
+        let scan_btn = Rc::new(ScanButton::new());
         let header = PopupHeader::new("Bluetooth");
+        header.append_suffix(scan_btn.widget());
         container.append(&header.container);
+
+        let pres_scan = presenter.clone();
+        let current_scanning = Rc::new(RefCell::new(false));
+        let cs_c = current_scanning.clone();
+        scan_btn.connect_clicked(move || {
+            let scanning = *cs_c.borrow();
+            if scanning {
+                pres_scan.stop_scan();
+            } else {
+                pres_scan.start_scan();
+            }
+        });
 
         let list = gtk4::ListBox::builder()
             .css_classes(vec!["qs-list".to_string()])
@@ -46,11 +61,14 @@ impl BluetoothPage {
         let rows: Rc<RefCell<HashMap<String, DeviceEntry>>> = Rc::new(RefCell::new(HashMap::new()));
         let rows_c = rows.clone();
         let list_c = list.clone();
+        let scan_btn_c = scan_btn.clone();
         let presenter_c = presenter.clone();
 
         let view = Box::new(BluetoothPageView {
             rows: rows_c,
             list: list_c,
+            scan_btn: scan_btn_c,
+            current_scanning,
             presenter: presenter_c,
         });
         presenter.add_view(view);
@@ -62,11 +80,16 @@ impl BluetoothPage {
 struct BluetoothPageView {
     rows: Rc<RefCell<HashMap<String, DeviceEntry>>>,
     list: gtk4::ListBox,
+    scan_btn: Rc<ScanButton>,
+    current_scanning: Rc<RefCell<bool>>,
     presenter: Rc<BluetoothPresenter>,
 }
 
 impl View<BluetoothStatus> for BluetoothPageView {
     fn render(&self, status: &BluetoothStatus) {
+        *self.current_scanning.borrow_mut() = status.is_scanning;
+        self.scan_btn.set_scanning(status.is_scanning);
+
         let mut rows = self.rows.borrow_mut();
 
         let ids: HashSet<String> = status.devices.iter().map(|d| d.id.clone()).collect();

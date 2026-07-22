@@ -41,6 +41,10 @@ impl PopupHeader {
         header
     }
 
+    pub fn append_suffix(&self, widget: &impl IsA<gtk4::Widget>) {
+        self.container.append(widget);
+    }
+
     pub fn connect_back<F: Fn() + 'static>(&self, f: F) {
         self.back_btn.connect_clicked(move |_| {
             f();

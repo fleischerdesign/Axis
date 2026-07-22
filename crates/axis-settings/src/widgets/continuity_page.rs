@@ -15,6 +15,10 @@ pub struct ContinuitySettingsPage {
     root: adw::ToolbarView,
     nav_view: adw::NavigationView,
     enable_switch: adw::SwitchRow,
+    arrangement_group: adw::PreferencesGroup,
+    peers_group: adw::PreferencesGroup,
+    status_group: adw::PreferencesGroup,
+    _status_page: adw::StatusPage,
     peer_list: gtk4::ListBox,
     grid: Rc<ArrangementGrid>,
     current_peer_page: RefCell<Option<Rc<PeerDetailPage>>>,
@@ -36,29 +40,41 @@ impl ContinuitySettingsPage {
         let header_bar = adw::HeaderBar::new();
         toolbar_view.add_top_bar(&header_bar);
 
-        let main_page = adw::PreferencesPage::builder()
+        let preferences_page = adw::PreferencesPage::builder()
             .title("Continuity")
             .icon_name("input-mouse-symbolic")
             .build();
 
+        let clamp = adw::Clamp::builder()
+            .maximum_size(760)
+            .tightening_threshold(500)
+            .child(&preferences_page)
+            .build();
+
         let nav_view = adw::NavigationView::new();
-        nav_view.add(&adw::NavigationPage::new(&main_page, "Continuity"));
+        let nav_page = adw::NavigationPage::builder()
+            .child(&clamp)
+            .title("Continuity")
+            .build();
+        nav_view.add(&nav_page);
         toolbar_view.set_content(Some(&nav_view));
 
+        // 1. Enable Switch Group
         let main_group = adw::PreferencesGroup::builder()
             .title("Continuity")
-            .description("Multi-device input sharing via network")
+            .description("Multi-device mouse and keyboard sharing via network")
             .build();
-        main_page.add(&main_group);
+        preferences_page.add(&main_group);
 
         let enable_switch = adw::SwitchRow::builder().title("Enable Continuity").build();
         main_group.add(&enable_switch);
 
+        // 2. Arrangement Group
         let arrangement_group = adw::PreferencesGroup::builder()
             .title("Display Arrangement")
             .description("Drag the peer device to position it relative to your screen")
             .build();
-        main_page.add(&arrangement_group);
+        preferences_page.add(&arrangement_group);
 
         let grid_cb: FnCell<PeerArrangement> = Rc::new(RefCell::new(None));
         let grid_cb_closure = grid_cb.clone();
@@ -69,8 +85,9 @@ impl ContinuitySettingsPage {
         });
         arrangement_group.add(grid.widget());
 
+        // 3. Devices Group
         let peers_group = adw::PreferencesGroup::builder().title("Devices").build();
-        main_page.add(&peers_group);
+        preferences_page.add(&peers_group);
 
         let peer_list = gtk4::ListBox::builder()
             .selection_mode(gtk4::SelectionMode::None)
@@ -78,10 +95,33 @@ impl ContinuitySettingsPage {
             .build();
         peers_group.add(&peer_list);
 
+        // 4. Empty State Status Page
+        let status_group = adw::PreferencesGroup::builder().build();
+        let status_page = adw::StatusPage::builder()
+            .icon_name("input-mouse-symbolic")
+            .title("Continuity is Disabled")
+            .description("Share mouse and keyboard seamlessly across nearby devices.")
+            .build();
+
+        let enable_btn = gtk4::Button::builder()
+            .label("Turn On Continuity")
+            .css_classes(vec!["suggested-action".to_string(), "pill".to_string()])
+            .halign(gtk4::Align::Center)
+            .margin_top(12)
+            .build();
+        status_page.set_child(Some(&enable_btn));
+        status_group.add(&status_page);
+        status_group.set_visible(false);
+        preferences_page.add(&status_group);
+
         let page = Rc::new(Self {
             root: toolbar_view,
             nav_view,
             enable_switch,
+            arrangement_group,
+            peers_group,
+            status_group,
+            _status_page: status_page,
             peer_list,
             grid: grid.clone(),
             current_peer_page: RefCell::new(None),
@@ -96,10 +136,18 @@ impl ContinuitySettingsPage {
             config_cb: Rc::new(RefCell::new(None)),
         });
 
-        let cb = page.toggle_cb.clone();
+        // Event Connections
+        let cb_toggle = page.toggle_cb.clone();
         page.enable_switch.connect_active_notify(move |row| {
-            if let Some(f) = cb.borrow().as_ref() {
+            if let Some(f) = cb_toggle.borrow().as_ref() {
                 f(row.is_active());
+            }
+        });
+
+        let cb_enable = page.toggle_cb.clone();
+        enable_btn.connect_clicked(move |_| {
+            if let Some(f) = cb_enable.borrow().as_ref() {
+                f(true);
             }
         });
 
@@ -120,6 +168,7 @@ impl ContinuitySettingsPage {
                 .title("Reconnecting...")
                 .sensitive(false)
                 .build();
+            row.add_prefix(&gtk4::Image::from_icon_name("network-wireless-symbolic"));
             self.peer_list.append(&row);
             return;
         }
@@ -131,18 +180,19 @@ impl ContinuitySettingsPage {
                 .title(format!("{} wants to connect", pin.peer_name))
                 .subtitle("Pairing request")
                 .build();
+            row.add_prefix(&gtk4::Image::from_icon_name("computer-symbolic"));
 
             let btn_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
             btn_box.set_valign(gtk4::Align::Center);
 
             let accept_btn = gtk4::Button::builder()
                 .label("Accept")
-                .css_classes(vec!["suggested-action".to_string(), "flat".to_string()])
+                .css_classes(vec!["suggested-action".to_string(), "pill".to_string()])
                 .valign(gtk4::Align::Center)
                 .build();
             let decline_btn = gtk4::Button::builder()
                 .label("Decline")
-                .css_classes(vec!["destructive-action".to_string(), "flat".to_string()])
+                .css_classes(vec!["destructive-action".to_string(), "pill".to_string()])
                 .valign(gtk4::Align::Center)
                 .build();
 
@@ -172,6 +222,7 @@ impl ContinuitySettingsPage {
                 .subtitle("Enable Continuity on other devices to discover them")
                 .sensitive(false)
                 .build();
+            row.add_prefix(&gtk4::Image::from_icon_name("computer-symbolic"));
             self.peer_list.append(&row);
             return;
         }
@@ -182,7 +233,12 @@ impl ContinuitySettingsPage {
                 .as_ref()
                 .is_some_and(|c| c.peer_id == peer.device_id);
 
-            let row = adw::ActionRow::builder().title(&peer.device_name).build();
+            let row = adw::ActionRow::builder()
+                .title(&peer.device_name)
+                .activatable(true)
+                .build();
+
+            row.add_prefix(&gtk4::Image::from_icon_name("computer-symbolic"));
 
             if is_connected {
                 let connected_secs = status
@@ -198,7 +254,7 @@ impl ContinuitySettingsPage {
 
                 let disconnect_btn = gtk4::Button::builder()
                     .label("Disconnect")
-                    .css_classes(vec!["destructive-action".to_string(), "flat".to_string()])
+                    .css_classes(vec!["destructive-action".to_string()])
                     .valign(gtk4::Align::Center)
                     .build();
 
@@ -214,7 +270,7 @@ impl ContinuitySettingsPage {
 
                 let connect_btn = gtk4::Button::builder()
                     .label("Connect")
-                    .css_classes(vec!["suggested-action".to_string(), "flat".to_string()])
+                    .css_classes(vec!["suggested-action".to_string()])
                     .valign(gtk4::Align::Center)
                     .build();
 
@@ -227,6 +283,8 @@ impl ContinuitySettingsPage {
                 });
                 row.add_suffix(&connect_btn);
             }
+
+            row.add_suffix(&gtk4::Image::from_icon_name("go-next-symbolic"));
 
             let peer_id = peer.device_id.clone();
             let peer_name = peer.device_name.clone();
@@ -280,6 +338,17 @@ impl ContinuitySettingsPage {
 impl View<ContinuityStatus> for ContinuitySettingsPage {
     fn render(&self, status: &ContinuityStatus) {
         self.enable_switch.set_active(status.enabled);
+        if !status.enabled {
+            self.arrangement_group.set_visible(false);
+            self.peers_group.set_visible(false);
+            self.status_group.set_visible(true);
+            return;
+        }
+
+        self.status_group.set_visible(false);
+        self.arrangement_group.set_visible(true);
+        self.peers_group.set_visible(true);
+
         self.grid.update_status(status);
         if let Some(ref pp) = *self.current_peer_page.borrow() {
             pp.update_status(status);
