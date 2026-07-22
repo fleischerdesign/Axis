@@ -97,34 +97,39 @@ graph TD
 
 ## Nix & NixOS Integration
 
-Axis provides full Nix Flake integration for building, development shells, and NixOS deployment.
+Axis provides full Nix Flake integration for building, development environments, and NixOS configuration.
 
-### Reproducible Build & Checks
+### Building & Checks with Nix
 
 ```bash
-# Build default package (axis-shell + axis-settings)
+# Build default packages (axis-shell and axis-settings)
 nix build .#default
 
-# Run hermetic flake checks (clippy, fmt, tests, package)
+# Run hermetic flake checks (clippy, formatting, workspace tests, package)
 nix flake check
 
 # Format flake.nix according to Nix standards
 nix fmt
 ```
 
-### NixOS Module Setup
+### NixOS System Integration
 
-Axis includes a native NixOS module in `flake.nix` (`nixosModules.default`):
+Axis exports a NixOS module (`nixosModules.default`) in `flake.nix` that automatically configures required system services for Continuity peer sync, clipboard support, and hardware permissions:
 
 ```nix
+# configuration.nix
 { inputs, ... }: {
   imports = [
     inputs.axis.nixosModules.default
   ];
-
-  # Enables Avahi mDNS peer discovery, firewall ports, and uinput udev rules
 }
 ```
+
+The module automatically configures:
+- **`services.avahi`:** Enables local mDNS mDNS/DNS-SD discovery for Axis Continuity peer sync.
+- **`networking.firewall`:** Opens TCP port `7391` for Axis Continuity communication.
+- **`services.udev`:** Configures `/dev/uinput` permissions for system input events.
+- **`environment.systemPackages`:** Installs `wl-clipboard` for Wayland clipboard support.
 
 ---
 
@@ -173,16 +178,6 @@ cargo fmt --all -- --check
 # Hermetic Nix sandbox verification
 nix flake check
 ```
-
----
-
-## Conventions
-
-- **Language:** Rust 2024 Edition.
-- **Async Runtime:** Tokio.
-- **GTK Thread Safety:** All GTK mutations from async context must use `glib::idle_add_local()`.
-- **Error Handling:** Use `Result<T, DomainError>`, no panics in production execution paths.
-- **Logging:** Use `log::info!`, `log::warn!`, and `log::error!` macros (never `println!`).
 
 ---
 
