@@ -84,6 +84,10 @@ impl NetworkPresenter {
             }
         });
     }
+
+    pub fn scan_wifi(&self) {
+        self.start_scan();
+    }
 }
 
 #[cfg(test)]
