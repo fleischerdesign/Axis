@@ -1,5 +1,6 @@
 pub mod clipboard;
 pub mod connection;
+pub mod crypto;
 pub mod dbus;
 pub mod discovery;
 mod inner;
