@@ -6,14 +6,16 @@ use axis_presentation::View;
 use libadwaita as adw;
 use libadwaita::prelude::*;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 
 pub struct AppearancePage {
     root: adw::ToolbarView,
-    scheme_group: adw::PreferencesGroup,
-    accent_group: adw::PreferencesGroup,
-    _wallpaper_group: adw::PreferencesGroup,
-    wallpaper_row: adw::ActionRow,
+    scheme_buttons: RefCell<HashMap<ColorScheme, gtk4::Button>>,
+    accent_buttons: RefCell<Vec<(AccentColor, gtk4::Button)>>,
+    wallpaper_picture: gtk4::Picture,
+    wallpaper_title: gtk4::Label,
+    wallpaper_subtitle: gtk4::Label,
 
     scheme_callback: FnCell<ColorScheme>,
     accent_callback: FnCell<AccentColor>,
@@ -30,93 +32,144 @@ impl AppearancePage {
             .title("Appearance")
             .icon_name("preferences-desktop-wallpaper-symbolic")
             .build();
-        toolbar_view.set_content(Some(&preferences_page));
+
+        let clamp = adw::Clamp::builder()
+            .maximum_size(760)
+            .tightening_threshold(500)
+            .child(&preferences_page)
+            .build();
+
+        toolbar_view.set_content(Some(&clamp));
 
         // 1. Color Scheme Section
         let scheme_group = adw::PreferencesGroup::builder()
             .title("Color Scheme")
+            .description("Choose system appearance theme")
             .build();
         preferences_page.add(&scheme_group);
 
         // 2. Accent Color Section
         let accent_group = adw::PreferencesGroup::builder()
             .title("Accent Color")
+            .description("Select primary highlight color")
             .build();
         preferences_page.add(&accent_group);
 
         // 3. Wallpaper Section
-        let wallpaper_group = adw::PreferencesGroup::builder().title("Wallpaper").build();
+        let wallpaper_group = adw::PreferencesGroup::builder()
+            .title("Wallpaper")
+            .description("Desktop background image")
+            .build();
         preferences_page.add(&wallpaper_group);
 
-        let wallpaper_row = adw::ActionRow::builder()
-            .title("Background Image")
-            .subtitle("Select a wallpaper")
+        let wallpaper_picture = gtk4::Picture::builder()
+            .content_fit(gtk4::ContentFit::Cover)
+            .can_shrink(true)
+            .hexpand(true)
+            .vexpand(true)
+            .halign(gtk4::Align::Fill)
+            .valign(gtk4::Align::Fill)
+            .css_classes(vec!["wallpaper-picture".to_string()])
             .build();
 
-        let select_btn = gtk4::Button::builder()
-            .label("Select File...")
-            .valign(gtk4::Align::Center)
+        let wallpaper_title = gtk4::Label::builder()
+            .label("No Wallpaper Set")
+            .css_classes(vec!["wallpaper-title".to_string()])
+            .halign(gtk4::Align::Start)
+            .ellipsize(gtk4::pango::EllipsizeMode::End)
             .build();
-        wallpaper_row.add_suffix(&select_btn);
-        wallpaper_group.add(&wallpaper_row);
+
+        let wallpaper_subtitle = gtk4::Label::builder()
+            .label("Default background active")
+            .css_classes(vec!["wallpaper-subtitle".to_string()])
+            .halign(gtk4::Align::Start)
+            .ellipsize(gtk4::pango::EllipsizeMode::End)
+            .build();
 
         let page = Rc::new(Self {
             root: toolbar_view,
-            scheme_group,
-            accent_group,
-            _wallpaper_group: wallpaper_group,
-            wallpaper_row,
+            scheme_buttons: RefCell::new(HashMap::new()),
+            accent_buttons: RefCell::new(Vec::new()),
+            wallpaper_picture,
+            wallpaper_title,
+            wallpaper_subtitle,
             scheme_callback: Rc::new(RefCell::new(None)),
             accent_callback: Rc::new(RefCell::new(None)),
             wallpaper_callback: Rc::new(RefCell::new(None)),
         });
 
-        page.setup_scheme_row();
-        page.setup_accent_row();
-        page.setup_wallpaper_logic(&select_btn);
+        page.setup_scheme_cards(&scheme_group);
+        page.setup_accent_swatches(&accent_group);
+        page.setup_wallpaper_card(&wallpaper_group);
 
         page
     }
 
-    fn setup_scheme_row(&self) {
+    fn setup_scheme_cards(&self, group: &adw::PreferencesGroup) {
         let box_ = gtk4::Box::builder()
             .orientation(gtk4::Orientation::Horizontal)
-            .spacing(0)
-            .css_classes(vec!["linked".to_string()])
-            .halign(gtk4::Align::Center)
+            .spacing(12)
+            .homogeneous(true)
+            .css_classes(vec!["scheme-box".to_string()])
             .build();
 
-        let dark_btn = gtk4::ToggleButton::builder().label("Dark").build();
-        let light_btn = gtk4::ToggleButton::builder()
-            .label("Light")
-            .group(&dark_btn)
-            .build();
+        let schemes = vec![
+            (ColorScheme::Dark, "Dark", "scheme-preview-dark"),
+            (ColorScheme::Light, "Light", "scheme-preview-light"),
+            (ColorScheme::System, "System", "scheme-preview-system"),
+        ];
 
-        box_.append(&dark_btn);
-        box_.append(&light_btn);
+        for (scheme, label_text, preview_class) in schemes {
+            let card_content = gtk4::Box::builder()
+                .orientation(gtk4::Orientation::Vertical)
+                .spacing(0)
+                .build();
 
-        self.scheme_group.add(&box_);
+            let preview = gtk4::Box::builder()
+                .orientation(gtk4::Orientation::Vertical)
+                .css_classes(vec!["scheme-preview".to_string(), preview_class.to_string()])
+                .build();
 
-        let cb_d = self.scheme_callback.clone();
-        dark_btn.connect_toggled(move |btn| {
-            if btn.is_active()
-                && let Some(f) = cb_d.borrow().as_ref()
-            {
-                f(ColorScheme::Dark);
-            }
-        });
+            let header = gtk4::Box::builder()
+                .css_classes(vec!["scheme-preview-header".to_string()])
+                .build();
+            let body = gtk4::Box::builder()
+                .css_classes(vec!["scheme-preview-body".to_string()])
+                .build();
 
-        let cb_l = self.scheme_callback.clone();
-        light_btn.connect_toggled(move |btn| {
-            if btn.is_active()
-                && let Some(f) = cb_l.borrow().as_ref()
-            {
-                f(ColorScheme::Light);
-            }
-        });
+            preview.append(&header);
+            preview.append(&body);
+
+            let label = gtk4::Label::builder()
+                .label(label_text)
+                .halign(gtk4::Align::Center)
+                .build();
+
+            card_content.append(&preview);
+            card_content.append(&label);
+
+            let button = gtk4::Button::builder()
+                .child(&card_content)
+                .css_classes(vec!["scheme-card".to_string()])
+                .build();
+
+            let cb = self.scheme_callback.clone();
+            let scheme_clone = scheme.clone();
+
+            button.connect_clicked(move |_| {
+                if let Some(f) = cb.borrow().as_ref() {
+                    f(scheme_clone.clone());
+                }
+            });
+
+            self.scheme_buttons.borrow_mut().insert(scheme, button.clone());
+            box_.append(&button);
+        }
+
+        group.add(&box_);
     }
 
-    fn setup_accent_row(&self) {
+    fn setup_accent_swatches(&self, group: &adw::PreferencesGroup) {
         let flow_box = gtk4::FlowBox::builder()
             .valign(gtk4::Align::Start)
             .max_children_per_line(10)
@@ -124,21 +177,10 @@ impl AppearancePage {
             .selection_mode(gtk4::SelectionMode::None)
             .build();
 
-        let colors = vec![
-            ("Blue", AccentColor::Blue, "#3584e4"),
-            ("Teal", AccentColor::Teal, "#21c7c7"),
-            ("Green", AccentColor::Green, "#3ec35a"),
-            ("Yellow", AccentColor::Yellow, "#f9f06b"),
-            ("Orange", AccentColor::Orange, "#ff9500"),
-            ("Red", AccentColor::Red, "#f66151"),
-            ("Pink", AccentColor::Pink, "#d56191"),
-            ("Purple", AccentColor::Purple, "#9141ac"),
-        ];
-
-        // Add "Auto" button first
+        // 1. Auto Button first
         let auto_btn = gtk4::Button::builder()
             .tooltip_text("Auto (from wallpaper)")
-            .css_classes(vec!["accent-button".to_string(), "accent-auto".to_string()])
+            .css_classes(vec!["accent-swatch".to_string(), "accent-auto-swatch".to_string()])
             .child(&gtk4::Image::from_icon_name(
                 "applications-graphics-symbolic",
             ))
@@ -150,18 +192,33 @@ impl AppearancePage {
                 f(AccentColor::Auto);
             }
         });
+
+        self.accent_buttons
+            .borrow_mut()
+            .push((AccentColor::Auto, auto_btn.clone()));
         flow_box.append(&auto_btn);
 
-        for (name, color_type, hex) in colors {
+        // 2. Preset Swatches
+        let presets = vec![
+            ("Blue", AccentColor::Blue),
+            ("Teal", AccentColor::Teal),
+            ("Green", AccentColor::Green),
+            ("Yellow", AccentColor::Yellow),
+            ("Orange", AccentColor::Orange),
+            ("Red", AccentColor::Red),
+            ("Pink", AccentColor::Pink),
+            ("Purple", AccentColor::Purple),
+        ];
+
+        for (name, color_type) in presets {
+            let hex = color_type.hex_value();
             let btn = gtk4::Button::builder()
                 .tooltip_text(name)
-                .css_classes(vec!["accent-button".to_string()])
+                .css_classes(vec!["accent-swatch".to_string()])
                 .build();
 
-            // Set individual button color
             let provider = gtk4::CssProvider::new();
-            provider.load_from_string(&format!("button {{ background-color: {}; }}", hex));
-            // TODO: Replace with gtk::Widget::add_css_provider when available in gtk4-rs
+            provider.load_from_string(&format!("button {{ background-color: {hex}; }}"));
             #[allow(deprecated)]
             btn.style_context()
                 .add_provider(&provider, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION);
@@ -174,16 +231,54 @@ impl AppearancePage {
                     f(color_c.clone());
                 }
             });
+
+            self.accent_buttons
+                .borrow_mut()
+                .push((color_type, btn.clone()));
             flow_box.append(&btn);
         }
 
-        self.accent_group.add(&flow_box);
+        group.add(&flow_box);
     }
 
-    fn setup_wallpaper_logic(&self, btn: &gtk4::Button) {
-        let btn_c = btn.clone();
+    fn setup_wallpaper_card(&self, group: &adw::PreferencesGroup) {
+        let card = gtk4::Box::builder()
+            .orientation(gtk4::Orientation::Vertical)
+            .css_classes(vec!["wallpaper-preview-card".to_string()])
+            .build();
+
+        let frame = gtk4::Box::builder()
+            .css_classes(vec!["wallpaper-picture-frame".to_string()])
+            .build();
+        frame.append(&self.wallpaper_picture);
+
+        let bottom_row = gtk4::Box::builder()
+            .orientation(gtk4::Orientation::Horizontal)
+            .spacing(12)
+            .valign(gtk4::Align::Center)
+            .build();
+
+        let label_box = gtk4::Box::builder()
+            .orientation(gtk4::Orientation::Vertical)
+            .hexpand(true)
+            .build();
+        label_box.append(&self.wallpaper_title);
+        label_box.append(&self.wallpaper_subtitle);
+
+        let select_btn = gtk4::Button::builder()
+            .label("Select File...")
+            .valign(gtk4::Align::Center)
+            .build();
+
+        bottom_row.append(&label_box);
+        bottom_row.append(&select_btn);
+
+        card.append(&frame);
+        card.append(&bottom_row);
+
         let cb = self.wallpaper_callback.clone();
-        btn.connect_clicked(move |_| {
+        let btn_c = select_btn.clone();
+        select_btn.connect_clicked(move |_| {
             let dialog = gtk4::FileDialog::builder()
                 .title("Select Wallpaper")
                 .build();
@@ -210,6 +305,8 @@ impl AppearancePage {
                 },
             );
         });
+
+        group.add(&card);
     }
 
     pub fn widget(&self) -> &adw::ToolbarView {
@@ -219,10 +316,48 @@ impl AppearancePage {
 
 impl View<AppearanceConfig> for AppearancePage {
     fn render(&self, status: &AppearanceConfig) {
-        if let Some(ref path) = status.wallpaper {
-            self.wallpaper_row.set_subtitle(path);
+        // 1. Color Scheme Active State
+        for (scheme, btn) in self.scheme_buttons.borrow().iter() {
+            if status.color_scheme == *scheme {
+                btn.add_css_class("active");
+            } else {
+                btn.remove_css_class("active");
+            }
+        }
+
+        // 2. Accent Color Active State
+        for (color, btn) in self.accent_buttons.borrow().iter() {
+            if status.accent_color == *color {
+                btn.add_css_class("active");
+            } else {
+                btn.remove_css_class("active");
+            }
+        }
+
+        // 3. Wallpaper Preview & Labels
+        if let Some(ref path_str) = status.wallpaper {
+            let path = std::path::Path::new(path_str);
+            if path.exists() {
+                self.wallpaper_picture.set_filename(Some(path_str));
+                let filename = path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or(path_str);
+                let parent = path
+                    .parent()
+                    .and_then(|p| p.to_str())
+                    .unwrap_or("");
+                self.wallpaper_title.set_text(filename);
+                self.wallpaper_subtitle.set_text(parent);
+            } else {
+                self.wallpaper_picture.set_filename(None::<&str>);
+                self.wallpaper_title.set_text("File not found");
+                self.wallpaper_subtitle.set_text(path_str);
+            }
         } else {
-            self.wallpaper_row.set_subtitle("None");
+            self.wallpaper_picture.set_filename(None::<&str>);
+            self.wallpaper_title.set_text("No Wallpaper Set");
+            self.wallpaper_subtitle.set_text("Default background active");
         }
     }
 }
