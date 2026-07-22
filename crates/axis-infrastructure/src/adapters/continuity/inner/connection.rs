@@ -186,6 +186,45 @@ impl ContinuityInner {
                     error!("[continuity] failed to set clipboard: {e}");
                 }
             }
+            Message::DragOffer {
+                transfer_id,
+                file_name,
+                file_size,
+                mime_type,
+            } => {
+                info!(
+                    "[continuity] incoming file drag offer {}: {} ({} bytes)",
+                    transfer_id, file_name, file_size
+                );
+                let _ = ctx
+                    .drag_drop_mgr
+                    .handle_offer(transfer_id, file_name, file_size, mime_type)
+                    .await;
+            }
+            Message::DragChunk {
+                transfer_id,
+                chunk_index,
+                is_last,
+                data,
+            } => {
+                if let Ok(Some(completed_path)) = ctx
+                    .drag_drop_mgr
+                    .handle_chunk(&transfer_id, chunk_index, is_last, &data)
+                    .await
+                {
+                    info!(
+                        "[continuity] file drag transfer complete: saved to {:?}",
+                        completed_path
+                    );
+                    let uri = format!("file://{}", completed_path.to_string_lossy());
+                    if let Err(e) = ctx.clipboard.set_content(uri.as_bytes(), "text/uri-list") {
+                        error!("[continuity] failed to set clipboard for file drop: {e}");
+                    }
+                }
+            }
+            Message::DragCancel { transfer_id } => {
+                info!("[continuity] file drag transfer cancelled: {transfer_id}");
+            }
             Message::CursorMove { .. }
             | Message::KeyPress { .. }
             | Message::KeyRelease { .. }

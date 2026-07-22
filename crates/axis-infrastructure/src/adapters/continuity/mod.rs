@@ -3,6 +3,7 @@ pub mod connection;
 pub mod crypto;
 pub mod dbus;
 pub mod discovery;
+pub mod drag_drop;
 mod inner;
 pub mod input;
 pub mod known_peers;

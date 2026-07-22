@@ -52,6 +52,7 @@ pub(crate) struct CmdContext<'a> {
     pub clipboard: &'a mut WaylandClipboard,
     pub injection: &'a mut WaylandInjection,
     pub capture: &'a mut EvdevCapture,
+    pub drag_drop_mgr: &'a super::drag_drop::DragDropManager,
     pub discovery_tx: &'a Sender<DiscoveryEvent>,
     pub conn_tx: &'a Sender<ConnectionEvent>,
     pub clipboard_tx: &'a Sender<ClipboardEvent>,
@@ -222,6 +223,7 @@ impl ContinuityInner {
         let mut clipboard = WaylandClipboard::new();
         let mut injection = WaylandInjection::new();
         let mut capture = EvdevCapture::new();
+        let drag_drop_mgr = super::drag_drop::DragDropManager::new();
         let mut heartbeat = interval(Duration::from_secs(HEARTBEAT_INTERVAL_SECS));
         let mut reconnect_sleep: Option<Pin<Box<tokio::time::Sleep>>> = None;
 
@@ -287,6 +289,7 @@ impl ContinuityInner {
                         clipboard: &mut clipboard,
                         injection: &mut injection,
                         capture: &mut capture,
+                        drag_drop_mgr: &drag_drop_mgr,
                         discovery_tx: &discovery_tx,
                         conn_tx: &conn_tx,
                         clipboard_tx: &clipboard_tx,
@@ -300,6 +303,7 @@ impl ContinuityInner {
                         clipboard: &mut clipboard,
                         injection: &mut injection,
                         capture: &mut capture,
+                        drag_drop_mgr: &drag_drop_mgr,
                         discovery_tx: &discovery_tx,
                         conn_tx: &conn_tx,
                         clipboard_tx: &clipboard_tx,
@@ -316,6 +320,7 @@ impl ContinuityInner {
                         clipboard: &mut clipboard,
                         injection: &mut injection,
                         capture: &mut capture,
+                        drag_drop_mgr: &drag_drop_mgr,
                         discovery_tx: &discovery_tx,
                         conn_tx: &conn_tx,
                         clipboard_tx: &clipboard_tx,

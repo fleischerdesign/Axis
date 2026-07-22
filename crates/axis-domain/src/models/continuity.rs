@@ -261,6 +261,21 @@ pub enum Message {
         content: String,
         mime_type: String,
     },
+    DragOffer {
+        transfer_id: String,
+        file_name: String,
+        file_size: u64,
+        mime_type: String,
+    },
+    DragChunk {
+        transfer_id: String,
+        chunk_index: u32,
+        is_last: bool,
+        data: Vec<u8>,
+    },
+    DragCancel {
+        transfer_id: String,
+    },
     EdgeTransition {
         side: Side,
         edge_pos: f64,
