@@ -67,6 +67,7 @@ fn sleep_value(index: u32) -> Option<u32> {
 pub struct IdleSettingsPage {
     root: adw::ToolbarView,
     inhibit_switch: adw::SwitchRow,
+    timeouts_group: adw::PreferencesGroup,
     lock_combo: adw::ComboRow,
     blank_combo: adw::ComboRow,
     sleep_combo: adw::ComboRow,
@@ -87,11 +88,19 @@ impl IdleSettingsPage {
             .title("Idle")
             .icon_name("changes-prevent-symbolic")
             .build();
-        toolbar_view.set_content(Some(&preferences_page));
 
+        let clamp = adw::Clamp::builder()
+            .maximum_size(760)
+            .tightening_threshold(500)
+            .child(&preferences_page)
+            .build();
+
+        toolbar_view.set_content(Some(&clamp));
+
+        // 1. Behavior Group
         let behavior_group = adw::PreferencesGroup::builder()
             .title("Behavior")
-            .description("Prevent automatic screen lock and blanking")
+            .description("Prevent automatic screen lock, blanking, and sleep")
             .build();
         preferences_page.add(&behavior_group);
 
@@ -99,19 +108,22 @@ impl IdleSettingsPage {
             .title("Idle Inhibit")
             .subtitle("When enabled, the screen will not lock or blank automatically")
             .build();
+        inhibit_switch.add_prefix(&gtk4::Image::from_icon_name("changes-prevent-symbolic"));
         behavior_group.add(&inhibit_switch);
 
+        // 2. Timeouts Group
         let timeouts_group = adw::PreferencesGroup::builder()
             .title("Timeouts")
-            .description("How long after inactivity the screen blanks and locks. Restart required for changes to take effect.")
+            .description("Inactivity timers for screen blanking, locking, and system suspend")
             .build();
         preferences_page.add(&timeouts_group);
 
         let lock_strings: Vec<&str> = LOCK_TIMEOUTS.iter().map(|(_, label)| *label).collect();
         let lock_combo = adw::ComboRow::builder()
-            .title("Lock after")
+            .title("Lock screen after")
             .model(&gtk4::StringList::new(&lock_strings))
             .build();
+        lock_combo.add_prefix(&gtk4::Image::from_icon_name("system-lock-screen-symbolic"));
         timeouts_group.add(&lock_combo);
 
         let blank_strings: Vec<&str> = BLANK_TIMEOUTS.iter().map(|(_, label)| *label).collect();
@@ -119,18 +131,21 @@ impl IdleSettingsPage {
             .title("Blank screen after")
             .model(&gtk4::StringList::new(&blank_strings))
             .build();
+        blank_combo.add_prefix(&gtk4::Image::from_icon_name("display-brightness-symbolic"));
         timeouts_group.add(&blank_combo);
 
         let sleep_strings: Vec<&str> = SLEEP_TIMEOUTS.iter().map(|(_, label)| *label).collect();
         let sleep_combo = adw::ComboRow::builder()
-            .title("Suspend after")
+            .title("Suspend system after")
             .model(&gtk4::StringList::new(&sleep_strings))
             .build();
+        sleep_combo.add_prefix(&gtk4::Image::from_icon_name("weather-clear-night-symbolic"));
         timeouts_group.add(&sleep_combo);
 
         let page = Rc::new(Self {
             root: toolbar_view,
             inhibit_switch,
+            timeouts_group,
             lock_combo,
             blank_combo,
             sleep_combo,
@@ -141,7 +156,9 @@ impl IdleSettingsPage {
         });
 
         let cb_inhibit = page.inhibit_callback.clone();
+        let tg_c = page.timeouts_group.clone();
         page.inhibit_switch.connect_active_notify(move |sw| {
+            tg_c.set_sensitive(!sw.is_active());
             if let Some(f) = cb_inhibit.borrow().as_ref() {
                 f(sw.is_active());
             }
@@ -179,6 +196,9 @@ impl IdleSettingsPage {
 impl View<AxisConfig> for IdleSettingsPage {
     fn render(&self, status: &AxisConfig) {
         self.inhibit_switch.set_active(status.idle_inhibit.enabled);
+        self.timeouts_group
+            .set_sensitive(!status.idle_inhibit.enabled);
+
         self.lock_combo
             .set_selected(lock_index(status.idle.lock_timeout_seconds));
         self.blank_combo
