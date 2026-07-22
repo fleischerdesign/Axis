@@ -184,8 +184,8 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    fn test_drag_drop_manager_creation() {
+    async fn test_drag_drop_manager_creation() {
         let mgr = DragDropManager::new();
-        assert!(mgr.incoming_transfers.blocking_lock().is_empty());
+        assert!(mgr.incoming_transfers.lock().await.is_empty());
     }
 }

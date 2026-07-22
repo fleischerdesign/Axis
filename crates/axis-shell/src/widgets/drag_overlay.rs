@@ -4,6 +4,7 @@ use gtk4_layer_shell::{Edge, Layer, LayerShell};
 
 use axis_domain::models::continuity::ContinuityStatus;
 
+#[allow(dead_code)]
 pub struct DragOverlayWindow {
     window: gtk4::Window,
     container: Box,
@@ -97,11 +98,11 @@ impl DragOverlayWindow {
 
         let active_path_clone = active_path.clone();
         btn_copy.connect_clicked(move |_| {
-            if let Some(path_str) = active_path_clone.borrow().as_ref() {
-                if let Some(display) = gtk4::gdk::Display::default() {
-                    let clipboard = display.clipboard();
-                    clipboard.set_text(&format!("file://{path_str}"));
-                }
+            if let Some(path_str) = active_path_clone.borrow().as_ref()
+                && let Some(display) = gtk4::gdk::Display::default()
+            {
+                let clipboard = display.clipboard();
+                clipboard.set_text(&format!("file://{path_str}"));
             }
         });
 
