@@ -334,13 +334,16 @@ impl ContinuityInner {
             if let Ok(mut sock) = niri_ipc::socket::Socket::connect()
                 && let Ok(Ok(niri_ipc::Response::FocusedWindow(Some(win)))) =
                     sock.send(niri_ipc::Request::FocusedWindow)
-                && win.is_fullscreen
             {
-                info!(
-                    "[continuity] blocking edge transition: active window '{}' is in fullscreen mode",
-                    win.title.unwrap_or_default()
-                );
-                return;
+                let is_fullscreen = win.layout.window_size.0 >= self.status.screen_width
+                    && win.layout.window_size.1 >= self.status.screen_height;
+                if is_fullscreen {
+                    info!(
+                        "[continuity] blocking edge transition: active window '{}' is in fullscreen mode",
+                        win.title.unwrap_or_default()
+                    );
+                    return;
+                }
             }
 
             let arrangement = self.status.active_peer_config().arrangement;

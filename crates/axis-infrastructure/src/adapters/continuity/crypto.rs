@@ -1,4 +1,4 @@
-use chacha20poly1305::aead::{Aead, KeyInit, OsRng};
+use chacha20poly1305::aead::{Aead, KeyInit};
 use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
 use thiserror::Error;
 

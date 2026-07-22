@@ -253,7 +253,7 @@ async fn run_connection(
     let (mut reader, mut writer) = split(stream);
 
     if is_initiator {
-        let hello = Message::Hello {
+        let hello = Message::Handshake {
             device_id,
             device_name,
             version: proto::PROTOCOL_VERSION,

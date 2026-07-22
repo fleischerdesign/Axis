@@ -7,7 +7,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::Mutex;
 
 use axis_domain::models::continuity::Message;
-use log::{error, info};
+use log::info;
 
 use super::connection::ConnectionProvider;
 

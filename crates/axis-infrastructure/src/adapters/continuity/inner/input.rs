@@ -63,13 +63,19 @@ impl ContinuityInner {
                 connection.send_message(Message::CursorMove { dx, dy });
             }
             InternalInputEvent::KeyPress { key, state } => {
-                connection.send_message(Message::KeyPress { key, state });
+                connection.send_message(Message::KeyPress {
+                    key,
+                    state: state.into(),
+                });
             }
             InternalInputEvent::KeyRelease { key } => {
                 connection.send_message(Message::KeyRelease { key });
             }
             InternalInputEvent::PointerButton { button, state } => {
-                connection.send_message(Message::PointerButton { button, state });
+                connection.send_message(Message::PointerButton {
+                    button,
+                    state: state.into(),
+                });
             }
             InternalInputEvent::PointerAxis { dx, dy } => {
                 connection.send_message(Message::PointerAxis { dx, dy });

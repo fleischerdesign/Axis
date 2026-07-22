@@ -1,9 +1,8 @@
 use gtk4::prelude::*;
 use gtk4::{Box, Button, Label, Orientation};
 use gtk4_layer_shell::{Edge, Layer, LayerShell};
-use libadwaita::prelude::*;
 
-use axis_domain::models::continuity::{ActiveDragPayload, ContinuityStatus};
+use axis_domain::models::continuity::ContinuityStatus;
 
 pub struct DragOverlayWindow {
     window: gtk4::Window,
@@ -23,7 +22,7 @@ impl DragOverlayWindow {
         let window = gtk4::Window::new();
         window.init_layer_shell();
         window.set_layer(Layer::Overlay);
-        window.set_namespace("axis-drag-overlay");
+        window.set_namespace(Some("axis-drag-overlay"));
 
         window.set_anchor(Edge::Top, true);
         window.set_anchor(Edge::Right, true);
@@ -99,7 +98,7 @@ impl DragOverlayWindow {
         let active_path_clone = active_path.clone();
         btn_copy.connect_clicked(move |_| {
             if let Some(path_str) = active_path_clone.borrow().as_ref() {
-                if let Some(display) = gdk4::Display::default() {
+                if let Some(display) = gtk4::gdk::Display::default() {
                     let clipboard = display.clipboard();
                     clipboard.set_text(&format!("file://{path_str}"));
                 }

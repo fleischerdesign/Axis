@@ -111,7 +111,7 @@ impl ContinuityInner {
         self.is_initiating = false;
         connection.set_active_write(write_tx);
 
-        let hello = Message::Hello {
+        let hello = Message::Handshake {
             device_id: self.status.device_id.clone(),
             device_name: self.status.device_name.clone(),
             version: proto::PROTOCOL_VERSION,
@@ -152,7 +152,7 @@ impl ContinuityInner {
     pub(crate) async fn handle_message_received(&mut self, msg: Message, ctx: &mut CmdContext<'_>) {
         self.last_message_at = Some(Instant::now());
         match msg {
-            Message::Hello {
+            Message::Handshake {
                 device_id,
                 device_name,
                 version,

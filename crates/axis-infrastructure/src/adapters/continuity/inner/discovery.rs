@@ -44,22 +44,23 @@ impl ContinuityInner {
                     self.status.peers.push(peer);
                 }
 
-                if self.status.active_connection.is_none() && !self.is_initiating {
-                    if let Some(config) = self.status.peer_configs.get(&peer_id) {
-                        if config.trusted && config.auto_connect {
-                            info!("[continuity] auto-connecting to trusted peer {}", peer_name);
-                            self.is_initiating = true;
-                            self.pending_peer = Some((peer_id.clone(), peer_name.clone()));
+                if self.status.active_connection.is_none()
+                    && !self.is_initiating
+                    && let Some(config) = self.status.peer_configs.get(&peer_id)
+                    && config.trusted
+                    && config.auto_connect
+                {
+                    info!("[continuity] auto-connecting to trusted peer {}", peer_name);
+                    self.is_initiating = true;
+                    self.pending_peer = Some((peer_id.clone(), peer_name.clone()));
 
-                            connection.connect_dual(
-                                addr_v4,
-                                addr_v6,
-                                conn_tx.clone(),
-                                self.status.device_id.clone(),
-                                self.status.device_name.clone(),
-                            );
-                        }
-                    }
+                    connection.connect_dual(
+                        addr_v4,
+                        addr_v6,
+                        conn_tx.clone(),
+                        self.status.device_id.clone(),
+                        self.status.device_name.clone(),
+                    );
                 }
 
                 self.push();

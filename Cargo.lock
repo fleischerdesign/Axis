@@ -470,6 +470,7 @@ dependencies = [
  "image",
  "libadwaita",
  "log",
+ "open",
  "serde_json",
  "tokio",
  "tokio-stream",
