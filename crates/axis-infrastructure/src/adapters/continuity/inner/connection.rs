@@ -241,6 +241,39 @@ impl ContinuityInner {
                 self.status.active_drag = None;
                 self.push();
             }
+            Message::NotificationOffer {
+                notification_id: _,
+                app_name,
+                title,
+                body,
+                icon: _,
+            } => {
+                info!("[continuity] incoming remote notification: '{app_name}' - {title}");
+                let _ = tokio::process::Command::new("notify-send")
+                    .arg(format!("[Continuity] {app_name}: {title}"))
+                    .arg(&body)
+                    .spawn();
+            }
+            Message::NotificationDismissed { notification_id } => {
+                info!("[continuity] remote notification dismissed: {notification_id}");
+            }
+            Message::NotificationActionInvoked {
+                notification_id,
+                action_key,
+            } => {
+                info!(
+                    "[continuity] remote notification action: id={notification_id}, action={action_key}"
+                );
+            }
+            Message::AudioChunk {
+                channel_id,
+                pcm_data,
+            } => {
+                info!(
+                    "[continuity] incoming audio stream chunk: channel={channel_id}, {} bytes",
+                    pcm_data.len()
+                );
+            }
             Message::CursorMove { .. }
             | Message::KeyPress { .. }
             | Message::KeyRelease { .. }

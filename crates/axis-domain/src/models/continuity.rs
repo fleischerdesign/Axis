@@ -270,7 +270,7 @@ pub enum Message {
         version: u64,
     },
     ClipboardUpdate {
-        content: String,
+        content: Vec<u8>,
         mime_type: String,
     },
     DragOffer {
@@ -289,6 +289,24 @@ pub enum Message {
     },
     DragCancel {
         transfer_id: String,
+    },
+    NotificationOffer {
+        notification_id: String,
+        app_name: String,
+        title: String,
+        body: String,
+        icon: String,
+    },
+    NotificationDismissed {
+        notification_id: String,
+    },
+    NotificationActionInvoked {
+        notification_id: String,
+        action_key: String,
+    },
+    AudioChunk {
+        channel_id: u8,
+        pcm_data: Vec<u8>,
     },
     EdgeTransition {
         side: Side,
