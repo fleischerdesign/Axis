@@ -1,12 +1,10 @@
 # Axis Desktop Shell
 
-> A modern, high-performance desktop shell for the **Niri Wayland Compositor**, built with **Rust**, **GTK4 / Libadwaita**, and **Layer Shell**.
+> A modern, high-performance desktop shell for **Wayland compositors** (such as Niri, Hyprland, and Sway), built with **Rust**, **GTK4 / Libadwaita**, and **wlr-layer-shell**.
 
-[![Release](https://img.shields.io/github/v/release/fleischerdesign/Axis?color=blue&style=flat-square)](https://github.com/fleischerdesign/Axis/releases)
-[![License](https://img.shields.io/github/license/fleischerdesign/Axis?color=green&style=flat-square)](LICENSE)
-[![Rust](https://img.shields.io/badge/rust-2024%20edition-orange?style=flat-square&logo=rust)](https://www.rust-lang.org/)
-[![Wayland](https://img.shields.io/badge/wayland-niri-purple?style=flat-square&logo=wayland)](https://github.com/YaLteR/niri)
-[![Nix](https://img.shields.io/badge/nix-flake-blue?style=flat-square&logo=nixos)](https://nixos.org/)
+[![Release](https://img.shields.io/github/v/release/fleischerdesign/Axis)](https://github.com/fleischerdesign/Axis/releases)
+[![License](https://img.shields.io/github/license/fleischerdesign/Axis)](LICENSE)
+[![CI Status](https://github.com/fleischerdesign/Axis/actions/workflows/ci.yml/badge.svg)](https://github.com/fleischerdesign/Axis/actions/workflows/ci.yml)
 
 ---
 
@@ -76,7 +74,7 @@ graph TD
 
 - **GTK4** and **libadwaita** (`>= 1.4`)
 - **Rust toolchain** (2024 edition)
-- **Niri Wayland Compositor** (recommended target environment)
+- **Wayland Compositor** with `wlr-layer-shell` support (e.g. Niri, Hyprland, Sway)
 
 ### Building with Cargo
 
