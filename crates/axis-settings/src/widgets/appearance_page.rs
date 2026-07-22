@@ -127,7 +127,10 @@ impl AppearancePage {
 
             let preview = gtk4::Box::builder()
                 .orientation(gtk4::Orientation::Vertical)
-                .css_classes(vec!["scheme-preview".to_string(), preview_class.to_string()])
+                .css_classes(vec![
+                    "scheme-preview".to_string(),
+                    preview_class.to_string(),
+                ])
                 .build();
 
             let header = gtk4::Box::builder()
@@ -162,7 +165,9 @@ impl AppearancePage {
                 }
             });
 
-            self.scheme_buttons.borrow_mut().insert(scheme, button.clone());
+            self.scheme_buttons
+                .borrow_mut()
+                .insert(scheme, button.clone());
             box_.append(&button);
         }
 
@@ -180,7 +185,10 @@ impl AppearancePage {
         // 1. Auto Button first
         let auto_btn = gtk4::Button::builder()
             .tooltip_text("Auto (from wallpaper)")
-            .css_classes(vec!["accent-swatch".to_string(), "accent-auto-swatch".to_string()])
+            .css_classes(vec![
+                "accent-swatch".to_string(),
+                "accent-auto-swatch".to_string(),
+            ])
             .child(&gtk4::Image::from_icon_name(
                 "applications-graphics-symbolic",
             ))
@@ -343,10 +351,7 @@ impl View<AppearanceConfig> for AppearancePage {
                     .file_name()
                     .and_then(|n| n.to_str())
                     .unwrap_or(path_str);
-                let parent = path
-                    .parent()
-                    .and_then(|p| p.to_str())
-                    .unwrap_or("");
+                let parent = path.parent().and_then(|p| p.to_str()).unwrap_or("");
                 self.wallpaper_title.set_text(filename);
                 self.wallpaper_subtitle.set_text(parent);
             } else {
@@ -357,7 +362,8 @@ impl View<AppearanceConfig> for AppearancePage {
         } else {
             self.wallpaper_picture.set_filename(None::<&str>);
             self.wallpaper_title.set_text("No Wallpaper Set");
-            self.wallpaper_subtitle.set_text("Default background active");
+            self.wallpaper_subtitle
+                .set_text("Default background active");
         }
     }
 }

@@ -209,10 +209,8 @@ impl View<NetworkStatus> for NetworkPage {
 
         self.status_group.set_visible(false);
 
-        let (active_aps, other_aps): (Vec<_>, Vec<_>) = status
-            .access_points
-            .iter()
-            .partition(|ap| ap.is_active);
+        let (active_aps, other_aps): (Vec<_>, Vec<_>) =
+            status.access_points.iter().partition(|ap| ap.is_active);
 
         // 1. Render Connected Network
         if let Some(active_ap) = active_aps.first() {
