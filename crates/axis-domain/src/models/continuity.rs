@@ -182,6 +182,16 @@ pub struct ReconnectState {
     pub delay_secs: u64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ActiveDragPayload {
+    pub transfer_id: String,
+    pub name: String,
+    pub size_bytes: u64,
+    pub mime_type: String,
+    pub is_directory: bool,
+    pub item_count: u32,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ContinuityStatus {
     pub device_id: String,
@@ -197,6 +207,7 @@ pub struct ContinuityStatus {
     pub local_outputs: Vec<OutputGeometry>,
     pub remote_screen: Option<(i32, i32)>,
     pub reconnect: Option<ReconnectState>,
+    pub active_drag: Option<ActiveDragPayload>,
 }
 
 impl ContinuityStatus {
@@ -220,7 +231,7 @@ impl Default for ContinuityStatus {
             enabled: false,
             peers: Vec::new(),
             active_connection: None,
-            sharing_state: SharingState::Idle,
+            sharing_state: SharingState::default(),
             pending_pin: None,
             peer_configs: HashMap::new(),
             screen_width: 1920,
@@ -228,13 +239,14 @@ impl Default for ContinuityStatus {
             local_outputs: Vec::new(),
             remote_screen: None,
             reconnect: None,
+            active_drag: None,
         }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Message {
-    Hello {
+    Handshake {
         device_id: String,
         device_name: String,
         version: u32,
@@ -266,6 +278,8 @@ pub enum Message {
         file_name: String,
         file_size: u64,
         mime_type: String,
+        is_directory: bool,
+        item_count: u32,
     },
     DragChunk {
         transfer_id: String,

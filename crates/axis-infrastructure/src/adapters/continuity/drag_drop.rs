@@ -56,11 +56,12 @@ impl DragDropManager {
             .to_string();
 
         let metadata = tokio::fs::metadata(path).await?;
+        let is_directory = metadata.is_dir();
         let file_size = metadata.len();
 
         info!(
-            "[continuity-dragdrop] offering file transfer {}: {} ({} bytes)",
-            transfer_id, file_name, file_size
+            "[continuity-dragdrop] offering file transfer {}: {} (dir={}, {} bytes)",
+            transfer_id, file_name, is_directory, file_size
         );
 
         connection.send_message(Message::DragOffer {
@@ -68,6 +69,8 @@ impl DragDropManager {
             file_name: file_name.clone(),
             file_size,
             mime_type,
+            is_directory,
+            item_count: 1,
         });
 
         let mut file = File::open(path).await?;

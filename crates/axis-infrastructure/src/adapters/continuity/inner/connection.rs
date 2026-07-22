@@ -191,11 +191,23 @@ impl ContinuityInner {
                 file_name,
                 file_size,
                 mime_type,
+                is_directory,
+                item_count,
             } => {
                 info!(
                     "[continuity] incoming file drag offer {}: {} ({} bytes)",
                     transfer_id, file_name, file_size
                 );
+                self.status.active_drag =
+                    Some(axis_domain::models::continuity::ActiveDragPayload {
+                        transfer_id: transfer_id.clone(),
+                        name: file_name.clone(),
+                        size_bytes: file_size,
+                        mime_type: mime_type.clone(),
+                        is_directory,
+                        item_count,
+                    });
+                self.push();
                 let _ = ctx
                     .drag_drop_mgr
                     .handle_offer(transfer_id, file_name, file_size, mime_type)
@@ -216,14 +228,18 @@ impl ContinuityInner {
                         "[continuity] file drag transfer complete: saved to {:?}",
                         completed_path
                     );
+                    self.status.active_drag = None;
+                    self.push();
                     let uri = format!("file://{}", completed_path.to_string_lossy());
                     if let Err(e) = ctx.clipboard.set_content(uri.as_bytes(), "text/uri-list") {
                         error!("[continuity] failed to set clipboard for file drop: {e}");
                     }
                 }
             }
-            Message::DragCancel { transfer_id } => {
-                info!("[continuity] file drag transfer cancelled: {transfer_id}");
+            Message::DragCancel { transfer_id: _ } => {
+                info!("[continuity] file drag transfer cancelled");
+                self.status.active_drag = None;
+                self.push();
             }
             Message::CursorMove { .. }
             | Message::KeyPress { .. }
