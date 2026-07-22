@@ -555,9 +555,9 @@ dependencies = [
 
 [[package]]
 name = "brightness"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef8ebb1074160fff0deafd33c0b37a27954293e0245321da5a42f80cc1ff6674"
+checksum = "96cbd6161e57989ea8b90d5adc0faf20eda8c0995a14cdbc63a8855ab7e4149e"
 dependencies = [
  "blocking",
  "cfg-if",

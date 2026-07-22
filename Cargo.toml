@@ -26,7 +26,7 @@ gtk4 = { version = "0.11", features = ["v4_12"] }
 gtk4-layer-shell = "0.8"
 libadwaita = { version = "0.9", features = ["v1_4"] }
 libpulse-binding = "2.30.1"
-brightness = "0.7"
+brightness = "0.8"
 inotify = "0.11"
 niri-ipc = "26.4.0"
 tokio = { version = "1.50.0", features = ["full", "sync"] }
