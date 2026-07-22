@@ -17,10 +17,17 @@ struct AppEntry {
     comment: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DirState {
+    path: PathBuf,
+    mtime: SystemTime,
+    canonical_target: Option<PathBuf>,
+}
+
 #[derive(Debug, Clone)]
 struct Cache {
     apps: Vec<AppEntry>,
-    dir_mtimes: Vec<(PathBuf, SystemTime)>,
+    dir_states: Vec<DirState>,
 }
 
 pub struct AppSearchProvider {
@@ -72,10 +79,11 @@ impl AppSearchProvider {
     }
 
     fn get_cached_or_scan(&self) -> Vec<AppEntry> {
+        let current_states = self.get_dir_states();
         {
             let guard = self.cache.read().unwrap();
             if let Some(ref cache) = *guard
-                && !self.dirs_changed(&cache.dir_mtimes)
+                && cache.dir_states == current_states
             {
                 return cache.apps.clone();
             }
@@ -84,32 +92,24 @@ impl AppSearchProvider {
         let mut apps = self.scan_apps();
         apps.sort_by_key(|a| a.name.to_lowercase());
         info!("[launcher] Found {} apps", apps.len());
-        let dir_mtimes = self.get_dir_mtimes();
         *self.cache.write().unwrap() = Some(Cache {
             apps: apps.clone(),
-            dir_mtimes,
+            dir_states: current_states,
         });
         apps
     }
 
-    fn dirs_changed(&self, cached: &[(PathBuf, SystemTime)]) -> bool {
-        for (path, cached_time) in cached {
-            if let Ok(meta) = fs::metadata(path)
-                && let Ok(mtime) = meta.modified()
-                && mtime != *cached_time
-            {
-                return true;
-            }
-        }
-        false
-    }
-
-    fn get_dir_mtimes(&self) -> Vec<(PathBuf, SystemTime)> {
+    fn get_dir_states(&self) -> Vec<DirState> {
         self.app_dirs()
             .into_iter()
             .filter_map(|p| {
-                let mtime = fs::metadata(&p).ok()?.modified().ok()?;
-                Some((p, mtime))
+                let mtime = fs::symlink_metadata(&p).ok()?.modified().ok()?;
+                let canonical_target = fs::canonicalize(&p).ok();
+                Some(DirState {
+                    path: p,
+                    mtime,
+                    canonical_target,
+                })
             })
             .collect()
     }
@@ -137,7 +137,7 @@ impl AppSearchProvider {
 
     fn scan_apps(&self) -> Vec<AppEntry> {
         let mut apps = Vec::new();
-        let mut seen_names = HashSet::new();
+        let mut seen_ids = HashSet::new();
 
         for path in self.app_dirs() {
             if !path.exists() {
@@ -146,9 +146,11 @@ impl AppSearchProvider {
 
             if let Ok(entries) = fs::read_dir(&path) {
                 for entry in entries.flatten() {
-                    if entry.path().extension().is_some_and(|ext| ext == "desktop")
-                        && let Some(app) = Self::parse_desktop_file(entry.path())
-                        && seen_names.insert(app.name.clone())
+                    let entry_path = entry.path();
+                    if entry_path.extension().is_some_and(|ext| ext == "desktop")
+                        && let Some(desktop_id) = entry_path.file_name().and_then(|n| n.to_str())
+                        && seen_ids.insert(desktop_id.to_string())
+                        && let Some(app) = Self::parse_desktop_file(entry_path)
                     {
                         apps.push(app);
                     }
@@ -165,13 +167,19 @@ impl AppSearchProvider {
         let mut icon = None;
         let mut comment = None;
         let mut no_display = false;
-        let mut is_app = false;
+        let mut in_desktop_entry = false;
 
         for line in content.lines() {
             let line = line.trim();
-            if line == "[Desktop Entry]" {
-                is_app = true;
-            } else if line.starts_with("Name=") && name.is_none() {
+            if line.starts_with('[') && line.ends_with(']') {
+                in_desktop_entry = line == "[Desktop Entry]";
+                continue;
+            }
+            if !in_desktop_entry {
+                continue;
+            }
+
+            if line.starts_with("Name=") && name.is_none() {
                 name = Some(line.replace("Name=", ""));
             } else if line.starts_with("Exec=") && exec.is_none() {
                 let full_exec = line.replace("Exec=", "");
@@ -190,7 +198,7 @@ impl AppSearchProvider {
             }
         }
 
-        if !is_app || no_display {
+        if no_display {
             return None;
         }
 
@@ -390,5 +398,27 @@ mod tests {
             action,
             LauncherAction::Exec(vec!["app".into(), "--arg".into(), "hello world".into()])
         );
+    }
+
+    #[test]
+    fn parse_desktop_file_section_aware() {
+        let temp_dir = std::env::temp_dir();
+        let file_path = temp_dir.join("test_steam.desktop");
+        let content = r#"[Desktop Entry]
+Name=Steam
+Exec=steam %U
+Icon=steam
+Type=Application
+
+[Desktop Action RimWorld]
+Name=RimWorld
+Exec=steam steam://rungameid/294100
+"#;
+        std::fs::write(&file_path, content).unwrap();
+
+        let app = AppSearchProvider::parse_desktop_file(file_path.clone()).unwrap();
+        assert_eq!(app.name, "Steam");
+        assert_eq!(app.exec, "steam");
+        let _ = std::fs::remove_file(file_path);
     }
 }
