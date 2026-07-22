@@ -9,7 +9,12 @@ pub struct ScanButton {
 impl ScanButton {
     pub fn new() -> Self {
         let image = gtk4::Image::from_icon_name("view-refresh-symbolic");
-        let spinner = gtk4::Spinner::new();
+        let spinner = gtk4::Spinner::builder()
+            .width_request(16)
+            .height_request(16)
+            .halign(gtk4::Align::Center)
+            .valign(gtk4::Align::Center)
+            .build();
 
         let stack = gtk4::Stack::builder()
             .transition_type(gtk4::StackTransitionType::Crossfade)
