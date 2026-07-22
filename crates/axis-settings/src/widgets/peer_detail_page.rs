@@ -10,6 +10,7 @@ type ConfigFnCell = Rc<RefCell<Option<Box<dyn Fn(String, PeerConfig) + 'static>>
 pub struct PeerDetailPage {
     root: adw::Clamp,
     peer_id: String,
+    auto_connect_switch: adw::SwitchRow,
     clipboard_switch: adw::SwitchRow,
     audio_switch: adw::SwitchRow,
     drag_drop_switch: adw::SwitchRow,
@@ -38,10 +39,16 @@ impl PeerDetailPage {
             .build();
 
         let caps_group = adw::PreferencesGroup::builder()
-            .title("Capabilities")
-            .description("Configure sharing permissions for this device")
+            .title("Capabilities & Automation")
+            .description("Configure sharing permissions and automatic connection for this device")
             .build();
         page.add(&caps_group);
+
+        let auto_connect_switch = adw::SwitchRow::builder()
+            .title("Auto-Connect")
+            .subtitle("Automatically connect when this trusted peer is in range")
+            .build();
+        caps_group.add(&auto_connect_switch);
 
         let clipboard_switch = adw::SwitchRow::builder()
             .title("Synchronize Clipboard")
@@ -89,6 +96,7 @@ impl PeerDetailPage {
         let page = Rc::new(Self {
             root: clamp,
             peer_id,
+            auto_connect_switch,
             clipboard_switch,
             audio_switch,
             drag_drop_switch,
@@ -108,6 +116,22 @@ impl PeerDetailPage {
     }
 
     fn wire_notifies(page: &Rc<Self>) {
+        let p = page.clone();
+        page.auto_connect_switch.connect_active_notify(move |row| {
+            if *p.update_silent.borrow() {
+                return;
+            }
+            if let Some(f) = p.config_cb.borrow().as_ref()
+                && let Some(ref current) = *p.last_config.borrow()
+            {
+                let config = PeerConfig {
+                    auto_connect: row.is_active(),
+                    ..current.clone()
+                };
+                f(p.peer_id.clone(), config);
+            }
+        });
+
         let p = page.clone();
         page.clipboard_switch.connect_active_notify(move |row| {
             if *p.update_silent.borrow() {
@@ -181,6 +205,7 @@ impl PeerDetailPage {
         let is_paired = status.peer_configs.contains_key(&self.peer_id);
         if let Some(config) = status.peer_configs.get(&self.peer_id) {
             *self.last_config.borrow_mut() = Some(config.clone());
+            self.auto_connect_switch.set_active(config.auto_connect);
             self.clipboard_switch.set_active(config.clipboard);
             self.audio_switch.set_active(config.audio);
             self.drag_drop_switch.set_active(config.drag_drop);

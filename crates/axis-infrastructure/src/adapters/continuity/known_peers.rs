@@ -58,6 +58,10 @@ impl From<KnownPeerArrangementSide> for Side {
     }
 }
 
+fn default_true() -> bool {
+    true
+}
+
 /// Complete persisted state for a known (paired) peer.
 /// This is the single source of truth for all peer configuration.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -68,6 +72,8 @@ pub struct KnownPeer {
     pub address: String,
     pub address_v6: Option<String>,
     pub trusted: bool,
+    #[serde(default = "default_true")]
+    pub auto_connect: bool,
     pub clipboard: bool,
     pub audio: bool,
     pub drag_drop: bool,
@@ -85,6 +91,7 @@ impl Default for KnownPeer {
             address: String::new(),
             address_v6: None,
             trusted: false,
+            auto_connect: true,
             clipboard: true,
             audio: false,
             drag_drop: false,
@@ -104,6 +111,7 @@ impl KnownPeer {
         };
         PeerConfig {
             trusted: self.trusted,
+            auto_connect: self.auto_connect,
             arrangement: PeerArrangement {
                 side: self.arrangement_side.into(),
                 offset,

@@ -134,9 +134,15 @@ impl Default for PeerArrangement {
     }
 }
 
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PeerConfig {
     pub trusted: bool,
+    #[serde(default = "default_true")]
+    pub auto_connect: bool,
     pub arrangement: PeerArrangement,
     pub clipboard: bool,
     pub audio: bool,
@@ -148,6 +154,7 @@ impl Default for PeerConfig {
     fn default() -> Self {
         Self {
             trusted: false,
+            auto_connect: true,
             arrangement: PeerArrangement::default(),
             clipboard: true,
             audio: false,
@@ -155,6 +162,15 @@ impl Default for PeerConfig {
             version: 0,
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OutputGeometry {
+    pub name: String,
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -178,6 +194,7 @@ pub struct ContinuityStatus {
     pub peer_configs: HashMap<String, PeerConfig>,
     pub screen_width: i32,
     pub screen_height: i32,
+    pub local_outputs: Vec<OutputGeometry>,
     pub remote_screen: Option<(i32, i32)>,
     pub reconnect: Option<ReconnectState>,
 }
@@ -208,16 +225,15 @@ impl Default for ContinuityStatus {
             peer_configs: HashMap::new(),
             screen_width: 1920,
             screen_height: 1080,
+            local_outputs: Vec::new(),
             remote_screen: None,
             reconnect: None,
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Message {
-    #[default]
-    Heartbeat,
     Hello {
         device_id: String,
         device_name: String,
@@ -229,7 +245,6 @@ pub enum Message {
     PinConfirm {
         pin: String,
     },
-    Connected,
     ScreenInfo {
         width: i32,
         height: i32,
@@ -241,6 +256,10 @@ pub enum Message {
         audio: bool,
         drag_drop: bool,
         version: u64,
+    },
+    ClipboardUpdate {
+        content: String,
+        mime_type: String,
     },
     EdgeTransition {
         side: Side,
@@ -264,49 +283,32 @@ pub enum Message {
     },
     KeyPress {
         key: u32,
-        state: u8,
+        state: u32,
     },
     KeyRelease {
         key: u32,
     },
     PointerButton {
         button: u32,
-        state: u8,
+        state: u32,
     },
     PointerAxis {
         dx: f64,
         dy: f64,
     },
-    ClipboardUpdate {
-        content: Vec<u8>,
-        mime_type: String,
-    },
+    Connected,
+    Heartbeat,
     Disconnect {
         reason: String,
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone)]
 pub enum InputEvent {
-    #[default]
+    CursorMove { dx: f64, dy: f64 },
+    KeyPress { key: u32, state: u32 },
+    KeyRelease { key: u32 },
+    PointerButton { button: u32, state: u32 },
+    PointerAxis { dx: f64, dy: f64 },
     EmergencyExit,
-    CursorMove {
-        dx: f64,
-        dy: f64,
-    },
-    KeyPress {
-        key: u32,
-        state: u8,
-    },
-    KeyRelease {
-        key: u32,
-    },
-    PointerButton {
-        button: u32,
-        state: u8,
-    },
-    PointerAxis {
-        dx: f64,
-        dy: f64,
-    },
 }

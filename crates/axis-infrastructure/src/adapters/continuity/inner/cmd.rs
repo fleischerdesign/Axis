@@ -483,10 +483,12 @@ impl ContinuityInner {
             } else if entry.clipboard != config.clipboard
                 || entry.audio != config.audio
                 || entry.drag_drop != config.drag_drop
+                || entry.auto_connect != config.auto_connect
             {
                 entry.clipboard = config.clipboard;
                 entry.audio = config.audio;
                 entry.drag_drop = config.drag_drop;
+                entry.auto_connect = config.auto_connect;
                 changed = true;
             }
 
@@ -494,6 +496,7 @@ impl ContinuityInner {
                 known.clipboard = config.clipboard;
                 known.audio = config.audio;
                 known.drag_drop = config.drag_drop;
+                known.auto_connect = config.auto_connect;
                 known.arrangement_side = KnownPeerArrangementSide::from(config.arrangement.side);
                 match config.arrangement.side {
                     Side::Left | Side::Right => {

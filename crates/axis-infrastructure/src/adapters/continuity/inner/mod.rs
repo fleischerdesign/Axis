@@ -169,6 +169,7 @@ impl ContinuityInner {
                     address,
                     address_v6,
                     trusted: config.trusted,
+                    auto_connect: config.auto_connect,
                     clipboard: config.clipboard,
                     audio: config.audio,
                     drag_drop: config.drag_drop,
@@ -230,12 +231,24 @@ impl ContinuityInner {
         {
             let mut best: Option<(i32, i32)> = None;
             let mut best_area: u64 = 0;
-            for output in outputs.values() {
+            let mut local_geometries = Vec::new();
+
+            for (output_name, output) in outputs {
                 if let Some(logical) = &output.logical {
                     let w = logical.width as i32;
                     let h = logical.height as i32;
-                    let covers_origin =
-                        logical.x <= 0 && logical.y <= 0 && logical.x + w > 0 && logical.y + h > 0;
+                    let x = logical.x;
+                    let y = logical.y;
+
+                    local_geometries.push(axis_domain::models::continuity::OutputGeometry {
+                        name: output_name.clone(),
+                        x,
+                        y,
+                        width: w,
+                        height: h,
+                    });
+
+                    let covers_origin = x <= 0 && y <= 0 && x + w > 0 && y + h > 0;
                     let area = (w as u64) * (h as u64);
                     if covers_origin || area > best_area {
                         best = Some((w, h));
@@ -243,10 +256,15 @@ impl ContinuityInner {
                     }
                 }
             }
+
+            self.status.local_outputs = local_geometries;
+
             if let Some((w, h)) = best {
                 info!(
-                    "[continuity] detected primary output: {}x{} (logical)",
-                    w, h
+                    "[continuity] detected primary output: {}x{} (logical, {} total outputs)",
+                    w,
+                    h,
+                    self.status.local_outputs.len()
                 );
                 self.status.screen_width = w;
                 self.status.screen_height = h;
@@ -289,7 +307,7 @@ impl ContinuityInner {
                     }).await;
                 }
                 Ok(event) = discovery_rx.recv() => {
-                    self.handle_discovery_event(event).await;
+                    self.handle_discovery_event_with_conn(event, &mut connection, &conn_tx).await;
                 }
                 Ok(event) = conn_rx.recv() => {
                     let new_sleep = self.handle_connection_event(event, &mut CmdContext {
