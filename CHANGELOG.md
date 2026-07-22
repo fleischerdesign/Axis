@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.3.0](https://github.com/fleischerdesign/Axis/compare/v0.2.0...v0.3.0) (2026-07-22)
+
+
+### Features
+
+* **about:** redesign about page with AdwClamp, desktop-symbolic hero icon, updated repository URLs, and standard icon names ([0eb6f1d](https://github.com/fleischerdesign/Axis/commit/0eb6f1d2feffb0e064ee7bc502d48f2b32bb1628))
+* **accounts:** redesign accounts page with AdwClamp, standard avatar icons, and object-select status indicators ([29e1a14](https://github.com/fleischerdesign/Axis/commit/29e1a14b12f8c3a202016b56ca5120a03a0fd0f5))
+* **bluetooth:** redesign bluetooth page with ScanButton, paired/available groups, and empty status page ([a3e91f7](https://github.com/fleischerdesign/Axis/commit/a3e91f7d8621b799a028606f05d014930cac4ade))
+* **continuity:** redesign continuity page with AdwClamp, status page, computer icons, and chevron indicators ([56098b5](https://github.com/fleischerdesign/Axis/commit/56098b5059392df341ce69184e1917a01cb74724))
+* **idle:** redesign idle settings page with AdwClamp, dynamic timeout group sensitivity, and row icons ([b170e66](https://github.com/fleischerdesign/Axis/commit/b170e66853dd9da3f48ab963c86467bd0ee1d2f8))
+* **network:** add ScanButton component, pinned connected network, and empty status page ([189b41b](https://github.com/fleischerdesign/Axis/commit/189b41bb92cb2c9fb8e2fe7ae102e91813ff321a))
+* **settings:** redesign appearance page with scheme cards and wallpaper picture preview ([9d11f5b](https://github.com/fleischerdesign/Axis/commit/9d11f5b8408d74be4d473707e1cb725b938b06ef))
+
+
+### Bug Fixes
+
+* **ci:** disable persist-credentials in update-flake workflow ([4d79bf3](https://github.com/fleischerdesign/Axis/commit/4d79bf35ac70dbb36915f650eec9b5c3a4de854a))
+* **continuity:** filter self-discovered peers, fix Pango markup for Drag & Drop, and remove double headerbar on detail page ([7b95ed8](https://github.com/fleischerdesign/Axis/commit/7b95ed8863c4d214bd994de17d5abd3c82d9102c))
+* **network:** preserve is_scanning state in NetworkManagerProvider and add optimistic spinner activation to ScanButton ([80f644d](https://github.com/fleischerdesign/Axis/commit/80f644d3487ee17caa29eb38202a56fd6e0b1781))
+* **settings:** add dark theme tokens and native navigation-sidebar styling ([be84cb5](https://github.com/fleischerdesign/Axis/commit/be84cb5e0e6f4a6692bb5b031ce3e25246406b27))
+
+
+### Performance Improvements
+
+* **ci:** replace generic cache with Swatinem/rust-cache ([03bced9](https://github.com/fleischerdesign/Axis/commit/03bced9635cdd3f41906c3b7a783bb9369c4be77))
+
 ## [0.2.0](https://github.com/fleischerdesign/Axis/compare/v0.1.0...v0.2.0) (2026-06-25)
 
 
