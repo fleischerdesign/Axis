@@ -8,11 +8,12 @@ use std::rc::Rc;
 type ConfigFnCell = Rc<RefCell<Option<Box<dyn Fn(String, PeerConfig) + 'static>>>>;
 
 pub struct PeerDetailPage {
-    root: adw::ToolbarView,
+    root: adw::Clamp,
     peer_id: String,
     clipboard_switch: adw::SwitchRow,
     audio_switch: adw::SwitchRow,
     drag_drop_switch: adw::SwitchRow,
+    danger_group: adw::PreferencesGroup,
     disconnect_btn: gtk4::Button,
     unpair_btn: gtk4::Button,
 
@@ -25,18 +26,20 @@ pub struct PeerDetailPage {
 
 impl PeerDetailPage {
     pub fn new(peer_id: String, peer_name: String) -> Rc<Self> {
-        let toolbar_view = adw::ToolbarView::new();
-        let header_bar = adw::HeaderBar::new();
-        toolbar_view.add_top_bar(&header_bar);
-
         let page = adw::PreferencesPage::builder()
             .title(&peer_name)
-            .icon_name("input-mouse-symbolic")
+            .icon_name("computer-symbolic")
             .build();
-        toolbar_view.set_content(Some(&page));
+
+        let clamp = adw::Clamp::builder()
+            .maximum_size(760)
+            .tightening_threshold(500)
+            .child(&page)
+            .build();
 
         let caps_group = adw::PreferencesGroup::builder()
             .title("Capabilities")
+            .description("Configure sharing permissions for this device")
             .build();
         page.add(&caps_group);
 
@@ -53,35 +56,43 @@ impl PeerDetailPage {
         caps_group.add(&audio_switch);
 
         let drag_drop_switch = adw::SwitchRow::builder()
-            .title("Drag & Drop")
-            .subtitle("Transfer files via drag & drop")
+            .title("Drag &amp; Drop")
+            .subtitle("Transfer files via drag &amp; drop")
             .build();
         caps_group.add(&drag_drop_switch);
 
-        let danger_group = adw::PreferencesGroup::builder().title("").build();
+        let danger_group = adw::PreferencesGroup::builder()
+            .title("Device Actions")
+            .build();
+        danger_group.set_visible(false);
         page.add(&danger_group);
 
         let disconnect_btn = gtk4::Button::builder()
             .label("Disconnect")
-            .css_classes(vec!["destructive-action".to_string()])
+            .css_classes(vec!["destructive-action".to_string(), "pill".to_string()])
+            .visible(false)
             .build();
 
         let unpair_btn = gtk4::Button::builder()
-            .label("Unpair")
-            .css_classes(vec!["destructive-action".to_string()])
+            .label("Unpair Device")
+            .css_classes(vec!["destructive-action".to_string(), "pill".to_string()])
+            .visible(false)
             .build();
 
         let btn_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
+        btn_box.set_halign(gtk4::Align::Center);
+        btn_box.set_margin_top(8);
         btn_box.append(&disconnect_btn);
         btn_box.append(&unpair_btn);
         danger_group.add(&btn_box);
 
         let page = Rc::new(Self {
-            root: toolbar_view,
+            root: clamp,
             peer_id,
             clipboard_switch,
             audio_switch,
             drag_drop_switch,
+            danger_group,
             disconnect_btn,
             unpair_btn,
             update_silent: Rc::new(RefCell::new(false)),
@@ -160,14 +171,14 @@ impl PeerDetailPage {
         });
     }
 
-    pub fn widget(&self) -> &adw::ToolbarView {
+    pub fn widget(&self) -> &adw::Clamp {
         &self.root
     }
 
-    #[allow(dead_code)]
     pub fn update_status(&self, status: &ContinuityStatus) {
         *self.update_silent.borrow_mut() = true;
 
+        let is_paired = status.peer_configs.contains_key(&self.peer_id);
         if let Some(config) = status.peer_configs.get(&self.peer_id) {
             *self.last_config.borrow_mut() = Some(config.clone());
             self.clipboard_switch.set_active(config.clipboard);
@@ -179,7 +190,10 @@ impl PeerDetailPage {
             .active_connection
             .as_ref()
             .is_some_and(|c| c.peer_id == self.peer_id);
+
         self.disconnect_btn.set_visible(connected);
+        self.unpair_btn.set_visible(is_paired);
+        self.danger_group.set_visible(connected || is_paired);
 
         *self.update_silent.borrow_mut() = false;
     }

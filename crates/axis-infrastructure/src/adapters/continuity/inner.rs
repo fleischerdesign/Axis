@@ -858,7 +858,16 @@ impl ContinuityInner {
     async fn handle_discovery_event(&mut self, event: DiscoveryEvent) {
         match event {
             DiscoveryEvent::PeerFound(peer) => {
-                if peer.hostname == self.status.device_name {
+                let peer_host = peer.hostname.trim_end_matches(".local");
+                let my_host = self.status.device_name.trim_end_matches(".local");
+                let my_id = &self.status.device_id;
+                if peer_host.eq_ignore_ascii_case(my_host)
+                    || peer
+                        .device_name
+                        .trim_end_matches(".local")
+                        .eq_ignore_ascii_case(my_host)
+                    || &peer.device_id == my_id
+                {
                     return;
                 }
                 if let Some(existing) = self
