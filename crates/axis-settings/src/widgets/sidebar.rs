@@ -13,7 +13,7 @@ impl Sidebar {
     pub fn new(presenter: Rc<NavigationPresenter>) -> Rc<Self> {
         let list_box = gtk4::ListBox::builder()
             .selection_mode(gtk4::SelectionMode::Single)
-            .css_classes(vec!["sidebar-list".to_string()])
+            .css_classes(vec!["navigation-sidebar".to_string(), "sidebar-list".to_string()])
             .build();
 
         let p_c = presenter.clone();
