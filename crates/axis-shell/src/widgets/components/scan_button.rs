@@ -51,7 +51,13 @@ impl ScanButton {
     }
 
     pub fn connect_clicked<F: Fn() + 'static>(&self, f: F) {
+        let btn = self.button.clone();
+        let spin = self.spinner.clone();
+        let st = self.stack.clone();
         self.button.connect_clicked(move |_| {
+            spin.start();
+            st.set_visible_child_name("spinner");
+            btn.set_sensitive(false);
             f();
         });
     }
