@@ -393,6 +393,27 @@ impl ContinuityInner {
                     error!("[continuity] failed to start clipboard monitoring: {e}");
                 }
 
+                if self.status.active_peer_config().audio
+                    && let Some(write_tx) = ctx.connection.active_write_tx()
+                {
+                    let (audio_tx, mut audio_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(32);
+                    ctx.audio_stream_mgr.start_capture(audio_tx).await;
+                    tokio::spawn(async move {
+                        while let Some(chunk) = audio_rx.recv().await {
+                            if write_tx
+                                .send(Message::AudioChunk {
+                                    channel_id: 0,
+                                    pcm_data: chunk,
+                                })
+                                .await
+                                .is_err()
+                            {
+                                break;
+                            }
+                        }
+                    });
+                }
+
                 if let Err(e) = ctx.injection.start() {
                     error!("[continuity] failed to start input injection: {e}");
                 }
@@ -440,6 +461,27 @@ impl ContinuityInner {
                     && let Err(e) = ctx.clipboard.start_monitoring(ctx.clipboard_tx.clone())
                 {
                     error!("[continuity] failed to start clipboard monitoring: {e}");
+                }
+
+                if self.status.active_peer_config().audio
+                    && let Some(write_tx) = ctx.connection.active_write_tx()
+                {
+                    let (audio_tx, mut audio_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(32);
+                    ctx.audio_stream_mgr.start_capture(audio_tx).await;
+                    tokio::spawn(async move {
+                        while let Some(chunk) = audio_rx.recv().await {
+                            if write_tx
+                                .send(Message::AudioChunk {
+                                    channel_id: 0,
+                                    pcm_data: chunk,
+                                })
+                                .await
+                                .is_err()
+                            {
+                                break;
+                            }
+                        }
+                    });
                 }
 
                 if let Err(e) = ctx.injection.start() {
