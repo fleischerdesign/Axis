@@ -32,14 +32,16 @@ impl CachedState {
 pub struct ContinuityDbusProxy {
     cached: CachedState,
     status_tx: watch::Sender<ContinuityStatus>,
+    _status_rx: watch::Receiver<ContinuityStatus>,
 }
 
 impl ContinuityDbusProxy {
     pub fn new() -> Arc<Self> {
-        let (status_tx, _) = watch::channel(ContinuityStatus::default());
+        let (status_tx, status_rx) = watch::channel(ContinuityStatus::default());
         Arc::new(Self {
             cached: CachedState::new(),
             status_tx,
+            _status_rx: status_rx,
         })
     }
 
