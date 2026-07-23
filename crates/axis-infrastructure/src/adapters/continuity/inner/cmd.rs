@@ -470,6 +470,7 @@ impl ContinuityInner {
 
             if let Some(known) = self.known_peers.peers.get_mut(&peer_id) {
                 known.arrangement_side = KnownPeerArrangementSide::from(arrangement.side);
+                known.version = config.version;
                 match arrangement.side {
                     Side::Left | Side::Right => {
                         known.arrangement_y = arrangement.offset;
@@ -574,6 +575,10 @@ impl ContinuityInner {
             if is_peer_active {
                 entry.version = entry.version.saturating_add(1);
                 let version = entry.version;
+
+                if let Some(known) = self.known_peers.peers.get_mut(&id) {
+                    known.version = version;
+                }
 
                 info!(
                     "[continuity] sending ConfigSync to {}: v{} clipboard={} audio={} dir={:?} drag_drop={}",

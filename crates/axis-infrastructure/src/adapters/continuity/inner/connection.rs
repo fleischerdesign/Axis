@@ -709,6 +709,7 @@ impl ContinuityInner {
                 }
 
                 self.push();
+                self.persist_known_peers();
             } else {
                 info!(
                     "[continuity] ignoring config from peer (v{} <= v{})",

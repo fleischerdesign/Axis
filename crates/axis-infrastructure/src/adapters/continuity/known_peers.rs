@@ -82,6 +82,8 @@ pub struct KnownPeer {
     pub arrangement_side: KnownPeerArrangementSide,
     pub arrangement_x: i32,
     pub arrangement_y: i32,
+    #[serde(default)]
+    pub version: u64,
 }
 
 impl Default for KnownPeer {
@@ -101,6 +103,7 @@ impl Default for KnownPeer {
             arrangement_side: KnownPeerArrangementSide::Right,
             arrangement_x: 0,
             arrangement_y: 0,
+            version: 0,
         }
     }
 }
@@ -125,7 +128,7 @@ impl KnownPeer {
             capture_device: None,
             playback_device: None,
             drag_drop: self.drag_drop,
-            version: 0, // version is runtime-only
+            version: self.version,
         }
     }
 }

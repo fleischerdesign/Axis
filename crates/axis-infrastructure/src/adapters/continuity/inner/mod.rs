@@ -185,6 +185,7 @@ impl ContinuityInner {
                     audio: config.audio,
                     audio_direction: config.audio_direction,
                     drag_drop: config.drag_drop,
+                    version: config.version,
                     arrangement_side,
                     arrangement_x,
                     arrangement_y,
