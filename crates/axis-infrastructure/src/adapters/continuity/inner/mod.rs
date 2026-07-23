@@ -52,6 +52,7 @@ pub(crate) struct CmdContext<'a> {
     pub injection: &'a mut WaylandInjection,
     pub capture: &'a mut EvdevCapture,
     pub drag_drop_mgr: &'a super::drag_drop::DragDropManager,
+    pub audio_stream_mgr: &'a super::audio_stream::AudioStreamManager,
     pub discovery_tx: &'a Sender<DiscoveryEvent>,
     pub conn_tx: &'a Sender<ConnectionEvent>,
     pub clipboard_tx: &'a Sender<ClipboardEvent>,
@@ -223,6 +224,7 @@ impl ContinuityInner {
         let mut injection = WaylandInjection::new();
         let mut capture = EvdevCapture::new();
         let drag_drop_mgr = super::drag_drop::DragDropManager::new();
+        let audio_stream_mgr = super::audio_stream::AudioStreamManager::new();
         let mut heartbeat = interval(Duration::from_secs(HEARTBEAT_INTERVAL_SECS));
         let mut reconnect_sleep: Option<Pin<Box<tokio::time::Sleep>>> = None;
 
@@ -289,6 +291,7 @@ impl ContinuityInner {
                         injection: &mut injection,
                         capture: &mut capture,
                         drag_drop_mgr: &drag_drop_mgr,
+                        audio_stream_mgr: &audio_stream_mgr,
                         discovery_tx: &discovery_tx,
                         conn_tx: &conn_tx,
                         clipboard_tx: &clipboard_tx,
@@ -303,6 +306,7 @@ impl ContinuityInner {
                         injection: &mut injection,
                         capture: &mut capture,
                         drag_drop_mgr: &drag_drop_mgr,
+                        audio_stream_mgr: &audio_stream_mgr,
                         discovery_tx: &discovery_tx,
                         conn_tx: &conn_tx,
                         clipboard_tx: &clipboard_tx,
@@ -320,6 +324,7 @@ impl ContinuityInner {
                         injection: &mut injection,
                         capture: &mut capture,
                         drag_drop_mgr: &drag_drop_mgr,
+                        audio_stream_mgr: &audio_stream_mgr,
                         discovery_tx: &discovery_tx,
                         conn_tx: &conn_tx,
                         clipboard_tx: &clipboard_tx,

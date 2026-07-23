@@ -1,3 +1,4 @@
+pub mod audio_stream;
 pub mod clipboard;
 pub mod connection;
 pub mod crypto;

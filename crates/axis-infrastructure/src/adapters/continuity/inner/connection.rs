@@ -266,13 +266,10 @@ impl ContinuityInner {
                 );
             }
             Message::AudioChunk {
-                channel_id,
+                channel_id: _,
                 pcm_data,
             } => {
-                info!(
-                    "[continuity] incoming audio stream chunk: channel={channel_id}, {} bytes",
-                    pcm_data.len()
-                );
+                ctx.audio_stream_mgr.play_chunk(&pcm_data).await;
             }
             Message::CursorMove { .. }
             | Message::KeyPress { .. }
