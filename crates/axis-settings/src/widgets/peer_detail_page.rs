@@ -282,13 +282,6 @@ impl PeerDetailPage {
             None
         });
 
-        log::info!(
-            "[settings-peer-detail] update_status: id={} found={} version={}",
-            &self.peer_id[..8.min(self.peer_id.len())],
-            found_config.is_some(),
-            found_config.map(|c| c.version).unwrap_or(0)
-        );
-
         let is_paired = found_config.is_some() || status.peer_configs.contains_key(&self.peer_id);
         if let Some(config) = found_config {
             *self.last_config.borrow_mut() = Some(config.clone());
