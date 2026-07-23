@@ -316,6 +316,7 @@ pub enum Message {
         offset: i32,
         clipboard: bool,
         audio: bool,
+        audio_direction: AudioStreamDirection,
         drag_drop: bool,
         version: u64,
     },

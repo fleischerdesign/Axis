@@ -488,6 +488,7 @@ impl ContinuityInner {
                 offset: arrangement.offset,
                 clipboard: config.clipboard,
                 audio: config.audio,
+                audio_direction: config.audio_direction,
                 drag_drop: config.drag_drop,
                 version,
             });
@@ -563,6 +564,7 @@ impl ContinuityInner {
                     offset: config.arrangement.offset,
                     clipboard: config.clipboard,
                     audio: config.audio,
+                    audio_direction: config.audio_direction,
                     drag_drop: config.drag_drop,
                     version: config.version,
                 });

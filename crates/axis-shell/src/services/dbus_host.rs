@@ -35,8 +35,7 @@ pub async fn run_dbus_host(
         on_lock: Arc::new(on_lock),
     };
 
-    let (status_tx, status_rx) = watch::channel(ContinuityStatus::default());
-    let cont_server = ContinuityDbusServer::new(continuity_cmd_tx, status_rx.clone());
+    let cont_server = ContinuityDbusServer::new(continuity_cmd_tx, continuity_status_rx.clone());
 
     let conn = match connection::Builder::session() {
         Ok(b) => b,
@@ -81,16 +80,12 @@ pub async fn run_dbus_host(
     info!("[dbus-host] D-Bus server started on org.axis.Shell with IPC + Continuity");
 
     let mut status_rx = continuity_status_rx;
-    let initial_status = status_rx.borrow().clone();
-    let _ = status_tx.send(initial_status);
-
     let snapshot_loop = async {
         loop {
             if status_rx.changed().await.is_err() {
                 break;
             }
             let status = status_rx.borrow_and_update().clone();
-            let _ = status_tx.send(status.clone());
 
             let iface_res: Result<_, _> = conn
                 .object_server()

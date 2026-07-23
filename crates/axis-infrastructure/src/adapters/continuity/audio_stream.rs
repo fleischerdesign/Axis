@@ -41,6 +41,7 @@ impl AudioStreamManager {
         cmd.args([
             "--target",
             target,
+            "--raw",
             "--format=s16",
             "--rate=44100",
             "--channels=2",
@@ -102,6 +103,7 @@ impl AudioStreamManager {
                 "--playback",
                 "--target",
                 target,
+                "--raw",
                 "--format=s16",
                 "--rate=44100",
                 "--channels=2",

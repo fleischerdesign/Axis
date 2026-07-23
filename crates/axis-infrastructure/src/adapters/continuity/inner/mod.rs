@@ -64,6 +64,7 @@ pub(crate) struct ConfigSyncArgs {
     pub offset: i32,
     pub clipboard: bool,
     pub audio: bool,
+    pub audio_direction: axis_domain::models::continuity::AudioStreamDirection,
     pub drag_drop: bool,
     pub version: u64,
 }
