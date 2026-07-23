@@ -190,6 +190,11 @@ fn wire_continuity_sync(
     continuity_provider: Arc<dyn axis_domain::ports::continuity::ContinuityProvider>,
     rt: &tokio::runtime::Runtime,
 ) {
+    let initial_enabled = config_provider
+        .get()
+        .map(|c| c.continuity.enabled)
+        .unwrap_or(false);
+
     {
         let cont = continuity_provider.clone();
         let mut config_stream = match config_provider.subscribe() {
@@ -199,8 +204,13 @@ fn wire_continuity_sync(
                 return;
             }
         };
-        let mut last_enabled: Option<bool> = None;
+        let mut last_enabled = Some(initial_enabled);
         rt.spawn(async move {
+            if initial_enabled {
+                if let Err(e) = cont.set_enabled(true).await {
+                    log::error!("[continuity:sync] initial config→continuity failed: {e}");
+                }
+            }
             while let Some(config) = futures_util::StreamExt::next(&mut config_stream).await {
                 let enabled = config.continuity.enabled;
                 if last_enabled != Some(enabled) {
@@ -222,7 +232,7 @@ fn wire_continuity_sync(
                 return;
             }
         };
-        let mut last_enabled: Option<bool> = None;
+        let mut last_enabled = Some(initial_enabled);
         rt.spawn(async move {
             while let Some(status) = futures_util::StreamExt::next(&mut cont_stream).await {
                 let enabled = status.enabled;
