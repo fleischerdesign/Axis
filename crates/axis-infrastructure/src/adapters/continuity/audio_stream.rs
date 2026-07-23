@@ -95,21 +95,23 @@ impl AudioStreamManager {
     pub async fn play_chunk(&self, target_device: Option<&str>, pcm_data: &[u8]) {
         let mut stdin_lock = self.play_stdin.lock().await;
         if stdin_lock.is_none() {
-            let target = target_device.unwrap_or("@DEFAULT_SINK@");
-            info!("[continuity-audio] starting PipeWire audio playback via pw-cat (target: {target})");
+            info!("[continuity-audio] starting PipeWire audio playback via pw-cat");
 
             let mut cmd = Command::new("pw-cat");
             cmd.args([
                 "--playback",
-                "--target",
-                target,
                 "--raw",
                 "--format=s16",
                 "--rate=44100",
                 "--channels=2",
                 "--latency=20ms",
-                "-",
             ]);
+            if let Some(target) = target_device
+                && target != "@DEFAULT_SINK@"
+            {
+                cmd.args(["--target", target]);
+            }
+            cmd.arg("-");
             cmd.stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null());
 
             match cmd.spawn() {

@@ -620,7 +620,7 @@ impl ContinuityInner {
             let peer_id = conn.peer_id.clone();
             let config = self.status.peer_configs.entry(peer_id).or_default();
 
-            let is_newer = args.version > config.version;
+            let is_newer = args.version >= config.version;
             let is_initial_adopt = !self.is_initiating && config.version == 0;
 
             if is_newer || is_initial_adopt {

@@ -552,6 +552,8 @@ impl ContinuityInner {
             let is_peer_active = self.status.active_connection.as_ref().is_some_and(|conn| {
                 conn.peer_id == id
                     || conn.peer_name == id
+                    || conn.peer_name.starts_with(&id)
+                    || id.starts_with(&conn.peer_name)
                     || self
                         .known_peers
                         .peers
