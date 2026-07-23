@@ -509,6 +509,9 @@ impl ContinuityInner {
                 || (entry.version == config.version && entry.arrangement != config.arrangement)
             {
                 *entry = config.clone();
+                if !entry.audio {
+                    entry.audio_direction = axis_domain::models::continuity::AudioStreamDirection::Off;
+                }
                 changed = true;
             } else if entry.clipboard != config.clipboard
                 || entry.audio != config.audio
@@ -519,7 +522,11 @@ impl ContinuityInner {
             {
                 entry.clipboard = config.clipboard;
                 entry.audio = config.audio;
-                entry.audio_direction = config.audio_direction;
+                entry.audio_direction = if config.audio {
+                    config.audio_direction
+                } else {
+                    axis_domain::models::continuity::AudioStreamDirection::Off
+                };
                 entry.capture_device = config.capture_device.clone();
                 entry.playback_device = config.playback_device.clone();
                 entry.drag_drop = config.drag_drop;

@@ -180,8 +180,19 @@ impl PeerDetailPage {
                 return;
             }
             let current = p.last_config.borrow().clone().unwrap_or_default();
+            let is_active = row.is_active();
+            let audio_direction = if is_active {
+                if current.audio_direction == axis_domain::models::continuity::AudioStreamDirection::Off {
+                    axis_domain::models::continuity::AudioStreamDirection::SendToPeer
+                } else {
+                    current.audio_direction
+                }
+            } else {
+                axis_domain::models::continuity::AudioStreamDirection::Off
+            };
             let config = PeerConfig {
-                audio: row.is_active(),
+                audio: is_active,
+                audio_direction,
                 ..current
             };
             if let Some(f) = p.config_cb.borrow().as_ref() {

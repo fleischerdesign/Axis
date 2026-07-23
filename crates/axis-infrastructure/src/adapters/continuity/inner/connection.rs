@@ -661,8 +661,13 @@ impl ContinuityInner {
                     offset: -args.offset,
                 };
                 config.clipboard = args.clipboard;
-                config.audio_direction = args.audio_direction.opposite();
-                config.audio = config.audio_direction != axis_domain::models::continuity::AudioStreamDirection::Off;
+                let dir = if args.audio {
+                    args.audio_direction.opposite()
+                } else {
+                    axis_domain::models::continuity::AudioStreamDirection::Off
+                };
+                config.audio_direction = dir;
+                config.audio = args.audio && dir != axis_domain::models::continuity::AudioStreamDirection::Off;
                 config.drag_drop = args.drag_drop;
                 config.version = args.version;
 
