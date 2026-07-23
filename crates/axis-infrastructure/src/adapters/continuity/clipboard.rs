@@ -156,10 +156,13 @@ impl ClipboardSync for WaylandClipboard {
             content.len()
         );
 
-        // Use wl-copy to set the clipboard
-        let mut cmd = Command::new("wl-copy");
+        // Use wl-copy via sh -c to detach the background daemon process cleanly
+        let mut cmd = Command::new("sh");
+        cmd.arg("-c");
         if mime_type != "text/plain" && !mime_type.is_empty() {
-            cmd.arg("--type").arg(mime_type);
+            cmd.arg(format!("wl-copy --type '{mime_type}'"));
+        } else {
+            cmd.arg("tee >(wl-copy) | wl-copy --primary");
         }
 
         let mut child = cmd
