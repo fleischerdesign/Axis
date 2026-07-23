@@ -376,14 +376,22 @@ async fn resolve_service(
                     format!("{address}:{port}")
                 };
 
+                let parsed_addr: std::net::SocketAddr = addr_str
+                    .parse()
+                    .map_err(|e| format!("parse address '{addr_str}': {e}"))?;
+
+                let (primary_addr, addr_v6) = if parsed_addr.is_ipv6() {
+                    (parsed_addr, Some(parsed_addr))
+                } else {
+                    (parsed_addr, None)
+                };
+
                 return Ok(PeerInfo {
                     device_id,
                     device_name: resolved_name,
                     hostname: host,
-                    address: addr_str
-                        .parse()
-                        .map_err(|e| format!("parse address '{addr_str}': {e}"))?,
-                    address_v6: None,
+                    address: primary_addr,
+                    address_v6: addr_v6,
                 });
             }
             Err(e) => return Err(format!("deserialize Found: {e}")),
@@ -450,10 +458,7 @@ async fn scan_cached_services(_conn: &Connection) -> Result<Vec<PeerInfo>, Strin
         });
 
         if is_ipv6 {
-            let lower = address.to_lowercase();
-            if lower.starts_with("fd") || lower.starts_with("fe80") {
-                entry.addr_v6.get_or_insert(socket_addr);
-            }
+            entry.addr_v6.get_or_insert(socket_addr);
         } else {
             entry.addr_v4.get_or_insert(socket_addr);
         }
@@ -461,16 +466,23 @@ async fn scan_cached_services(_conn: &Connection) -> Result<Vec<PeerInfo>, Strin
 
     let mut result = Vec::new();
     for (_, entry) in raw {
-        let Some(addr_v4) = entry.addr_v4 else {
-            continue;
-        };
-        result.push(PeerInfo {
-            device_id: entry.name,
-            device_name: entry.host.clone(),
-            hostname: entry.host,
-            address: addr_v4,
-            address_v6: entry.addr_v6,
-        });
+        if let Some(addr_v4) = entry.addr_v4 {
+            result.push(PeerInfo {
+                device_id: entry.name,
+                device_name: entry.host.clone(),
+                hostname: entry.host,
+                address: addr_v4,
+                address_v6: entry.addr_v6,
+            });
+        } else if let Some(addr_v6) = entry.addr_v6 {
+            result.push(PeerInfo {
+                device_id: entry.name,
+                device_name: entry.host.clone(),
+                hostname: entry.host,
+                address: addr_v6,
+                address_v6: Some(addr_v6),
+            });
+        }
     }
 
     Ok(result)
