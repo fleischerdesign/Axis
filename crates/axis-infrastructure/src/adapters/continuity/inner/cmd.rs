@@ -508,7 +508,7 @@ impl ContinuityInner {
         audio_stream_mgr: &dyn ContinuityAudioPort,
     ) {
         let mut changed = false;
-        for (id, mut config) in configs {
+        for (id, config) in configs {
             let entry = self.status.peer_configs.entry(id.clone()).or_default();
             let clipboard_toggled = entry.clipboard != config.clipboard;
             let audio_toggled = entry.audio != config.audio
@@ -572,9 +572,8 @@ impl ContinuityInner {
             );
 
             if is_peer_active {
-                config.version = config.version.saturating_add(1);
-                let version = config.version;
-                entry.version = version;
+                entry.version = entry.version.saturating_add(1);
+                let version = entry.version;
 
                 info!(
                     "[continuity] sending ConfigSync to {}: v{} clipboard={} audio={} dir={:?} drag_drop={}",
