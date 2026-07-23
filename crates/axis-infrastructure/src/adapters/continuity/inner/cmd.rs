@@ -574,6 +574,7 @@ impl ContinuityInner {
             if is_peer_active {
                 config.version = config.version.saturating_add(1);
                 let version = config.version;
+                entry.version = version;
 
                 info!(
                     "[continuity] sending ConfigSync to {}: v{} clipboard={} audio={} dir={:?} drag_drop={}",
