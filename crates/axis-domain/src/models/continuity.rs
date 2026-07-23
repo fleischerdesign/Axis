@@ -216,6 +216,17 @@ impl ContinuityStatus {
         if let Some(conn) = &self.active_connection {
             self.peer_configs
                 .get(&conn.peer_id)
+                .or_else(|| {
+                    self.peers
+                        .iter()
+                        .find(|p| {
+                            p.device_name == conn.peer_name
+                                || p.hostname == conn.peer_name
+                                || p.device_id == conn.peer_id
+                        })
+                        .and_then(|p| self.peer_configs.get(&p.device_id))
+                })
+                .or_else(|| self.peer_configs.values().next())
                 .cloned()
                 .unwrap_or_default()
         } else {
