@@ -118,6 +118,9 @@ impl KnownPeer {
             },
             clipboard: self.clipboard,
             audio: self.audio,
+            audio_direction: axis_domain::models::continuity::AudioStreamDirection::Off,
+            capture_device: None,
+            playback_device: None,
             drag_drop: self.drag_drop,
             version: 0, // version is runtime-only
         }

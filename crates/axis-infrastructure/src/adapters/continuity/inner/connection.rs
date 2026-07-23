@@ -269,7 +269,10 @@ impl ContinuityInner {
                 channel_id: _,
                 pcm_data,
             } => {
-                ctx.audio_stream_mgr.play_chunk(&pcm_data).await;
+                let target = self.status.active_peer_config().playback_device.clone();
+                ctx.audio_stream_mgr
+                    .play_chunk(target.as_deref(), &pcm_data)
+                    .await;
             }
             Message::CursorMove { .. }
             | Message::KeyPress { .. }
@@ -393,11 +396,15 @@ impl ContinuityInner {
                     error!("[continuity] failed to start clipboard monitoring: {e}");
                 }
 
-                if self.status.active_peer_config().audio
+                let cfg = self.status.active_peer_config();
+                if (cfg.audio || cfg.audio_direction.should_capture())
                     && let Some(write_tx) = ctx.connection.active_write_tx()
                 {
                     let (audio_tx, mut audio_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(32);
-                    ctx.audio_stream_mgr.start_capture(audio_tx).await;
+                    let target = cfg.capture_device.clone();
+                    ctx.audio_stream_mgr
+                        .start_capture(target.as_deref(), audio_tx)
+                        .await;
                     tokio::spawn(async move {
                         while let Some(chunk) = audio_rx.recv().await {
                             if write_tx
@@ -463,11 +470,15 @@ impl ContinuityInner {
                     error!("[continuity] failed to start clipboard monitoring: {e}");
                 }
 
-                if self.status.active_peer_config().audio
+                let cfg = self.status.active_peer_config();
+                if (cfg.audio || cfg.audio_direction.should_capture())
                     && let Some(write_tx) = ctx.connection.active_write_tx()
                 {
                     let (audio_tx, mut audio_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(32);
-                    ctx.audio_stream_mgr.start_capture(audio_tx).await;
+                    let target = cfg.capture_device.clone();
+                    ctx.audio_stream_mgr
+                        .start_capture(target.as_deref(), audio_tx)
+                        .await;
                     tokio::spawn(async move {
                         while let Some(chunk) = audio_rx.recv().await {
                             if write_tx
@@ -634,7 +645,10 @@ impl ContinuityInner {
                     if args.audio {
                         if let Some(write_tx) = ctx.connection.active_write_tx() {
                             let (audio_tx, mut audio_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(32);
-                            ctx.audio_stream_mgr.start_capture(audio_tx).await;
+                            let target = config.capture_device.clone();
+                            ctx.audio_stream_mgr
+                                .start_capture(target.as_deref(), audio_tx)
+                                .await;
                             tokio::spawn(async move {
                                 while let Some(chunk) = audio_rx.recv().await {
                                     if write_tx

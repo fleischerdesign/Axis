@@ -26,13 +26,27 @@ impl AudioStreamManager {
         }
     }
 
-    /// Starts capturing PCM audio from local PipeWire output and streams chunks to `tx`.
-    pub async fn start_capture(&self, tx: tokio::sync::mpsc::Sender<Vec<u8>>) {
+    /// Starts capturing PCM audio from local PipeWire output/microphone and streams chunks to `tx`.
+    pub async fn start_capture(
+        &self,
+        target_device: Option<&str>,
+        tx: tokio::sync::mpsc::Sender<Vec<u8>>,
+    ) {
         self.stop_capture().await;
 
-        info!("[continuity-audio] starting PipeWire audio capture via pw-record");
+        let target = target_device.unwrap_or("@DEFAULT_MONITOR@");
+        info!("[continuity-audio] starting PipeWire audio capture via pw-record (target: {target})");
+
         let mut cmd = Command::new("pw-record");
-        cmd.args(["--format=s16", "--rate=44100", "--channels=2", "-"]);
+        cmd.args([
+            "--target",
+            target,
+            "--format=s16",
+            "--rate=44100",
+            "--channels=2",
+            "--latency=20ms",
+            "-",
+        ]);
         cmd.stdout(Stdio::piped()).stderr(Stdio::null());
 
         match cmd.spawn() {
@@ -76,13 +90,24 @@ impl AudioStreamManager {
         }
     }
 
-    /// Plays an incoming PCM audio chunk over PipeWire speakers using `pw-play`.
-    pub async fn play_chunk(&self, pcm_data: &[u8]) {
+    /// Plays an incoming PCM audio chunk over PipeWire speakers using `pw-cat`.
+    pub async fn play_chunk(&self, target_device: Option<&str>, pcm_data: &[u8]) {
         let mut stdin_lock = self.play_stdin.lock().await;
         if stdin_lock.is_none() {
-            info!("[continuity-audio] starting PipeWire audio playback via pw-play");
-            let mut cmd = Command::new("pw-play");
-            cmd.args(["--format=s16", "--rate=44100", "--channels=2", "-"]);
+            let target = target_device.unwrap_or("@DEFAULT_SINK@");
+            info!("[continuity-audio] starting PipeWire audio playback via pw-cat (target: {target})");
+
+            let mut cmd = Command::new("pw-cat");
+            cmd.args([
+                "--playback",
+                "--target",
+                target,
+                "--format=s16",
+                "--rate=44100",
+                "--channels=2",
+                "--latency=20ms",
+                "-",
+            ]);
             cmd.stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null());
 
             match cmd.spawn() {
@@ -94,7 +119,7 @@ impl AudioStreamManager {
                     }
                 }
                 Err(e) => {
-                    error!("[continuity-audio] failed to spawn pw-play: {e}");
+                    error!("[continuity-audio] failed to spawn pw-cat: {e}");
                     return;
                 }
             }

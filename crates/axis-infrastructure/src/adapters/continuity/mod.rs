@@ -1,4 +1,5 @@
 pub mod audio_stream;
+pub mod pipewire_devices;
 pub mod clipboard;
 pub mod connection;
 pub mod crypto;

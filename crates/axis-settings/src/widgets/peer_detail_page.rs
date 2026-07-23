@@ -13,6 +13,7 @@ pub struct PeerDetailPage {
     auto_connect_switch: adw::SwitchRow,
     clipboard_switch: adw::SwitchRow,
     audio_switch: adw::SwitchRow,
+    audio_source_row: adw::ComboRow,
     drag_drop_switch: adw::SwitchRow,
     danger_group: adw::PreferencesGroup,
     disconnect_btn: gtk4::Button,
@@ -39,7 +40,7 @@ impl PeerDetailPage {
             .build();
 
         let caps_group = adw::PreferencesGroup::builder()
-            .title("Capabilities & Automation")
+            .title("Capabilities &amp; Automation")
             .description("Configure sharing permissions and automatic connection for this device")
             .build();
         page.add(&caps_group);
@@ -61,6 +62,17 @@ impl PeerDetailPage {
             .subtitle("Stream audio playback to this device")
             .build();
         caps_group.add(&audio_switch);
+
+        let audio_source_model = gtk4::StringList::new(&[
+            "System Sound (Spotify, Browser, Media)",
+            "Default Microphone",
+        ]);
+        let audio_source_row = adw::ComboRow::builder()
+            .title("Audio Capture Source")
+            .subtitle("Select system audio output or microphone to stream")
+            .model(&audio_source_model)
+            .build();
+        caps_group.add(&audio_source_row);
 
         let drag_drop_switch = adw::SwitchRow::builder()
             .title("Drag &amp; Drop")
@@ -99,6 +111,7 @@ impl PeerDetailPage {
             auto_connect_switch,
             clipboard_switch,
             audio_switch,
+            audio_source_row,
             drag_drop_switch,
             danger_group,
             disconnect_btn,
@@ -162,6 +175,26 @@ impl PeerDetailPage {
         });
 
         let p = page.clone();
+        page.audio_source_row
+            .connect_selected_notify(move |row| {
+                if *p.update_silent.borrow() {
+                    return;
+                }
+                let current = p.last_config.borrow().clone().unwrap_or_default();
+                let capture_device = match row.selected() {
+                    1 => Some("@DEFAULT_SOURCE@".to_string()),
+                    _ => Some("@DEFAULT_MONITOR@".to_string()),
+                };
+                let config = PeerConfig {
+                    capture_device,
+                    ..current
+                };
+                if let Some(f) = p.config_cb.borrow().as_ref() {
+                    f(p.peer_id.clone(), config);
+                }
+            });
+
+        let p = page.clone();
         page.drag_drop_switch.connect_active_notify(move |row| {
             if *p.update_silent.borrow() {
                 return;
@@ -217,6 +250,13 @@ impl PeerDetailPage {
             self.auto_connect_switch.set_active(config.auto_connect);
             self.clipboard_switch.set_active(config.clipboard);
             self.audio_switch.set_active(config.audio);
+
+            let selected = match config.capture_device.as_deref() {
+                Some("@DEFAULT_SOURCE@") => 1,
+                _ => 0,
+            };
+            self.audio_source_row.set_selected(selected);
+
             self.drag_drop_switch.set_active(config.drag_drop);
         }
 

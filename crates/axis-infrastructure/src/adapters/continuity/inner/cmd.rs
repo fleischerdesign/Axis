@@ -572,7 +572,10 @@ impl ContinuityInner {
                     if config.audio {
                         if let Some(write_tx) = connection.active_write_tx() {
                             let (audio_tx, mut audio_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(32);
-                            audio_stream_mgr.start_capture(audio_tx).await;
+                            let target = config.capture_device.clone();
+                            audio_stream_mgr
+                                .start_capture(target.as_deref(), audio_tx)
+                                .await;
                             tokio::spawn(async move {
                                 while let Some(chunk) = audio_rx.recv().await {
                                     if write_tx

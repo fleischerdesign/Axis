@@ -138,6 +138,34 @@ fn default_true() -> bool {
     true
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum AudioStreamDirection {
+    #[default]
+    Off,
+    SendToPeer,
+    ReceiveFromPeer,
+    BiDirectional,
+}
+
+impl AudioStreamDirection {
+    pub fn opposite(&self) -> Self {
+        match self {
+            Self::Off => Self::Off,
+            Self::SendToPeer => Self::ReceiveFromPeer,
+            Self::ReceiveFromPeer => Self::SendToPeer,
+            Self::BiDirectional => Self::BiDirectional,
+        }
+    }
+
+    pub fn should_capture(&self) -> bool {
+        matches!(self, Self::SendToPeer | Self::BiDirectional)
+    }
+
+    pub fn should_play(&self) -> bool {
+        matches!(self, Self::ReceiveFromPeer | Self::BiDirectional)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PeerConfig {
     pub trusted: bool,
@@ -146,6 +174,12 @@ pub struct PeerConfig {
     pub arrangement: PeerArrangement,
     pub clipboard: bool,
     pub audio: bool,
+    #[serde(default)]
+    pub audio_direction: AudioStreamDirection,
+    #[serde(default)]
+    pub capture_device: Option<String>,
+    #[serde(default)]
+    pub playback_device: Option<String>,
     pub drag_drop: bool,
     pub version: u64,
 }
@@ -158,6 +192,9 @@ impl Default for PeerConfig {
             arrangement: PeerArrangement::default(),
             clipboard: true,
             audio: false,
+            audio_direction: AudioStreamDirection::Off,
+            capture_device: None,
+            playback_device: None,
             drag_drop: false,
             version: 0,
         }
