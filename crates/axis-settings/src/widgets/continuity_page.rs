@@ -357,13 +357,6 @@ impl ContinuitySettingsPage {
 
 impl View<ContinuityStatus> for ContinuitySettingsPage {
     fn render(&self, status: &ContinuityStatus) {
-        log::info!(
-            "[settings-ui] render called: enabled={}, peers={}, active={}",
-            status.enabled,
-            status.peers.len(),
-            status.active_connection.is_some()
-        );
-
         *self.update_silent.borrow_mut() = true;
         if self.enable_switch.is_active() != status.enabled {
             self.enable_switch.set_active(status.enabled);

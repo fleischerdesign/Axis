@@ -70,11 +70,6 @@ impl ContinuityDbusProxy {
             .map_err(|e| ContinuityError::ProviderError(format!("D-Bus connect: {e}")))?;
 
         let initial_state = self.call_get_state(&conn).await?;
-        log::info!(
-            "[continuity-proxy] initialized from shell: enabled={}, peers={}",
-            initial_state.enabled,
-            initial_state.peers.len()
-        );
         self.cached.set(initial_state.clone());
         let _ = self.status_tx.send(initial_state);
 
@@ -223,11 +218,6 @@ impl ContinuityDbusProxy {
 
                 match serde_json::from_str::<ContinuityStatus>(&json) {
                     Ok(status) => {
-                        log::info!(
-                            "[continuity-proxy] StateChanged: enabled={}, peers={}",
-                            status.enabled,
-                            status.peers.len()
-                        );
                         this.cached.set(status.clone());
                         let _ = this.status_tx.send(status);
                     }
@@ -249,12 +239,7 @@ impl ContinuityProvider for ContinuityDbusProxy {
     }
 
     async fn subscribe(&self) -> Result<ContinuityStream, ContinuityError> {
-        let rx = self.status_tx.subscribe();
-        log::info!(
-            "[continuity-proxy] subscribe: current enabled={}",
-            rx.borrow().enabled
-        );
-        Ok(Box::pin(WatchStream::new(rx)))
+        Ok(Box::pin(WatchStream::new(self.status_tx.subscribe())))
     }
 
     async fn set_enabled(&self, enabled: bool) -> Result<(), ContinuityError> {
