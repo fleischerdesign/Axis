@@ -141,6 +141,8 @@ impl ContinuityInner {
             info!("[continuity] connecting to {name}");
             self.is_initiating = true;
             self.pending_peer = Some((peer.device_id.clone(), name.clone()));
+            self.status.connecting_peer_id = Some(peer.device_id.clone());
+            self.push();
 
             connection.connect_dual(
                 addr_v4,

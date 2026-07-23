@@ -81,6 +81,9 @@ pub async fn run_dbus_host(
     info!("[dbus-host] D-Bus server started on org.axis.Shell with IPC + Continuity");
 
     let mut status_rx = continuity_status_rx;
+    let initial_status = status_rx.borrow().clone();
+    let _ = status_tx.send(initial_status);
+
     let snapshot_loop = async {
         loop {
             if status_rx.changed().await.is_err() {

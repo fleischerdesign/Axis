@@ -96,6 +96,10 @@ impl ContinuityInner {
             }
             ConnectionEvent::Error(e) => {
                 error!("[continuity] connection error: {e}");
+                self.is_initiating = false;
+                self.pending_peer = None;
+                self.status.connecting_peer_id = None;
+                self.push();
                 None
             }
         }
@@ -135,6 +139,7 @@ impl ContinuityInner {
         self.pin_created_at = None;
         self.status.remote_screen = None;
         self.pending_peer = None;
+        self.status.connecting_peer_id = None;
         self.last_message_at = None;
         clipboard.stop_monitoring();
         injection.stop();
@@ -383,6 +388,7 @@ impl ContinuityInner {
                 self.status.pending_pin = None;
                 self.pin_created_at = None;
                 self.status.reconnect = None;
+                self.status.connecting_peer_id = None;
                 self.last_message_at = Some(Instant::now());
                 self.push();
 

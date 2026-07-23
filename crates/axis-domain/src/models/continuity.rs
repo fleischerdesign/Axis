@@ -208,6 +208,7 @@ pub struct ContinuityStatus {
     pub remote_screen: Option<(i32, i32)>,
     pub reconnect: Option<ReconnectState>,
     pub active_drag: Option<ActiveDragPayload>,
+    pub connecting_peer_id: Option<String>,
 }
 
 impl ContinuityStatus {
@@ -240,6 +241,7 @@ impl Default for ContinuityStatus {
             remote_screen: None,
             reconnect: None,
             active_drag: None,
+            connecting_peer_id: None,
         }
     }
 }

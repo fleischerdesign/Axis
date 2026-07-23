@@ -240,6 +240,11 @@ impl ContinuitySettingsPage {
 
             row.add_prefix(&gtk4::Image::from_icon_name("computer-symbolic"));
 
+            let is_connecting = status
+                .connecting_peer_id
+                .as_ref()
+                .is_some_and(|id| id == &peer.device_id);
+
             if is_connected {
                 let connected_secs = status
                     .active_connection
@@ -265,6 +270,13 @@ impl ContinuitySettingsPage {
                     }
                 });
                 row.add_suffix(&disconnect_btn);
+            } else if is_connecting {
+                row.set_subtitle("Connecting...");
+                let spinner = gtk4::Spinner::builder()
+                    .valign(gtk4::Align::Center)
+                    .spinning(true)
+                    .build();
+                row.add_suffix(&spinner);
             } else {
                 row.set_subtitle(&peer.hostname);
 
@@ -337,7 +349,9 @@ impl ContinuitySettingsPage {
 
 impl View<ContinuityStatus> for ContinuitySettingsPage {
     fn render(&self, status: &ContinuityStatus) {
-        self.enable_switch.set_active(status.enabled);
+        if self.enable_switch.is_active() != status.enabled {
+            self.enable_switch.set_active(status.enabled);
+        }
         if !status.enabled {
             self.arrangement_group.set_visible(false);
             self.peers_group.set_visible(false);

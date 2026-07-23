@@ -83,6 +83,7 @@ pub struct ContinuityStateSnapshot {
     pub screen_height: i32,
     pub remote_screen: Option<(i32, i32)>,
     pub reconnect: Option<DbusReconnectState>,
+    pub connecting_peer_id: Option<String>,
 }
 
 impl Default for ContinuityStateSnapshot {
@@ -99,6 +100,7 @@ impl Default for ContinuityStateSnapshot {
             screen_height: 1080,
             remote_screen: None,
             reconnect: None,
+            connecting_peer_id: None,
         }
     }
 }
@@ -132,6 +134,7 @@ pub fn build_snapshot(status: &ContinuityStatus) -> ContinuityStateSnapshot {
             max_attempts: r.max_attempts,
             delay_secs: r.delay_secs,
         }),
+        connecting_peer_id: status.connecting_peer_id.clone(),
     }
 }
 
