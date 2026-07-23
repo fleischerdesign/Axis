@@ -121,13 +121,12 @@ impl PeerDetailPage {
             if *p.update_silent.borrow() {
                 return;
             }
-            if let Some(f) = p.config_cb.borrow().as_ref()
-                && let Some(ref current) = *p.last_config.borrow()
-            {
-                let config = PeerConfig {
-                    auto_connect: row.is_active(),
-                    ..current.clone()
-                };
+            let current = p.last_config.borrow().clone().unwrap_or_default();
+            let config = PeerConfig {
+                auto_connect: row.is_active(),
+                ..current
+            };
+            if let Some(f) = p.config_cb.borrow().as_ref() {
                 f(p.peer_id.clone(), config);
             }
         });
@@ -137,13 +136,12 @@ impl PeerDetailPage {
             if *p.update_silent.borrow() {
                 return;
             }
-            if let Some(f) = p.config_cb.borrow().as_ref()
-                && let Some(ref current) = *p.last_config.borrow()
-            {
-                let config = PeerConfig {
-                    clipboard: row.is_active(),
-                    ..current.clone()
-                };
+            let current = p.last_config.borrow().clone().unwrap_or_default();
+            let config = PeerConfig {
+                clipboard: row.is_active(),
+                ..current
+            };
+            if let Some(f) = p.config_cb.borrow().as_ref() {
                 f(p.peer_id.clone(), config);
             }
         });
@@ -153,13 +151,12 @@ impl PeerDetailPage {
             if *p.update_silent.borrow() {
                 return;
             }
-            if let Some(f) = p.config_cb.borrow().as_ref()
-                && let Some(ref current) = *p.last_config.borrow()
-            {
-                let config = PeerConfig {
-                    audio: row.is_active(),
-                    ..current.clone()
-                };
+            let current = p.last_config.borrow().clone().unwrap_or_default();
+            let config = PeerConfig {
+                audio: row.is_active(),
+                ..current
+            };
+            if let Some(f) = p.config_cb.borrow().as_ref() {
                 f(p.peer_id.clone(), config);
             }
         });
@@ -169,13 +166,12 @@ impl PeerDetailPage {
             if *p.update_silent.borrow() {
                 return;
             }
-            if let Some(f) = p.config_cb.borrow().as_ref()
-                && let Some(ref current) = *p.last_config.borrow()
-            {
-                let config = PeerConfig {
-                    drag_drop: row.is_active(),
-                    ..current.clone()
-                };
+            let current = p.last_config.borrow().clone().unwrap_or_default();
+            let config = PeerConfig {
+                drag_drop: row.is_active(),
+                ..current
+            };
+            if let Some(f) = p.config_cb.borrow().as_ref() {
                 f(p.peer_id.clone(), config);
             }
         });
@@ -203,11 +199,16 @@ impl PeerDetailPage {
         *self.update_silent.borrow_mut() = true;
 
         let found_config = status.peer_configs.get(&self.peer_id).or_else(|| {
-            status
-                .peers
-                .iter()
-                .find(|p| p.device_name == self.peer_id || p.hostname == self.peer_id)
-                .and_then(|p| status.peer_configs.get(&p.device_id))
+            if let Some(p) = status.peers.iter().find(|p| {
+                p.device_name == self.peer_id
+                    || p.hostname == self.peer_id
+                    || p.device_id == self.peer_id
+            })
+                && let Some(cfg) = status.peer_configs.get(&p.device_id)
+            {
+                return Some(cfg);
+            }
+            status.peer_configs.values().next()
         });
 
         let is_paired = found_config.is_some() || status.peer_configs.contains_key(&self.peer_id);

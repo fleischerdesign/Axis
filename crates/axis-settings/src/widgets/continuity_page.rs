@@ -228,10 +228,11 @@ impl ContinuitySettingsPage {
         }
 
         for peer in &status.peers {
-            let is_connected = status
-                .active_connection
-                .as_ref()
-                .is_some_and(|c| c.peer_id == peer.device_id);
+            let is_connected = status.active_connection.as_ref().is_some_and(|c| {
+                c.peer_id == peer.device_id
+                    || c.peer_name == peer.device_name
+                    || c.peer_name == peer.device_id
+            });
 
             let row = adw::ActionRow::builder()
                 .title(&peer.device_name)
@@ -240,10 +241,9 @@ impl ContinuitySettingsPage {
 
             row.add_prefix(&gtk4::Image::from_icon_name("computer-symbolic"));
 
-            let is_connecting = status
-                .connecting_peer_id
-                .as_ref()
-                .is_some_and(|id| id == &peer.device_id);
+            let is_connecting = status.connecting_peer_id.as_ref().is_some_and(|id| {
+                id == &peer.device_id || id == &peer.device_name || id == &peer.hostname
+            });
 
             if is_connected {
                 let connected_secs = status
