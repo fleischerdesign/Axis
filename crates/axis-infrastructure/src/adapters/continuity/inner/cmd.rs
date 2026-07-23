@@ -507,7 +507,9 @@ impl ContinuityInner {
         for (id, config) in configs {
             let entry = self.status.peer_configs.entry(id.clone()).or_default();
             let clipboard_toggled = entry.clipboard != config.clipboard;
-            let audio_toggled = entry.audio != config.audio;
+            let audio_toggled = entry.audio != config.audio
+                || entry.audio_direction != config.audio_direction
+                || entry.capture_device != config.capture_device;
             if entry.version < config.version
                 || (entry.version == config.version && entry.arrangement != config.arrangement)
             {
@@ -515,11 +517,16 @@ impl ContinuityInner {
                 changed = true;
             } else if entry.clipboard != config.clipboard
                 || entry.audio != config.audio
+                || entry.audio_direction != config.audio_direction
+                || entry.capture_device != config.capture_device
                 || entry.drag_drop != config.drag_drop
                 || entry.auto_connect != config.auto_connect
             {
                 entry.clipboard = config.clipboard;
                 entry.audio = config.audio;
+                entry.audio_direction = config.audio_direction;
+                entry.capture_device = config.capture_device.clone();
+                entry.playback_device = config.playback_device.clone();
                 entry.drag_drop = config.drag_drop;
                 entry.auto_connect = config.auto_connect;
                 changed = true;
@@ -569,7 +576,7 @@ impl ContinuityInner {
                 }
 
                 if audio_toggled {
-                    if config.audio {
+                    if config.audio || config.audio_direction.should_capture() {
                         if let Some(write_tx) = connection.active_write_tx() {
                             let (audio_tx, mut audio_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(32);
                             let target = config.capture_device.clone();

@@ -13,6 +13,7 @@ pub struct PeerDetailPage {
     auto_connect_switch: adw::SwitchRow,
     clipboard_switch: adw::SwitchRow,
     audio_switch: adw::SwitchRow,
+    audio_direction_row: adw::ComboRow,
     audio_source_row: adw::ComboRow,
     drag_drop_switch: adw::SwitchRow,
     danger_group: adw::PreferencesGroup,
@@ -63,13 +64,26 @@ impl PeerDetailPage {
             .build();
         caps_group.add(&audio_switch);
 
+        let audio_dir_model = gtk4::StringList::new(&[
+            "Aus",
+            "Dieser PC sendet →",
+            "← Empfangen",
+            "⇄ Beidseitig (Duplex)",
+        ]);
+        let audio_direction_row = adw::ComboRow::builder()
+            .title("Audio-Richtung (Direction)")
+            .subtitle("Steuert wer Ton sendet oder empfängt")
+            .model(&audio_dir_model)
+            .build();
+        caps_group.add(&audio_direction_row);
+
         let audio_source_model = gtk4::StringList::new(&[
-            "System Sound (Spotify, Browser, Media)",
-            "Default Microphone",
+            "System-Sound (Spotify, Browser, Media)",
+            "Standard Mikrofon",
         ]);
         let audio_source_row = adw::ComboRow::builder()
-            .title("Audio Capture Source")
-            .subtitle("Select system audio output or microphone to stream")
+            .title("Aufnahme-Quelle (Capture Source)")
+            .subtitle("Wähle Medienton-Monitor oder Mikrofon zum Senden")
             .model(&audio_source_model)
             .build();
         caps_group.add(&audio_source_row);
@@ -111,6 +125,7 @@ impl PeerDetailPage {
             auto_connect_switch,
             clipboard_switch,
             audio_switch,
+            audio_direction_row,
             audio_source_row,
             drag_drop_switch,
             danger_group,
@@ -173,6 +188,29 @@ impl PeerDetailPage {
                 f(p.peer_id.clone(), config);
             }
         });
+
+        let p = page.clone();
+        page.audio_direction_row
+            .connect_selected_notify(move |row| {
+                if *p.update_silent.borrow() {
+                    return;
+                }
+                let current = p.last_config.borrow().clone().unwrap_or_default();
+                let dir = match row.selected() {
+                    1 => axis_domain::models::continuity::AudioStreamDirection::SendToPeer,
+                    2 => axis_domain::models::continuity::AudioStreamDirection::ReceiveFromPeer,
+                    3 => axis_domain::models::continuity::AudioStreamDirection::BiDirectional,
+                    _ => axis_domain::models::continuity::AudioStreamDirection::Off,
+                };
+                let config = PeerConfig {
+                    audio_direction: dir,
+                    audio: dir != axis_domain::models::continuity::AudioStreamDirection::Off,
+                    ..current
+                };
+                if let Some(f) = p.config_cb.borrow().as_ref() {
+                    f(p.peer_id.clone(), config);
+                }
+            });
 
         let p = page.clone();
         page.audio_source_row
@@ -250,6 +288,14 @@ impl PeerDetailPage {
             self.auto_connect_switch.set_active(config.auto_connect);
             self.clipboard_switch.set_active(config.clipboard);
             self.audio_switch.set_active(config.audio);
+
+            let dir_selected = match config.audio_direction {
+                axis_domain::models::continuity::AudioStreamDirection::Off => 0,
+                axis_domain::models::continuity::AudioStreamDirection::SendToPeer => 1,
+                axis_domain::models::continuity::AudioStreamDirection::ReceiveFromPeer => 2,
+                axis_domain::models::continuity::AudioStreamDirection::BiDirectional => 3,
+            };
+            self.audio_direction_row.set_selected(dir_selected);
 
             let selected = match config.capture_device.as_deref() {
                 Some("@DEFAULT_SOURCE@") => 1,

@@ -43,6 +43,25 @@ impl ContinuityDbusProxy {
         })
     }
 
+    pub async fn list_audio_devices(&self) -> Vec<super::pipewire_devices::PipeWireAudioDevice> {
+        if let Ok(conn) = Connection::session().await
+            && let Ok(reply) = conn
+                .call_method(
+                    Some("org.axis.Shell"),
+                    "/org/axis/Shell/Continuity",
+                    Some("org.axis.Shell.Continuity"),
+                    "ListAudioDevices",
+                    &(),
+                )
+                .await
+            && let Ok(json_str) = reply.body().deserialize::<String>()
+            && let Ok(devices) = serde_json::from_str(&json_str)
+        {
+            return devices;
+        }
+        super::pipewire_devices::list_pipewire_audio_devices().await
+    }
+
     pub async fn init(self: &Arc<Self>) -> Result<(), ContinuityError> {
         let conn = Connection::session()
             .await

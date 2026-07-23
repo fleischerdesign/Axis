@@ -155,6 +155,11 @@ impl ContinuityDbusServer {
         serde_json::to_string(&*self.state_rx.borrow()).unwrap_or_default()
     }
 
+    async fn list_audio_devices(&self) -> String {
+        let devices = super::pipewire_devices::list_pipewire_audio_devices().await;
+        serde_json::to_string(&devices).unwrap_or_default()
+    }
+
     async fn connect_to_peer(&self, peer_id: &str) -> bool {
         self.cmd_tx
             .try_send(ContinuityCmd::ConnectToPeer(peer_id.to_string()))

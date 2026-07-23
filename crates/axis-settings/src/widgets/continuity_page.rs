@@ -22,6 +22,7 @@ pub struct ContinuitySettingsPage {
     peer_list: gtk4::ListBox,
     grid: Rc<ArrangementGrid>,
     current_peer_page: RefCell<Option<Rc<PeerDetailPage>>>,
+    update_silent: Rc<RefCell<bool>>,
 
     toggle_cb: FnCell<bool>,
     connect_cb: FnCell<String>,
@@ -125,6 +126,7 @@ impl ContinuitySettingsPage {
             peer_list,
             grid: grid.clone(),
             current_peer_page: RefCell::new(None),
+            update_silent: Rc::new(RefCell::new(false)),
             toggle_cb: Rc::new(RefCell::new(None)),
             connect_cb: Rc::new(RefCell::new(None)),
             disconnect_cb: Rc::new(RefCell::new(None)),
@@ -137,8 +139,12 @@ impl ContinuitySettingsPage {
         });
 
         // Event Connections
+        let update_silent_c = page.update_silent.clone();
         let cb_toggle = page.toggle_cb.clone();
         page.enable_switch.connect_active_notify(move |row| {
+            if *update_silent_c.borrow() {
+                return;
+            }
             if let Some(f) = cb_toggle.borrow().as_ref() {
                 f(row.is_active());
             }
@@ -351,9 +357,12 @@ impl ContinuitySettingsPage {
 
 impl View<ContinuityStatus> for ContinuitySettingsPage {
     fn render(&self, status: &ContinuityStatus) {
+        *self.update_silent.borrow_mut() = true;
         if self.enable_switch.is_active() != status.enabled {
             self.enable_switch.set_active(status.enabled);
         }
+        *self.update_silent.borrow_mut() = false;
+
         if !status.enabled {
             self.arrangement_group.set_visible(false);
             self.peers_group.set_visible(false);
