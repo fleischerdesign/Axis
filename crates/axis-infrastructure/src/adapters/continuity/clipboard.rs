@@ -1,8 +1,8 @@
 use async_channel::Sender;
 use log::{error, info, warn};
 use std::process::Stdio;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::io::AsyncWriteExt;
 use tokio::process::{Child, Command};
 use tokio::task::JoinHandle;

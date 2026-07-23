@@ -21,6 +21,14 @@ jobs:
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@v22
 
+      - name: Clear nix-installer git credential overrides
+        run: |
+          git config --local --name-only --get-regexp '^includeIf\.gitdir:' |
+            while read key; do
+              git config --local --unset-all "$key" || true
+            done
+          git config --local --unset-all 'http.https://github.com/.extraheader' || true
+
       - name: Update Flake Lock
         uses: DeterminateSystems/update-flake-lock@v24
         with:
