@@ -21,7 +21,7 @@ pub struct ContinuitySettingsPage {
     _status_page: adw::StatusPage,
     peer_list: gtk4::ListBox,
     grid: Rc<ArrangementGrid>,
-    current_peer_page: RefCell<Option<Rc<PeerDetailPage>>>,
+    current_peer_page: Rc<RefCell<Option<Rc<PeerDetailPage>>>>,
     update_silent: Rc<RefCell<bool>>,
 
     toggle_cb: FnCell<bool>,
@@ -125,7 +125,7 @@ impl ContinuitySettingsPage {
             _status_page: status_page,
             peer_list,
             grid: grid.clone(),
-            current_peer_page: RefCell::new(None),
+            current_peer_page: Rc::new(RefCell::new(None)),
             update_silent: Rc::new(RefCell::new(false)),
             toggle_cb: Rc::new(RefCell::new(None)),
             connect_cb: Rc::new(RefCell::new(None)),
