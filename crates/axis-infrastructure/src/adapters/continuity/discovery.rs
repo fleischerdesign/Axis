@@ -258,10 +258,6 @@ async fn browse_services(
                 if let Ok((interface, protocol, name, stype, domain, _flags)) =
                     msg.body().deserialize::<(i32, i32, String, String, String, u32)>()
                 {
-                    if protocol != 0 {
-                        continue;
-                    }
-
                     let conn_c = conn.clone();
                     let tx_c = event_tx.clone();
                     let name_c = name.clone();

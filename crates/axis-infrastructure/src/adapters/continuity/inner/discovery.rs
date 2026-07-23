@@ -29,20 +29,31 @@ impl ContinuityInner {
 
                 let peer_id = peer.device_id.clone();
                 let peer_name = peer.device_name.clone();
-                let addr_v4 = peer.address;
-                let addr_v6 = peer.address_v6;
 
-                if let Some(existing) = self
+                let (addr_v4, addr_v6) = if let Some(existing) = self
                     .status
                     .peers
                     .iter_mut()
                     .find(|p| p.device_id == peer_id)
                 {
-                    *existing = peer;
+                    existing.device_name = peer.device_name.clone();
+                    existing.hostname = peer.hostname.clone();
+                    if peer.address.is_ipv6() {
+                        existing.address_v6 = Some(peer.address);
+                    } else {
+                        existing.address = peer.address;
+                    }
+                    if peer.address_v6.is_some() {
+                        existing.address_v6 = peer.address_v6;
+                    }
+                    (existing.address, existing.address_v6)
                 } else {
-                    info!("[continuity] peer found: {} at {}", peer_name, addr_v4);
+                    let v4 = peer.address;
+                    let v6 = peer.address_v6;
+                    info!("[continuity] peer found: {} at {}", peer_name, v4);
                     self.status.peers.push(peer);
-                }
+                    (v4, v6)
+                };
 
                 if self.status.active_connection.is_none()
                     && !self.is_initiating
