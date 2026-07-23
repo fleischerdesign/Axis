@@ -542,15 +542,17 @@ impl ContinuityInner {
         self.status.remote_screen = Some((width, height));
         self.push();
 
-        let config = self.status.active_peer_config();
-        connection.send_message(Message::ConfigSync {
-            arrangement: config.arrangement.side,
-            offset: config.arrangement.offset,
-            clipboard: config.clipboard,
-            audio: config.audio,
-            drag_drop: config.drag_drop,
-            version: config.version,
-        });
+        if self.is_initiating {
+            let config = self.status.active_peer_config();
+            connection.send_message(Message::ConfigSync {
+                arrangement: config.arrangement.side,
+                offset: config.arrangement.offset,
+                clipboard: config.clipboard,
+                audio: config.audio,
+                drag_drop: config.drag_drop,
+                version: config.version,
+            });
+        }
 
         self.push();
         let _ = capture.prepare();
@@ -565,11 +567,13 @@ impl ContinuityInner {
             let peer_id = conn.peer_id.clone();
             let config = self.status.peer_configs.entry(peer_id).or_default();
 
-            if args.version >= config.version {
+            let is_newer = args.version > config.version;
+            let is_initial_adopt = !self.is_initiating && config.version == 0;
+
+            if is_newer || is_initial_adopt {
                 info!(
-                    "[continuity] adopting config from peer (v{} >= v{}): mirrored {:?} offset {} clipboard={} audio={} drag_drop={}",
+                    "[continuity] adopting config from peer (v{}): mirrored {:?} offset {} clipboard={} audio={} drag_drop={}",
                     args.version,
-                    config.version,
                     args.arrangement.opposite(),
                     -args.offset,
                     args.clipboard,
@@ -588,7 +592,7 @@ impl ContinuityInner {
                 self.push();
             } else {
                 info!(
-                    "[continuity] ignoring older config from peer (v{} < v{})",
+                    "[continuity] ignoring config from peer (v{} <= v{})",
                     args.version, config.version
                 );
             }
