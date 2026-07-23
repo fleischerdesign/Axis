@@ -19,7 +19,6 @@ dirs.workspace = true
 gtk4-layer-shell.workspace = true
 log.workspace = true
 uuid = { workspace = true, features = ["v4"] }
-fern.workspace = true
 async-stream.workspace = true
 image.workspace = true
 clap.workspace = true

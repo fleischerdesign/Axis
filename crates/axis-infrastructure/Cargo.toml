@@ -22,6 +22,7 @@ thiserror.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 log.workspace = true
+fern.workspace = true
 notify.workspace = true
 gtk4.workspace = true
 gtk4-session-lock.workspace = true

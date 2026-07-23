@@ -16,6 +16,7 @@ pub mod idle_notify;
 pub mod ipc;
 pub mod launcher;
 pub mod lock;
+pub mod logging;
 pub mod mpris;
 pub mod network;
 pub mod nightlight;

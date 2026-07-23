@@ -1,4 +1,3 @@
-use chrono::Local;
 use gtk4::{gdk, glib};
 use libadwaita as adw;
 use libadwaita::prelude::*;
@@ -76,7 +75,7 @@ use axis_domain::ports::network::NetworkProvider;
 use axis_presentation::ThemeService;
 
 fn main() -> glib::ExitCode {
-    setup_logger().expect("Failed to initialize logger");
+    setup_logger();
     let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
     let _guard = rt.enter();
 
@@ -399,25 +398,14 @@ fn build_ui(
     settings_window.present();
 }
 
-fn setup_logger() -> Result<(), fern::InitError> {
-    let mut dispatch = fern::Dispatch::new()
-        .format(|out, message, record| {
-            out.finish(format_args!(
-                "{}[{}][{}] {}",
-                Local::now().format("[%Y-%m-%d][%H:%M:%S]"),
-                record.target(),
-                record.level(),
-                message
-            ))
-        })
-        .level(log::LevelFilter::Info);
-
-    if let Ok(lvl) = std::env::var("RUST_LOG")
-        && let Ok(parsed) = lvl.parse()
-    {
-        dispatch = dispatch.level(parsed);
-    }
-
-    dispatch.chain(std::io::stdout()).apply()?;
-    Ok(())
+fn setup_logger() {
+    let log_dir = std::env::var("AXIS_LOG_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| {
+            let config = dirs::config_dir()
+                .or_else(|| dirs::home_dir().map(|h| h.join(".config")));
+            config.unwrap_or_else(|| std::path::PathBuf::from(".")).join("axis").join("logs")
+        });
+    axis_infrastructure::adapters::logging::setup_logger(&log_dir, "axis-settings")
+        .expect("Failed to initialize logger");
 }

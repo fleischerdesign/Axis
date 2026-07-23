@@ -635,6 +635,16 @@ impl ContinuityInner {
             let peer_id = conn.peer_id.clone();
             let config = self.status.peer_configs.entry(peer_id).or_default();
 
+            info!(
+                "[continuity] config_sync received: v{} (local v{}) initiating={} clipboard={} audio={} drag_drop={}",
+                args.version,
+                config.version,
+                self.is_initiating,
+                args.clipboard,
+                args.audio,
+                args.drag_drop,
+            );
+
             let is_newer = args.version > config.version;
             let is_initial_adopt = !self.is_initiating && config.version == 0;
 

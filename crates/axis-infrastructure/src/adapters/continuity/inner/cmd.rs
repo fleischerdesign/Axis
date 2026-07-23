@@ -508,7 +508,7 @@ impl ContinuityInner {
         audio_stream_mgr: &dyn ContinuityAudioPort,
     ) {
         let mut changed = false;
-        for (id, config) in configs {
+        for (id, mut config) in configs {
             let entry = self.status.peer_configs.entry(id.clone()).or_default();
             let clipboard_toggled = entry.clipboard != config.clipboard;
             let audio_toggled = entry.audio != config.audio
@@ -558,7 +558,33 @@ impl ContinuityInner {
                 .active_connection
                 .as_ref()
                 .is_some_and(|conn| conn.peer_id == id);
+
+            info!(
+                "[continuity] update_peer_configs: id={} active={} clipboard={} audio={} dir={:?} drag_drop={} auto_connect={} version={}",
+                &id[..8.min(id.len())],
+                is_peer_active,
+                config.clipboard,
+                config.audio,
+                config.audio_direction,
+                config.drag_drop,
+                config.auto_connect,
+                config.version,
+            );
+
             if is_peer_active {
+                config.version = config.version.saturating_add(1);
+                let version = config.version;
+
+                info!(
+                    "[continuity] sending ConfigSync to {}: v{} clipboard={} audio={} dir={:?} drag_drop={}",
+                    &id[..8.min(id.len())],
+                    version,
+                    config.clipboard,
+                    config.audio,
+                    config.audio_direction,
+                    config.drag_drop,
+                );
+
                 connection.send_message(Message::ConfigSync {
                     arrangement: config.arrangement.side,
                     offset: config.arrangement.offset,
@@ -566,7 +592,7 @@ impl ContinuityInner {
                     audio: config.audio,
                     audio_direction: config.audio_direction,
                     drag_drop: config.drag_drop,
-                    version: config.version,
+                    version,
                 });
 
                 if clipboard_toggled {
