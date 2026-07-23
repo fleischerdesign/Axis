@@ -541,9 +541,16 @@ impl ContinuityInner {
                 }
             }
 
-            if let Some(conn) = &self.status.active_connection
-                && conn.peer_id == id
-            {
+            let is_peer_active = self.status.active_connection.as_ref().is_some_and(|conn| {
+                conn.peer_id == id
+                    || conn.peer_name == id
+                    || self
+                        .known_peers
+                        .peers
+                        .get(&id)
+                        .is_some_and(|k| k.device_name == conn.peer_name || k.device_id == conn.peer_id)
+            });
+            if is_peer_active {
                 connection.send_message(Message::ConfigSync {
                     arrangement: config.arrangement.side,
                     offset: config.arrangement.offset,

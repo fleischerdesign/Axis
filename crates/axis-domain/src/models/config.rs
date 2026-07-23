@@ -202,10 +202,18 @@ impl Default for ShortcutsConfig {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ContinuityConfig {
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub enabled: bool,
+}
+
+impl Default for ContinuityConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_true(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
