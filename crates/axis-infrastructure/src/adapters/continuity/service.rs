@@ -55,9 +55,23 @@ impl ContinuityProvider for ContinuityService {
     }
 
     async fn set_enabled(&self, enabled: bool) -> Result<(), ContinuityError> {
+        let mut rx = self.status_tx.subscribe();
+        if rx.borrow().enabled == enabled {
+            return Ok(());
+        }
+
         self.cmd_tx
             .try_send(ContinuityCmd::SetEnabled(enabled))
-            .map_err(|e| ContinuityError::ProviderError(e.to_string()))
+            .map_err(|e| ContinuityError::ProviderError(e.to_string()))?;
+
+        loop {
+            rx.changed()
+                .await
+                .map_err(|e| ContinuityError::ProviderError(e.to_string()))?;
+            if rx.borrow_and_update().enabled == enabled {
+                return Ok(());
+            }
+        }
     }
 
     async fn connect_to_peer(&self, peer_id: &str) -> Result<(), ContinuityError> {
