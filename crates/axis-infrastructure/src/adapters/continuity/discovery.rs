@@ -432,6 +432,7 @@ async fn scan_cached_services(_conn: &Connection) -> Result<Vec<PeerInfo>, Strin
     struct RawEntry {
         name: String,
         host: String,
+        device_id: String,
         addr_v4: Option<std::net::SocketAddr>,
         addr_v6: Option<std::net::SocketAddr>,
     }
@@ -448,6 +449,15 @@ async fn scan_cached_services(_conn: &Connection) -> Result<Vec<PeerInfo>, Strin
         let host = parts[6].to_string();
         let address = parts[7].to_string();
         let port: u16 = parts[8].parse().unwrap_or(0);
+
+        let mut device_id = name.clone();
+        for part in &parts[9..] {
+            let clean = part.trim_matches('"');
+            if let Some(id) = clean.strip_prefix("id=") {
+                device_id = id.to_string();
+                break;
+            }
+        }
 
         if port == 0 || address.is_empty() || name == self_hostname {
             continue;
@@ -469,9 +479,10 @@ async fn scan_cached_services(_conn: &Connection) -> Result<Vec<PeerInfo>, Strin
             continue;
         };
 
-        let entry = raw.entry(name.clone()).or_insert_with(|| RawEntry {
+        let entry = raw.entry(device_id.clone()).or_insert_with(|| RawEntry {
             name: name.clone(),
             host: host.clone(),
+            device_id: device_id.clone(),
             addr_v4: None,
             addr_v6: None,
         });
@@ -487,16 +498,16 @@ async fn scan_cached_services(_conn: &Connection) -> Result<Vec<PeerInfo>, Strin
     for (_, entry) in raw {
         if let Some(addr_v4) = entry.addr_v4 {
             result.push(PeerInfo {
-                device_id: entry.name,
-                device_name: entry.host.clone(),
+                device_id: entry.device_id,
+                device_name: entry.name,
                 hostname: entry.host,
                 address: addr_v4,
                 address_v6: entry.addr_v6,
             });
         } else if let Some(addr_v6) = entry.addr_v6 {
             result.push(PeerInfo {
-                device_id: entry.name,
-                device_name: entry.host.clone(),
+                device_id: entry.device_id,
+                device_name: entry.name,
                 hostname: entry.host,
                 address: addr_v6,
                 address_v6: Some(addr_v6),
