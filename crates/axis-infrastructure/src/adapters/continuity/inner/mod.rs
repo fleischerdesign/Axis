@@ -88,6 +88,7 @@ pub struct ContinuityInner {
     pub(crate) last_transition_at: Instant,
     pub(crate) switch_tx: Option<Sender<ContinuityCmd>>,
     pub(crate) known_peers: KnownPeersStore,
+    pub(crate) audio_task: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl ContinuityInner {
@@ -115,6 +116,7 @@ impl ContinuityInner {
             last_transition_at: Instant::now() - Duration::from_secs(10),
             switch_tx: None,
             known_peers,
+            audio_task: None,
         }
     }
 
@@ -220,7 +222,13 @@ impl ContinuityInner {
 
     pub(crate) fn decrypt_from_wire(&self, packet: &[u8]) -> Option<Vec<u8>> {
         if let Some(ref cipher) = *self.cipher.lock().unwrap() {
-            cipher.decrypt(packet).ok()
+            match cipher.decrypt(packet) {
+                Ok(data) => Some(data),
+                Err(e) => {
+                    log::warn!("[continuity] decrypt_from_wire failed: {e}");
+                    None
+                }
+            }
         } else {
             Some(packet.to_vec())
         }

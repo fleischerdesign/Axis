@@ -303,13 +303,7 @@ mod tests {
         );
 
         inner
-            .handle_update_peer_configs(
-                configs,
-                cmd_ctx.network,
-                cmd_ctx.clipboard,
-                cmd_ctx.clipboard_tx,
-                cmd_ctx.audio,
-            )
+            .handle_update_peer_configs(configs, &mut cmd_ctx)
             .await;
 
         let sent = network.drain_sent();

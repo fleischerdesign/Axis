@@ -12,7 +12,7 @@ use super::super::connection::ConnectionEvent;
 use super::super::discovery::DiscoveryEvent;
 use super::super::known_peers::{self, KnownPeer, KnownPeerArrangementSide};
 use super::super::ports::{
-    ContinuityAudioPort, ContinuityCapturePort, ContinuityClipboardPort,
+    ContinuityCapturePort, ContinuityClipboardPort,
     ContinuityInjectionPort, ContinuityNetworkPort,
 };
 use super::{CONTINUITY_PORT, CmdContext, ContinuityCmd, ContinuityInner};
@@ -83,14 +83,7 @@ impl ContinuityInner {
                     .await;
             }
             ContinuityCmd::UpdatePeerConfigs(configs) => {
-                self.handle_update_peer_configs(
-                    configs,
-                    ctx.network,
-                    ctx.clipboard,
-                    ctx.clipboard_tx,
-                    ctx.audio,
-                )
-                .await;
+                self.handle_update_peer_configs(configs, ctx).await;
             }
             ContinuityCmd::SwitchToReceiving(side) => {
                 self.handle_switch_to_receiving(side, ctx.network, ctx.injection)
@@ -503,10 +496,7 @@ impl ContinuityInner {
     pub(crate) async fn handle_update_peer_configs(
         &mut self,
         configs: HashMap<String, PeerConfig>,
-        connection: &mut dyn ContinuityNetworkPort,
-        clipboard: &mut dyn ContinuityClipboardPort,
-        clipboard_tx: &Sender<ClipboardEvent>,
-        audio_stream_mgr: &dyn ContinuityAudioPort,
+        ctx: &mut CmdContext<'_>,
     ) {
         let mut changed = false;
         for (id, config) in configs {
@@ -590,7 +580,7 @@ impl ContinuityInner {
                     config.drag_drop,
                 );
 
-                connection.send_message(Message::ConfigSync {
+                ctx.network.send_message(Message::ConfigSync {
                     arrangement: config.arrangement.side,
                     offset: config.arrangement.offset,
                     clipboard: config.clipboard,
@@ -602,47 +592,15 @@ impl ContinuityInner {
 
                 if clipboard_toggled {
                     if config.clipboard {
-                        let _ = clipboard.start_monitoring(clipboard_tx.clone());
+                        let _ = ctx.clipboard.start_monitoring(ctx.clipboard_tx.clone());
                     } else {
-                        clipboard.stop_monitoring();
+                        ctx.clipboard.stop_monitoring();
                     }
                 }
 
                 if audio_toggled {
-                    if config.audio || config.audio_direction.should_capture() {
-                        if let Some(write_tx) = connection.active_write_tx() {
-                            let (audio_tx, mut audio_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(32);
-                            let target = config.capture_device.clone();
-                            audio_stream_mgr
-                                .start_capture(target.as_deref(), audio_tx)
-                                .await;
-                            let cipher = self.cipher_arc();
-                            tokio::spawn(async move {
-                                while let Some(chunk) = audio_rx.recv().await {
-                                    let encrypted = {
-                                        let mut guard = cipher.lock().unwrap();
-                                        if let Some(ref mut c) = *guard {
-                                            c.encrypt(&chunk)
-                                        } else {
-                                            chunk
-                                        }
-                                    };
-                                    if write_tx
-                                        .send(Message::AudioChunk {
-                                            channel_id: 0,
-                                            pcm_data: encrypted,
-                                        })
-                                        .await
-                                        .is_err()
-                                    {
-                                        break;
-                                    }
-                                }
-                            });
-                        }
-                    } else {
-                        audio_stream_mgr.stop_capture().await;
-                    }
+                    let cfg = config.clone();
+                    self.sync_audio_capture(&cfg, ctx).await;
                 }
             }
         }

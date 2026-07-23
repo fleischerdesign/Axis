@@ -34,20 +34,25 @@ impl AudioStreamManager {
     ) {
         self.stop_capture().await;
 
-        let target = target_device.unwrap_or("@DEFAULT_MONITOR@");
-        info!("[continuity-audio] starting PipeWire audio capture via pw-record (target: {target})");
-
         let mut cmd = Command::new("pw-record");
         cmd.args([
-            "--target",
-            target,
             "--raw",
             "--format=s16",
             "--rate=44100",
             "--channels=2",
             "--latency=20ms",
-            "-",
         ]);
+        if let Some(target) = target_device
+            && target != "@DEFAULT_MONITOR@"
+            && target != "@DEFAULT_SOURCE@"
+            && !target.is_empty()
+        {
+            cmd.args(["--target", target]);
+            info!("[continuity-audio] starting PipeWire audio capture via pw-record (target: {target})");
+        } else {
+            info!("[continuity-audio] starting PipeWire audio capture via pw-record (default source)");
+        }
+        cmd.arg("-");
         cmd.stdout(Stdio::piped()).stderr(Stdio::null());
 
         match cmd.spawn() {

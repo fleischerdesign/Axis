@@ -20,6 +20,54 @@ use super::{
 };
 
 impl ContinuityInner {
+    pub(crate) async fn sync_audio_capture(
+        &mut self,
+        config: &axis_domain::models::continuity::PeerConfig,
+        ctx: &mut CmdContext<'_>,
+    ) {
+        if let Some(task) = self.audio_task.take() {
+            task.abort();
+        }
+
+        if config.audio || config.audio_direction.should_capture() {
+            if let Some(write_tx) = ctx.network.active_write_tx() {
+                let (audio_tx, mut audio_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(128);
+                let target = config.capture_device.clone();
+                ctx.audio.start_capture(target.as_deref(), audio_tx).await;
+                let cipher = self.cipher_arc();
+                let task = tokio::spawn(async move {
+                    while let Some(chunk) = audio_rx.recv().await {
+                        let encrypted = {
+                            let mut guard = cipher.lock().unwrap();
+                            if let Some(ref mut c) = *guard {
+                                c.encrypt(&chunk)
+                            } else {
+                                chunk
+                            }
+                        };
+                        if write_tx
+                            .send(Message::AudioChunk {
+                                channel_id: 0,
+                                pcm_data: encrypted,
+                            })
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                });
+                self.audio_task = Some(task);
+            }
+        } else {
+            ctx.audio.stop_capture().await;
+        }
+
+        if !config.audio_direction.should_play() {
+            ctx.audio.stop_playback().await;
+        }
+    }
+
     pub(crate) fn handle_heartbeat(
         &mut self,
         connection: &mut dyn ContinuityNetworkPort,
@@ -143,6 +191,9 @@ impl ContinuityInner {
         self.pending_peer = None;
         self.status.connecting_peer_id = None;
         self.last_message_at = None;
+        if let Some(task) = self.audio_task.take() {
+            task.abort();
+        }
         clipboard.stop_monitoring();
         injection.stop_injection();
         capture.stop_capture();
@@ -407,29 +458,7 @@ impl ContinuityInner {
                 }
 
                 let cfg = self.status.active_peer_config();
-                if (cfg.audio || cfg.audio_direction.should_capture())
-                    && let Some(write_tx) = ctx.network.active_write_tx()
-                {
-                    let (audio_tx, mut audio_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(32);
-                    let target = cfg.capture_device.clone();
-                    ctx.audio
-                        .start_capture(target.as_deref(), audio_tx)
-                        .await;
-                    tokio::spawn(async move {
-                        while let Some(chunk) = audio_rx.recv().await {
-                            if write_tx
-                                .send(Message::AudioChunk {
-                                    channel_id: 0,
-                                    pcm_data: chunk,
-                                })
-                                .await
-                                .is_err()
-                            {
-                                break;
-                            }
-                        }
-                    });
-                }
+                self.sync_audio_capture(&cfg, ctx).await;
 
                 if let Err(e) = ctx.injection.start_injection() {
                     error!("[continuity] failed to start input injection: {e}");
@@ -482,38 +511,7 @@ impl ContinuityInner {
                 }
 
                 let cfg = self.status.active_peer_config();
-                if (cfg.audio || cfg.audio_direction.should_capture())
-                    && let Some(write_tx) = ctx.network.active_write_tx()
-                {
-                    let (audio_tx, mut audio_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(32);
-                    let target = cfg.capture_device.clone();
-                    ctx.audio
-                        .start_capture(target.as_deref(), audio_tx)
-                        .await;
-                    let cipher = self.cipher_arc();
-                    tokio::spawn(async move {
-                        while let Some(chunk) = audio_rx.recv().await {
-                            let encrypted = {
-                                let mut guard = cipher.lock().unwrap();
-                                if let Some(ref mut c) = *guard {
-                                    c.encrypt(&chunk)
-                                } else {
-                                    chunk
-                                }
-                            };
-                            if write_tx
-                                .send(Message::AudioChunk {
-                                    channel_id: 0,
-                                    pcm_data: encrypted,
-                                })
-                                .await
-                                .is_err()
-                            {
-                                break;
-                            }
-                        }
-                    });
-                }
+                self.sync_audio_capture(&cfg, ctx).await;
 
                 if let Err(e) = ctx.injection.start_injection() {
                     error!("[continuity] failed to start input injection: {e}");
@@ -630,7 +628,6 @@ impl ContinuityInner {
         args: ConfigSyncArgs,
         ctx: &mut CmdContext<'_>,
     ) {
-        let cipher = self.cipher_arc();
         if let Some(conn) = &self.status.active_connection {
             let peer_id = conn.peer_id.clone();
             let config = self.status.peer_configs.entry(peer_id).or_default();
@@ -669,44 +666,8 @@ impl ContinuityInner {
                 config.drag_drop = args.drag_drop;
                 config.version = args.version;
 
-                if config.audio_direction.should_capture() {
-                    if let Some(write_tx) = ctx.network.active_write_tx() {
-                        let (audio_tx, mut audio_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(32);
-                        let target = config.capture_device.clone();
-                        ctx.audio
-                            .start_capture(target.as_deref(), audio_tx)
-                            .await;
-                    let cipher = cipher.clone();
-                    tokio::spawn(async move {
-                        while let Some(chunk) = audio_rx.recv().await {
-                            let encrypted = {
-                                let mut guard = cipher.lock().unwrap();
-                                if let Some(ref mut c) = *guard {
-                                    c.encrypt(&chunk)
-                                } else {
-                                    chunk
-                                }
-                            };
-                            if write_tx
-                                .send(Message::AudioChunk {
-                                    channel_id: 0,
-                                    pcm_data: encrypted,
-                                })
-                                .await
-                                .is_err()
-                            {
-                                break;
-                            }
-                        }
-                    });
-                    }
-                } else {
-                    ctx.audio.stop_capture().await;
-                }
-
-                if !config.audio_direction.should_play() {
-                    ctx.audio.stop_playback().await;
-                }
+                let cfg = config.clone();
+                self.sync_audio_capture(&cfg, ctx).await;
 
                 self.push();
                 self.persist_known_peers();

@@ -96,7 +96,7 @@ impl ConnectionProvider for TcpConnectionProvider {
     ) {
         self.disconnect_active();
 
-        let (write_tx, write_rx) = tokio::sync::mpsc::channel::<Message>(64);
+        let (write_tx, write_rx) = tokio::sync::mpsc::channel::<Message>(256);
 
         let task = tokio::spawn(async move {
             if let Some(v6) = addr_v6 {
@@ -249,7 +249,7 @@ async fn listen_loop(
                         debug!("[continuity:connection] incoming from {addr}");
                         let tx = event_tx.clone();
                         let (write_tx, write_rx) =
-                            tokio::sync::mpsc::channel::<Message>(64);
+                            tokio::sync::mpsc::channel::<Message>(256);
 
                         let _ = tx.send(ConnectionEvent::IncomingConnection {
                             addr,
@@ -315,38 +315,57 @@ async fn run_connection(
     }
 
     debug!("[continuity:connection] message loop started ({peer})");
-    loop {
-        tokio::select! {
-            result = proto::read_message(&mut reader) => {
-                match result {
-                    Ok(msg) => {
-                        let _ = event_tx.send(ConnectionEvent::MessageReceived(msg)).await;
-                    }
-                    Err(e) => {
-                        if e.kind() == std::io::ErrorKind::UnexpectedEof {
-                            info!("[continuity:connection] peer disconnected");
-                            let _ = event_tx
-                                .send(ConnectionEvent::Disconnected {
-                                    reason: "peer disconnected".into(),
-                                })
-                                .await;
-                        } else {
-                            error!("[continuity:connection] read error: {e}");
-                            let _ = event_tx
-                                .send(ConnectionEvent::Error(e.to_string()))
-                                .await;
-                        }
+
+    let peer_label = peer.clone();
+    let mut write_task = tokio::spawn(async move {
+        while let Some(msg) = write_rx.recv().await {
+            if let Err(e) = proto::write_message(&mut writer, &msg).await {
+                error!("[continuity:connection] write error ({peer_label}): {e}");
+                break;
+            }
+        }
+    });
+
+    let event_tx_c = event_tx.clone();
+    let peer_label = peer.clone();
+    let mut read_task = tokio::spawn(async move {
+        loop {
+            match proto::read_message(&mut reader).await {
+                Ok(msg) => {
+                    if event_tx_c
+                        .send(ConnectionEvent::MessageReceived(msg))
+                        .await
+                        .is_err()
+                    {
                         break;
                     }
                 }
-            }
-            Some(msg) = write_rx.recv() => {
-                if let Err(e) = proto::write_message(&mut writer, &msg).await {
-                    error!("[continuity:connection] write error: {e}");
+                Err(e) => {
+                    if e.kind() == std::io::ErrorKind::UnexpectedEof {
+                        info!("[continuity:connection] peer disconnected ({peer_label})");
+                        let _ = event_tx_c
+                            .send(ConnectionEvent::Disconnected {
+                                reason: "peer disconnected".into(),
+                            })
+                            .await;
+                    } else {
+                        error!("[continuity:connection] read error ({peer_label}): {e}");
+                        let _ = event_tx_c
+                            .send(ConnectionEvent::Error(e.to_string()))
+                            .await;
+                    }
                     break;
                 }
             }
-            else => break,
+        }
+    });
+
+    tokio::select! {
+        _ = &mut read_task => {
+            write_task.abort();
+        }
+        _ = &mut write_task => {
+            read_task.abort();
         }
     }
 }

@@ -2,6 +2,103 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 
+pub mod base64_bytes {
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+    pub fn encode(data: &[u8]) -> String {
+        let mut result = String::with_capacity(data.len().div_ceil(3) * 4);
+        for chunk in data.chunks(3) {
+            let b0 = chunk[0];
+            let b1 = *chunk.get(1).unwrap_or(&0);
+            let b2 = *chunk.get(2).unwrap_or(&0);
+
+            let n = ((b0 as u32) << 16) | ((b1 as u32) << 8) | (b2 as u32);
+
+            result.push(ALPHABET[((n >> 18) & 63) as usize] as char);
+            result.push(ALPHABET[((n >> 12) & 63) as usize] as char);
+
+            if chunk.len() > 1 {
+                result.push(ALPHABET[((n >> 6) & 63) as usize] as char);
+            } else {
+                result.push('=');
+            }
+
+            if chunk.len() > 2 {
+                result.push(ALPHABET[(n & 63) as usize] as char);
+            } else {
+                result.push('=');
+            }
+        }
+        result
+    }
+
+    pub fn decode(input: &str) -> Result<Vec<u8>, &'static str> {
+        let bytes = input.as_bytes();
+        if bytes.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        fn char_to_val(c: u8) -> Option<u8> {
+            match c {
+                b'A'..=b'Z' => Some(c - b'A'),
+                b'a'..=b'z' => Some(c - b'a' + 26),
+                b'0'..=b'9' => Some(c - b'0' + 52),
+                b'+' => Some(62),
+                b'/' => Some(63),
+                _ => None,
+            }
+        }
+
+        let mut out = Vec::with_capacity((bytes.len() * 3) / 4);
+        let mut i = 0;
+        while i < bytes.len() {
+            if bytes[i] == b'\r' || bytes[i] == b'\n' || bytes[i] == b' ' {
+                i += 1;
+                continue;
+            }
+            if i + 3 >= bytes.len() {
+                break;
+            }
+            let c0 = char_to_val(bytes[i]);
+            let c1 = char_to_val(bytes[i + 1]);
+            let c2 = if bytes[i + 2] == b'=' { Some(0) } else { char_to_val(bytes[i + 2]) };
+            let c3 = if bytes[i + 3] == b'=' { Some(0) } else { char_to_val(bytes[i + 3]) };
+
+            if let (Some(v0), Some(v1), Some(v2), Some(v3)) = (c0, c1, c2, c3) {
+                let n = ((v0 as u32) << 18) | ((v1 as u32) << 12) | ((v2 as u32) << 6) | (v3 as u32);
+                out.push(((n >> 16) & 0xFF) as u8);
+                if bytes[i + 2] != b'=' {
+                    out.push(((n >> 8) & 0xFF) as u8);
+                }
+                if bytes[i + 3] != b'=' {
+                    out.push((n & 0xFF) as u8);
+                }
+            } else {
+                return Err("invalid base64 byte");
+            }
+            i += 4;
+        }
+        Ok(out)
+    }
+
+    pub fn serialize<S>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&encode(bytes))
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        decode(&s).map_err(serde::de::Error::custom)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum Side {
     #[default]
@@ -321,6 +418,7 @@ pub enum Message {
         version: u64,
     },
     ClipboardUpdate {
+        #[serde(with = "base64_bytes")]
         content: Vec<u8>,
         mime_type: String,
     },
@@ -336,6 +434,7 @@ pub enum Message {
         transfer_id: String,
         chunk_index: u32,
         is_last: bool,
+        #[serde(with = "base64_bytes")]
         data: Vec<u8>,
     },
     DragCancel {
@@ -357,6 +456,7 @@ pub enum Message {
     },
     AudioChunk {
         channel_id: u8,
+        #[serde(with = "base64_bytes")]
         pcm_data: Vec<u8>,
     },
     EdgeTransition {
