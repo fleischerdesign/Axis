@@ -100,8 +100,19 @@ pub fn wire(args: WiringArgs) {
     });
 
     wire_auto_hide(pres, uc, &bar_window);
+    wire_continuity_capture(app, pres, p);
     bar_window.present();
     wire_dbus_host(pres, uc, p, rt);
+}
+
+fn wire_continuity_capture(app: &libadwaita::Application, pres: &Presenters, p: &Providers) {
+    let capture_controller = Rc::new(
+        crate::widgets::continuity_capture::ContinuityCaptureController::new(
+            app,
+            p.continuity_sharing.clone(),
+        ),
+    );
+    pres.continuity.add_view(Box::new(capture_controller));
 }
 
 fn wire_appearance(
