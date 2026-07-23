@@ -1,6 +1,8 @@
 use async_channel::Sender;
 use log::{error, info, warn};
 use std::process::Stdio;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
 use tokio::process::{Child, Command};
 use tokio::task::JoinHandle;
@@ -27,7 +29,7 @@ pub trait ClipboardSync: Send {
 pub struct WaylandClipboard {
     monitor_task: Option<JoinHandle<()>>,
     monitor_child: Option<Child>,
-    last_hash: u64,
+    last_hash: Arc<AtomicU64>,
 }
 
 impl Default for WaylandClipboard {
@@ -41,7 +43,7 @@ impl WaylandClipboard {
         Self {
             monitor_task: None,
             monitor_child: None,
-            last_hash: 0,
+            last_hash: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -73,7 +75,7 @@ impl ClipboardSync for WaylandClipboard {
         self.monitor_child = Some(child);
 
         let mut reader = tokio::io::BufReader::new(stdout);
-        let mut last_hash: u64 = self.last_hash;
+        let last_hash = self.last_hash.clone();
 
         let task = tokio::spawn(async move {
             use tokio::io::AsyncBufReadExt;
@@ -94,8 +96,8 @@ impl ClipboardSync for WaylandClipboard {
                             }
                             if !accumulator.is_empty() {
                                 let hash = Self::hash(&accumulator);
-                                if hash != last_hash {
-                                    last_hash = hash;
+                                if hash != last_hash.load(Ordering::Relaxed) {
+                                    last_hash.store(hash, Ordering::Relaxed);
                                     info!(
                                         "[continuity:clipboard] detected clipboard change: {} bytes",
                                         accumulator.len()
@@ -144,10 +146,10 @@ impl ClipboardSync for WaylandClipboard {
 
     fn set_content(&mut self, content: &[u8], mime_type: &str) -> Result<(), String> {
         let hash = Self::hash(content);
-        if hash == self.last_hash {
+        if hash == self.last_hash.load(Ordering::Relaxed) {
             return Ok(()); // Dedup: avoid loops
         }
-        self.last_hash = hash;
+        self.last_hash.store(hash, Ordering::Relaxed);
 
         info!(
             "[continuity:clipboard] setting content: {} bytes ({mime_type})",
