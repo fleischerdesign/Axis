@@ -231,12 +231,18 @@ fn wire_continuity_sync(
                 return;
             }
         };
-        let mut last_enabled = Some(initial_enabled);
         rt.spawn(async move {
+            let mut is_first = true;
+            let mut last_enabled = initial_enabled;
             while let Some(status) = futures_util::StreamExt::next(&mut cont_stream).await {
+                if is_first {
+                    is_first = false;
+                    last_enabled = status.enabled;
+                    continue;
+                }
                 let enabled = status.enabled;
-                if last_enabled != Some(enabled) {
-                    last_enabled = Some(enabled);
+                if last_enabled != enabled {
+                    last_enabled = enabled;
                     if let Err(e) = cfg.update(Box::new(move |c: &mut AxisConfig| {
                         c.continuity.enabled = enabled;
                     })) {
