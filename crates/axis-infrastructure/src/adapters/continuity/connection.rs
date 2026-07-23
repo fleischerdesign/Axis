@@ -181,6 +181,50 @@ impl ConnectionProvider for TcpConnectionProvider {
     }
 }
 
+impl super::ports::ContinuityNetworkPort for TcpConnectionProvider {
+    fn listen(
+        &mut self,
+        port: u16,
+        tx: Sender<ConnectionEvent>,
+    ) -> Result<(), String> {
+        ConnectionProvider::listen(self, port, tx)
+    }
+
+    fn connect_dual(
+        &mut self,
+        addr_v4: SocketAddr,
+        addr_v6: Option<SocketAddr>,
+        tx: Sender<ConnectionEvent>,
+        device_id: String,
+        device_name: String,
+    ) {
+        ConnectionProvider::connect_dual(self, addr_v4, addr_v6, tx, device_id, device_name);
+    }
+
+    fn disconnect_active(&mut self) {
+        ConnectionProvider::disconnect_active(self);
+    }
+
+    fn stop(&mut self) {
+        ConnectionProvider::stop(self);
+    }
+
+    fn send_message(&self, msg: Message) {
+        ConnectionProvider::send_message(self, msg);
+    }
+
+    fn set_active_write(
+        &mut self,
+        write_tx: tokio::sync::mpsc::Sender<Message>,
+    ) {
+        ConnectionProvider::set_active_write(self, write_tx);
+    }
+
+    fn active_write_tx(&self) -> Option<tokio::sync::mpsc::Sender<Message>> {
+        TcpConnectionProvider::active_write_tx(self)
+    }
+}
+
 impl Drop for TcpConnectionProvider {
     fn drop(&mut self) {
         self.stop();

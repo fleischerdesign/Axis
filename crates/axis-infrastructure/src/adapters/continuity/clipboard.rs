@@ -192,3 +192,18 @@ impl ClipboardSync for WaylandClipboard {
         Ok(())
     }
 }
+
+impl super::ports::ContinuityClipboardPort for WaylandClipboard {
+    fn start_monitoring(
+        &mut self,
+        tx: Sender<ClipboardEvent>,
+    ) -> Result<(), String> {
+        ClipboardSync::start_monitoring(self, tx)
+    }
+    fn stop_monitoring(&mut self) {
+        ClipboardSync::stop_monitoring(self);
+    }
+    fn set_content(&mut self, content: &[u8], mime_type: &str) -> Result<(), String> {
+        ClipboardSync::set_content(self, content, mime_type)
+    }
+}

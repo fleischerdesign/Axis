@@ -618,3 +618,39 @@ impl InputCapture for EvdevCapture {
         !self.tasks.is_empty()
     }
 }
+
+impl super::ports::ContinuityCapturePort for EvdevCapture {
+    fn prepare(&mut self) -> Result<(), String> {
+        InputCapture::prepare(self)
+    }
+    fn start_capture(&mut self, tx: Sender<InternalInputEvent>) -> Result<(), String> {
+        InputCapture::start(self, tx)
+    }
+    fn stop_capture(&mut self) {
+        InputCapture::stop(self);
+    }
+    fn is_capturing(&self) -> bool {
+        InputCapture::is_capturing(self)
+    }
+}
+
+impl super::ports::ContinuityInjectionPort for WaylandInjection {
+    fn start_injection(&mut self) -> Result<(), String> {
+        InputInjection::start(self)
+    }
+    fn stop_injection(&mut self) {
+        InputInjection::stop(self);
+    }
+    fn warp(
+        &mut self,
+        side: Side,
+        edge_pos: f64,
+        screen_w: i32,
+        screen_h: i32,
+    ) -> Result<(), String> {
+        InputInjection::warp(self, side, edge_pos, screen_w, screen_h)
+    }
+    fn inject(&mut self, msg: &Message) -> Result<(), String> {
+        InputInjection::inject(self, msg)
+    }
+}

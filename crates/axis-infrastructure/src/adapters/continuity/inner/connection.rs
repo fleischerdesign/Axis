@@ -7,10 +7,12 @@ use axis_domain::models::continuity::{
 };
 use log::{error, info, warn};
 
-use super::super::clipboard::{ClipboardEvent, ClipboardSync, WaylandClipboard};
-use super::super::connection::{ConnectionEvent, ConnectionProvider, TcpConnectionProvider};
-use super::super::input::{
-    EvdevCapture, InputCapture, InputInjection, InternalInputEvent, WaylandInjection,
+use super::super::clipboard::ClipboardEvent;
+use super::super::connection::ConnectionEvent;
+use super::super::input::InternalInputEvent;
+use super::super::ports::{
+    ContinuityCapturePort, ContinuityClipboardPort,
+    ContinuityInjectionPort, ContinuityNetworkPort,
 };
 use super::super::proto;
 use super::{
@@ -20,8 +22,8 @@ use super::{
 impl ContinuityInner {
     pub(crate) fn handle_heartbeat(
         &mut self,
-        connection: &mut TcpConnectionProvider,
-        capture: &mut EvdevCapture,
+        connection: &mut dyn ContinuityNetworkPort,
+        capture: &mut dyn ContinuityCapturePort,
     ) {
         if let Some(last) = self.last_message_at {
             let timeout = if matches!(
@@ -38,7 +40,7 @@ impl ContinuityInner {
             if last.elapsed() > timeout {
                 warn!("[continuity] peer timed out (no message for {:?})", timeout);
                 connection.disconnect_active();
-                capture.stop();
+                capture.stop_capture();
                 self.status.active_connection = None;
                 self.connected_at = None;
                 self.status.sharing_state = SharingState::Idle;
@@ -75,7 +77,7 @@ impl ContinuityInner {
     ) -> Option<Pin<Box<tokio::time::Sleep>>> {
         match event {
             ConnectionEvent::IncomingConnection { addr, write_tx } => {
-                self.handle_incoming_connection(addr, write_tx, ctx.connection)
+                self.handle_incoming_connection(addr, write_tx, ctx.network)
                     .await;
                 None
             }
@@ -83,7 +85,7 @@ impl ContinuityInner {
             ConnectionEvent::Disconnected { reason } => {
                 self.handle_disconnected(
                     reason,
-                    ctx.connection,
+                    ctx.network,
                     ctx.clipboard,
                     ctx.injection,
                     ctx.capture,
@@ -109,7 +111,7 @@ impl ContinuityInner {
         &mut self,
         addr: std::net::SocketAddr,
         write_tx: tokio::sync::mpsc::Sender<Message>,
-        connection: &mut TcpConnectionProvider,
+        connection: &mut dyn ContinuityNetworkPort,
     ) {
         info!("[continuity] incoming connection from {addr}");
         self.is_initiating = false;
@@ -126,10 +128,10 @@ impl ContinuityInner {
     pub(crate) async fn handle_disconnected(
         &mut self,
         reason: String,
-        _connection: &mut TcpConnectionProvider,
-        clipboard: &mut WaylandClipboard,
-        injection: &mut WaylandInjection,
-        capture: &mut EvdevCapture,
+        _connection: &mut dyn ContinuityNetworkPort,
+        clipboard: &mut dyn ContinuityClipboardPort,
+        injection: &mut dyn ContinuityInjectionPort,
+        capture: &mut dyn ContinuityCapturePort,
     ) -> Option<Pin<Box<tokio::time::Sleep>>> {
         info!("[continuity] disconnected: {reason}");
         let was_active = self.status.active_connection.take();
@@ -142,8 +144,8 @@ impl ContinuityInner {
         self.status.connecting_peer_id = None;
         self.last_message_at = None;
         clipboard.stop_monitoring();
-        injection.stop();
-        capture.stop();
+        injection.stop_injection();
+        capture.stop_capture();
 
         let reconnect_sleep = if let Some(conn) = was_active {
             self.start_reconnect(&conn.peer_id, &conn.peer_name)
@@ -171,7 +173,7 @@ impl ContinuityInner {
             Message::PinConfirm { pin } => {
                 self.handle_pin_confirm(
                     pin,
-                    ctx.connection,
+                    ctx.network,
                     ctx.clipboard,
                     ctx.injection,
                     ctx.capture,
@@ -180,11 +182,13 @@ impl ContinuityInner {
                 .await;
             }
             Message::ClipboardUpdate { content, mime_type } => {
-                if self.status.active_peer_config().clipboard
-                    && let Err(e) = ctx.clipboard.set_content(&content, &mime_type)
-                {
-                    error!("[continuity] failed to set clipboard: {e}");
-                }
+                let decrypted = self.decrypt_from_wire(&content);
+                if let Some(data) = decrypted
+                    && self.status.active_peer_config().clipboard
+                        && let Err(e) = ctx.clipboard.set_content(&data, &mime_type)
+                    {
+                        error!("[continuity] failed to set clipboard: {e}");
+                    }
             }
             Message::DragOffer {
                 transfer_id,
@@ -219,11 +223,13 @@ impl ContinuityInner {
                 is_last,
                 data,
             } => {
-                if let Ok(Some(completed_path)) = ctx
-                    .drag_drop_mgr
-                    .handle_chunk(&transfer_id, chunk_index, is_last, &data)
-                    .await
-                {
+                let decrypted = self.decrypt_from_wire(&data);
+                if let Some(chunk_data) = decrypted
+                    && let Ok(Some(completed_path)) = ctx
+                        .drag_drop_mgr
+                        .handle_chunk(&transfer_id, chunk_index, is_last, &chunk_data)
+                        .await
+                    {
                     info!(
                         "[continuity] file drag transfer complete: saved to {:?}",
                         completed_path
@@ -269,10 +275,11 @@ impl ContinuityInner {
                 channel_id: _,
                 pcm_data,
             } => {
-                let target = self.status.active_peer_config().playback_device.clone();
-                ctx.audio_stream_mgr
-                    .play_chunk(target.as_deref(), &pcm_data)
-                    .await;
+                let decrypted = self.decrypt_from_wire(&pcm_data);
+                if let Some(pcm) = decrypted {
+                    let target = self.status.active_peer_config().playback_device.clone();
+                    ctx.audio.play_chunk(target.as_deref(), &pcm).await;
+                }
             }
             Message::CursorMove { .. }
             | Message::KeyPress { .. }
@@ -282,7 +289,7 @@ impl ContinuityInner {
                 let _ = ctx.injection.inject(&msg);
             }
             Message::ScreenInfo { width, height } => {
-                self.handle_screen_info(width, height, ctx.connection, ctx.capture)
+                self.handle_screen_info(width, height, ctx.network, ctx.capture)
                     .await;
             }
             Message::ConfigSync {
@@ -309,24 +316,24 @@ impl ContinuityInner {
                 .await;
             }
             Message::EdgeTransition { side, edge_pos } => {
-                self.handle_edge_transition(side, edge_pos, ctx.connection, ctx.injection)
+                self.handle_edge_transition(side, edge_pos, ctx.network, ctx.injection)
                     .await;
             }
             Message::TransitionAck { accepted } => {
-                self.handle_transition_ack(accepted, ctx.connection, ctx.capture, ctx.input_tx)
+                self.handle_transition_ack(accepted, ctx.network, ctx.capture, ctx.input_tx)
                     .await;
             }
             Message::TransitionCancel => {
                 self.handle_transition_cancel().await;
             }
             Message::SwitchTransition { side, edge_pos: _ } => {
-                self.handle_switch_transition(side, ctx.connection).await;
+                self.handle_switch_transition(side, ctx.network).await;
             }
             Message::SwitchConfirm { side, edge_pos } => {
                 self.handle_switch_confirm(
                     side,
                     edge_pos,
-                    ctx.connection,
+                    ctx.network,
                     ctx.capture,
                     ctx.input_tx,
                 )
@@ -339,7 +346,7 @@ impl ContinuityInner {
             Message::Disconnect { reason } => {
                 self.handle_peer_disconnect(
                     reason,
-                    ctx.connection,
+                    ctx.network,
                     ctx.clipboard,
                     ctx.injection,
                     ctx.capture,
@@ -358,7 +365,7 @@ impl ContinuityInner {
     ) {
         if version != proto::PROTOCOL_VERSION {
             warn!("[continuity] peer version mismatch: {version}");
-            ctx.connection.disconnect_active();
+            ctx.network.disconnect_active();
             self.last_message_at = None;
             return;
         }
@@ -375,11 +382,12 @@ impl ContinuityInner {
             if is_trusted {
                 info!("[continuity] trusted peer reconnected, skipping PIN");
                 self.status.active_connection = Some(ActiveConnectionInfo {
-                    peer_id: device_id,
-                    peer_name: device_name,
+                    peer_id: device_id.clone(),
+                    peer_name: device_name.clone(),
                     connected_secs: 0,
                 });
                 self.connected_at = Some(Instant::now());
+                self.create_cipher(&device_id, None);
                 self.status.pending_pin = None;
                 self.pin_created_at = None;
                 self.status.reconnect = None;
@@ -387,7 +395,7 @@ impl ContinuityInner {
                 self.last_message_at = Some(Instant::now());
                 self.push();
 
-                ctx.connection.send_message(Message::ScreenInfo {
+                ctx.network.send_message(Message::ScreenInfo {
                     width: self.status.screen_width,
                     height: self.status.screen_height,
                 });
@@ -400,11 +408,11 @@ impl ContinuityInner {
 
                 let cfg = self.status.active_peer_config();
                 if (cfg.audio || cfg.audio_direction.should_capture())
-                    && let Some(write_tx) = ctx.connection.active_write_tx()
+                    && let Some(write_tx) = ctx.network.active_write_tx()
                 {
                     let (audio_tx, mut audio_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(32);
                     let target = cfg.capture_device.clone();
-                    ctx.audio_stream_mgr
+                    ctx.audio
                         .start_capture(target.as_deref(), audio_tx)
                         .await;
                     tokio::spawn(async move {
@@ -423,7 +431,7 @@ impl ContinuityInner {
                     });
                 }
 
-                if let Err(e) = ctx.injection.start() {
+                if let Err(e) = ctx.injection.start_injection() {
                     error!("[continuity] failed to start input injection: {e}");
                 }
                 let _ = ctx.capture.prepare();
@@ -437,7 +445,7 @@ impl ContinuityInner {
                     is_incoming: false,
                 });
                 self.pin_created_at = Some(Instant::now());
-                ctx.connection.send_message(Message::PinRequest { pin });
+                ctx.network.send_message(Message::PinRequest { pin });
                 self.push();
             }
         } else {
@@ -450,18 +458,19 @@ impl ContinuityInner {
             if is_trusted {
                 info!("[continuity] trusted peer connected (incoming), skipping PIN");
                 self.status.active_connection = Some(ActiveConnectionInfo {
-                    peer_id: device_id,
-                    peer_name: device_name,
+                    peer_id: device_id.clone(),
+                    peer_name: device_name.clone(),
                     connected_secs: 0,
                 });
                 self.connected_at = Some(Instant::now());
+                self.create_cipher(&device_id, None);
                 self.status.pending_pin = None;
                 self.pin_created_at = None;
                 self.status.reconnect = None;
                 self.last_message_at = Some(Instant::now());
                 self.push();
 
-                ctx.connection.send_message(Message::ScreenInfo {
+                ctx.network.send_message(Message::ScreenInfo {
                     width: self.status.screen_width,
                     height: self.status.screen_height,
                 });
@@ -474,19 +483,28 @@ impl ContinuityInner {
 
                 let cfg = self.status.active_peer_config();
                 if (cfg.audio || cfg.audio_direction.should_capture())
-                    && let Some(write_tx) = ctx.connection.active_write_tx()
+                    && let Some(write_tx) = ctx.network.active_write_tx()
                 {
                     let (audio_tx, mut audio_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(32);
                     let target = cfg.capture_device.clone();
-                    ctx.audio_stream_mgr
+                    ctx.audio
                         .start_capture(target.as_deref(), audio_tx)
                         .await;
+                    let cipher = self.cipher_arc();
                     tokio::spawn(async move {
                         while let Some(chunk) = audio_rx.recv().await {
+                            let encrypted = {
+                                let mut guard = cipher.lock().unwrap();
+                                if let Some(ref mut c) = *guard {
+                                    c.encrypt(&chunk)
+                                } else {
+                                    chunk
+                                }
+                            };
                             if write_tx
                                 .send(Message::AudioChunk {
                                     channel_id: 0,
-                                    pcm_data: chunk,
+                                    pcm_data: encrypted,
                                 })
                                 .await
                                 .is_err()
@@ -497,22 +515,12 @@ impl ContinuityInner {
                     });
                 }
 
-                if let Err(e) = ctx.injection.start() {
+                if let Err(e) = ctx.injection.start_injection() {
                     error!("[continuity] failed to start input injection: {e}");
                 }
                 let _ = ctx.capture.prepare();
             } else {
-                let pin = format!("{:06}", rand::random_range(0..1_000_000));
-                info!("[continuity] incoming pairing request, generating PIN: {pin}");
-                self.status.pending_pin = Some(PendingPin {
-                    pin: pin.clone(),
-                    peer_id: device_id,
-                    peer_name: device_name,
-                    is_incoming: true,
-                });
-                self.pin_created_at = Some(Instant::now());
-                ctx.connection.send_message(Message::PinRequest { pin });
-                self.push();
+                info!("[continuity] incoming pairing request from {device_name}, waiting for PIN");
             }
         }
     }
@@ -534,61 +542,67 @@ impl ContinuityInner {
     pub(crate) async fn handle_pin_confirm(
         &mut self,
         pin: String,
-        connection: &mut TcpConnectionProvider,
-        clipboard: &mut WaylandClipboard,
-        injection: &mut WaylandInjection,
-        capture: &mut EvdevCapture,
+        connection: &mut dyn ContinuityNetworkPort,
+        clipboard: &mut dyn ContinuityClipboardPort,
+        injection: &mut dyn ContinuityInjectionPort,
+        capture: &mut dyn ContinuityCapturePort,
         clipboard_tx: &Sender<ClipboardEvent>,
     ) {
-        if let Some(pending) = &self.status.pending_pin {
-            if pending.pin == pin {
-                info!("[continuity] peer confirmed PIN, connection active");
-
-                self.status
-                    .peer_configs
-                    .entry(pending.peer_id.clone())
-                    .or_default()
-                    .trusted = true;
-                self.persist_known_peers();
-
-                self.status.active_connection = Some(ActiveConnectionInfo {
-                    peer_id: pending.peer_id.clone(),
-                    peer_name: pending.peer_name.clone(),
-                    connected_secs: 0,
-                });
-                self.connected_at = Some(Instant::now());
-                self.status.pending_pin = None;
-                self.pin_created_at = None;
-                self.push();
-
-                connection.send_message(Message::ScreenInfo {
-                    width: self.status.screen_width,
-                    height: self.status.screen_height,
-                });
-
-                if let Err(e) = clipboard.start_monitoring(clipboard_tx.clone()) {
-                    error!("[continuity] failed to start clipboard monitoring: {e}");
+        let (pending_peer_id, pending_peer_name, pending_pin) = {
+            
+            match &self.status.pending_pin {
+                Some(p) if p.pin == pin => (p.peer_id.clone(), p.peer_name.clone(), p.pin.clone()),
+                _ => {
+                    warn!("[continuity] peer sent incorrect PIN confirmation");
+                    connection.disconnect_active();
+                    return;
                 }
-
-                if let Err(e) = injection.start() {
-                    error!("[continuity] failed to start input injection: {e}");
-                }
-
-                self.push();
-                let _ = capture.prepare();
-            } else {
-                warn!("[continuity] peer sent incorrect PIN confirmation");
-                connection.disconnect_active();
             }
+        };
+
+        info!("[continuity] peer confirmed PIN, connection active");
+
+        self.status
+            .peer_configs
+            .entry(pending_peer_id.clone())
+            .or_default()
+            .trusted = true;
+        self.persist_known_peers();
+
+        self.status.active_connection = Some(ActiveConnectionInfo {
+            peer_id: pending_peer_id.clone(),
+            peer_name: pending_peer_name,
+            connected_secs: 0,
+        });
+        self.connected_at = Some(Instant::now());
+        self.create_cipher(&pending_peer_id, Some(&pending_pin));
+        self.status.pending_pin = None;
+        self.pin_created_at = None;
+        self.push();
+
+        connection.send_message(Message::ScreenInfo {
+            width: self.status.screen_width,
+            height: self.status.screen_height,
+        });
+
+        if let Err(e) = clipboard.start_monitoring(clipboard_tx.clone()) {
+            error!("[continuity] failed to start clipboard monitoring: {e}");
         }
+
+        if let Err(e) = injection.start_injection() {
+            error!("[continuity] failed to start input injection: {e}");
+        }
+
+        self.push();
+        let _ = capture.prepare();
     }
 
     pub(crate) async fn handle_screen_info(
         &mut self,
         width: i32,
         height: i32,
-        connection: &mut TcpConnectionProvider,
-        capture: &mut EvdevCapture,
+        connection: &mut dyn ContinuityNetworkPort,
+        capture: &mut dyn ContinuityCapturePort,
     ) {
         info!("[continuity] peer screen: {}x{}", width, height);
         self.status.remote_screen = Some((width, height));
@@ -616,11 +630,12 @@ impl ContinuityInner {
         args: ConfigSyncArgs,
         ctx: &mut CmdContext<'_>,
     ) {
+        let cipher = self.cipher_arc();
         if let Some(conn) = &self.status.active_connection {
             let peer_id = conn.peer_id.clone();
             let config = self.status.peer_configs.entry(peer_id).or_default();
 
-            let is_newer = args.version >= config.version;
+            let is_newer = args.version > config.version;
             let is_initial_adopt = !self.is_initiating && config.version == 0;
 
             if is_newer || is_initial_adopt {
@@ -645,33 +660,42 @@ impl ContinuityInner {
                 config.version = args.version;
 
                 if config.audio_direction.should_capture() {
-                    if let Some(write_tx) = ctx.connection.active_write_tx() {
+                    if let Some(write_tx) = ctx.network.active_write_tx() {
                         let (audio_tx, mut audio_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(32);
                         let target = config.capture_device.clone();
-                        ctx.audio_stream_mgr
+                        ctx.audio
                             .start_capture(target.as_deref(), audio_tx)
                             .await;
-                        tokio::spawn(async move {
-                            while let Some(chunk) = audio_rx.recv().await {
-                                if write_tx
-                                    .send(Message::AudioChunk {
-                                        channel_id: 0,
-                                        pcm_data: chunk,
-                                    })
-                                    .await
-                                    .is_err()
-                                {
-                                    break;
+                    let cipher = cipher.clone();
+                    tokio::spawn(async move {
+                        while let Some(chunk) = audio_rx.recv().await {
+                            let encrypted = {
+                                let mut guard = cipher.lock().unwrap();
+                                if let Some(ref mut c) = *guard {
+                                    c.encrypt(&chunk)
+                                } else {
+                                    chunk
                                 }
+                            };
+                            if write_tx
+                                .send(Message::AudioChunk {
+                                    channel_id: 0,
+                                    pcm_data: encrypted,
+                                })
+                                .await
+                                .is_err()
+                            {
+                                break;
                             }
-                        });
+                        }
+                    });
                     }
                 } else {
-                    ctx.audio_stream_mgr.stop_capture().await;
+                    ctx.audio.stop_capture().await;
                 }
 
                 if !config.audio_direction.should_play() {
-                    ctx.audio_stream_mgr.stop_playback().await;
+                    ctx.audio.stop_playback().await;
                 }
 
                 self.push();
@@ -688,8 +712,8 @@ impl ContinuityInner {
         &mut self,
         side: Side,
         edge_pos: f64,
-        connection: &mut TcpConnectionProvider,
-        injection: &mut WaylandInjection,
+        connection: &mut dyn ContinuityNetworkPort,
+        injection: &mut dyn ContinuityInjectionPort,
     ) {
         if self.status.sharing_state.is_idle() {
             let mapped_pos = edge_pos;
@@ -725,8 +749,8 @@ impl ContinuityInner {
     pub(crate) async fn handle_transition_ack(
         &mut self,
         accepted: bool,
-        connection: &mut TcpConnectionProvider,
-        capture: &mut EvdevCapture,
+        connection: &mut dyn ContinuityNetworkPort,
+        capture: &mut dyn ContinuityCapturePort,
         input_tx: &Sender<InternalInputEvent>,
     ) {
         if let SharingState::Pending {
@@ -746,7 +770,7 @@ impl ContinuityInner {
                     virtual_pos.0, virtual_pos.1
                 );
 
-                if let Err(e) = capture.start(input_tx.clone()) {
+                if let Err(e) = capture.start_capture(input_tx.clone()) {
                     error!("[continuity] failed to start input capture: {e}");
                     self.status.sharing_state = SharingState::Idle;
                     connection.send_message(Message::TransitionCancel);
@@ -773,7 +797,7 @@ impl ContinuityInner {
     pub(crate) async fn handle_switch_transition(
         &mut self,
         side: Side,
-        connection: &mut TcpConnectionProvider,
+        connection: &mut dyn ContinuityNetworkPort,
     ) {
         if matches!(self.status.sharing_state, SharingState::Sharing { .. }) {
             info!("[continuity] peer requesting switch via {:?}", side);
@@ -798,8 +822,8 @@ impl ContinuityInner {
         &mut self,
         side: Side,
         edge_pos: f64,
-        connection: &mut TcpConnectionProvider,
-        capture: &mut EvdevCapture,
+        connection: &mut dyn ContinuityNetworkPort,
+        capture: &mut dyn ContinuityCapturePort,
         input_tx: &Sender<InternalInputEvent>,
     ) {
         if matches!(self.status.sharing_state, SharingState::PendingSwitch) {
@@ -815,7 +839,7 @@ impl ContinuityInner {
                 virtual_pos.0, virtual_pos.1
             );
 
-            if let Err(e) = capture.start(input_tx.clone()) {
+            if let Err(e) = capture.start_capture(input_tx.clone()) {
                 error!("[continuity] failed to start input capture after switch: {e}");
                 self.status.sharing_state = SharingState::Idle;
                 connection.send_message(Message::TransitionCancel);
@@ -832,10 +856,10 @@ impl ContinuityInner {
     pub(crate) async fn handle_peer_disconnect(
         &mut self,
         reason: String,
-        _connection: &mut TcpConnectionProvider,
-        clipboard: &mut WaylandClipboard,
-        injection: &mut WaylandInjection,
-        capture: &mut EvdevCapture,
+        _connection: &mut dyn ContinuityNetworkPort,
+        clipboard: &mut dyn ContinuityClipboardPort,
+        injection: &mut dyn ContinuityInjectionPort,
+        capture: &mut dyn ContinuityCapturePort,
     ) {
         info!("[continuity] peer disconnected: {reason}");
         self.status.active_connection = None;
@@ -846,8 +870,8 @@ impl ContinuityInner {
         self.pending_peer = None;
         self.last_message_at = None;
         clipboard.stop_monitoring();
-        injection.stop();
-        capture.stop();
+        injection.stop_injection();
+        capture.stop_capture();
         self.push();
     }
 }

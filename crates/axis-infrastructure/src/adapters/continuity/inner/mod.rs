@@ -10,15 +10,22 @@ use log::info;
 
 use super::clipboard::{ClipboardEvent, WaylandClipboard};
 use super::connection::{ConnectionEvent, TcpConnectionProvider};
+use super::crypto::ContinuityCipher;
 use super::discovery::{AvahiDiscovery, DiscoveryEvent};
 use super::input::{EvdevCapture, InternalInputEvent, WaylandInjection};
 use super::known_peers::{self, KnownPeer, KnownPeerArrangementSide, KnownPeersStore};
+use super::ports::{
+    ContinuityAudioPort, ContinuityCapturePort, ContinuityClipboardPort,
+    ContinuityDiscoveryPort, ContinuityInjectionPort, ContinuityNetworkPort,
+};
 
 mod cmd;
 mod connection;
 mod discovery;
 mod input;
 mod reconnect;
+#[cfg(test)]
+mod tests;
 
 pub const CONTINUITY_PORT: u16 = 7391;
 const HEARTBEAT_INTERVAL_SECS: u64 = 5;
@@ -46,13 +53,13 @@ pub enum ContinuityCmd {
 }
 
 pub(crate) struct CmdContext<'a> {
-    pub discovery: &'a mut AvahiDiscovery,
-    pub connection: &'a mut TcpConnectionProvider,
-    pub clipboard: &'a mut WaylandClipboard,
-    pub injection: &'a mut WaylandInjection,
-    pub capture: &'a mut EvdevCapture,
+    pub network: &'a mut dyn ContinuityNetworkPort,
+    pub capture: &'a mut dyn ContinuityCapturePort,
+    pub injection: &'a mut dyn ContinuityInjectionPort,
+    pub clipboard: &'a mut dyn ContinuityClipboardPort,
+    pub discovery: &'a mut dyn ContinuityDiscoveryPort,
+    pub audio: &'a dyn ContinuityAudioPort,
     pub drag_drop_mgr: &'a super::drag_drop::DragDropManager,
-    pub audio_stream_mgr: &'a super::audio_stream::AudioStreamManager,
     pub discovery_tx: &'a Sender<DiscoveryEvent>,
     pub conn_tx: &'a Sender<ConnectionEvent>,
     pub clipboard_tx: &'a Sender<ClipboardEvent>,
@@ -72,6 +79,7 @@ pub(crate) struct ConfigSyncArgs {
 pub struct ContinuityInner {
     pub(crate) status_tx: tokio::sync::watch::Sender<ContinuityStatus>,
     pub(crate) status: ContinuityStatus,
+    pub(crate) cipher: std::sync::Arc<std::sync::Mutex<Option<ContinuityCipher>>>,
     pub(crate) connected_at: Option<Instant>,
     pub(crate) pin_created_at: Option<Instant>,
     pub(crate) last_message_at: Option<Instant>,
@@ -98,6 +106,7 @@ impl ContinuityInner {
         Self {
             status_tx,
             status,
+            cipher: std::sync::Arc::new(std::sync::Mutex::new(None)),
             connected_at: None,
             pin_created_at: None,
             last_message_at: None,
@@ -174,6 +183,7 @@ impl ContinuityInner {
                     auto_connect: config.auto_connect,
                     clipboard: config.clipboard,
                     audio: config.audio,
+                    audio_direction: config.audio_direction,
                     drag_drop: config.drag_drop,
                     arrangement_side,
                     arrangement_x,
@@ -190,6 +200,33 @@ impl ContinuityInner {
         self.status
             .remote_screen
             .unwrap_or((self.status.screen_width, self.status.screen_height))
+    }
+
+    pub(crate) fn create_cipher(&mut self, peer_id: &str, pin: Option<&str>) {
+        let local_id = &self.status.device_id;
+        let pin_str = pin.unwrap_or("trusted");
+        let key = super::crypto::derive_session_key(pin_str, local_id, peer_id);
+        *self.cipher.lock().unwrap() = Some(ContinuityCipher::new(&key));
+    }
+
+    pub(crate) fn encrypt_for_wire(&self, data: &[u8]) -> Vec<u8> {
+        if let Some(ref mut cipher) = *self.cipher.lock().unwrap() {
+            cipher.encrypt(data)
+        } else {
+            data.to_vec()
+        }
+    }
+
+    pub(crate) fn decrypt_from_wire(&self, packet: &[u8]) -> Option<Vec<u8>> {
+        if let Some(ref cipher) = *self.cipher.lock().unwrap() {
+            cipher.decrypt(packet).ok()
+        } else {
+            Some(packet.to_vec())
+        }
+    }
+
+    pub(crate) fn cipher_arc(&self) -> std::sync::Arc<std::sync::Mutex<Option<ContinuityCipher>>> {
+        self.cipher.clone()
     }
 
     pub(crate) fn init_virtual_pos(
@@ -286,13 +323,13 @@ impl ContinuityInner {
             select! {
                 Ok(cmd) = cmd_rx.recv() => {
                     self.handle_cmd(cmd, &mut CmdContext {
-                        discovery: &mut discovery,
-                        connection: &mut connection,
-                        clipboard: &mut clipboard,
-                        injection: &mut injection,
+                        network: &mut connection,
                         capture: &mut capture,
+                        injection: &mut injection,
+                        clipboard: &mut clipboard,
+                        discovery: &mut discovery,
+                        audio: &audio_stream_mgr,
                         drag_drop_mgr: &drag_drop_mgr,
-                        audio_stream_mgr: &audio_stream_mgr,
                         discovery_tx: &discovery_tx,
                         conn_tx: &conn_tx,
                         clipboard_tx: &clipboard_tx,
@@ -301,13 +338,13 @@ impl ContinuityInner {
                 }
                 Ok(cmd) = switch_rx.recv() => {
                     self.handle_cmd(cmd, &mut CmdContext {
-                        discovery: &mut discovery,
-                        connection: &mut connection,
-                        clipboard: &mut clipboard,
-                        injection: &mut injection,
+                        network: &mut connection,
                         capture: &mut capture,
+                        injection: &mut injection,
+                        clipboard: &mut clipboard,
+                        discovery: &mut discovery,
+                        audio: &audio_stream_mgr,
                         drag_drop_mgr: &drag_drop_mgr,
-                        audio_stream_mgr: &audio_stream_mgr,
                         discovery_tx: &discovery_tx,
                         conn_tx: &conn_tx,
                         clipboard_tx: &clipboard_tx,
@@ -319,13 +356,13 @@ impl ContinuityInner {
                 }
                 Ok(event) = conn_rx.recv() => {
                     let new_sleep = self.handle_connection_event(event, &mut CmdContext {
-                        discovery: &mut discovery,
-                        connection: &mut connection,
-                        clipboard: &mut clipboard,
-                        injection: &mut injection,
+                        network: &mut connection,
                         capture: &mut capture,
+                        injection: &mut injection,
+                        clipboard: &mut clipboard,
+                        discovery: &mut discovery,
+                        audio: &audio_stream_mgr,
                         drag_drop_mgr: &drag_drop_mgr,
-                        audio_stream_mgr: &audio_stream_mgr,
                         discovery_tx: &discovery_tx,
                         conn_tx: &conn_tx,
                         clipboard_tx: &clipboard_tx,

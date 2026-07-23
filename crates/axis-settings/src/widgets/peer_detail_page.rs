@@ -279,7 +279,7 @@ impl PeerDetailPage {
             {
                 return Some(cfg);
             }
-            status.peer_configs.values().next()
+            None
         });
 
         let is_paired = found_config.is_some() || status.peer_configs.contains_key(&self.peer_id);

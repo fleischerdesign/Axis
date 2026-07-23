@@ -7,11 +7,14 @@ use axis_domain::models::continuity::{
 };
 use log::{error, info};
 
-use super::super::clipboard::{ClipboardEvent, ClipboardSync, WaylandClipboard};
-use super::super::connection::{ConnectionEvent, ConnectionProvider, TcpConnectionProvider};
-use super::super::discovery::{DiscoveryEvent, DiscoveryProvider};
-use super::super::input::{EvdevCapture, InputCapture, InputInjection, WaylandInjection};
+use super::super::clipboard::ClipboardEvent;
+use super::super::connection::ConnectionEvent;
+use super::super::discovery::DiscoveryEvent;
 use super::super::known_peers::{self, KnownPeer, KnownPeerArrangementSide};
+use super::super::ports::{
+    ContinuityAudioPort, ContinuityCapturePort, ContinuityClipboardPort,
+    ContinuityInjectionPort, ContinuityNetworkPort,
+};
 use super::{CONTINUITY_PORT, CmdContext, ContinuityCmd, ContinuityInner};
 
 impl ContinuityInner {
@@ -23,7 +26,7 @@ impl ContinuityInner {
             ContinuityCmd::ConnectToPeer(peer_id) => {
                 self.handle_connect_to_peer(
                     &peer_id,
-                    ctx.connection,
+                    ctx.network,
                     ctx.discovery_tx,
                     ctx.conn_tx,
                 )
@@ -31,7 +34,7 @@ impl ContinuityInner {
             }
             ContinuityCmd::ConfirmPin => {
                 self.handle_confirm_pin(
-                    ctx.connection,
+                    ctx.network,
                     ctx.clipboard,
                     ctx.injection,
                     ctx.capture,
@@ -40,11 +43,11 @@ impl ContinuityInner {
                 .await;
             }
             ContinuityCmd::RejectPin => {
-                self.handle_reject_pin(ctx.connection, ctx.clipboard, ctx.injection, ctx.capture)
+                self.handle_reject_pin(ctx.network, ctx.clipboard, ctx.injection, ctx.capture)
                     .await;
             }
             ContinuityCmd::Disconnect => {
-                self.handle_disconnect(ctx.connection, ctx.clipboard, ctx.injection, ctx.capture)
+                self.handle_disconnect(ctx.network, ctx.clipboard, ctx.injection, ctx.capture)
                     .await;
             }
             ContinuityCmd::CancelReconnect => {
@@ -53,7 +56,7 @@ impl ContinuityInner {
             ContinuityCmd::Unpair(peer_id) => {
                 self.handle_unpair(
                     &peer_id,
-                    ctx.connection,
+                    ctx.network,
                     ctx.clipboard,
                     ctx.injection,
                     ctx.capture,
@@ -61,36 +64,36 @@ impl ContinuityInner {
                 .await;
             }
             ContinuityCmd::ForceLocal => {
-                self.handle_force_local(ctx.capture, ctx.connection).await;
+                self.handle_force_local(ctx.capture, ctx.network).await;
             }
             ContinuityCmd::StartSharing(side, local_edge_pos) => {
-                self.handle_start_sharing(side, local_edge_pos, ctx.connection)
+                self.handle_start_sharing(side, local_edge_pos, ctx.network)
                     .await;
             }
             ContinuityCmd::StopSharing(edge_pos) => {
-                self.handle_stop_sharing(edge_pos, ctx.connection, ctx.capture)
+                self.handle_stop_sharing(edge_pos, ctx.network, ctx.capture)
                     .await;
             }
             ContinuityCmd::SendInput(event) => {
-                self.handle_send_input(&event, ctx.connection, ctx.capture)
+                self.handle_send_input(&event, ctx.network, ctx.capture)
                     .await;
             }
             ContinuityCmd::SetPeerArrangement(arrangement) => {
-                self.handle_set_peer_arrangement(arrangement, ctx.connection)
+                self.handle_set_peer_arrangement(arrangement, ctx.network)
                     .await;
             }
             ContinuityCmd::UpdatePeerConfigs(configs) => {
                 self.handle_update_peer_configs(
                     configs,
-                    ctx.connection,
+                    ctx.network,
                     ctx.clipboard,
                     ctx.clipboard_tx,
-                    ctx.audio_stream_mgr,
+                    ctx.audio,
                 )
                 .await;
             }
             ContinuityCmd::SwitchToReceiving(side) => {
-                self.handle_switch_to_receiving(side, ctx.connection, ctx.injection)
+                self.handle_switch_to_receiving(side, ctx.network, ctx.injection)
                     .await;
             }
         }
@@ -112,16 +115,16 @@ impl ContinuityInner {
             if let Err(e) = ctx.discovery.browse(ctx.discovery_tx.clone()) {
                 error!("[continuity] discovery browse failed: {e}");
             }
-            if let Err(e) = ctx.connection.listen(CONTINUITY_PORT, ctx.conn_tx.clone()) {
+            if let Err(e) = ctx.network.listen(CONTINUITY_PORT, ctx.conn_tx.clone()) {
                 error!("[continuity] listen failed: {e}");
             }
         } else {
             info!("[continuity] disabled");
             ctx.discovery.stop();
-            ctx.connection.stop();
+            ctx.network.stop();
             ctx.clipboard.stop_monitoring();
-            ctx.injection.stop();
-            ctx.capture.stop();
+            ctx.injection.stop_injection();
+            ctx.capture.stop_capture();
             self.status.peers.clear();
             self.status.active_connection = None;
             self.connected_at = None;
@@ -136,7 +139,7 @@ impl ContinuityInner {
     async fn handle_connect_to_peer(
         &mut self,
         peer_id: &str,
-        connection: &mut TcpConnectionProvider,
+        connection: &mut dyn ContinuityNetworkPort,
         _discovery_tx: &Sender<DiscoveryEvent>,
         conn_tx: &Sender<ConnectionEvent>,
     ) {
@@ -163,10 +166,10 @@ impl ContinuityInner {
 
     async fn handle_confirm_pin(
         &mut self,
-        connection: &mut TcpConnectionProvider,
-        clipboard: &mut WaylandClipboard,
-        injection: &mut WaylandInjection,
-        _capture: &mut EvdevCapture,
+        connection: &mut dyn ContinuityNetworkPort,
+        clipboard: &mut dyn ContinuityClipboardPort,
+        injection: &mut dyn ContinuityInjectionPort,
+        _capture: &mut dyn ContinuityCapturePort,
         clipboard_tx: &Sender<ClipboardEvent>,
     ) {
         if let Some(pending) = self.status.pending_pin.take() {
@@ -223,7 +226,7 @@ impl ContinuityInner {
                     error!("[continuity] failed to start clipboard monitoring: {e}");
                 }
 
-                if let Err(e) = injection.start() {
+                if let Err(e) = injection.start_injection() {
                     error!("[continuity] failed to start input injection: {e}");
                 }
             }
@@ -233,10 +236,10 @@ impl ContinuityInner {
 
     async fn handle_reject_pin(
         &mut self,
-        connection: &mut TcpConnectionProvider,
-        clipboard: &mut WaylandClipboard,
-        injection: &mut WaylandInjection,
-        capture: &mut EvdevCapture,
+        connection: &mut dyn ContinuityNetworkPort,
+        clipboard: &mut dyn ContinuityClipboardPort,
+        injection: &mut dyn ContinuityInjectionPort,
+        capture: &mut dyn ContinuityCapturePort,
     ) {
         info!("[continuity] PIN rejected");
         self.status.pending_pin = None;
@@ -246,8 +249,8 @@ impl ContinuityInner {
         });
         connection.disconnect_active();
         clipboard.stop_monitoring();
-        injection.stop();
-        capture.stop();
+        injection.stop_injection();
+        capture.stop_capture();
         self.status.active_connection = None;
         self.connected_at = None;
         self.status.sharing_state = axis_domain::models::continuity::SharingState::Idle;
@@ -256,16 +259,16 @@ impl ContinuityInner {
 
     async fn handle_disconnect(
         &mut self,
-        connection: &mut TcpConnectionProvider,
-        clipboard: &mut WaylandClipboard,
-        injection: &mut WaylandInjection,
-        capture: &mut EvdevCapture,
+        connection: &mut dyn ContinuityNetworkPort,
+        clipboard: &mut dyn ContinuityClipboardPort,
+        injection: &mut dyn ContinuityInjectionPort,
+        capture: &mut dyn ContinuityCapturePort,
     ) {
         info!("[continuity] disconnecting");
         connection.disconnect_active();
         clipboard.stop_monitoring();
-        injection.stop();
-        capture.stop();
+        injection.stop_injection();
+        capture.stop_capture();
         self.status.active_connection = None;
         self.connected_at = None;
         self.status.sharing_state = axis_domain::models::continuity::SharingState::Idle;
@@ -284,10 +287,10 @@ impl ContinuityInner {
     async fn handle_unpair(
         &mut self,
         peer_id: &str,
-        connection: &mut TcpConnectionProvider,
-        clipboard: &mut WaylandClipboard,
-        injection: &mut WaylandInjection,
-        capture: &mut EvdevCapture,
+        connection: &mut dyn ContinuityNetworkPort,
+        clipboard: &mut dyn ContinuityClipboardPort,
+        injection: &mut dyn ContinuityInjectionPort,
+        capture: &mut dyn ContinuityCapturePort,
     ) {
         info!("[continuity] unpairing {peer_id}");
         self.status.peer_configs.remove(peer_id);
@@ -302,8 +305,8 @@ impl ContinuityInner {
         {
             connection.disconnect_active();
             clipboard.stop_monitoring();
-            injection.stop();
-            capture.stop();
+            injection.stop_injection();
+            capture.stop_capture();
             self.status.active_connection = None;
             self.connected_at = None;
             self.status.sharing_state = axis_domain::models::continuity::SharingState::Idle;
@@ -314,13 +317,13 @@ impl ContinuityInner {
 
     async fn handle_force_local(
         &mut self,
-        capture: &mut EvdevCapture,
-        connection: &mut TcpConnectionProvider,
+        capture: &mut dyn ContinuityCapturePort,
+        connection: &mut dyn ContinuityNetworkPort,
     ) {
         if !self.status.sharing_state.is_active() {
             info!("[continuity] forcing cursor back to local");
             self.status.sharing_state = axis_domain::models::continuity::SharingState::Idle;
-            capture.stop();
+            capture.stop_capture();
             connection.send_message(Message::TransitionCancel);
             self.push();
             let _ = capture.prepare();
@@ -331,7 +334,7 @@ impl ContinuityInner {
         &mut self,
         side: Side,
         local_edge_pos: f64,
-        connection: &mut TcpConnectionProvider,
+        connection: &mut dyn ContinuityNetworkPort,
     ) {
         if self.status.active_connection.is_some()
             && self.status.sharing_state == axis_domain::models::continuity::SharingState::Idle
@@ -378,8 +381,8 @@ impl ContinuityInner {
     async fn handle_stop_sharing(
         &mut self,
         edge_pos: f64,
-        connection: &mut TcpConnectionProvider,
-        capture: &mut EvdevCapture,
+        connection: &mut dyn ContinuityNetworkPort,
+        capture: &mut dyn ContinuityCapturePort,
     ) {
         if matches!(
             &self.status.sharing_state,
@@ -388,7 +391,7 @@ impl ContinuityInner {
         ) {
             info!("[continuity] stopping sharing");
             self.status.sharing_state = axis_domain::models::continuity::SharingState::Idle;
-            capture.stop();
+            capture.stop_capture();
             connection.send_message(Message::TransitionCancel);
             self.push();
             let _ = capture.prepare();
@@ -411,8 +414,8 @@ impl ContinuityInner {
     async fn handle_send_input(
         &mut self,
         event: &InputEvent,
-        connection: &mut TcpConnectionProvider,
-        capture: &mut EvdevCapture,
+        connection: &mut dyn ContinuityNetworkPort,
+        capture: &mut dyn ContinuityCapturePort,
     ) {
         if !matches!(
             self.status.sharing_state,
@@ -445,7 +448,7 @@ impl ContinuityInner {
             InputEvent::EmergencyExit => {
                 info!("[continuity] emergency exit via SendInput");
                 self.status.sharing_state = axis_domain::models::continuity::SharingState::Idle;
-                capture.stop();
+                capture.stop_capture();
                 connection.send_message(Message::TransitionCancel);
                 self.push();
                 let _ = capture.prepare();
@@ -453,10 +456,10 @@ impl ContinuityInner {
         }
     }
 
-    async fn handle_set_peer_arrangement(
+    pub(crate) async fn handle_set_peer_arrangement(
         &mut self,
         arrangement: PeerArrangement,
-        connection: &mut TcpConnectionProvider,
+        connection: &mut dyn ContinuityNetworkPort,
     ) {
         if let Some(conn) = &self.status.active_connection {
             let peer_id = conn.peer_id.clone();
@@ -496,13 +499,13 @@ impl ContinuityInner {
         self.push();
     }
 
-    async fn handle_update_peer_configs(
+    pub(crate) async fn handle_update_peer_configs(
         &mut self,
         configs: HashMap<String, PeerConfig>,
-        connection: &mut TcpConnectionProvider,
-        clipboard: &mut WaylandClipboard,
+        connection: &mut dyn ContinuityNetworkPort,
+        clipboard: &mut dyn ContinuityClipboardPort,
         clipboard_tx: &Sender<ClipboardEvent>,
-        audio_stream_mgr: &super::super::audio_stream::AudioStreamManager,
+        audio_stream_mgr: &dyn ContinuityAudioPort,
     ) {
         let mut changed = false;
         for (id, config) in configs {
@@ -536,6 +539,7 @@ impl ContinuityInner {
             if let Some(known) = self.known_peers.peers.get_mut(&id) {
                 known.clipboard = config.clipboard;
                 known.audio = config.audio;
+                known.audio_direction = config.audio_direction;
                 known.drag_drop = config.drag_drop;
                 known.auto_connect = config.auto_connect;
                 known.arrangement_side = KnownPeerArrangementSide::from(config.arrangement.side);
@@ -549,17 +553,11 @@ impl ContinuityInner {
                 }
             }
 
-            let is_peer_active = self.status.active_connection.as_ref().is_some_and(|conn| {
-                conn.peer_id == id
-                    || conn.peer_name == id
-                    || conn.peer_name.starts_with(&id)
-                    || id.starts_with(&conn.peer_name)
-                    || self
-                        .known_peers
-                        .peers
-                        .get(&id)
-                        .is_some_and(|k| k.device_name == conn.peer_name || k.device_id == conn.peer_id)
-            });
+            let is_peer_active = self
+                .status
+                .active_connection
+                .as_ref()
+                .is_some_and(|conn| conn.peer_id == id);
             if is_peer_active {
                 connection.send_message(Message::ConfigSync {
                     arrangement: config.arrangement.side,
@@ -587,12 +585,21 @@ impl ContinuityInner {
                             audio_stream_mgr
                                 .start_capture(target.as_deref(), audio_tx)
                                 .await;
+                            let cipher = self.cipher_arc();
                             tokio::spawn(async move {
                                 while let Some(chunk) = audio_rx.recv().await {
+                                    let encrypted = {
+                                        let mut guard = cipher.lock().unwrap();
+                                        if let Some(ref mut c) = *guard {
+                                            c.encrypt(&chunk)
+                                        } else {
+                                            chunk
+                                        }
+                                    };
                                     if write_tx
                                         .send(Message::AudioChunk {
                                             channel_id: 0,
-                                            pcm_data: chunk,
+                                            pcm_data: encrypted,
                                         })
                                         .await
                                         .is_err()
@@ -617,8 +624,8 @@ impl ContinuityInner {
     async fn handle_switch_to_receiving(
         &mut self,
         side: Side,
-        connection: &mut TcpConnectionProvider,
-        injection: &mut WaylandInjection,
+        connection: &mut dyn ContinuityNetworkPort,
+        injection: &mut dyn ContinuityInjectionPort,
     ) {
         use axis_domain::models::continuity::SharingState;
 
@@ -640,7 +647,7 @@ impl ContinuityInner {
 
             self.status.sharing_state = SharingState::Receiving;
 
-            if let Err(e) = injection.start() {
+            if let Err(e) = injection.start_injection() {
                 error!("[continuity] failed to start injection for switch: {e}");
             }
 

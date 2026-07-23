@@ -1,16 +1,16 @@
 use axis_domain::models::continuity::{Message, SharingState, Side};
 use log::info;
 
-use super::super::connection::{ConnectionProvider, TcpConnectionProvider};
-use super::super::input::{EvdevCapture, InputCapture, InternalInputEvent};
+use super::super::input::InternalInputEvent;
+use super::super::ports::{ContinuityCapturePort, ContinuityNetworkPort};
 use super::ContinuityInner;
 
 impl ContinuityInner {
     pub(crate) async fn handle_input_capture_event(
         &mut self,
         event: InternalInputEvent,
-        connection: &TcpConnectionProvider,
-        capture: &mut EvdevCapture,
+        connection: &dyn ContinuityNetworkPort,
+        capture: &mut dyn ContinuityCapturePort,
     ) {
         if !matches!(self.status.sharing_state, SharingState::Sharing { .. }) {
             return;
@@ -49,7 +49,7 @@ impl ContinuityInner {
                     );
                     self.status.sharing_state = SharingState::Idle;
                     self.last_transition_at = std::time::Instant::now();
-                    capture.stop();
+                    capture.stop_capture();
                     connection.send_message(Message::TransitionCancel);
                     self.push();
                     let _ = capture.prepare();
@@ -83,7 +83,7 @@ impl ContinuityInner {
             InternalInputEvent::EmergencyExit => {
                 info!("[continuity] kernel emergency exit requested");
                 self.status.sharing_state = SharingState::Idle;
-                capture.stop();
+                capture.stop_capture();
                 connection.send_message(Message::TransitionCancel);
                 self.push();
                 let _ = capture.prepare();

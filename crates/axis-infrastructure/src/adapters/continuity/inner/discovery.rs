@@ -1,15 +1,16 @@
 use axis_domain::models::continuity::SharingState;
 use log::info;
 
-use super::super::connection::{ConnectionEvent, ConnectionProvider, TcpConnectionProvider};
+use super::super::connection::ConnectionEvent;
 use super::super::discovery::DiscoveryEvent;
+use super::super::ports::ContinuityNetworkPort;
 use super::ContinuityInner;
 
 impl ContinuityInner {
     pub(crate) async fn handle_discovery_event_with_conn(
         &mut self,
         event: DiscoveryEvent,
-        connection: &mut TcpConnectionProvider,
+        connection: &mut dyn ContinuityNetworkPort,
         conn_tx: &async_channel::Sender<ConnectionEvent>,
     ) {
         match event {

@@ -147,3 +147,31 @@ impl AudioStreamManager {
         }
     }
 }
+
+#[async_trait::async_trait]
+impl super::ports::ContinuityAudioPort for AudioStreamManager {
+    async fn start_capture(
+        &self,
+        target_device: Option<&str>,
+        tx: tokio::sync::mpsc::Sender<Vec<u8>>,
+    ) {
+        AudioStreamManager::start_capture(self, target_device, tx).await;
+    }
+
+    async fn stop_capture(&self) {
+        AudioStreamManager::stop_capture(self).await;
+    }
+
+    async fn play_chunk(&self, target_device: Option<&str>, pcm_data: &[u8]) {
+        AudioStreamManager::play_chunk(self, target_device, pcm_data).await;
+    }
+
+    async fn stop_playback(&self) {
+        AudioStreamManager::stop_playback(self).await;
+    }
+
+    fn list_devices(&self) -> Vec<super::pipewire_devices::PipeWireAudioDevice> {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(super::pipewire_devices::list_pipewire_audio_devices())
+    }
+}

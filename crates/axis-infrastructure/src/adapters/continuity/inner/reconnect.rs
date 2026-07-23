@@ -6,14 +6,15 @@ use axis_domain::models::continuity::ReconnectState;
 use log::{info, warn};
 
 use super::super::clipboard::ClipboardEvent;
-use super::super::connection::{ConnectionEvent, ConnectionProvider, TcpConnectionProvider};
+use super::super::connection::{ConnectionEvent, TcpConnectionProvider};
+use super::super::ports::ContinuityNetworkPort;
 use super::{ContinuityInner, RECONNECT_BASE_DELAY_MS, RECONNECT_MAX_ATTEMPTS};
 
 impl ContinuityInner {
     pub(crate) async fn handle_clipboard_event(
         &mut self,
         event: ClipboardEvent,
-        connection: &TcpConnectionProvider,
+        connection: &dyn ContinuityNetworkPort,
     ) {
         match event {
             ClipboardEvent::ContentChanged { content, mime_type } => {
@@ -21,9 +22,10 @@ impl ContinuityInner {
                     && self.status.active_peer_config().clipboard
                 {
                     info!("[continuity] clipboard changed, sending to peer");
+                    let encrypted = self.encrypt_for_wire(&content);
                     connection.send_message(
                         axis_domain::models::continuity::Message::ClipboardUpdate {
-                            content,
+                            content: encrypted,
                             mime_type,
                         },
                     );

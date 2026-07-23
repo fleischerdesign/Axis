@@ -130,6 +130,21 @@ impl Drop for AvahiDiscovery {
     }
 }
 
+impl super::ports::ContinuityDiscoveryPort for AvahiDiscovery {
+    fn register(&mut self, name: &str, port: u16) -> Result<(), String> {
+        DiscoveryProvider::register(self, name, port)
+    }
+    fn browse(&mut self, tx: Sender<DiscoveryEvent>) -> Result<(), String> {
+        DiscoveryProvider::browse(self, tx)
+    }
+    fn stop_browse(&mut self) {
+        DiscoveryProvider::stop_browse(self);
+    }
+    fn stop(&mut self) {
+        DiscoveryProvider::stop(self);
+    }
+}
+
 async fn register_service(name: &str, port: u16) -> Result<(OwnedObjectPath, Connection), String> {
     let conn = Connection::system()
         .await
