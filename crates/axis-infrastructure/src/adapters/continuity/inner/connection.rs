@@ -600,11 +600,12 @@ impl ContinuityInner {
     pub(crate) async fn handle_config_sync(
         &mut self,
         args: ConfigSyncArgs,
-        _ctx: &mut CmdContext<'_>,
+        ctx: &mut CmdContext<'_>,
     ) {
         if let Some(conn) = &self.status.active_connection {
             let peer_id = conn.peer_id.clone();
             let config = self.status.peer_configs.entry(peer_id).or_default();
+            let audio_toggled = config.audio != args.audio;
 
             let is_newer = args.version > config.version;
             let is_initial_adopt = !self.is_initiating && config.version == 0;
@@ -628,6 +629,33 @@ impl ContinuityInner {
                 config.audio = args.audio;
                 config.drag_drop = args.drag_drop;
                 config.version = args.version;
+
+                if audio_toggled {
+                    if args.audio {
+                        if let Some(write_tx) = ctx.connection.active_write_tx() {
+                            let (audio_tx, mut audio_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(32);
+                            ctx.audio_stream_mgr.start_capture(audio_tx).await;
+                            tokio::spawn(async move {
+                                while let Some(chunk) = audio_rx.recv().await {
+                                    if write_tx
+                                        .send(Message::AudioChunk {
+                                            channel_id: 0,
+                                            pcm_data: chunk,
+                                        })
+                                        .await
+                                        .is_err()
+                                    {
+                                        break;
+                                    }
+                                }
+                            });
+                        }
+                    } else {
+                        ctx.audio_stream_mgr.stop_capture().await;
+                        ctx.audio_stream_mgr.stop_playback().await;
+                    }
+                }
+
                 self.push();
             } else {
                 info!(
