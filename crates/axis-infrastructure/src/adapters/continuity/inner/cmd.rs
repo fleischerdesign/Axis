@@ -80,7 +80,13 @@ impl ContinuityInner {
                     .await;
             }
             ContinuityCmd::UpdatePeerConfigs(configs) => {
-                self.handle_update_peer_configs(configs).await;
+                self.handle_update_peer_configs(
+                    configs,
+                    ctx.connection,
+                    ctx.clipboard,
+                    ctx.clipboard_tx,
+                )
+                .await;
             }
             ContinuityCmd::SwitchToReceiving(side) => {
                 self.handle_switch_to_receiving(side, ctx.connection, ctx.injection)
@@ -488,10 +494,17 @@ impl ContinuityInner {
         self.push();
     }
 
-    async fn handle_update_peer_configs(&mut self, configs: HashMap<String, PeerConfig>) {
+    async fn handle_update_peer_configs(
+        &mut self,
+        configs: HashMap<String, PeerConfig>,
+        connection: &mut TcpConnectionProvider,
+        clipboard: &mut WaylandClipboard,
+        clipboard_tx: &Sender<ClipboardEvent>,
+    ) {
         let mut changed = false;
         for (id, config) in configs {
             let entry = self.status.peer_configs.entry(id.clone()).or_default();
+            let clipboard_toggled = entry.clipboard != config.clipboard;
             if entry.version < config.version
                 || (entry.version == config.version && entry.arrangement != config.arrangement)
             {
@@ -521,6 +534,27 @@ impl ContinuityInner {
                     }
                     Side::Top | Side::Bottom => {
                         known.arrangement_x = config.arrangement.offset;
+                    }
+                }
+            }
+
+            if let Some(conn) = &self.status.active_connection
+                && conn.peer_id == id
+            {
+                connection.send_message(Message::ConfigSync {
+                    arrangement: config.arrangement.side,
+                    offset: config.arrangement.offset,
+                    clipboard: config.clipboard,
+                    audio: config.audio,
+                    drag_drop: config.drag_drop,
+                    version: config.version,
+                });
+
+                if clipboard_toggled {
+                    if config.clipboard {
+                        let _ = clipboard.start_monitoring(clipboard_tx.clone());
+                    } else {
+                        clipboard.stop_monitoring();
                     }
                 }
             }

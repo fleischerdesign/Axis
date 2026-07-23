@@ -162,15 +162,8 @@ impl ContinuityInner {
                 device_name,
                 version,
             } => {
-                self.handle_hello(
-                    device_id,
-                    device_name,
-                    version,
-                    ctx.connection,
-                    ctx.injection,
-                    ctx.capture,
-                )
-                .await;
+                self.handle_hello(device_id, device_name, version, ctx)
+                    .await;
             }
             Message::PinRequest { pin } => {
                 self.handle_pin_request(pin).await;
@@ -187,7 +180,9 @@ impl ContinuityInner {
                 .await;
             }
             Message::ClipboardUpdate { content, mime_type } => {
-                if let Err(e) = ctx.clipboard.set_content(&content, &mime_type) {
+                if self.status.active_peer_config().clipboard
+                    && let Err(e) = ctx.clipboard.set_content(&content, &mime_type)
+                {
                     error!("[continuity] failed to set clipboard: {e}");
                 }
             }
@@ -357,13 +352,11 @@ impl ContinuityInner {
         device_id: String,
         device_name: String,
         version: u32,
-        connection: &mut TcpConnectionProvider,
-        injection: &mut WaylandInjection,
-        capture: &mut EvdevCapture,
+        ctx: &mut CmdContext<'_>,
     ) {
         if version != proto::PROTOCOL_VERSION {
             warn!("[continuity] peer version mismatch: {version}");
-            connection.disconnect_active();
+            ctx.connection.disconnect_active();
             self.last_message_at = None;
             return;
         }
@@ -392,15 +385,21 @@ impl ContinuityInner {
                 self.last_message_at = Some(Instant::now());
                 self.push();
 
-                connection.send_message(Message::ScreenInfo {
+                ctx.connection.send_message(Message::ScreenInfo {
                     width: self.status.screen_width,
                     height: self.status.screen_height,
                 });
 
-                if let Err(e) = injection.start() {
+                if self.status.active_peer_config().clipboard
+                    && let Err(e) = ctx.clipboard.start_monitoring(ctx.clipboard_tx.clone())
+                {
+                    error!("[continuity] failed to start clipboard monitoring: {e}");
+                }
+
+                if let Err(e) = ctx.injection.start() {
                     error!("[continuity] failed to start input injection: {e}");
                 }
-                let _ = capture.prepare();
+                let _ = ctx.capture.prepare();
             } else {
                 let pin = format!("{:06}", rand::random_range(0..1_000_000));
                 info!("[continuity] initiating pairing, generating PIN: {pin}");
@@ -411,7 +410,7 @@ impl ContinuityInner {
                     is_incoming: false,
                 });
                 self.pin_created_at = Some(Instant::now());
-                connection.send_message(Message::PinRequest { pin });
+                ctx.connection.send_message(Message::PinRequest { pin });
                 self.push();
             }
         } else {
@@ -435,15 +434,21 @@ impl ContinuityInner {
                 self.last_message_at = Some(Instant::now());
                 self.push();
 
-                connection.send_message(Message::ScreenInfo {
+                ctx.connection.send_message(Message::ScreenInfo {
                     width: self.status.screen_width,
                     height: self.status.screen_height,
                 });
 
-                if let Err(e) = injection.start() {
+                if self.status.active_peer_config().clipboard
+                    && let Err(e) = ctx.clipboard.start_monitoring(ctx.clipboard_tx.clone())
+                {
+                    error!("[continuity] failed to start clipboard monitoring: {e}");
+                }
+
+                if let Err(e) = ctx.injection.start() {
                     error!("[continuity] failed to start input injection: {e}");
                 }
-                let _ = capture.prepare();
+                let _ = ctx.capture.prepare();
             } else {
                 let pin = format!("{:06}", rand::random_range(0..1_000_000));
                 info!("[continuity] incoming pairing request, generating PIN: {pin}");
@@ -454,7 +459,7 @@ impl ContinuityInner {
                     is_incoming: true,
                 });
                 self.pin_created_at = Some(Instant::now());
-                connection.send_message(Message::PinRequest { pin });
+                ctx.connection.send_message(Message::PinRequest { pin });
                 self.push();
             }
         }

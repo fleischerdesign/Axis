@@ -17,7 +17,9 @@ impl ContinuityInner {
     ) {
         match event {
             ClipboardEvent::ContentChanged { content, mime_type } => {
-                if self.status.active_connection.is_some() {
+                if self.status.active_connection.is_some()
+                    && self.status.active_peer_config().clipboard
+                {
                     info!("[continuity] clipboard changed, sending to peer");
                     connection.send_message(
                         axis_domain::models::continuity::Message::ClipboardUpdate {
