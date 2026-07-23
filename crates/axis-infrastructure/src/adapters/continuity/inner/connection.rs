@@ -560,13 +560,13 @@ impl ContinuityInner {
             let peer_id = conn.peer_id.clone();
             let config = self.status.peer_configs.entry(peer_id).or_default();
 
-            if args.version > config.version {
+            if args.version >= config.version {
                 info!(
-                    "[continuity] adopting newer config from peer (v{} > v{}): {:?} offset {} clipboard={} audio={} dnd={}",
+                    "[continuity] adopting config from peer (v{} >= v{}): mirrored {:?} offset {} clipboard={} audio={} drag_drop={}",
                     args.version,
                     config.version,
-                    args.arrangement,
-                    args.offset,
+                    args.arrangement.opposite(),
+                    -args.offset,
                     args.clipboard,
                     args.audio,
                     args.drag_drop
@@ -583,7 +583,7 @@ impl ContinuityInner {
                 self.push();
             } else {
                 info!(
-                    "[continuity] ignoring older/same config from peer (v{} <= v{})",
+                    "[continuity] ignoring older config from peer (v{} < v{})",
                     args.version, config.version
                 );
             }
