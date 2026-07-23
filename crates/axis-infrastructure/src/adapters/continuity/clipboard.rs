@@ -164,10 +164,12 @@ impl ClipboardSync for WaylandClipboard {
 
         let mut child = cmd
             .stdin(Stdio::piped())
+            .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| format!("failed to spawn wl-copy: {e}"))?;
 
         let mut stdin = child.stdin.take().ok_or("failed to take stdin")?;
+        let stderr = child.stderr.take();
         let content_owned = content.to_vec();
 
         tokio::spawn(async move {
@@ -175,7 +177,29 @@ impl ClipboardSync for WaylandClipboard {
                 error!("[continuity:clipboard] wl-copy write error: {e}");
             }
             let _ = stdin.shutdown().await;
-            let _ = child.wait().await;
+
+            if let Some(mut err_stream) = stderr {
+                use tokio::io::AsyncReadExt;
+                let mut err_buf = Vec::new();
+                let _ = err_stream.read_to_end(&mut err_buf).await;
+                if !err_buf.is_empty() {
+                    let err_msg = String::from_utf8_lossy(&err_buf);
+                    error!("[continuity:clipboard] wl-copy stderr: {}", err_msg.trim());
+                }
+            }
+
+            match child.wait().await {
+                Ok(status) => {
+                    if !status.success() {
+                        error!("[continuity:clipboard] wl-copy exited with status: {status}");
+                    } else {
+                        info!("[continuity:clipboard] wl-copy completed successfully");
+                    }
+                }
+                Err(e) => {
+                    error!("[continuity:clipboard] wl-copy wait error: {e}");
+                }
+            }
         });
 
         Ok(())
