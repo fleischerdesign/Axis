@@ -305,9 +305,11 @@ impl ContinuitySettingsPage {
             let disconnect_cb_r = self.disconnect_cb.clone();
             let unpair_cb_r = self.unpair_cb.clone();
             let current_peer_page = self.current_peer_page.clone();
+            let status_snapshot = status.clone();
             let gesture = gtk4::GestureClick::new();
             gesture.connect_released(move |_, _, _, _| {
                 let detail_page = PeerDetailPage::new(peer_id.clone(), peer_name.clone());
+                detail_page.update_status(&status_snapshot);
 
                 detail_page.set_on_disconnect({
                     let cb = disconnect_cb_r.clone();
