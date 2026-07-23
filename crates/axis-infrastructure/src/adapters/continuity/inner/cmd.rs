@@ -85,6 +85,7 @@ impl ContinuityInner {
                     ctx.connection,
                     ctx.clipboard,
                     ctx.clipboard_tx,
+                    ctx.audio_stream_mgr,
                 )
                 .await;
             }
@@ -500,11 +501,13 @@ impl ContinuityInner {
         connection: &mut TcpConnectionProvider,
         clipboard: &mut WaylandClipboard,
         clipboard_tx: &Sender<ClipboardEvent>,
+        audio_stream_mgr: &super::super::audio_stream::AudioStreamManager,
     ) {
         let mut changed = false;
         for (id, config) in configs {
             let entry = self.status.peer_configs.entry(id.clone()).or_default();
             let clipboard_toggled = entry.clipboard != config.clipboard;
+            let audio_toggled = entry.audio != config.audio;
             if entry.version < config.version
                 || (entry.version == config.version && entry.arrangement != config.arrangement)
             {
@@ -555,6 +558,31 @@ impl ContinuityInner {
                         let _ = clipboard.start_monitoring(clipboard_tx.clone());
                     } else {
                         clipboard.stop_monitoring();
+                    }
+                }
+
+                if audio_toggled {
+                    if config.audio {
+                        if let Some(write_tx) = connection.active_write_tx() {
+                            let (audio_tx, mut audio_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(32);
+                            audio_stream_mgr.start_capture(audio_tx).await;
+                            tokio::spawn(async move {
+                                while let Some(chunk) = audio_rx.recv().await {
+                                    if write_tx
+                                        .send(Message::AudioChunk {
+                                            channel_id: 0,
+                                            pcm_data: chunk,
+                                        })
+                                        .await
+                                        .is_err()
+                                    {
+                                        break;
+                                    }
+                                }
+                            });
+                        }
+                    } else {
+                        audio_stream_mgr.stop_capture().await;
                     }
                 }
             }

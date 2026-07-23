@@ -65,6 +65,10 @@ impl TcpConnectionProvider {
             stop_tx: None,
         }
     }
+
+    pub fn active_write_tx(&self) -> Option<tokio::sync::mpsc::Sender<Message>> {
+        self.active.as_ref().map(|c| c.write_tx.clone())
+    }
 }
 
 impl ConnectionProvider for TcpConnectionProvider {
