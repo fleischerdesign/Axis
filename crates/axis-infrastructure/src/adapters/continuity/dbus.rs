@@ -225,7 +225,7 @@ impl ContinuityDbusServer {
         env!("CARGO_PKG_VERSION")
     }
 
-    #[zbus(signal)]
+    #[zbus(signal, name = "StateChanged")]
     pub async fn state_changed(
         emitter: &zbus::object_server::SignalEmitter<'_>,
         json: &str,

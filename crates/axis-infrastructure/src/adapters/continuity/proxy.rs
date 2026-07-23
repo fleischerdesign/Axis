@@ -207,13 +207,15 @@ impl ContinuityDbusProxy {
             use futures_util::StreamExt;
             while let Some(msg) = signal.next().await {
                 let body = msg.body();
-                let json: Result<(String,), _> = body.deserialize();
-                let (json,) = match json {
+                let json: String = match body.deserialize::<String>() {
                     Ok(v) => v,
-                    Err(e) => {
-                        warn!("[continuity-proxy] Failed to parse signal: {e}");
-                        continue;
-                    }
+                    Err(_) => match body.deserialize::<(String,)>() {
+                        Ok((v,)) => v,
+                        Err(e) => {
+                            warn!("[continuity-proxy] Failed to parse signal: {e}");
+                            continue;
+                        }
+                    },
                 };
 
                 match serde_json::from_str::<ContinuityStatus>(&json) {

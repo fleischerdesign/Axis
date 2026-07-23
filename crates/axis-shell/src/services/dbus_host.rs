@@ -92,9 +92,18 @@ pub async fn run_dbus_host(
                 .interface::<&str, ContinuityDbusServer>("/org/axis/Shell/Continuity")
                 .await;
 
-            if let Ok(iface) = iface_res {
-                let json = serde_json::to_string(&status).unwrap_or_default();
-                let _ = ContinuityDbusServer::state_changed(iface.signal_emitter(), &json).await;
+            match iface_res {
+                Ok(iface) => {
+                    let json = serde_json::to_string(&status).unwrap_or_default();
+                    if let Err(e) =
+                        ContinuityDbusServer::state_changed(iface.signal_emitter(), &json).await
+                    {
+                        log::warn!("[dbus-host] Failed to emit state_changed signal: {e}");
+                    }
+                }
+                Err(e) => {
+                    log::warn!("[dbus-host] Failed to get ContinuityDbusServer interface: {e}");
+                }
             }
         }
     };
