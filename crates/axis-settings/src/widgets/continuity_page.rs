@@ -375,6 +375,11 @@ impl View<ContinuityStatus> for ContinuitySettingsPage {
         self.peers_group.set_visible(true);
 
         self.grid.update_status(status);
+        log::info!(
+            "[settings-continuity] render: current_peer_page={}, configs={}",
+            self.current_peer_page.borrow().is_some(),
+            status.peer_configs.len()
+        );
         if let Some(ref pp) = *self.current_peer_page.borrow() {
             pp.update_status(status);
         }

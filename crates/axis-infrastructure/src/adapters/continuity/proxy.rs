@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use axis_domain::models::continuity::{ContinuityStatus, PeerArrangement, PeerConfig};
 use axis_domain::ports::continuity::{ContinuityError, ContinuityProvider, ContinuityStream};
-use log::{error, warn};
+use log::{error, info, warn};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::sync::watch;
@@ -220,6 +220,10 @@ impl ContinuityDbusProxy {
 
                 match serde_json::from_str::<ContinuityStatus>(&json) {
                     Ok(status) => {
+                        info!(
+                            "[continuity-proxy] received StateChanged signal, configs={}",
+                            status.peer_configs.len()
+                        );
                         this.cached.set(status.clone());
                         let _ = this.status_tx.send(status);
                     }
