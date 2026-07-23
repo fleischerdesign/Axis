@@ -156,51 +156,35 @@ impl ClipboardSync for WaylandClipboard {
             content.len()
         );
 
-        // Use wl-copy via sh -c to detach the background daemon process cleanly
-        let mut cmd = Command::new("sh");
-        cmd.arg("-c");
-        if mime_type != "text/plain" && !mime_type.is_empty() {
-            cmd.arg(format!("wl-copy --type '{mime_type}'"));
-        } else {
-            cmd.arg("tee >(wl-copy) | wl-copy --primary");
-        }
-
-        let mut child = cmd
-            .stdin(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("failed to spawn wl-copy: {e}"))?;
-
-        let mut stdin = child.stdin.take().ok_or("failed to take stdin")?;
-        let stderr = child.stderr.take();
         let content_owned = content.to_vec();
+        let mime_type_owned = mime_type.to_string();
 
         tokio::spawn(async move {
-            if let Err(e) = stdin.write_all(&content_owned).await {
-                error!("[continuity:clipboard] wl-copy write error: {e}");
-            }
-            let _ = stdin.shutdown().await;
-
-            if let Some(mut err_stream) = stderr {
-                use tokio::io::AsyncReadExt;
-                let mut err_buf = Vec::new();
-                let _ = err_stream.read_to_end(&mut err_buf).await;
-                if !err_buf.is_empty() {
-                    let err_msg = String::from_utf8_lossy(&err_buf);
-                    error!("[continuity:clipboard] wl-copy stderr: {}", err_msg.trim());
+            for is_primary in [false, true] {
+                let mut cmd = Command::new("wl-copy");
+                if is_primary {
+                    cmd.arg("--primary");
                 }
-            }
+                if mime_type_owned != "text/plain" && !mime_type_owned.is_empty() {
+                    cmd.arg("--type").arg(&mime_type_owned);
+                }
+                cmd.stdin(Stdio::piped()).stderr(Stdio::piped());
 
-            match child.wait().await {
-                Ok(status) => {
-                    if !status.success() {
-                        error!("[continuity:clipboard] wl-copy exited with status: {status}");
-                    } else {
-                        info!("[continuity:clipboard] wl-copy completed successfully");
+                if let Ok(mut child) = cmd.spawn() {
+                    if let Some(mut stdin) = child.stdin.take() {
+                        let _ = stdin.write_all(&content_owned).await;
+                        let _ = stdin.shutdown().await;
                     }
-                }
-                Err(e) => {
-                    error!("[continuity:clipboard] wl-copy wait error: {e}");
+                    if let Some(mut err_stream) = child.stderr.take() {
+                        use tokio::io::AsyncReadExt;
+                        let mut err_buf = Vec::new();
+                        let _ = err_stream.read_to_end(&mut err_buf).await;
+                        if !err_buf.is_empty() {
+                            let err_msg = String::from_utf8_lossy(&err_buf);
+                            error!("[continuity:clipboard] wl-copy stderr: {}", err_msg.trim());
+                        }
+                    }
+                    let _ = child.wait().await;
                 }
             }
         });
