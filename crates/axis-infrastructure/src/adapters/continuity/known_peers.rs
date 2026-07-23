@@ -76,6 +76,7 @@ pub struct KnownPeer {
     pub auto_connect: bool,
     pub clipboard: bool,
     pub audio: bool,
+    #[serde(default)]
     pub audio_direction: axis_domain::models::continuity::AudioStreamDirection,
     pub drag_drop: bool,
     pub arrangement_side: KnownPeerArrangementSide,
