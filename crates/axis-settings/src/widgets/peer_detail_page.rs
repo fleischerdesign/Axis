@@ -202,8 +202,16 @@ impl PeerDetailPage {
     pub fn update_status(&self, status: &ContinuityStatus) {
         *self.update_silent.borrow_mut() = true;
 
-        let is_paired = status.peer_configs.contains_key(&self.peer_id);
-        if let Some(config) = status.peer_configs.get(&self.peer_id) {
+        let found_config = status.peer_configs.get(&self.peer_id).or_else(|| {
+            status
+                .peers
+                .iter()
+                .find(|p| p.device_name == self.peer_id || p.hostname == self.peer_id)
+                .and_then(|p| status.peer_configs.get(&p.device_id))
+        });
+
+        let is_paired = found_config.is_some() || status.peer_configs.contains_key(&self.peer_id);
+        if let Some(config) = found_config {
             *self.last_config.borrow_mut() = Some(config.clone());
             self.auto_connect_switch.set_active(config.auto_connect);
             self.clipboard_switch.set_active(config.clipboard);

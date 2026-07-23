@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::time::{Duration, Instant};
-use uuid::Uuid;
 
 use async_channel::{Receiver, Sender, bounded};
 use axis_domain::models::continuity::{
@@ -85,7 +84,7 @@ impl ContinuityInner {
     pub fn new(status_tx: tokio::sync::watch::Sender<ContinuityStatus>) -> Self {
         let known_peers = known_peers::load_known_peers();
         let mut status = ContinuityStatus {
-            device_id: persistent_device_id(),
+            device_id: known_peers::persistent_device_id(),
             device_name: known_peers::hostname(),
             ..ContinuityStatus::default()
         };
@@ -345,20 +344,4 @@ impl ContinuityInner {
             }
         }
     }
-}
-
-fn persistent_device_id() -> String {
-    let path = known_peers::config_dir().join("continuity_id");
-    if let Ok(id) = std::fs::read_to_string(&path) {
-        let id = id.trim().to_string();
-        if !id.is_empty() {
-            return id;
-        }
-    }
-    let id = Uuid::new_v4().to_string();
-    if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    let _ = std::fs::write(&path, &id);
-    id
 }

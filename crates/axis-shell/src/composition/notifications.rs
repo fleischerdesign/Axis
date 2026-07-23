@@ -195,6 +195,10 @@ fn wire_continuity_sync(
         .map(|c| c.continuity.enabled)
         .unwrap_or(false);
 
+    if initial_enabled && let Err(e) = rt.block_on(continuity_provider.set_enabled(true)) {
+        log::error!("[continuity:sync] initial config→continuity failed: {e}");
+    }
+
     {
         let cont = continuity_provider.clone();
         let mut config_stream = match config_provider.subscribe() {
@@ -206,11 +210,6 @@ fn wire_continuity_sync(
         };
         let mut last_enabled = Some(initial_enabled);
         rt.spawn(async move {
-            if initial_enabled
-                && let Err(e) = cont.set_enabled(true).await
-            {
-                log::error!("[continuity:sync] initial config→continuity failed: {e}");
-            }
             while let Some(config) = futures_util::StreamExt::next(&mut config_stream).await {
                 let enabled = config.continuity.enabled;
                 if last_enabled != Some(enabled) {

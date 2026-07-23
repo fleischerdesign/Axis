@@ -161,12 +161,13 @@ async fn register_service(name: &str, port: u16) -> Result<(OwnedObjectPath, Con
     .await
     .map_err(|e| format!("group proxy: {e}"))?;
 
-    let empty: Vec<Vec<u8>> = Vec::new();
+    let txt: Vec<Vec<u8>> =
+        vec![format!("id={}", super::known_peers::persistent_device_id()).into_bytes()];
 
     group
         .call_method(
             "AddService",
-            &(-1i32, -1i32, 0u32, name, AVAHI_SERVICE, "", "", port, empty),
+            &(-1i32, -1i32, 0u32, name, AVAHI_SERVICE, "", "", port, txt),
         )
         .await
         .map_err(|e| format!("AddService: {e}"))?;
@@ -357,14 +358,21 @@ async fn resolve_service(
                 _a,
                 address,
                 port,
-                _txt,
+                txt,
                 _flags,
             )) => {
-                info!(
-                    "[continuity:discovery] resolved: name={resolved_name} host={host} addr={address} port={port}"
-                );
+                let mut device_id = resolved_name.clone();
+                for entry in &txt {
+                    if let Ok(s) = String::from_utf8(entry.clone())
+                        && let Some(id) = s.strip_prefix("id=")
+                    {
+                        device_id = id.to_string();
+                    }
+                }
 
-                let device_id = resolved_name.clone();
+                info!(
+                    "[continuity:discovery] resolved: name={resolved_name} (id={device_id}) host={host} addr={address} port={port}"
+                );
 
                 let addr_str = if address.contains(':') {
                     format!("[{address}]:{port}")

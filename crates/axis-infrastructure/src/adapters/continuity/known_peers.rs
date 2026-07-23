@@ -152,3 +152,19 @@ pub fn save_known_peers(store: &KnownPeersStore) {
         let _ = std::fs::write(&path, json);
     }
 }
+
+pub fn persistent_device_id() -> String {
+    let path = config_dir().join("continuity_id");
+    if let Ok(id) = std::fs::read_to_string(&path) {
+        let id = id.trim().to_string();
+        if !id.is_empty() {
+            return id;
+        }
+    }
+    let id = uuid::Uuid::new_v4().to_string();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(&path, &id);
+    id
+}

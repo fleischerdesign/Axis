@@ -66,7 +66,7 @@ impl ClipboardSync for WaylandClipboard {
             .arg("--watch")
             .arg("sh")
             .arg("-c")
-            .arg("wl-paste -n; printf \"\\n---AXIS_CLIP_END---\\n\"")
+            .arg("cat; printf \"\\n---AXIS_CLIP_END---\\n\"")
             .stdout(Stdio::piped())
             .spawn()
             .map_err(|e| format!("failed to spawn wl-paste: {e}"))?;
