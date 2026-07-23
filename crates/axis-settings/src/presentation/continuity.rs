@@ -101,7 +101,15 @@ impl ContinuitySettingsPresenter {
         } = args;
         let initial_status = rt.block_on(async {
             match get_status_uc.execute().await {
-                Ok(s) => s,
+                Ok(s) => {
+                    log::info!(
+                        "[settings-continuity] initial status: enabled={}, peers={}, active={}",
+                        s.enabled,
+                        s.peers.len(),
+                        s.active_connection.is_some()
+                    );
+                    s
+                }
                 Err(e) => {
                     log::error!("[settings-continuity] Failed to get initial status: {e}");
                     Default::default()

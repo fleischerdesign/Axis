@@ -68,6 +68,11 @@ impl ContinuityDbusProxy {
             .map_err(|e| ContinuityError::ProviderError(format!("D-Bus connect: {e}")))?;
 
         let initial_state = self.call_get_state(&conn).await?;
+        log::info!(
+            "[continuity-proxy] initialized from shell: enabled={}, peers={}",
+            initial_state.enabled,
+            initial_state.peers.len()
+        );
         self.cached.set(initial_state.clone());
         let _ = self.status_tx.send(initial_state);
 

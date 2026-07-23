@@ -152,7 +152,15 @@ impl ContinuityDbusServer {
 #[zbus::interface(name = "org.axis.Shell.Continuity")]
 impl ContinuityDbusServer {
     async fn get_state(&self) -> String {
-        serde_json::to_string(&*self.state_rx.borrow()).unwrap_or_default()
+        let state = self.state_rx.borrow();
+        let json = serde_json::to_string(&*state).unwrap_or_default();
+        log::info!(
+            "[continuity-dbus] GetState: enabled={}, peers={}, active={}",
+            state.enabled,
+            state.peers.len(),
+            state.active_connection.is_some()
+        );
+        json
     }
 
     async fn list_audio_devices(&self) -> String {
