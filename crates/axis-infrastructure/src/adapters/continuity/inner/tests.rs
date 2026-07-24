@@ -88,6 +88,8 @@ mod tests {
                     audio_direction: AudioStreamDirection::SendToPeer,
                     drag_drop: true,
                     version: 1,
+                    capture_device: String::new(),
+                    playback_device: String::new(),
                 },
                 &mut cmd_ctx,
             )
@@ -166,6 +168,8 @@ mod tests {
                     audio_direction: AudioStreamDirection::Off,
                     drag_drop: false,
                     version: 3,
+                    capture_device: String::new(),
+                    playback_device: String::new(),
                 },
                 &mut cmd_ctx,
             )
@@ -416,6 +420,8 @@ mod tests {
                     audio_direction: AudioStreamDirection::SendToPeer,
                     drag_drop: false,
                     version: 0,
+                    capture_device: String::new(),
+                    playback_device: String::new(),
                 },
                 &mut cmd_ctx,
             )
@@ -478,6 +484,8 @@ mod tests {
                     audio_direction: AudioStreamDirection::SendToPeer,
                     drag_drop: false,
                     version: 0,
+                    capture_device: String::new(),
+                    playback_device: String::new(),
                 },
                 &mut cmd_ctx,
             )

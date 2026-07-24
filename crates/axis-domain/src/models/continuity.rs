@@ -416,6 +416,8 @@ pub enum Message {
         audio_direction: AudioStreamDirection,
         drag_drop: bool,
         version: u64,
+        capture_device: String,
+        playback_device: String,
     },
     ClipboardUpdate {
         #[serde(with = "base64_bytes")]

@@ -74,6 +74,8 @@ pub(crate) struct ConfigSyncArgs {
     pub audio_direction: axis_domain::models::continuity::AudioStreamDirection,
     pub drag_drop: bool,
     pub version: u64,
+    pub capture_device: String,
+    pub playback_device: String,
 }
 
 pub struct ContinuityInner {
@@ -193,6 +195,8 @@ impl ContinuityInner {
                     audio_direction: config.audio_direction,
                     drag_drop: config.drag_drop,
                     version: config.version,
+                    capture_device: config.capture_device.clone(),
+                    playback_device: config.playback_device.clone(),
                     arrangement_side,
                     arrangement_x,
                     arrangement_y,

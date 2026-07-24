@@ -490,7 +490,10 @@ impl ContinuityInner {
                 audio_direction: config.audio_direction,
                 drag_drop: config.drag_drop,
                 version,
+                capture_device: config.capture_device.clone().unwrap_or_default(),
+                playback_device: config.playback_device.clone().unwrap_or_default(),
             });
+
         }
         self.push();
     }
@@ -519,6 +522,7 @@ impl ContinuityInner {
                 || entry.audio != config.audio
                 || entry.audio_direction != config.audio_direction
                 || entry.capture_device != config.capture_device
+                || entry.playback_device != config.playback_device
                 || entry.drag_drop != config.drag_drop
                 || entry.auto_connect != config.auto_connect
             {
@@ -542,6 +546,8 @@ impl ContinuityInner {
                 known.audio_direction = config.audio_direction;
                 known.drag_drop = config.drag_drop;
                 known.auto_connect = config.auto_connect;
+                known.capture_device = config.capture_device.clone();
+                known.playback_device = config.playback_device.clone();
                 known.arrangement_side = KnownPeerArrangementSide::from(config.arrangement.side);
                 match config.arrangement.side {
                     Side::Left | Side::Right => {
@@ -597,6 +603,8 @@ impl ContinuityInner {
                     audio_direction: config.audio_direction,
                     drag_drop: config.drag_drop,
                     version,
+                    capture_device: config.capture_device.clone().unwrap_or_default(),
+                    playback_device: config.playback_device.clone().unwrap_or_default(),
                 });
 
                 if clipboard_toggled {

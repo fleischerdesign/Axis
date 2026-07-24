@@ -394,6 +394,8 @@ impl ContinuityInner {
                 audio_direction,
                 drag_drop,
                 version,
+                capture_device,
+                playback_device,
             } => {
                 self.handle_config_sync(
                     ConfigSyncArgs {
@@ -404,6 +406,8 @@ impl ContinuityInner {
                         audio_direction,
                         drag_drop,
                         version,
+                        capture_device,
+                        playback_device,
                     },
                     ctx,
                 )
@@ -659,6 +663,8 @@ impl ContinuityInner {
                 audio_direction: config.audio_direction,
                 drag_drop: config.drag_drop,
                 version: config.version,
+                capture_device: config.capture_device.clone().unwrap_or_default(),
+                playback_device: config.playback_device.clone().unwrap_or_default(),
             });
         }
 
@@ -713,6 +719,12 @@ impl ContinuityInner {
                 config.audio = args.audio && dir != axis_domain::models::continuity::AudioStreamDirection::Off;
                 config.drag_drop = args.drag_drop;
                 config.version = args.version;
+                if !args.capture_device.is_empty() {
+                    config.capture_device = Some(args.capture_device);
+                }
+                if !args.playback_device.is_empty() {
+                    config.playback_device = Some(args.playback_device);
+                }
 
                 let cfg = config.clone();
                 self.sync_audio_capture(&cfg, ctx).await;

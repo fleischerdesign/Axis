@@ -84,6 +84,10 @@ pub struct KnownPeer {
     pub arrangement_y: i32,
     #[serde(default)]
     pub version: u64,
+    #[serde(default)]
+    pub capture_device: Option<String>,
+    #[serde(default)]
+    pub playback_device: Option<String>,
 }
 
 impl Default for KnownPeer {
@@ -104,6 +108,8 @@ impl Default for KnownPeer {
             arrangement_x: 0,
             arrangement_y: 0,
             version: 0,
+            capture_device: None,
+            playback_device: None,
         }
     }
 }
@@ -125,8 +131,8 @@ impl KnownPeer {
             clipboard: self.clipboard,
             audio: self.audio,
             audio_direction: self.audio_direction,
-            capture_device: None,
-            playback_device: None,
+            capture_device: self.capture_device.clone(),
+            playback_device: self.playback_device.clone(),
             drag_drop: self.drag_drop,
             version: self.version,
         }
