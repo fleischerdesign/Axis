@@ -43,8 +43,6 @@ impl AudioStreamManager {
             "--latency=20ms",
         ]);
         if let Some(target) = target_device
-            && target != "@DEFAULT_MONITOR@"
-            && target != "@DEFAULT_SOURCE@"
             && !target.is_empty()
         {
             cmd.args(["--target", target]);
@@ -116,9 +114,7 @@ impl AudioStreamManager {
                 "--channels=2",
                 "--latency=20ms",
             ]);
-            if let Some(target) = target_device
-                && target != "@DEFAULT_SINK@"
-            {
+            if let Some(target) = target_device {
                 cmd.args(["--target", target]);
             }
             cmd.arg("-");
