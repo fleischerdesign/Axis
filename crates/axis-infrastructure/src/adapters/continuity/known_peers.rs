@@ -145,8 +145,9 @@ pub fn known_peers_path() -> PathBuf {
 pub fn load_known_peers() -> KnownPeersStore {
     let path = known_peers_path();
     if let Ok(content) = std::fs::read_to_string(&path)
-        && let Ok(store) = serde_json::from_str(&content)
+        && let Ok(mut store) = serde_json::from_str::<KnownPeersStore>(&content)
     {
+        store.peers.retain(|_, p| !p.hostname.is_empty() || !p.address.is_empty());
         return store;
     }
     KnownPeersStore::default()

@@ -1,6 +1,6 @@
 //! Opus / Compressed Audio Framing & Packet Loss Concealment (PLC) Engine.
 
-pub const AUDIO_SAMPLE_RATE: u32 = 48_000;
+pub const AUDIO_SAMPLE_RATE: u32 = 44_100;
 pub const AUDIO_CHANNELS: u16 = 2;
 pub const AUDIO_FRAME_MS: u32 = 20;
 pub const AUDIO_FRAME_SAMPLES: usize = (AUDIO_SAMPLE_RATE as usize * AUDIO_FRAME_MS as usize) / 1000;
