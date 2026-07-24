@@ -31,7 +31,7 @@ impl ContinuityInner {
 
         self.jitter_buffer = super::super::jitter_buffer::AdaptiveJitterBuffer::default();
 
-        if config.audio || config.audio_direction.should_capture() {
+        if config.audio && config.audio_direction.should_capture() {
             if let Some(write_tx) = ctx.network.active_write_tx() {
                 let (audio_tx, mut audio_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(128);
                 let target = config.capture_device.clone();
@@ -719,12 +719,6 @@ impl ContinuityInner {
                 config.audio = args.audio && dir != axis_domain::models::continuity::AudioStreamDirection::Off;
                 config.drag_drop = args.drag_drop;
                 config.version = args.version;
-                if !args.capture_device.is_empty() {
-                    config.capture_device = Some(args.capture_device);
-                }
-                if !args.playback_device.is_empty() {
-                    config.playback_device = Some(args.playback_device);
-                }
 
                 let cfg = config.clone();
                 self.sync_audio_capture(&cfg, ctx).await;

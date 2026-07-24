@@ -74,7 +74,9 @@ pub(crate) struct ConfigSyncArgs {
     pub audio_direction: axis_domain::models::continuity::AudioStreamDirection,
     pub drag_drop: bool,
     pub version: u64,
+    #[allow(dead_code)]
     pub capture_device: String,
+    #[allow(dead_code)]
     pub playback_device: String,
 }
 
