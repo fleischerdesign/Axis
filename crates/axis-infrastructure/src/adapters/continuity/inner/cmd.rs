@@ -203,12 +203,14 @@ impl ContinuityInner {
                     pending.peer_name
                 );
                 self.status.active_connection = Some(ActiveConnectionInfo {
-                    peer_id: pending.peer_id,
-                    peer_name: pending.peer_name,
+                    peer_id: pending.peer_id.clone(),
+                    peer_name: pending.peer_name.clone(),
                     connected_secs: 0,
                 });
                 self.connected_at = Some(Instant::now());
                 self.last_message_at = Some(Instant::now());
+
+                self.create_cipher(&pending.peer_id, Some(&pending.pin));
 
                 connection.send_message(Message::ScreenInfo {
                     width: self.status.screen_width,
