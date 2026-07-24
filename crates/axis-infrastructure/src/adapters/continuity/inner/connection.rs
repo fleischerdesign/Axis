@@ -29,6 +29,8 @@ impl ContinuityInner {
             task.abort();
         }
 
+        self.jitter_buffer = super::super::jitter_buffer::AdaptiveJitterBuffer::default();
+
         if config.audio || config.audio_direction.should_capture() {
             if let Some(write_tx) = ctx.network.active_write_tx() {
                 let (audio_tx, mut audio_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(128);
