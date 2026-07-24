@@ -1,3 +1,4 @@
+use log::warn;
 use serde::{Deserialize, Serialize};
 use tokio::process::Command;
 
@@ -10,23 +11,46 @@ pub struct PipeWireAudioDevice {
     pub is_source: bool,
 }
 
+async fn resolve_default_monitor() -> Option<PipeWireAudioDevice> {
+    let output = Command::new("wpctl")
+        .args(["inspect", "@DEFAULT_SINK@"])
+        .output()
+        .await
+        .ok()?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for line in stdout.lines() {
+        if let Some(node_name) = line
+            .strip_prefix("* node.name = \"")
+            .and_then(|s| s.strip_suffix('"'))
+        {
+            let monitor_id = format!("{node_name}.monitor");
+            return Some(PipeWireAudioDevice {
+                id: monitor_id.clone(),
+                name: monitor_id,
+                description: "System Sound (Default Monitor)".to_string(),
+                is_sink_monitor: true,
+                is_source: false,
+            });
+        }
+    }
+    warn!("[continuity-pw] could not resolve @DEFAULT_SINK@, falling back to @DEFAULT_MONITOR@");
+    None
+}
+
 pub async fn list_pipewire_audio_devices() -> Vec<PipeWireAudioDevice> {
-    let mut devices = vec![
-        PipeWireAudioDevice {
-            id: "@DEFAULT_MONITOR@".to_string(),
-            name: "@DEFAULT_MONITOR@".to_string(),
-            description: "System Sound (Spotify, Browser, Media)".to_string(),
-            is_sink_monitor: true,
-            is_source: false,
-        },
-        PipeWireAudioDevice {
-            id: "@DEFAULT_SOURCE@".to_string(),
-            name: "@DEFAULT_SOURCE@".to_string(),
-            description: "Default Microphone".to_string(),
-            is_sink_monitor: false,
-            is_source: true,
-        },
-    ];
+    let mut devices = Vec::new();
+
+    let default_monitor = resolve_default_monitor().await;
+    if let Some(monitor) = default_monitor {
+        devices.push(monitor);
+    }
+    devices.push(PipeWireAudioDevice {
+        id: "@DEFAULT_SOURCE@".to_string(),
+        name: "@DEFAULT_SOURCE@".to_string(),
+        description: "Default Microphone".to_string(),
+        is_sink_monitor: false,
+        is_source: true,
+    });
 
     if let Ok(output) = Command::new("pw-dump").output().await
         && let Ok(json_str) = String::from_utf8(output.stdout)

@@ -33,6 +33,8 @@ pub struct ContinuitySettingsPage {
     unpair_cb: FnCell<String>,
     arrangement_cb: FnCell<PeerArrangement>,
     config_cb: ContinuityConfigFnCell,
+
+    presenter: Rc<ContinuitySettingsPresenter>,
 }
 
 impl ContinuitySettingsPage {
@@ -136,6 +138,7 @@ impl ContinuitySettingsPage {
             unpair_cb: Rc::new(RefCell::new(None)),
             arrangement_cb: grid_cb,
             config_cb: Rc::new(RefCell::new(None)),
+            presenter: _presenter,
         });
 
         // Event Connections
@@ -312,6 +315,7 @@ impl ContinuitySettingsPage {
             let unpair_cb_r = self.unpair_cb.clone();
             let current_peer_page = self.current_peer_page.clone();
             let status_snapshot = status.clone();
+            let presenter = self.presenter.clone();
             let gesture = gtk4::GestureClick::new();
             gesture.connect_released(move |_, _, _, _| {
                 let detail_page = PeerDetailPage::new(peer_id.clone(), peer_name.clone());
@@ -342,6 +346,13 @@ impl ContinuitySettingsPage {
                             f(id, config);
                         }
                     })
+                });
+
+                let detail_page_c = detail_page.clone();
+                let presenter = presenter.clone();
+                gtk4::glib::spawn_future_local(async move {
+                    let devices = presenter.list_audio_devices().await;
+                    detail_page_c.load_audio_devices(&devices);
                 });
 
                 let nav_page = adw::NavigationPage::new(detail_page.widget(), &peer_name);

@@ -2,13 +2,14 @@ use axis_application::use_cases::continuity::cancel_reconnect::CancelReconnectUs
 use axis_application::use_cases::continuity::confirm_pin::ConfirmPinUseCase;
 use axis_application::use_cases::continuity::connect_to_peer::ConnectToPeerUseCase;
 use axis_application::use_cases::continuity::disconnect::DisconnectUseCase;
+use axis_application::use_cases::continuity::list_audio_devices::ListAudioDevicesUseCase;
 use axis_application::use_cases::continuity::reject_pin::RejectPinUseCase;
 use axis_application::use_cases::continuity::set_enabled::SetContinuityEnabledUseCase;
 use axis_application::use_cases::continuity::set_peer_arrangement::SetPeerArrangementUseCase;
 use axis_application::use_cases::continuity::unpair::UnpairUseCase;
 use axis_application::use_cases::continuity::update_peer_configs::UpdatePeerConfigsUseCase;
 use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
-use axis_domain::models::continuity::{ContinuityStatus, PeerArrangement, PeerConfig};
+use axis_domain::models::continuity::{AudioDeviceInfo, ContinuityStatus, PeerArrangement, PeerConfig};
 use axis_domain::ports::continuity::ContinuityProvider;
 use axis_presentation::{Presenter, View};
 use std::collections::HashMap;
@@ -68,6 +69,7 @@ pub struct ContinuitySettingsPresenter {
     unpair_uc: Arc<UnpairUseCase>,
     set_arrangement_uc: Arc<SetPeerArrangementUseCase>,
     update_configs_uc: Arc<UpdatePeerConfigsUseCase>,
+    list_audio_devices_uc: Arc<ListAudioDevicesUseCase>,
 }
 
 pub struct ContinuitySettingsPresenterArgs {
@@ -82,6 +84,7 @@ pub struct ContinuitySettingsPresenterArgs {
     pub unpair_uc: Arc<UnpairUseCase>,
     pub set_arrangement_uc: Arc<SetPeerArrangementUseCase>,
     pub update_configs_uc: Arc<UpdatePeerConfigsUseCase>,
+    pub list_audio_devices_uc: Arc<ListAudioDevicesUseCase>,
 }
 
 impl ContinuitySettingsPresenter {
@@ -98,6 +101,7 @@ impl ContinuitySettingsPresenter {
             unpair_uc,
             set_arrangement_uc,
             update_configs_uc,
+            list_audio_devices_uc,
         } = args;
         let initial_status = rt.block_on(async {
             match get_status_uc.execute().await {
@@ -133,6 +137,17 @@ impl ContinuitySettingsPresenter {
             unpair_uc,
             set_arrangement_uc,
             update_configs_uc,
+            list_audio_devices_uc,
+        }
+    }
+
+    pub async fn list_audio_devices(&self) -> Vec<AudioDeviceInfo> {
+        match self.list_audio_devices_uc.execute().await {
+            Ok(devices) => devices,
+            Err(e) => {
+                log::error!("[settings-continuity] list_audio_devices failed: {e}");
+                Vec::new()
+            }
         }
     }
 
@@ -250,6 +265,7 @@ impl Clone for ContinuitySettingsPresenter {
             unpair_uc: self.unpair_uc.clone(),
             set_arrangement_uc: self.set_arrangement_uc.clone(),
             update_configs_uc: self.update_configs_uc.clone(),
+            list_audio_devices_uc: self.list_audio_devices_uc.clone(),
         }
     }
 }

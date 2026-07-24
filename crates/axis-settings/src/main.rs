@@ -47,6 +47,7 @@ use axis_application::use_cases::continuity::cancel_reconnect::CancelReconnectUs
 use axis_application::use_cases::continuity::confirm_pin::ConfirmPinUseCase;
 use axis_application::use_cases::continuity::connect_to_peer::ConnectToPeerUseCase;
 use axis_application::use_cases::continuity::disconnect::DisconnectUseCase;
+use axis_application::use_cases::continuity::list_audio_devices::ListAudioDevicesUseCase;
 use axis_application::use_cases::continuity::reject_pin::RejectPinUseCase;
 use axis_application::use_cases::continuity::set_enabled::SetContinuityEnabledUseCase;
 use axis_application::use_cases::continuity::set_peer_arrangement::SetPeerArrangementUseCase;
@@ -221,6 +222,8 @@ fn build_ui(
         Arc::new(SetPeerArrangementUseCase::new(continuity_provider.clone()));
     let continuity_update_configs =
         Arc::new(UpdatePeerConfigsUseCase::new(continuity_provider.clone()));
+    let continuity_list_audio_devices =
+        Arc::new(ListAudioDevicesUseCase::new(continuity_provider.clone()));
 
     let set_idle_inhibited_uc = Arc::new(SetIdleInhibitUseCase::new(idle_inhibit_provider.clone()));
 
@@ -268,6 +271,7 @@ fn build_ui(
             unpair_uc: continuity_unpair,
             set_arrangement_uc: continuity_set_arrangement,
             update_configs_uc: continuity_update_configs,
+            list_audio_devices_uc: continuity_list_audio_devices,
         },
         rt,
     ));

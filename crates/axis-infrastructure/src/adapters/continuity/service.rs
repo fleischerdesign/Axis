@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use axis_domain::models::continuity::{
-    ContinuityStatus, InputEvent, PeerArrangement, PeerConfig, Side,
+    AudioDeviceInfo, ContinuityStatus, InputEvent, PeerArrangement, PeerConfig, Side,
 };
 use axis_domain::ports::continuity::{
     ContinuityError, ContinuityProvider, ContinuitySharingProvider, ContinuityStream,
@@ -11,6 +11,7 @@ use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
 
 use super::inner::{ContinuityCmd, ContinuityInner};
+use super::pipewire_devices;
 
 pub struct ContinuityService {
     cmd_tx: async_channel::Sender<ContinuityCmd>,
@@ -126,6 +127,19 @@ impl ContinuityProvider for ContinuityService {
         self.cmd_tx
             .try_send(ContinuityCmd::UpdatePeerConfigs(configs))
             .map_err(|e| ContinuityError::ProviderError(e.to_string()))
+    }
+
+    async fn list_audio_devices(
+        &self,
+    ) -> Result<Vec<AudioDeviceInfo>, ContinuityError> {
+        let devices = pipewire_devices::list_pipewire_audio_devices().await;
+        Ok(devices
+            .into_iter()
+            .map(|d| AudioDeviceInfo {
+                id: d.id,
+                description: d.description,
+            })
+            .collect())
     }
 }
 

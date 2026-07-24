@@ -281,6 +281,12 @@ pub struct PeerConfig {
     pub version: u64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AudioDeviceInfo {
+    pub id: String,
+    pub description: String,
+}
+
 impl Default for PeerConfig {
     fn default() -> Self {
         Self {

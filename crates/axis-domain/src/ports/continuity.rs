@@ -1,5 +1,7 @@
 use super::StatusStream;
-use crate::models::continuity::{ContinuityStatus, InputEvent, PeerArrangement, PeerConfig, Side};
+use crate::models::continuity::{
+    AudioDeviceInfo, ContinuityStatus, InputEvent, PeerArrangement, PeerConfig, Side,
+};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use thiserror::Error;
@@ -47,6 +49,10 @@ pub trait ContinuityProvider: Send + Sync {
         &self,
         configs: HashMap<String, PeerConfig>,
     ) -> Result<(), ContinuityError>;
+
+    async fn list_audio_devices(
+        &self,
+    ) -> Result<Vec<AudioDeviceInfo>, ContinuityError>;
 }
 
 crate::status_provider!(ContinuityProvider, ContinuityStatus, ContinuityError);

@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use axis_domain::models::continuity::{
-    ContinuityStatus, InputEvent, PeerArrangement, PeerConfig, PeerInfo, SharingState, Side,
+    AudioDeviceInfo, ContinuityStatus, InputEvent, PeerArrangement, PeerConfig, PeerInfo,
+    SharingState, Side,
 };
 use axis_domain::ports::continuity::{
     ContinuityError, ContinuityProvider, ContinuitySharingProvider, ContinuityStream,
@@ -95,6 +96,21 @@ impl ContinuityProvider for MockContinuityProvider {
         _configs: HashMap<String, PeerConfig>,
     ) -> Result<(), ContinuityError> {
         Ok(())
+    }
+
+    async fn list_audio_devices(
+        &self,
+    ) -> Result<Vec<AudioDeviceInfo>, ContinuityError> {
+        Ok(vec![
+            AudioDeviceInfo {
+                id: "test_monitor.monitor".to_string(),
+                description: "System Sound (Default Monitor)".to_string(),
+            },
+            AudioDeviceInfo {
+                id: "@DEFAULT_SOURCE@".to_string(),
+                description: "Default Microphone".to_string(),
+            },
+        ])
     }
 }
 

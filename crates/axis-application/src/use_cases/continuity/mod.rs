@@ -3,6 +3,7 @@ pub mod confirm_pin;
 pub mod connect_to_peer;
 pub mod disconnect;
 pub mod force_local;
+pub mod list_audio_devices;
 pub mod reject_pin;
 pub mod send_input;
 pub mod set_enabled;

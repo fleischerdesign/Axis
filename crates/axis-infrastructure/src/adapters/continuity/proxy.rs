@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use axis_domain::models::continuity::{ContinuityStatus, PeerArrangement, PeerConfig};
+use axis_domain::models::continuity::{AudioDeviceInfo, ContinuityStatus, PeerArrangement, PeerConfig};
 use axis_domain::ports::continuity::{ContinuityError, ContinuityProvider, ContinuityStream};
 use log::{error, warn};
 use std::collections::HashMap;
@@ -45,8 +45,8 @@ impl ContinuityDbusProxy {
         })
     }
 
-    pub async fn list_audio_devices(&self) -> Vec<super::pipewire_devices::PipeWireAudioDevice> {
-        if let Ok(conn) = Connection::session().await
+    pub async fn list_audio_devices(&self) -> Vec<AudioDeviceInfo> {
+        let devices = if let Ok(conn) = Connection::session().await
             && let Ok(reply) = conn
                 .call_method(
                     Some("org.axis.Shell"),
@@ -57,11 +57,19 @@ impl ContinuityDbusProxy {
                 )
                 .await
             && let Ok(json_str) = reply.body().deserialize::<String>()
-            && let Ok(devices) = serde_json::from_str(&json_str)
+            && let Ok(pw_devices) = serde_json::from_str::<Vec<super::pipewire_devices::PipeWireAudioDevice>>(&json_str)
         {
-            return devices;
-        }
-        super::pipewire_devices::list_pipewire_audio_devices().await
+            pw_devices
+        } else {
+            super::pipewire_devices::list_pipewire_audio_devices().await
+        };
+        devices
+            .into_iter()
+            .map(|d| AudioDeviceInfo {
+                id: d.id,
+                description: d.description,
+            })
+            .collect()
     }
 
     pub async fn init(self: &Arc<Self>) -> Result<(), ContinuityError> {
@@ -288,5 +296,11 @@ impl ContinuityProvider for ContinuityDbusProxy {
         let json = serde_json::to_string(&configs)
             .map_err(|e| ContinuityError::ProviderError(format!("serialize: {e}")))?;
         self.call_method_str("UpdatePeerConfigs", &json).await
+    }
+
+    async fn list_audio_devices(
+        &self,
+    ) -> Result<Vec<AudioDeviceInfo>, ContinuityError> {
+        Ok(self.list_audio_devices().await)
     }
 }

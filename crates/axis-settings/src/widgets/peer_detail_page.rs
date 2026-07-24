@@ -1,5 +1,5 @@
 use crate::widgets::callback::{FnCell, FnCell0};
-use axis_domain::models::continuity::{ContinuityStatus, PeerConfig};
+use axis_domain::models::continuity::{AudioDeviceInfo, ContinuityStatus, PeerConfig};
 use libadwaita as adw;
 use libadwaita::prelude::*;
 use std::cell::RefCell;
@@ -15,6 +15,8 @@ pub struct PeerDetailPage {
     audio_switch: adw::SwitchRow,
     audio_direction_row: adw::ComboRow,
     audio_source_row: adw::ComboRow,
+    audio_source_model: gtk4::StringList,
+    audio_source_ids: Rc<RefCell<Vec<String>>>,
     drag_drop_switch: adw::SwitchRow,
     danger_group: adw::PreferencesGroup,
     disconnect_btn: gtk4::Button,
@@ -77,10 +79,8 @@ impl PeerDetailPage {
             .build();
         caps_group.add(&audio_direction_row);
 
-        let audio_source_model = gtk4::StringList::new(&[
-            "System-Sound (Spotify, Browser, Media)",
-            "Standard Mikrofon",
-        ]);
+        let audio_source_model = gtk4::StringList::new(&[] as &[&str]);
+        let audio_source_ids: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
         let audio_source_row = adw::ComboRow::builder()
             .title("Aufnahme-Quelle (Capture Source)")
             .subtitle("Wähle Medienton-Monitor oder Mikrofon zum Senden")
@@ -127,6 +127,8 @@ impl PeerDetailPage {
             audio_switch,
             audio_direction_row,
             audio_source_row,
+            audio_source_model,
+            audio_source_ids,
             drag_drop_switch,
             danger_group,
             disconnect_btn,
@@ -230,10 +232,12 @@ impl PeerDetailPage {
                     return;
                 }
                 let current = p.last_config.borrow().clone().unwrap_or_default();
-                let capture_device = match row.selected() {
-                    1 => Some("@DEFAULT_SOURCE@".to_string()),
-                    _ => Some("@DEFAULT_MONITOR@".to_string()),
-                };
+                let idx = row.selected() as usize;
+                let capture_device = p
+                    .audio_source_ids
+                    .borrow()
+                    .get(idx)
+                    .cloned();
                 let config = PeerConfig {
                     capture_device,
                     ..current
@@ -308,10 +312,17 @@ impl PeerDetailPage {
             };
             self.audio_direction_row.set_selected(dir_selected);
 
-            let selected = match config.capture_device.as_deref() {
-                Some("@DEFAULT_SOURCE@") => 1,
-                _ => 0,
-            };
+            let selected = config
+                .capture_device
+                .as_deref()
+                .and_then(|cd| {
+                    self.audio_source_ids
+                        .borrow()
+                        .iter()
+                        .position(|id| id.as_str() == cd)
+                })
+                .map(|i| i as u32)
+                .unwrap_or(0);
             self.audio_source_row.set_selected(selected);
 
             self.drag_drop_switch.set_active(config.drag_drop);
@@ -339,5 +350,30 @@ impl PeerDetailPage {
 
     pub fn set_on_config(&self, f: Box<dyn Fn(String, PeerConfig) + 'static>) {
         *self.config_cb.borrow_mut() = Some(f);
+    }
+
+    pub fn load_audio_devices(&self, devices: &[AudioDeviceInfo]) {
+        *self.update_silent.borrow_mut() = true;
+
+        let ids: Vec<String> = devices.iter().map(|d| d.id.clone()).collect();
+        let names: Vec<&str> = devices.iter().map(|d| d.description.as_str()).collect();
+        self.audio_source_model.splice(0, self.audio_source_model.n_items(), &names);
+        *self.audio_source_ids.borrow_mut() = ids;
+
+        let selected = self
+            .last_config
+            .borrow()
+            .as_ref()
+            .and_then(|cfg| cfg.capture_device.as_deref())
+            .and_then(|cd| {
+                devices
+                    .iter()
+                    .position(|d| d.id.as_str() == cd)
+            })
+            .map(|i| i as u32)
+            .unwrap_or(0);
+        self.audio_source_row.set_selected(selected);
+
+        *self.update_silent.borrow_mut() = false;
     }
 }
