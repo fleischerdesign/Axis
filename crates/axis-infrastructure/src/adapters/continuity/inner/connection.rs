@@ -360,6 +360,16 @@ impl ContinuityInner {
                 if let Some(wire_data) = decrypted {
                     self.jitter_buffer.push(&wire_data);
                     let pcm = self.jitter_buffer.pop_next();
+                    self.audio_rx_count += 1;
+                    if self.audio_rx_count <= 5 || self.audio_rx_count.is_multiple_of(100) {
+                        log::info!(
+                            "[continuity] audio received: n={} wire={} pcm_out={} pcm_first={:02x?}",
+                            self.audio_rx_count,
+                            wire_data.len(),
+                            pcm.len(),
+                            &pcm[..pcm.len().min(8)]
+                        );
+                    }
                     let target = self.status.active_peer_config().playback_device.clone();
                     ctx.audio.play_chunk(target.as_deref(), &pcm).await;
                 }

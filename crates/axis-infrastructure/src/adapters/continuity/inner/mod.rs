@@ -90,6 +90,7 @@ pub struct ContinuityInner {
     pub(crate) known_peers: KnownPeersStore,
     pub(crate) audio_task: Option<tokio::task::JoinHandle<()>>,
     pub(crate) jitter_buffer: super::jitter_buffer::AdaptiveJitterBuffer,
+    pub(crate) audio_rx_count: u64,
 }
 
 impl ContinuityInner {
@@ -119,6 +120,7 @@ impl ContinuityInner {
             known_peers,
             audio_task: None,
             jitter_buffer: super::jitter_buffer::AdaptiveJitterBuffer::default(),
+            audio_rx_count: 0,
         }
     }
 
