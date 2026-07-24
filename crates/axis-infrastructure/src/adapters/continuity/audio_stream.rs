@@ -5,6 +5,29 @@ use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
 use log::{error, info, warn};
 
+async fn resolve_target(target: Option<&str>) -> Option<String> {
+    match target {
+        Some("@DEFAULT_SOURCE@") | None => target.map(|s| s.to_string()),
+        Some(name) => {
+            let output = Command::new("pw-cli")
+                .args(["info", name])
+                .output()
+                .await
+                .ok()?;
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines() {
+                if let Some(rest) = line.trim().strip_prefix("id:")
+                    && let Some(comma) = rest.find(',')
+                {
+                    return Some(rest[..comma].trim().to_string());
+                }
+            }
+            warn!("[continuity-audio] could not resolve PipeWire target '{name}', falling back to default source");
+            None
+        }
+    }
+}
+
 pub struct AudioStreamManager {
     record_child: Arc<Mutex<Option<Child>>>,
     play_child: Arc<Mutex<Option<Child>>>,
@@ -34,6 +57,8 @@ impl AudioStreamManager {
     ) {
         self.stop_capture().await;
 
+        let resolved = resolve_target(target_device).await;
+
         let mut cmd = Command::new("pw-record");
         cmd.args([
             "--raw",
@@ -42,7 +67,7 @@ impl AudioStreamManager {
             "--channels=2",
             "--latency=20ms",
         ]);
-        if let Some(target) = target_device
+        if let Some(target) = resolved.as_deref()
             && !target.is_empty()
         {
             cmd.args(["--target", target]);

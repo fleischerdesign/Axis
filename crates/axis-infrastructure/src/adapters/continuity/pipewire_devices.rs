@@ -56,8 +56,8 @@ pub async fn list_pipewire_audio_devices() -> Vec<PipeWireAudioDevice> {
                     });
                 } else if media_class == "Audio/Sink" || media_class.contains("Sink") {
                     devices.push(PipeWireAudioDevice {
-                        id: format!("{node_name}.monitor"),
-                        name: format!("{node_name}.monitor"),
+                        id: node_name.to_string(),
+                        name: node_name.to_string(),
                         description: format!("{node_desc} (Monitor)"),
                         is_sink_monitor: true,
                         is_source: false,
