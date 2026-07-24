@@ -36,13 +36,15 @@ impl ContinuityInner {
                 ctx.audio.start_capture(target.as_deref(), audio_tx).await;
                 let cipher = self.cipher_arc();
                 let task = tokio::spawn(async move {
+                    let mut codec = super::super::codec::AudioCodecEngine::new();
                     while let Some(chunk) = audio_rx.recv().await {
+                        let encoded = codec.encode(&chunk);
                         let encrypted = {
                             let mut guard = cipher.lock().unwrap();
                             if let Some(ref mut c) = *guard {
-                                c.encrypt(&chunk)
+                                c.encrypt(&encoded)
                             } else {
-                                chunk
+                                encoded
                             }
                         };
                         if write_tx
@@ -57,6 +59,7 @@ impl ContinuityInner {
                         }
                     }
                 });
+
                 self.audio_task = Some(task);
             }
         } else {
@@ -327,11 +330,14 @@ impl ContinuityInner {
                 pcm_data,
             } => {
                 let decrypted = self.decrypt_from_wire(&pcm_data);
-                if let Some(pcm) = decrypted {
+                if let Some(wire_data) = decrypted {
+                    self.jitter_buffer.push(&wire_data);
+                    let pcm = self.jitter_buffer.pop_next();
                     let target = self.status.active_peer_config().playback_device.clone();
                     ctx.audio.play_chunk(target.as_deref(), &pcm).await;
                 }
             }
+
             Message::CursorMove { .. }
             | Message::KeyPress { .. }
             | Message::KeyRelease { .. }

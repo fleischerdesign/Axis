@@ -89,6 +89,7 @@ pub struct ContinuityInner {
     pub(crate) switch_tx: Option<Sender<ContinuityCmd>>,
     pub(crate) known_peers: KnownPeersStore,
     pub(crate) audio_task: Option<tokio::task::JoinHandle<()>>,
+    pub(crate) jitter_buffer: super::jitter_buffer::AdaptiveJitterBuffer,
 }
 
 impl ContinuityInner {
@@ -117,8 +118,10 @@ impl ContinuityInner {
             switch_tx: None,
             known_peers,
             audio_task: None,
+            jitter_buffer: super::jitter_buffer::AdaptiveJitterBuffer::default(),
         }
     }
+
 
     pub(crate) fn push(&self) {
         let mut status = self.status.clone();

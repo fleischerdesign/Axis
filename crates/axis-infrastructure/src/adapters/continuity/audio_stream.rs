@@ -66,20 +66,25 @@ impl AudioStreamManager {
                         // 20ms chunk size for 44.1kHz 16-bit 2-channel PCM = 44100 * 2 * 2 * 0.020 = 3528 bytes
                         let mut buffer = vec![0u8; 3528];
                         loop {
-                            match reader.read(&mut buffer).await {
-                                Ok(0) => break,
-                                Ok(n) => {
-                                    if tx.send(buffer[..n].to_vec()).await.is_err() {
-                                        break; // Receiver disconnected
+                            match reader.read_exact(&mut buffer).await {
+                                Ok(_) => {
+                                    if tx.try_send(buffer.clone()).is_err() && tx.is_closed() {
+                                        break;
                                     }
                                 }
+
+                                Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
+                                    info!("[continuity-audio] capture stream ended (EOF)");
+                                    break;
+                                }
                                 Err(e) => {
-                                    error!("[continuity-audio] capture read error: {e}");
+                                    error!("[continuity-audio] capture read_exact error: {e}");
                                     break;
                                 }
                             }
                         }
                     });
+
                 }
             }
             Err(e) => {

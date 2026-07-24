@@ -37,6 +37,7 @@
             pkgs.clang
             pkgs.meson
             pkgs.ninja
+            pkgs.cmake
           ];
 
           buildInputs = [
@@ -44,10 +45,12 @@
             pkgs.libadwaita
             pkgs.gtk4-layer-shell
             pkgs.libpulseaudio
+            pkgs.opus
             pkgs.linux-pam
             pkgs.wl-clipboard
             pkgs.libevdev
           ];
+
 
           env = {
             LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";

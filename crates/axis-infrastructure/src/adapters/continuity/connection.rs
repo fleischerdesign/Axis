@@ -41,7 +41,8 @@ pub trait ConnectionProvider: Send {
 }
 
 struct ActiveConnection {
-    write_tx: tokio::sync::mpsc::Sender<Message>,
+    control_tx: tokio::sync::mpsc::Sender<Message>,
+    audio_tx: tokio::sync::mpsc::Sender<Message>,
     task: tokio::task::JoinHandle<()>,
 }
 
@@ -67,7 +68,7 @@ impl TcpConnectionProvider {
     }
 
     pub fn active_write_tx(&self) -> Option<tokio::sync::mpsc::Sender<Message>> {
-        self.active.as_ref().map(|c| c.write_tx.clone())
+        self.active.as_ref().map(|c| c.control_tx.clone())
     }
 }
 
@@ -96,7 +97,8 @@ impl ConnectionProvider for TcpConnectionProvider {
     ) {
         self.disconnect_active();
 
-        let (write_tx, write_rx) = tokio::sync::mpsc::channel::<Message>(256);
+        let (control_tx, control_rx) = tokio::sync::mpsc::channel::<Message>(256);
+        let (audio_tx, audio_rx) = tokio::sync::mpsc::channel::<Message>(8);
 
         let task = tokio::spawn(async move {
             if let Some(v6) = addr_v6 {
@@ -109,7 +111,7 @@ impl ConnectionProvider for TcpConnectionProvider {
                 {
                     Ok(Ok(stream)) => {
                         info!("[continuity:connection] connected via IPv6 to {v6}");
-                        run_connection(stream, write_rx, tx, true, device_id, device_name).await;
+                        run_connection(stream, control_rx, audio_rx, tx, true, device_id, device_name).await;
                         return;
                     }
                     Ok(Err(e)) => {
@@ -130,7 +132,7 @@ impl ConnectionProvider for TcpConnectionProvider {
             {
                 Ok(Ok(stream)) => {
                     info!("[continuity:connection] connected via IPv4 to {addr_v4}");
-                    run_connection(stream, write_rx, tx, true, device_id, device_name).await;
+                    run_connection(stream, control_rx, audio_rx, tx, true, device_id, device_name).await;
                 }
                 Ok(Err(e)) => {
                     error!("[continuity:connection] IPv4 failed: {e}");
@@ -145,7 +147,11 @@ impl ConnectionProvider for TcpConnectionProvider {
             }
         });
 
-        self.active = Some(ActiveConnection { write_tx, task });
+        self.active = Some(ActiveConnection {
+            control_tx,
+            audio_tx,
+            task,
+        });
     }
 
     fn disconnect_active(&mut self) {
@@ -167,19 +173,31 @@ impl ConnectionProvider for TcpConnectionProvider {
 
     fn send_message(&self, msg: Message) {
         if let Some(conn) = &self.active {
-            let _ = conn.write_tx.try_send(msg);
+            if matches!(msg, Message::AudioChunk { .. }) {
+                if conn.audio_tx.try_send(msg).is_err() {
+                    debug!("[continuity:connection] audio queue full, dropping audio frame");
+                }
+            } else {
+                let _ = conn.control_tx.try_send(msg);
+            }
         }
     }
 
     fn set_active_write(&mut self, write_tx: tokio::sync::mpsc::Sender<Message>) {
+        let (audio_tx, _dummy_rx) = tokio::sync::mpsc::channel::<Message>(8);
         let task = self
             .active
             .take()
             .map(|c| c.task)
             .unwrap_or_else(|| tokio::spawn(async {}));
-        self.active = Some(ActiveConnection { write_tx, task });
+        self.active = Some(ActiveConnection {
+            control_tx: write_tx,
+            audio_tx,
+            task,
+        });
     }
 }
+
 
 impl super::ports::ContinuityNetworkPort for TcpConnectionProvider {
     fn listen(
@@ -248,8 +266,10 @@ async fn listen_loop(
                     Ok((stream, addr)) => {
                         debug!("[continuity:connection] incoming from {addr}");
                         let tx = event_tx.clone();
-                        let (write_tx, write_rx) =
+                        let (write_tx, control_rx) =
                             tokio::sync::mpsc::channel::<Message>(256);
+                        let (_audio_tx, audio_rx) =
+                            tokio::sync::mpsc::channel::<Message>(8);
 
                         let _ = tx.send(ConnectionEvent::IncomingConnection {
                             addr,
@@ -257,7 +277,7 @@ async fn listen_loop(
                         }).await;
 
                         tokio::spawn(async move {
-                            run_connection(stream, write_rx, tx, false, String::new(), String::new()).await;
+                            run_connection(stream, control_rx, audio_rx, tx, false, String::new(), String::new()).await;
                         });
                     }
                     Err(e) => {
@@ -277,7 +297,8 @@ async fn listen_loop(
 
 async fn run_connection(
     stream: TcpStream,
-    mut write_rx: tokio::sync::mpsc::Receiver<Message>,
+    mut control_rx: tokio::sync::mpsc::Receiver<Message>,
+    mut audio_rx: tokio::sync::mpsc::Receiver<Message>,
     event_tx: Sender<ConnectionEvent>,
     is_initiator: bool,
     device_id: String,
@@ -318,10 +339,22 @@ async fn run_connection(
 
     let peer_label = peer.clone();
     let mut write_task = tokio::spawn(async move {
-        while let Some(msg) = write_rx.recv().await {
-            if let Err(e) = proto::write_message(&mut writer, &msg).await {
-                error!("[continuity:connection] write error ({peer_label}): {e}");
-                break;
+        loop {
+            tokio::select! {
+                biased;
+                Some(msg) = control_rx.recv() => {
+                    if let Err(e) = proto::write_message(&mut writer, &msg).await {
+                        error!("[continuity:connection] control write error ({peer_label}): {e}");
+                        break;
+                    }
+                }
+                Some(msg) = audio_rx.recv() => {
+                    if let Err(e) = proto::write_message(&mut writer, &msg).await {
+                        error!("[continuity:connection] audio write error ({peer_label}): {e}");
+                        break;
+                    }
+                }
+                else => break,
             }
         }
     });
@@ -369,3 +402,4 @@ async fn run_connection(
         }
     }
 }
+
