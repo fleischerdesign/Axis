@@ -35,15 +35,40 @@ impl ContinuityInner {
                 let target = config.capture_device.clone();
                 ctx.audio.start_capture(target.as_deref(), audio_tx).await;
                 let cipher = self.cipher_arc();
+                let counter_at_start = {
+                    let guard = cipher.lock().unwrap();
+                    guard.as_ref().map(|c| c.nonce_counter()).unwrap_or(0)
+                };
+                info!(
+                    "[continuity] audio capture starting: nonce_counter={counter_at_start}"
+                );
                 let task = tokio::spawn(async move {
                     let mut codec = super::super::codec::AudioCodecEngine::new();
+                    let mut chunk_count: u64 = 0;
                     while let Some(chunk) = audio_rx.recv().await {
                         let encoded = codec.encode(&chunk);
                         let encrypted = {
                             let mut guard = cipher.lock().unwrap();
                             if let Some(ref mut c) = *guard {
-                                c.encrypt(&encoded)
+                                let ct = c.encrypt(&encoded);
+                                let counter = c.nonce_counter();
+                                drop(guard);
+                                chunk_count += 1;
+                                if chunk_count <= 3 || chunk_count.is_multiple_of(100) {
+                                    log::info!(
+                                        "[continuity] audio encrypted: chunk={chunk_count} raw_len={} enc_len={} nonce={} pkt_len={}",
+                                        chunk.len(),
+                                        encoded.len(),
+                                        counter - 1,
+                                        ct.len(),
+                                    );
+                                }
+                                ct
                             } else {
+                                chunk_count += 1;
+                                if chunk_count <= 3 {
+                                    log::warn!("[continuity] audio sent RAW (cipher is None)");
+                                }
                                 encoded
                             }
                         };

@@ -6,7 +6,7 @@ use async_channel::{Receiver, Sender, bounded};
 use axis_domain::models::continuity::{
     ContinuityStatus, InputEvent, PeerArrangement, PeerConfig, Side,
 };
-use log::info;
+use log::{info, warn};
 
 use super::clipboard::{ClipboardEvent, WaylandClipboard};
 use super::connection::{ConnectionEvent, TcpConnectionProvider};
@@ -212,6 +212,16 @@ impl ContinuityInner {
         let local_id = &self.status.device_id;
         let pin_str = pin.unwrap_or("trusted");
         let key = super::crypto::derive_session_key(pin_str, local_id, peer_id);
+        let fingerprint = {
+            use std::collections::hash_map::DefaultHasher;
+            use std::hash::{Hash, Hasher};
+            let mut h = DefaultHasher::new();
+            key.hash(&mut h);
+            format!("{:016x}", h.finish())
+        };
+        info!(
+            "[continuity] cipher created: local={local_id} peer={peer_id} pin=\"{pin_str}\" key_fp={fingerprint}",
+        );
         *self.cipher.lock().unwrap() = Some(ContinuityCipher::new(&key));
     }
 
@@ -228,7 +238,11 @@ impl ContinuityInner {
             match cipher.decrypt(packet) {
                 Ok(data) => Some(data),
                 Err(e) => {
-                    log::warn!("[continuity] decrypt_from_wire failed: {e}");
+                    warn!(
+                        "[continuity] decrypt_from_wire failed: {e} (packet_len={}, first_bytes={:02x?})",
+                        packet.len(),
+                        &packet[..packet.len().min(20)]
+                    );
                     None
                 }
             }
@@ -236,6 +250,7 @@ impl ContinuityInner {
             Some(packet.to_vec())
         }
     }
+
 
     pub(crate) fn cipher_arc(&self) -> std::sync::Arc<std::sync::Mutex<Option<ContinuityCipher>>> {
         self.cipher.clone()

@@ -57,6 +57,10 @@ impl ContinuityCipher {
         }
     }
 
+    pub fn nonce_counter(&self) -> u64 {
+        self.send_nonce_counter
+    }
+
     /// Encrypts plaintext bytes and prepends a 12-byte nonce.
     pub fn encrypt(&mut self, plaintext: &[u8]) -> Vec<u8> {
         let mut nonce_bytes = [0u8; 12];
