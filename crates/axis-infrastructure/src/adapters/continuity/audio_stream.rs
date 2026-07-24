@@ -16,10 +16,8 @@ async fn resolve_target(target: Option<&str>) -> Option<String> {
                 .ok()?;
             let stdout = String::from_utf8_lossy(&output.stdout);
             for line in stdout.lines() {
-                if let Some(rest) = line.trim().strip_prefix("id:")
-                    && let Some(comma) = rest.find(',')
-                {
-                    return Some(rest[..comma].trim().to_string());
+                if let Some(id_str) = line.trim().strip_prefix("id: ") {
+                    return Some(id_str.to_string());
                 }
             }
             warn!("[continuity-audio] could not resolve PipeWire target '{name}', falling back to default source");
