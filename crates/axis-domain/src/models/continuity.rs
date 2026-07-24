@@ -63,11 +63,20 @@ pub mod base64_bytes {
             }
             let c0 = char_to_val(bytes[i]);
             let c1 = char_to_val(bytes[i + 1]);
-            let c2 = if bytes[i + 2] == b'=' { Some(0) } else { char_to_val(bytes[i + 2]) };
-            let c3 = if bytes[i + 3] == b'=' { Some(0) } else { char_to_val(bytes[i + 3]) };
+            let c2 = if bytes[i + 2] == b'=' {
+                Some(0)
+            } else {
+                char_to_val(bytes[i + 2])
+            };
+            let c3 = if bytes[i + 3] == b'=' {
+                Some(0)
+            } else {
+                char_to_val(bytes[i + 3])
+            };
 
             if let (Some(v0), Some(v1), Some(v2), Some(v3)) = (c0, c1, c2, c3) {
-                let n = ((v0 as u32) << 18) | ((v1 as u32) << 12) | ((v2 as u32) << 6) | (v3 as u32);
+                let n =
+                    ((v0 as u32) << 18) | ((v1 as u32) << 12) | ((v2 as u32) << 6) | (v3 as u32);
                 out.push(((n >> 16) & 0xFF) as u8);
                 if bytes[i + 2] != b'=' {
                     out.push(((n >> 8) & 0xFF) as u8);

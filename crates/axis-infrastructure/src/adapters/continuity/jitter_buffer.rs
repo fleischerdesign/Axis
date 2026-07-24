@@ -1,8 +1,8 @@
 //! Adaptive Receiver Jitter Buffer for Low-Latency Audio Streaming.
 
-use std::collections::BTreeMap;
+use super::codec::{AUDIO_PCM_FRAME_BYTES, AudioCodecEngine};
 use log::debug;
-use super::codec::{AudioCodecEngine, AUDIO_PCM_FRAME_BYTES};
+use std::collections::BTreeMap;
 
 pub struct AdaptiveJitterBuffer {
     buffer: BTreeMap<u32, Vec<u8>>,
@@ -59,14 +59,21 @@ impl AdaptiveJitterBuffer {
             self.expected_sequence = self.expected_sequence.wrapping_add(1);
             payload
         } else if let Some(&next_seq) = self.buffer.keys().next() {
-            if next_seq > self.expected_sequence && next_seq.wrapping_sub(self.expected_sequence) < 10 {
-                debug!("[continuity-audio] sequence gap ({}), issuing PLC frame", self.expected_sequence);
+            if next_seq > self.expected_sequence
+                && next_seq.wrapping_sub(self.expected_sequence) < 10
+            {
+                debug!(
+                    "[continuity-audio] sequence gap ({}), issuing PLC frame",
+                    self.expected_sequence
+                );
                 self.expected_sequence = self.expected_sequence.wrapping_add(1);
                 let (_, plc) = self.codec.decode(None);
                 plc
             } else {
                 self.expected_sequence = next_seq;
-                self.buffer.remove(&next_seq).unwrap_or_else(|| vec![0u8; AUDIO_PCM_FRAME_BYTES])
+                self.buffer
+                    .remove(&next_seq)
+                    .unwrap_or_else(|| vec![0u8; AUDIO_PCM_FRAME_BYTES])
             }
         } else {
             let (_, plc) = self.codec.decode(None);

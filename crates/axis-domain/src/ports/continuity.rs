@@ -50,9 +50,7 @@ pub trait ContinuityProvider: Send + Sync {
         configs: HashMap<String, PeerConfig>,
     ) -> Result<(), ContinuityError>;
 
-    async fn list_audio_devices(
-        &self,
-    ) -> Result<Vec<AudioDeviceInfo>, ContinuityError>;
+    async fn list_audio_devices(&self) -> Result<Vec<AudioDeviceInfo>, ContinuityError>;
 }
 
 crate::status_provider!(ContinuityProvider, ContinuityStatus, ContinuityError);

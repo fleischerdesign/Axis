@@ -111,7 +111,16 @@ impl ConnectionProvider for TcpConnectionProvider {
                 {
                     Ok(Ok(stream)) => {
                         info!("[continuity:connection] connected via IPv6 to {v6}");
-                        run_connection(stream, control_rx, audio_rx, tx, true, device_id, device_name).await;
+                        run_connection(
+                            stream,
+                            control_rx,
+                            audio_rx,
+                            tx,
+                            true,
+                            device_id,
+                            device_name,
+                        )
+                        .await;
                         return;
                     }
                     Ok(Err(e)) => {
@@ -132,7 +141,16 @@ impl ConnectionProvider for TcpConnectionProvider {
             {
                 Ok(Ok(stream)) => {
                     info!("[continuity:connection] connected via IPv4 to {addr_v4}");
-                    run_connection(stream, control_rx, audio_rx, tx, true, device_id, device_name).await;
+                    run_connection(
+                        stream,
+                        control_rx,
+                        audio_rx,
+                        tx,
+                        true,
+                        device_id,
+                        device_name,
+                    )
+                    .await;
                 }
                 Ok(Err(e)) => {
                     error!("[continuity:connection] IPv4 failed: {e}");
@@ -198,13 +216,8 @@ impl ConnectionProvider for TcpConnectionProvider {
     }
 }
 
-
 impl super::ports::ContinuityNetworkPort for TcpConnectionProvider {
-    fn listen(
-        &mut self,
-        port: u16,
-        tx: Sender<ConnectionEvent>,
-    ) -> Result<(), String> {
+    fn listen(&mut self, port: u16, tx: Sender<ConnectionEvent>) -> Result<(), String> {
         ConnectionProvider::listen(self, port, tx)
     }
 
@@ -231,10 +244,7 @@ impl super::ports::ContinuityNetworkPort for TcpConnectionProvider {
         ConnectionProvider::send_message(self, msg);
     }
 
-    fn set_active_write(
-        &mut self,
-        write_tx: tokio::sync::mpsc::Sender<Message>,
-    ) {
+    fn set_active_write(&mut self, write_tx: tokio::sync::mpsc::Sender<Message>) {
         ConnectionProvider::set_active_write(self, write_tx);
     }
 
@@ -383,9 +393,7 @@ async fn run_connection(
                             .await;
                     } else {
                         error!("[continuity:connection] read error ({peer_label}): {e}");
-                        let _ = event_tx_c
-                            .send(ConnectionEvent::Error(e.to_string()))
-                            .await;
+                        let _ = event_tx_c.send(ConnectionEvent::Error(e.to_string())).await;
                     }
                     break;
                 }
@@ -402,4 +410,3 @@ async fn run_connection(
         }
     }
 }
-

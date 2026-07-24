@@ -1,8 +1,8 @@
 pub mod audio_stream;
 pub mod codec;
 pub mod jitter_buffer;
-pub mod udp_audio;
 pub mod pipewire_devices;
+pub mod udp_audio;
 
 pub mod clipboard;
 pub mod connection;

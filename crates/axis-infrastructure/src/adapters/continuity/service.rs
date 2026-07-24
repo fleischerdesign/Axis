@@ -129,9 +129,7 @@ impl ContinuityProvider for ContinuityService {
             .map_err(|e| ContinuityError::ProviderError(e.to_string()))
     }
 
-    async fn list_audio_devices(
-        &self,
-    ) -> Result<Vec<AudioDeviceInfo>, ContinuityError> {
+    async fn list_audio_devices(&self) -> Result<Vec<AudioDeviceInfo>, ContinuityError> {
         let devices = pipewire_devices::list_pipewire_audio_devices().await;
         Ok(devices
             .into_iter()

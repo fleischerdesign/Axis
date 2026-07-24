@@ -406,9 +406,11 @@ fn setup_logger() {
     let log_dir = std::env::var("AXIS_LOG_DIR")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| {
-            let config = dirs::config_dir()
-                .or_else(|| dirs::home_dir().map(|h| h.join(".config")));
-            config.unwrap_or_else(|| std::path::PathBuf::from(".")).join("axis").join("logs")
+            let config = dirs::config_dir().or_else(|| dirs::home_dir().map(|h| h.join(".config")));
+            config
+                .unwrap_or_else(|| std::path::PathBuf::from("."))
+                .join("axis")
+                .join("logs")
         });
     axis_infrastructure::adapters::logging::setup_logger(&log_dir, "axis-settings")
         .expect("Failed to initialize logger");

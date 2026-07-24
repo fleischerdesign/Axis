@@ -184,7 +184,9 @@ impl PeerDetailPage {
             let current = p.last_config.borrow().clone().unwrap_or_default();
             let is_active = row.is_active();
             let audio_direction = if is_active {
-                if current.audio_direction == axis_domain::models::continuity::AudioStreamDirection::Off {
+                if current.audio_direction
+                    == axis_domain::models::continuity::AudioStreamDirection::Off
+                {
                     axis_domain::models::continuity::AudioStreamDirection::SendToPeer
                 } else {
                     current.audio_direction
@@ -226,26 +228,21 @@ impl PeerDetailPage {
             });
 
         let p = page.clone();
-        page.audio_source_row
-            .connect_selected_notify(move |row| {
-                if *p.update_silent.borrow() {
-                    return;
-                }
-                let current = p.last_config.borrow().clone().unwrap_or_default();
-                let idx = row.selected() as usize;
-                let capture_device = p
-                    .audio_source_ids
-                    .borrow()
-                    .get(idx)
-                    .cloned();
-                let config = PeerConfig {
-                    capture_device,
-                    ..current
-                };
-                if let Some(f) = p.config_cb.borrow().as_ref() {
-                    f(p.peer_id.clone(), config);
-                }
-            });
+        page.audio_source_row.connect_selected_notify(move |row| {
+            if *p.update_silent.borrow() {
+                return;
+            }
+            let current = p.last_config.borrow().clone().unwrap_or_default();
+            let idx = row.selected() as usize;
+            let capture_device = p.audio_source_ids.borrow().get(idx).cloned();
+            let config = PeerConfig {
+                capture_device,
+                ..current
+            };
+            if let Some(f) = p.config_cb.borrow().as_ref() {
+                f(p.peer_id.clone(), config);
+            }
+        });
 
         let p = page.clone();
         page.drag_drop_switch.connect_active_notify(move |row| {
@@ -289,8 +286,7 @@ impl PeerDetailPage {
                 p.device_name == self.peer_id
                     || p.hostname == self.peer_id
                     || p.device_id == self.peer_id
-            })
-                && let Some(cfg) = status.peer_configs.get(&p.device_id)
+            }) && let Some(cfg) = status.peer_configs.get(&p.device_id)
             {
                 return Some(cfg);
             }
@@ -357,7 +353,8 @@ impl PeerDetailPage {
 
         let ids: Vec<String> = devices.iter().map(|d| d.id.clone()).collect();
         let names: Vec<&str> = devices.iter().map(|d| d.description.as_str()).collect();
-        self.audio_source_model.splice(0, self.audio_source_model.n_items(), &names);
+        self.audio_source_model
+            .splice(0, self.audio_source_model.n_items(), &names);
         *self.audio_source_ids.borrow_mut() = ids;
 
         let selected = self
@@ -365,11 +362,7 @@ impl PeerDetailPage {
             .borrow()
             .as_ref()
             .and_then(|cfg| cfg.capture_device.as_deref())
-            .and_then(|cd| {
-                devices
-                    .iter()
-                    .position(|d| d.id.as_str() == cd)
-            })
+            .and_then(|cd| devices.iter().position(|d| d.id.as_str() == cd))
             .map(|i| i as u32)
             .unwrap_or(0);
         self.audio_source_row.set_selected(selected);

@@ -1,5 +1,7 @@
 use async_trait::async_trait;
-use axis_domain::models::continuity::{AudioDeviceInfo, ContinuityStatus, PeerArrangement, PeerConfig};
+use axis_domain::models::continuity::{
+    AudioDeviceInfo, ContinuityStatus, PeerArrangement, PeerConfig,
+};
 use axis_domain::ports::continuity::{ContinuityError, ContinuityProvider, ContinuityStream};
 use log::{error, warn};
 use std::collections::HashMap;
@@ -57,7 +59,8 @@ impl ContinuityDbusProxy {
                 )
                 .await
             && let Ok(json_str) = reply.body().deserialize::<String>()
-            && let Ok(pw_devices) = serde_json::from_str::<Vec<super::pipewire_devices::PipeWireAudioDevice>>(&json_str)
+            && let Ok(pw_devices) =
+                serde_json::from_str::<Vec<super::pipewire_devices::PipeWireAudioDevice>>(&json_str)
         {
             pw_devices
         } else {
@@ -298,9 +301,7 @@ impl ContinuityProvider for ContinuityDbusProxy {
         self.call_method_str("UpdatePeerConfigs", &json).await
     }
 
-    async fn list_audio_devices(
-        &self,
-    ) -> Result<Vec<AudioDeviceInfo>, ContinuityError> {
+    async fn list_audio_devices(&self) -> Result<Vec<AudioDeviceInfo>, ContinuityError> {
         Ok(self.list_audio_devices().await)
     }
 }

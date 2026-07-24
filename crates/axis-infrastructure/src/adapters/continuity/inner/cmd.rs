@@ -12,8 +12,7 @@ use super::super::connection::ConnectionEvent;
 use super::super::discovery::DiscoveryEvent;
 use super::super::known_peers::{self, KnownPeer, KnownPeerArrangementSide};
 use super::super::ports::{
-    ContinuityCapturePort, ContinuityClipboardPort,
-    ContinuityInjectionPort, ContinuityNetworkPort,
+    ContinuityCapturePort, ContinuityClipboardPort, ContinuityInjectionPort, ContinuityNetworkPort,
 };
 use super::{CONTINUITY_PORT, CmdContext, ContinuityCmd, ContinuityInner};
 
@@ -24,13 +23,8 @@ impl ContinuityInner {
                 self.handle_set_enabled(on, ctx).await;
             }
             ContinuityCmd::ConnectToPeer(peer_id) => {
-                self.handle_connect_to_peer(
-                    &peer_id,
-                    ctx.network,
-                    ctx.discovery_tx,
-                    ctx.conn_tx,
-                )
-                .await;
+                self.handle_connect_to_peer(&peer_id, ctx.network, ctx.discovery_tx, ctx.conn_tx)
+                    .await;
             }
             ContinuityCmd::ConfirmPin => {
                 self.handle_confirm_pin(
@@ -493,7 +487,6 @@ impl ContinuityInner {
                 capture_device: config.capture_device.clone().unwrap_or_default(),
                 playback_device: config.playback_device.clone().unwrap_or_default(),
             });
-
         }
         self.push();
     }
@@ -515,7 +508,8 @@ impl ContinuityInner {
             {
                 *entry = config.clone();
                 if !entry.audio {
-                    entry.audio_direction = axis_domain::models::continuity::AudioStreamDirection::Off;
+                    entry.audio_direction =
+                        axis_domain::models::continuity::AudioStreamDirection::Off;
                 }
                 changed = true;
             } else if entry.clipboard != config.clipboard

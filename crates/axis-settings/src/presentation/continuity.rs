@@ -9,7 +9,9 @@ use axis_application::use_cases::continuity::set_peer_arrangement::SetPeerArrang
 use axis_application::use_cases::continuity::unpair::UnpairUseCase;
 use axis_application::use_cases::continuity::update_peer_configs::UpdatePeerConfigsUseCase;
 use axis_application::use_cases::generic::{GetStatusUseCase, SubscribeUseCase};
-use axis_domain::models::continuity::{AudioDeviceInfo, ContinuityStatus, PeerArrangement, PeerConfig};
+use axis_domain::models::continuity::{
+    AudioDeviceInfo, ContinuityStatus, PeerArrangement, PeerConfig,
+};
 use axis_domain::ports::continuity::ContinuityProvider;
 use axis_presentation::{Presenter, View};
 use std::collections::HashMap;

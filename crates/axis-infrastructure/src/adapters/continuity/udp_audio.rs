@@ -1,11 +1,11 @@
 //! Dual Transport UDP Audio Server & AEAD Encrypted Datagram Protocol.
 
+use log::{error, info};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::net::UdpSocket;
 use tokio::sync::Mutex;
-use log::{error, info};
 
 use super::crypto::ContinuityCipher;
 
@@ -136,7 +136,6 @@ impl UdpAudioSocket {
                             {
                                 break;
                             }
-
                         }
                     }
                     Err(e) => {

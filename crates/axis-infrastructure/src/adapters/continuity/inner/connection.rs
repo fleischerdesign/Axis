@@ -11,8 +11,7 @@ use super::super::clipboard::ClipboardEvent;
 use super::super::connection::ConnectionEvent;
 use super::super::input::InternalInputEvent;
 use super::super::ports::{
-    ContinuityCapturePort, ContinuityClipboardPort,
-    ContinuityInjectionPort, ContinuityNetworkPort,
+    ContinuityCapturePort, ContinuityClipboardPort, ContinuityInjectionPort, ContinuityNetworkPort,
 };
 use super::super::proto;
 use super::{
@@ -41,9 +40,7 @@ impl ContinuityInner {
                     let guard = cipher.lock().unwrap();
                     guard.as_ref().map(|c| c.nonce_counter()).unwrap_or(0)
                 };
-                info!(
-                    "[continuity] audio capture starting: nonce_counter={counter_at_start}"
-                );
+                info!("[continuity] audio capture starting: nonce_counter={counter_at_start}");
                 let task = tokio::spawn(async move {
                     let mut codec = super::super::codec::AudioCodecEngine::new();
                     let mut chunk_count: u64 = 0;
@@ -266,10 +263,10 @@ impl ContinuityInner {
                 let decrypted = self.decrypt_from_wire(&content);
                 if let Some(data) = decrypted
                     && self.status.active_peer_config().clipboard
-                        && let Err(e) = ctx.clipboard.set_content(&data, &mime_type)
-                    {
-                        error!("[continuity] failed to set clipboard: {e}");
-                    }
+                    && let Err(e) = ctx.clipboard.set_content(&data, &mime_type)
+                {
+                    error!("[continuity] failed to set clipboard: {e}");
+                }
             }
             Message::DragOffer {
                 transfer_id,
@@ -310,7 +307,7 @@ impl ContinuityInner {
                         .drag_drop_mgr
                         .handle_chunk(&transfer_id, chunk_index, is_last, &chunk_data)
                         .await
-                    {
+                {
                     info!(
                         "[continuity] file drag transfer complete: saved to {:?}",
                         completed_path
@@ -428,14 +425,8 @@ impl ContinuityInner {
                 self.handle_switch_transition(side, ctx.network).await;
             }
             Message::SwitchConfirm { side, edge_pos } => {
-                self.handle_switch_confirm(
-                    side,
-                    edge_pos,
-                    ctx.network,
-                    ctx.capture,
-                    ctx.input_tx,
-                )
-                .await;
+                self.handle_switch_confirm(side, edge_pos, ctx.network, ctx.capture, ctx.input_tx)
+                    .await;
             }
             Message::Connected => {
                 info!("[continuity] connection established");
@@ -594,7 +585,6 @@ impl ContinuityInner {
         clipboard_tx: &Sender<ClipboardEvent>,
     ) {
         let (pending_peer_id, pending_peer_name, pending_pin) = {
-            
             match &self.status.pending_pin {
                 Some(p) if p.pin == pin => (p.peer_id.clone(), p.peer_name.clone(), p.pin.clone()),
                 _ => {
@@ -716,7 +706,8 @@ impl ContinuityInner {
                     axis_domain::models::continuity::AudioStreamDirection::Off
                 };
                 config.audio_direction = dir;
-                config.audio = args.audio && dir != axis_domain::models::continuity::AudioStreamDirection::Off;
+                config.audio =
+                    args.audio && dir != axis_domain::models::continuity::AudioStreamDirection::Off;
                 config.drag_drop = args.drag_drop;
                 config.version = args.version;
 

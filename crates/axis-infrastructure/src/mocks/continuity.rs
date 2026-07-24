@@ -98,9 +98,7 @@ impl ContinuityProvider for MockContinuityProvider {
         Ok(())
     }
 
-    async fn list_audio_devices(
-        &self,
-    ) -> Result<Vec<AudioDeviceInfo>, ContinuityError> {
+    async fn list_audio_devices(&self) -> Result<Vec<AudioDeviceInfo>, ContinuityError> {
         Ok(vec![
             AudioDeviceInfo {
                 id: "test_monitor.monitor".to_string(),

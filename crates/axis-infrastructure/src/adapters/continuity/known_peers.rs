@@ -153,7 +153,9 @@ pub fn load_known_peers() -> KnownPeersStore {
     if let Ok(content) = std::fs::read_to_string(&path)
         && let Ok(mut store) = serde_json::from_str::<KnownPeersStore>(&content)
     {
-        store.peers.retain(|_, p| !p.hostname.is_empty() || !p.address.is_empty());
+        store
+            .peers
+            .retain(|_, p| !p.hostname.is_empty() || !p.address.is_empty());
         return store;
     }
     KnownPeersStore::default()

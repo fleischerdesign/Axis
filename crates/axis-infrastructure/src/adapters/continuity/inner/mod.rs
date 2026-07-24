@@ -15,8 +15,8 @@ use super::discovery::{AvahiDiscovery, DiscoveryEvent};
 use super::input::{EvdevCapture, InternalInputEvent, WaylandInjection};
 use super::known_peers::{self, KnownPeer, KnownPeerArrangementSide, KnownPeersStore};
 use super::ports::{
-    ContinuityAudioPort, ContinuityCapturePort, ContinuityClipboardPort,
-    ContinuityDiscoveryPort, ContinuityInjectionPort, ContinuityNetworkPort,
+    ContinuityAudioPort, ContinuityCapturePort, ContinuityClipboardPort, ContinuityDiscoveryPort,
+    ContinuityInjectionPort, ContinuityNetworkPort,
 };
 
 mod cmd;
@@ -127,7 +127,6 @@ impl ContinuityInner {
             audio_rx_count: 0,
         }
     }
-
 
     pub(crate) fn push(&self) {
         let mut status = self.status.clone();
@@ -258,7 +257,6 @@ impl ContinuityInner {
             Some(packet.to_vec())
         }
     }
-
 
     pub(crate) fn cipher_arc(&self) -> std::sync::Arc<std::sync::Mutex<Option<ContinuityCipher>>> {
         self.cipher.clone()

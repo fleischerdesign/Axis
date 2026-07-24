@@ -13,7 +13,10 @@ mod tests {
         MockAudio, MockCapture, MockClipboard, MockDiscovery, MockInjection, MockNetwork,
     };
 
-    fn make_inner() -> (ContinuityInner, tokio::sync::watch::Receiver<ContinuityStatus>) {
+    fn make_inner() -> (
+        ContinuityInner,
+        tokio::sync::watch::Receiver<ContinuityStatus>,
+    ) {
         let (tx, rx) = tokio::sync::watch::channel(ContinuityStatus::default());
         (ContinuityInner::new(tx), rx)
     }
@@ -43,13 +46,12 @@ mod tests {
         let peer_id = fake_peer();
 
         setup_trusted_peer(&mut inner, &peer_id);
-        inner.status.active_connection = Some(
-            axis_domain::models::continuity::ActiveConnectionInfo {
+        inner.status.active_connection =
+            Some(axis_domain::models::continuity::ActiveConnectionInfo {
                 peer_id: peer_id.clone(),
                 peer_name: "test-peer".to_string(),
                 connected_secs: 0,
-            },
-        );
+            });
         inner.connected_at = Some(std::time::Instant::now());
 
         let mut network = MockNetwork::new();
@@ -96,9 +98,16 @@ mod tests {
             .await;
 
         let status = status_rx.borrow().clone();
-        let config = status.peer_configs.get(&peer_id).expect("config should exist");
+        let config = status
+            .peer_configs
+            .get(&peer_id)
+            .expect("config should exist");
 
-        assert_eq!(config.arrangement.side, Side::Left, "side should be mirrored");
+        assert_eq!(
+            config.arrangement.side,
+            Side::Left,
+            "side should be mirrored"
+        );
         assert_eq!(config.arrangement.offset, -42, "offset should be negated");
         assert_eq!(
             config.audio_direction,
@@ -115,13 +124,12 @@ mod tests {
         let peer_id = fake_peer();
 
         setup_trusted_peer(&mut inner, &peer_id);
-        inner.status.active_connection = Some(
-            axis_domain::models::continuity::ActiveConnectionInfo {
+        inner.status.active_connection =
+            Some(axis_domain::models::continuity::ActiveConnectionInfo {
                 peer_id: peer_id.clone(),
                 peer_name: "test-peer".to_string(),
                 connected_secs: 0,
-            },
-        );
+            });
         inner.connected_at = Some(std::time::Instant::now());
 
         let config = inner.status.peer_configs.get_mut(&peer_id).unwrap();
@@ -188,7 +196,11 @@ mod tests {
             }
         };
         assert_eq!(config.version, 5, "version should not be downgraded");
-        assert_eq!(config.arrangement.side, Side::Left, "arrangement should not change");
+        assert_eq!(
+            config.arrangement.side,
+            Side::Left,
+            "arrangement should not change"
+        );
     }
 
     #[tokio::test]
@@ -197,13 +209,12 @@ mod tests {
         let peer_id = fake_peer();
 
         setup_trusted_peer(&mut inner, &peer_id);
-        inner.status.active_connection = Some(
-            axis_domain::models::continuity::ActiveConnectionInfo {
+        inner.status.active_connection =
+            Some(axis_domain::models::continuity::ActiveConnectionInfo {
                 peer_id: peer_id.clone(),
                 peer_name: "test-peer".to_string(),
                 connected_secs: 0,
-            },
-        );
+            });
         inner.connected_at = Some(std::time::Instant::now());
 
         let mut network = MockNetwork::new();
@@ -260,13 +271,12 @@ mod tests {
         let peer_id = fake_peer();
 
         setup_trusted_peer(&mut inner, &peer_id);
-        inner.status.active_connection = Some(
-            axis_domain::models::continuity::ActiveConnectionInfo {
+        inner.status.active_connection =
+            Some(axis_domain::models::continuity::ActiveConnectionInfo {
                 peer_id: peer_id.clone(),
                 peer_name: "test-peer".to_string(),
                 connected_secs: 0,
-            },
-        );
+            });
         inner.connected_at = Some(std::time::Instant::now());
 
         let mut network = MockNetwork::new();
@@ -362,7 +372,10 @@ mod tests {
             .await;
 
         let status = status_rx.borrow().clone();
-        assert!(status.active_connection.is_some(), "should have active connection");
+        assert!(
+            status.active_connection.is_some(),
+            "should have active connection"
+        );
         assert_eq!(status.active_connection.as_ref().unwrap().peer_id, peer_id);
         assert!(status.pending_pin.is_none(), "trusted peer should skip PIN");
     }
@@ -373,13 +386,12 @@ mod tests {
         let peer_id = fake_peer();
 
         setup_trusted_peer(&mut inner, &peer_id);
-        inner.status.active_connection = Some(
-            axis_domain::models::continuity::ActiveConnectionInfo {
+        inner.status.active_connection =
+            Some(axis_domain::models::continuity::ActiveConnectionInfo {
                 peer_id: peer_id.clone(),
                 peer_name: "test-peer".to_string(),
                 connected_secs: 0,
-            },
-        );
+            });
         inner.connected_at = Some(std::time::Instant::now());
 
         let mut network = MockNetwork::new();
@@ -437,13 +449,12 @@ mod tests {
         let peer_id = fake_peer();
 
         setup_trusted_peer(&mut inner, &peer_id);
-        inner.status.active_connection = Some(
-            axis_domain::models::continuity::ActiveConnectionInfo {
+        inner.status.active_connection =
+            Some(axis_domain::models::continuity::ActiveConnectionInfo {
                 peer_id: peer_id.clone(),
                 peer_name: "test-peer".to_string(),
                 connected_secs: 0,
-            },
-        );
+            });
         inner.connected_at = Some(std::time::Instant::now());
 
         let mut network = MockNetwork::new();
@@ -494,7 +505,10 @@ mod tests {
         let status = status_rx.borrow().clone();
         let config = status.peer_configs.get(&peer_id).unwrap();
 
-        assert_eq!(config.version, 0, "non-initiator adopts through is_initial_adopt");
+        assert_eq!(
+            config.version, 0,
+            "non-initiator adopts through is_initial_adopt"
+        );
         assert_eq!(config.arrangement.side, Side::Left, "side mirrored");
         assert_eq!(config.arrangement.offset, -50, "offset negated");
     }

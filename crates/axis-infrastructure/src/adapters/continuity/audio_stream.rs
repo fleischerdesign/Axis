@@ -1,9 +1,9 @@
+use log::{error, info, warn};
 use std::process::Stdio;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
-use log::{error, info, warn};
 
 async fn resolve_target(target: Option<&str>) -> Option<String> {
     match target {
@@ -20,7 +20,9 @@ async fn resolve_target(target: Option<&str>) -> Option<String> {
                     return Some(id_str.to_string());
                 }
             }
-            warn!("[continuity-audio] could not resolve PipeWire target '{name}', falling back to default source");
+            warn!(
+                "[continuity-audio] could not resolve PipeWire target '{name}', falling back to default source"
+            );
             None
         }
     }
@@ -69,9 +71,13 @@ impl AudioStreamManager {
             && !target.is_empty()
         {
             cmd.args(["--target", target]);
-            info!("[continuity-audio] starting PipeWire audio capture via pw-record (target: {target})");
+            info!(
+                "[continuity-audio] starting PipeWire audio capture via pw-record (target: {target})"
+            );
         } else {
-            info!("[continuity-audio] starting PipeWire audio capture via pw-record (default source)");
+            info!(
+                "[continuity-audio] starting PipeWire audio capture via pw-record (default source)"
+            );
         }
         cmd.arg("-");
         cmd.stdout(Stdio::piped()).stderr(Stdio::null());
@@ -105,7 +111,6 @@ impl AudioStreamManager {
                             }
                         }
                     });
-
                 }
             }
             Err(e) => {
@@ -141,7 +146,9 @@ impl AudioStreamManager {
                 cmd.args(["--target", target]);
             }
             cmd.arg("-");
-            cmd.stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null());
+            cmd.stdin(Stdio::piped())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
 
             match cmd.spawn() {
                 Ok(mut child) => {

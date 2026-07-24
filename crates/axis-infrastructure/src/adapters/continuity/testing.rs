@@ -11,8 +11,8 @@ use super::discovery::DiscoveryEvent;
 use super::input::InternalInputEvent;
 use super::pipewire_devices::PipeWireAudioDevice;
 use super::ports::{
-    ContinuityAudioPort, ContinuityCapturePort, ContinuityClipboardPort,
-    ContinuityDiscoveryPort, ContinuityInjectionPort, ContinuityNetworkPort,
+    ContinuityAudioPort, ContinuityCapturePort, ContinuityClipboardPort, ContinuityDiscoveryPort,
+    ContinuityInjectionPort, ContinuityNetworkPort,
 };
 
 #[derive(Clone)]
@@ -112,10 +112,7 @@ impl ContinuityAudioPort for MockAudio {
     }
 
     async fn play_chunk(&self, _target_device: Option<&str>, pcm_data: &[u8]) {
-        self.played_chunks
-            .lock()
-            .unwrap()
-            .push(pcm_data.to_vec());
+        self.played_chunks.lock().unwrap().push(pcm_data.to_vec());
         *self.playback_active.lock().unwrap() = true;
     }
 
