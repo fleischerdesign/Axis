@@ -61,4 +61,9 @@ pub trait ContinuitySharingProvider: Send + Sync {
     async fn stop_sharing(&self, edge_pos: f64) -> Result<(), ContinuityError>;
     async fn send_input(&self, event: InputEvent) -> Result<(), ContinuityError>;
     async fn force_local(&self) -> Result<(), ContinuityError>;
+    async fn send_file(
+        &self,
+        path: std::path::PathBuf,
+        mime_type: String,
+    ) -> Result<(), ContinuityError>;
 }

@@ -160,6 +160,32 @@ impl ContinuityCaptureController {
         });
 
         edge_widget.add_controller(motion);
+
+        let drop_target =
+            gtk4::DropTarget::new(gtk4::gio::File::static_type(), gtk4::gdk::DragAction::COPY);
+        let drop_provider = self.provider.clone();
+        drop_target.connect_drop(move |_, value, _x, _y| {
+            if let Ok(file) = value.get::<gtk4::gio::File>()
+                && let Some(path) = file.path()
+            {
+                log::info!(
+                    "[continuity:edge] File dropped onto edge window: {:?}",
+                    path
+                );
+                let p = drop_provider.clone();
+                let mime = "application/octet-stream".to_string();
+                tokio::spawn(async move {
+                    if let Err(e) = p.send_file(path, mime).await {
+                        log::error!("[continuity:edge] send_file failed: {e}");
+                    }
+                });
+                return true;
+            }
+            false
+        });
+
+        edge_widget.add_controller(drop_target);
+
         window
     }
 

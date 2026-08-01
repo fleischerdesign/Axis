@@ -129,4 +129,12 @@ impl ContinuitySharingProvider for MockContinuityProvider {
     async fn force_local(&self) -> Result<(), ContinuityError> {
         Ok(())
     }
+
+    async fn send_file(
+        &self,
+        _path: std::path::PathBuf,
+        _mime_type: String,
+    ) -> Result<(), ContinuityError> {
+        Ok(())
+    }
 }

@@ -166,4 +166,14 @@ impl ContinuitySharingProvider for ContinuityService {
             .try_send(ContinuityCmd::ForceLocal)
             .map_err(|e| ContinuityError::ProviderError(e.to_string()))
     }
+
+    async fn send_file(
+        &self,
+        path: std::path::PathBuf,
+        mime_type: String,
+    ) -> Result<(), ContinuityError> {
+        self.cmd_tx
+            .try_send(ContinuityCmd::SendFile(path, mime_type))
+            .map_err(|e| ContinuityError::ProviderError(e.to_string()))
+    }
 }

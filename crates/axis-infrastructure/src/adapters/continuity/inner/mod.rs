@@ -50,6 +50,7 @@ pub enum ContinuityCmd {
     SetPeerArrangement(PeerArrangement),
     UpdatePeerConfigs(HashMap<String, PeerConfig>),
     SwitchToReceiving(Side),
+    SendFile(std::path::PathBuf, String),
 }
 
 pub(crate) struct CmdContext<'a> {

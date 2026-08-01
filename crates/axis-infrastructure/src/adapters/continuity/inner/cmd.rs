@@ -83,6 +83,9 @@ impl ContinuityInner {
                 self.handle_switch_to_receiving(side, ctx.network, ctx.injection)
                     .await;
             }
+            ContinuityCmd::SendFile(path, mime_type) => {
+                self.handle_send_file(path, mime_type, ctx).await;
+            }
         }
     }
 
@@ -662,6 +665,60 @@ impl ContinuityInner {
 
             connection.send_message(Message::SwitchConfirm { side, edge_pos });
             self.push();
+        }
+    }
+
+    async fn handle_send_file(
+        &mut self,
+        path: std::path::PathBuf,
+        mime_type: String,
+        ctx: &mut CmdContext<'_>,
+    ) {
+        if self.status.active_connection.is_some() {
+            if let Some(tx) = ctx.network.active_write_tx() {
+                let mgr = ctx.drag_drop_mgr.clone();
+                let transfer_id = uuid::Uuid::new_v4().to_string();
+                info!(
+                    "[continuity] starting send_file transfer {} for path: {:?}",
+                    transfer_id, path
+                );
+                struct NetworkConnectionAdapter(tokio::sync::mpsc::Sender<Message>);
+                impl super::super::connection::ConnectionProvider for NetworkConnectionAdapter {
+                    fn listen(
+                        &mut self,
+                        _port: u16,
+                        _tx: async_channel::Sender<super::super::connection::ConnectionEvent>,
+                    ) -> Result<(), String> {
+                        Ok(())
+                    }
+                    fn connect_dual(
+                        &mut self,
+                        _addr_v4: std::net::SocketAddr,
+                        _addr_v6: Option<std::net::SocketAddr>,
+                        _tx: async_channel::Sender<super::super::connection::ConnectionEvent>,
+                        _device_id: String,
+                        _device_name: String,
+                    ) {
+                    }
+                    fn disconnect_active(&mut self) {}
+                    fn stop(&mut self) {}
+                    fn send_message(&self, msg: Message) {
+                        let _ = self.0.try_send(msg);
+                    }
+                    fn set_active_write(&mut self, _write_tx: tokio::sync::mpsc::Sender<Message>) {}
+                }
+
+                let conn = NetworkConnectionAdapter(tx);
+                tokio::spawn(async move {
+                    if let Err(e) = mgr.send_file(path, transfer_id, mime_type, &conn).await {
+                        error!("[continuity] send_file failed: {e}");
+                    }
+                });
+            } else {
+                log::warn!("[continuity] send_file requested but no active write tx");
+            }
+        } else {
+            log::warn!("[continuity] send_file requested but no active connection");
         }
     }
 }
