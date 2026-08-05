@@ -5,13 +5,14 @@ use crate::widgets::components::scan_button::ScanButton;
 use axis_domain::models::bluetooth::BluetoothStatus;
 use axis_presentation::View;
 use gtk4::prelude::*;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 struct DeviceEntry {
     list_box_row: gtk4::ListBoxRow,
     list_row: ListRow,
+    is_connected: Rc<Cell<bool>>,
 }
 
 pub struct BluetoothPage {
@@ -109,6 +110,7 @@ impl View<BluetoothStatus> for BluetoothPageView {
             if let Some(entry) = rows.get(&device.id) {
                 entry.list_row.set_subtitle(sublabel);
                 entry.list_row.set_active(device.connected);
+                entry.is_connected.set(device.connected);
                 continue;
             }
 
@@ -125,13 +127,14 @@ impl View<BluetoothStatus> for BluetoothPageView {
                 .child(&list_row.container)
                 .build();
 
+            let is_connected = Rc::new(Cell::new(device.connected));
             let pres = self.presenter.clone();
             let device_id = device.id.clone();
-            let connected = device.connected;
+            let is_conn = is_connected.clone();
 
             let gesture = gtk4::GestureClick::new();
             gesture.connect_released(move |_, _, _, _| {
-                if connected {
+                if is_conn.get() {
                     pres.disconnect_device(device_id.clone());
                 } else {
                     pres.connect_device(device_id.clone());
@@ -144,6 +147,7 @@ impl View<BluetoothStatus> for BluetoothPageView {
                 DeviceEntry {
                     list_box_row,
                     list_row,
+                    is_connected,
                 },
             );
             self.list.append(&rows[&device.id].list_box_row);
