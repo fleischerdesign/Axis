@@ -32,7 +32,13 @@ impl View<BluetoothStatus> for BluetoothStatusWidget {
     fn render(&self, status: &BluetoothStatus) {
         self.container.set_visible(status.powered);
         if status.powered {
-            self.icon.set_icon_name(Some("bluetooth-active-symbolic"));
+            let has_connected = status.devices.iter().any(|d| d.connected);
+            let icon_name = if has_connected {
+                "bluetooth-active-symbolic"
+            } else {
+                "bluetooth-disconnected-symbolic"
+            };
+            self.icon.set_icon_name(Some(icon_name));
         }
     }
 }
