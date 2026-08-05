@@ -412,12 +412,18 @@ impl BlueZProvider {
                 .await
                 .unwrap_or_else(|_| "bluetooth-symbolic".to_string());
 
+            let battery_percentage = interfaces
+                .get("org.bluez.Battery1")
+                .and_then(|props| props.get("Percentage"))
+                .and_then(|val| u8::try_from(val.clone()).ok());
+
             devices.push(BluetoothDevice {
                 id: path.to_string(),
                 name,
                 connected,
                 paired,
                 icon,
+                battery_percentage,
             });
         }
 
