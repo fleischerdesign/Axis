@@ -131,9 +131,11 @@ impl View<BluetoothStatus> for BluetoothPageView {
         if !status.powered {
             self.scan_btn.widget().set_visible(false);
             self.scrolled.set_visible(false);
-            self.empty_icon.set_icon_name(Some("bluetooth-disabled-symbolic"));
+            self.empty_icon
+                .set_icon_name(Some("bluetooth-disabled-symbolic"));
             self.empty_title.set_text("Bluetooth Turned Off");
-            self.empty_desc.set_text("Turn on Bluetooth to view and connect devices.");
+            self.empty_desc
+                .set_text("Turn on Bluetooth to view and connect devices.");
             self.empty_box.set_visible(true);
             return;
         }
@@ -143,7 +145,8 @@ impl View<BluetoothStatus> for BluetoothPageView {
             self.scrolled.set_visible(false);
             self.empty_icon.set_icon_name(Some("bluetooth-symbolic"));
             self.empty_title.set_text("No Devices Found");
-            self.empty_desc.set_text("Make sure your device is powered on and in pairing mode.");
+            self.empty_desc
+                .set_text("Make sure your device is powered on and in pairing mode.");
             self.empty_box.set_visible(true);
             return;
         }
