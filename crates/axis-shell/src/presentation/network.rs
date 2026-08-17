@@ -9,10 +9,9 @@ use std::sync::Arc;
 
 pub(crate) fn wifi_icon(strength: u8) -> &'static str {
     match strength {
-        0..=20 => "network-wireless-signal-none-symbolic",
-        21..=40 => "network-wireless-signal-weak-symbolic",
-        41..=60 => "network-wireless-signal-ok-symbolic",
-        61..=80 => "network-wireless-signal-good-symbolic",
+        0..=25 => "network-wireless-signal-weak-symbolic",
+        26..=50 => "network-wireless-signal-ok-symbolic",
+        51..=75 => "network-wireless-signal-good-symbolic",
         _ => "network-wireless-signal-excellent-symbolic",
     }
 }
@@ -95,36 +94,30 @@ mod tests {
     use super::*;
 
     #[test]
-    fn wifi_icon_none() {
-        for s in 0..=20 {
-            assert!(wifi_icon(s).contains("none"), "signal {s}");
-        }
-    }
-
-    #[test]
     fn wifi_icon_weak() {
-        for s in 21..=40 {
+        for s in 0..=25 {
             assert!(wifi_icon(s).contains("weak"), "signal {s}");
         }
     }
 
     #[test]
     fn wifi_icon_ok() {
-        for s in 41..=60 {
+        for s in 26..=50 {
             assert!(wifi_icon(s).contains("ok"), "signal {s}");
         }
     }
 
     #[test]
     fn wifi_icon_good() {
-        for s in 61..=80 {
+        for s in 51..=75 {
             assert!(wifi_icon(s).contains("good"), "signal {s}");
         }
     }
 
     #[test]
     fn wifi_icon_excellent() {
-        assert!(wifi_icon(81).contains("excellent"));
-        assert!(wifi_icon(100).contains("excellent"));
+        for s in 76..=100 {
+            assert!(wifi_icon(s).contains("excellent"), "signal {s}");
+        }
     }
 }

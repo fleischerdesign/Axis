@@ -1,3 +1,4 @@
+use crate::presentation::bluetooth::bluetooth_icon;
 use axis_domain::models::bluetooth::BluetoothStatus;
 use axis_presentation::View;
 use libadwaita::prelude::*;
@@ -32,13 +33,7 @@ impl View<BluetoothStatus> for BluetoothStatusWidget {
     fn render(&self, status: &BluetoothStatus) {
         self.container.set_visible(status.powered);
         if status.powered {
-            let has_connected = status.devices.iter().any(|d| d.connected);
-            let icon_name = if has_connected {
-                "bluetooth-active-symbolic"
-            } else {
-                "bluetooth-disconnected-symbolic"
-            };
-            self.icon.set_icon_name(Some(icon_name));
+            self.icon.set_icon_name(Some(bluetooth_icon(status)));
         }
     }
 }

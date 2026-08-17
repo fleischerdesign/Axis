@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
-use zbus::{Connection, proxy, zvariant::OwnedObjectPath};
+use zbus::{Connection, MatchRule, MessageStream, proxy, zvariant::OwnedObjectPath};
 
 const MAX_ACCESS_POINTS: usize = 15;
 
@@ -150,6 +150,20 @@ impl NetworkManagerProvider {
                 let mut state_changed = nm_proxy.receive_state_changed().await;
                 let mut wifi_changed = nm_proxy.receive_wireless_enabled_changed().await;
 
+                let props_rule = MatchRule::builder()
+                    .msg_type(zbus::message::Type::Signal)
+                    .interface("org.freedesktop.DBus.Properties")
+                    .ok()
+                    .and_then(|b| b.member("PropertiesChanged").ok())
+                    .and_then(|b| b.path_namespace("/org/freedesktop/NetworkManager").ok())
+                    .map(|b| b.build());
+
+                let mut props_stream = if let Some(rule) = props_rule {
+                    MessageStream::for_match_rule(rule, &conn, None).await.ok()
+                } else {
+                    None
+                };
+
                 let mut ap_added_stream = None;
                 let mut ap_removed_stream = None;
                 let mut last_scan_stream = None;
@@ -168,6 +182,7 @@ impl NetworkManagerProvider {
 
                 loop {
                     let alive = tokio::select! {
+                        Some(_) = async { props_stream.as_mut()?.next().await }, if props_stream.is_some() => true,
                         _ = state_changed.next() => true,
                         _ = wifi_changed.next() => true,
                         Some(_) = async { ap_added_stream.as_mut()?.next().await }, if ap_added_stream.is_some() => true,
@@ -181,9 +196,15 @@ impl NetworkManagerProvider {
                         break;
                     }
 
+                    let active_wifi_path = if wifi_device_path.is_some() {
+                        wifi_device_path.clone()
+                    } else {
+                        Self::find_wifi_device(&nm_proxy, &conn).await
+                    };
+
                     let is_scanning = provider_clone.status_tx.borrow().is_scanning;
                     let status =
-                        Self::fetch_data(&nm_proxy, &conn, wifi_device_path.as_ref(), is_scanning)
+                        Self::fetch_data(&nm_proxy, &conn, active_wifi_path.as_ref(), is_scanning)
                             .await;
                     let _ = provider_clone.status_tx.send(status);
                 }
@@ -238,13 +259,15 @@ impl NetworkManagerProvider {
                 if let Ok(ap_path) = wifi_proxy.active_access_point().await {
                     active_ap_path = ap_path.to_string();
                     let ap_path_str = active_ap_path.clone();
-                    match AccessPointProxy::builder(conn).path(ap_path) {
-                        Ok(builder) => {
-                            if let Ok(ap_proxy) = builder.build().await {
-                                active_strength = ap_proxy.strength().await.unwrap_or(0);
+                    if active_ap_path != "/" && !active_ap_path.is_empty() {
+                        match AccessPointProxy::builder(conn).path(ap_path) {
+                            Ok(builder) => {
+                                if let Ok(ap_proxy) = builder.build().await {
+                                    active_strength = ap_proxy.strength().await.unwrap_or(0);
+                                }
                             }
+                            Err(e) => log::warn!("[network] invalid ap path {ap_path_str}: {e}"),
                         }
-                        Err(e) => log::warn!("[network] invalid ap path {ap_path_str}: {e}"),
                     }
                 }
 
@@ -283,9 +306,9 @@ impl NetworkManagerProvider {
         }
 
         let is_connected = (50..=70).contains(&state);
+        let has_active_ap = active_ap_path != "/" && !active_ap_path.is_empty();
         NetworkStatus {
-            is_wifi_connected: is_connected
-                && (primary_type == "802-11-wireless" || active_ap_path != "/"),
+            is_wifi_connected: is_connected && (primary_type == "802-11-wireless" || has_active_ap),
             is_ethernet_connected: is_connected && primary_type == "802-3-ethernet",
             is_wifi_enabled: wifi_on,
             active_strength,

@@ -11,6 +11,15 @@ use axis_presentation::{Presenter, View};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+pub(crate) fn bluetooth_icon(status: &BluetoothStatus) -> &'static str {
+    let has_connected = status.devices.iter().any(|d| d.connected);
+    if has_connected {
+        "bluetooth-active-symbolic"
+    } else {
+        "bluetooth-symbolic"
+    }
+}
+
 pub struct BluetoothPresenter {
     inner: Presenter<BluetoothStatus>,
     connect_use_case: Arc<ConnectBluetoothDeviceUseCase>,
@@ -115,5 +124,45 @@ impl BluetoothPresenter {
                 log::error!("[bluetooth] stop_scan failed: {e}");
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axis_domain::models::bluetooth::BluetoothDevice;
+
+    #[test]
+    fn test_bluetooth_icon_no_connected_devices() {
+        let status = BluetoothStatus {
+            powered: true,
+            is_scanning: false,
+            devices: vec![BluetoothDevice {
+                connected: false,
+                ..Default::default()
+            }],
+            pending_pairing: None,
+        };
+        assert_eq!(bluetooth_icon(&status), "bluetooth-symbolic");
+    }
+
+    #[test]
+    fn test_bluetooth_icon_with_connected_device() {
+        let status = BluetoothStatus {
+            powered: true,
+            is_scanning: false,
+            devices: vec![
+                BluetoothDevice {
+                    connected: false,
+                    ..Default::default()
+                },
+                BluetoothDevice {
+                    connected: true,
+                    ..Default::default()
+                },
+            ],
+            pending_pairing: None,
+        };
+        assert_eq!(bluetooth_icon(&status), "bluetooth-active-symbolic");
     }
 }
