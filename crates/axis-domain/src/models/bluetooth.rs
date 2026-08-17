@@ -7,6 +7,7 @@ pub struct BluetoothDevice {
     pub connected: bool,
     pub paired: bool,
     pub icon: String,
+    pub battery_percentage: Option<u8>,
 }
 
 impl Default for BluetoothDevice {
@@ -17,6 +18,7 @@ impl Default for BluetoothDevice {
             connected: false,
             paired: false,
             icon: "bluetooth-symbolic".to_string(),
+            battery_percentage: None,
         }
     }
 }
@@ -55,6 +57,7 @@ mod tests {
         assert_eq!(d.icon, "bluetooth-symbolic");
         assert!(!d.connected);
         assert!(!d.paired);
+        assert_eq!(d.battery_percentage, None);
     }
 
     #[test]

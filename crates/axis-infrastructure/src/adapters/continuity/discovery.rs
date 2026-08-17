@@ -130,6 +130,21 @@ impl Drop for AvahiDiscovery {
     }
 }
 
+impl super::ports::ContinuityDiscoveryPort for AvahiDiscovery {
+    fn register(&mut self, name: &str, port: u16) -> Result<(), String> {
+        DiscoveryProvider::register(self, name, port)
+    }
+    fn browse(&mut self, tx: Sender<DiscoveryEvent>) -> Result<(), String> {
+        DiscoveryProvider::browse(self, tx)
+    }
+    fn stop_browse(&mut self) {
+        DiscoveryProvider::stop_browse(self);
+    }
+    fn stop(&mut self) {
+        DiscoveryProvider::stop(self);
+    }
+}
+
 async fn register_service(name: &str, port: u16) -> Result<(OwnedObjectPath, Connection), String> {
     let conn = Connection::system()
         .await
@@ -161,12 +176,13 @@ async fn register_service(name: &str, port: u16) -> Result<(OwnedObjectPath, Con
     .await
     .map_err(|e| format!("group proxy: {e}"))?;
 
-    let empty: Vec<Vec<u8>> = Vec::new();
+    let txt: Vec<Vec<u8>> =
+        vec![format!("id={}", super::known_peers::persistent_device_id()).into_bytes()];
 
     group
         .call_method(
             "AddService",
-            &(-1i32, -1i32, 0u32, name, AVAHI_SERVICE, "", "", port, empty),
+            &(-1i32, -1i32, 0u32, name, AVAHI_SERVICE, "", "", port, txt),
         )
         .await
         .map_err(|e| format!("AddService: {e}"))?;
@@ -258,10 +274,6 @@ async fn browse_services(
                 if let Ok((interface, protocol, name, stype, domain, _flags)) =
                     msg.body().deserialize::<(i32, i32, String, String, String, u32)>()
                 {
-                    if protocol != 0 {
-                        continue;
-                    }
-
                     let conn_c = conn.clone();
                     let tx_c = event_tx.clone();
                     let name_c = name.clone();
@@ -361,14 +373,21 @@ async fn resolve_service(
                 _a,
                 address,
                 port,
-                _txt,
+                txt,
                 _flags,
             )) => {
-                info!(
-                    "[continuity:discovery] resolved: name={resolved_name} host={host} addr={address} port={port}"
-                );
+                let mut device_id = resolved_name.clone();
+                for entry in &txt {
+                    if let Ok(s) = String::from_utf8(entry.clone())
+                        && let Some(id) = s.strip_prefix("id=")
+                    {
+                        device_id = id.to_string();
+                    }
+                }
 
-                let device_id = resolved_name.clone();
+                info!(
+                    "[continuity:discovery] resolved: name={resolved_name} (id={device_id}) host={host} addr={address} port={port}"
+                );
 
                 let addr_str = if address.contains(':') {
                     format!("[{address}]:{port}")
@@ -376,14 +395,22 @@ async fn resolve_service(
                     format!("{address}:{port}")
                 };
 
+                let parsed_addr: std::net::SocketAddr = addr_str
+                    .parse()
+                    .map_err(|e| format!("parse address '{addr_str}': {e}"))?;
+
+                let (primary_addr, addr_v6) = if parsed_addr.is_ipv6() {
+                    (parsed_addr, Some(parsed_addr))
+                } else {
+                    (parsed_addr, None)
+                };
+
                 return Ok(PeerInfo {
                     device_id,
                     device_name: resolved_name,
                     hostname: host,
-                    address: addr_str
-                        .parse()
-                        .map_err(|e| format!("parse address '{addr_str}': {e}"))?,
-                    address_v6: None,
+                    address: primary_addr,
+                    address_v6: addr_v6,
                 });
             }
             Err(e) => return Err(format!("deserialize Found: {e}")),
@@ -405,6 +432,7 @@ async fn scan_cached_services(_conn: &Connection) -> Result<Vec<PeerInfo>, Strin
     struct RawEntry {
         name: String,
         host: String,
+        device_id: String,
         addr_v4: Option<std::net::SocketAddr>,
         addr_v6: Option<std::net::SocketAddr>,
     }
@@ -421,6 +449,15 @@ async fn scan_cached_services(_conn: &Connection) -> Result<Vec<PeerInfo>, Strin
         let host = parts[6].to_string();
         let address = parts[7].to_string();
         let port: u16 = parts[8].parse().unwrap_or(0);
+
+        let mut device_id = name.clone();
+        for part in &parts[9..] {
+            let clean = part.trim_matches('"');
+            if let Some(id) = clean.strip_prefix("id=") {
+                device_id = id.to_string();
+                break;
+            }
+        }
 
         if port == 0 || address.is_empty() || name == self_hostname {
             continue;
@@ -442,18 +479,16 @@ async fn scan_cached_services(_conn: &Connection) -> Result<Vec<PeerInfo>, Strin
             continue;
         };
 
-        let entry = raw.entry(name.clone()).or_insert_with(|| RawEntry {
+        let entry = raw.entry(device_id.clone()).or_insert_with(|| RawEntry {
             name: name.clone(),
             host: host.clone(),
+            device_id: device_id.clone(),
             addr_v4: None,
             addr_v6: None,
         });
 
         if is_ipv6 {
-            let lower = address.to_lowercase();
-            if lower.starts_with("fd") || lower.starts_with("fe80") {
-                entry.addr_v6.get_or_insert(socket_addr);
-            }
+            entry.addr_v6.get_or_insert(socket_addr);
         } else {
             entry.addr_v4.get_or_insert(socket_addr);
         }
@@ -461,16 +496,23 @@ async fn scan_cached_services(_conn: &Connection) -> Result<Vec<PeerInfo>, Strin
 
     let mut result = Vec::new();
     for (_, entry) in raw {
-        let Some(addr_v4) = entry.addr_v4 else {
-            continue;
-        };
-        result.push(PeerInfo {
-            device_id: entry.name,
-            device_name: entry.host.clone(),
-            hostname: entry.host,
-            address: addr_v4,
-            address_v6: entry.addr_v6,
-        });
+        if let Some(addr_v4) = entry.addr_v4 {
+            result.push(PeerInfo {
+                device_id: entry.device_id,
+                device_name: entry.name,
+                hostname: entry.host,
+                address: addr_v4,
+                address_v6: entry.addr_v6,
+            });
+        } else if let Some(addr_v6) = entry.addr_v6 {
+            result.push(PeerInfo {
+                device_id: entry.device_id,
+                device_name: entry.name,
+                hostname: entry.host,
+                address: addr_v6,
+                address_v6: Some(addr_v6),
+            });
+        }
     }
 
     Ok(result)

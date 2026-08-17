@@ -40,7 +40,7 @@ impl View<NetworkStatus> for WifiStatusWidget {
             let icon_name = if status.is_wifi_connected {
                 wifi_icon(status.active_strength)
             } else {
-                "network-wireless-signal-none-symbolic"
+                "network-wireless-offline-symbolic"
             };
             self.icon.set_icon_name(Some(icon_name));
             if self.label.is_visible() {

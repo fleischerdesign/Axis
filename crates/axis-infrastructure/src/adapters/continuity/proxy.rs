@@ -1,5 +1,7 @@
 use async_trait::async_trait;
-use axis_domain::models::continuity::{ContinuityStatus, PeerArrangement, PeerConfig};
+use axis_domain::models::continuity::{
+    AudioDeviceInfo, ContinuityStatus, PeerArrangement, PeerConfig,
+};
 use axis_domain::ports::continuity::{ContinuityError, ContinuityProvider, ContinuityStream};
 use log::{error, warn};
 use std::collections::HashMap;
@@ -32,15 +34,45 @@ impl CachedState {
 pub struct ContinuityDbusProxy {
     cached: CachedState,
     status_tx: watch::Sender<ContinuityStatus>,
+    _status_rx: watch::Receiver<ContinuityStatus>,
 }
 
 impl ContinuityDbusProxy {
     pub fn new() -> Arc<Self> {
-        let (status_tx, _) = watch::channel(ContinuityStatus::default());
+        let (status_tx, status_rx) = watch::channel(ContinuityStatus::default());
         Arc::new(Self {
             cached: CachedState::new(),
             status_tx,
+            _status_rx: status_rx,
         })
+    }
+
+    pub async fn list_audio_devices(&self) -> Vec<AudioDeviceInfo> {
+        let devices = if let Ok(conn) = Connection::session().await
+            && let Ok(reply) = conn
+                .call_method(
+                    Some("org.axis.Shell"),
+                    "/org/axis/Shell/Continuity",
+                    Some("org.axis.Shell.Continuity"),
+                    "ListAudioDevices",
+                    &(),
+                )
+                .await
+            && let Ok(json_str) = reply.body().deserialize::<String>()
+            && let Ok(pw_devices) =
+                serde_json::from_str::<Vec<super::pipewire_devices::PipeWireAudioDevice>>(&json_str)
+        {
+            pw_devices
+        } else {
+            super::pipewire_devices::list_pipewire_audio_devices().await
+        };
+        devices
+            .into_iter()
+            .map(|d| AudioDeviceInfo {
+                id: d.id,
+                description: d.description,
+            })
+            .collect()
     }
 
     pub async fn init(self: &Arc<Self>) -> Result<(), ContinuityError> {
@@ -186,13 +218,15 @@ impl ContinuityDbusProxy {
             use futures_util::StreamExt;
             while let Some(msg) = signal.next().await {
                 let body = msg.body();
-                let json: Result<(String,), _> = body.deserialize();
-                let (json,) = match json {
+                let json: String = match body.deserialize::<String>() {
                     Ok(v) => v,
-                    Err(e) => {
-                        warn!("[continuity-proxy] Failed to parse signal: {e}");
-                        continue;
-                    }
+                    Err(_) => match body.deserialize::<(String,)>() {
+                        Ok((v,)) => v,
+                        Err(e) => {
+                            warn!("[continuity-proxy] Failed to parse signal: {e}");
+                            continue;
+                        }
+                    },
                 };
 
                 match serde_json::from_str::<ContinuityStatus>(&json) {
@@ -265,5 +299,9 @@ impl ContinuityProvider for ContinuityDbusProxy {
         let json = serde_json::to_string(&configs)
             .map_err(|e| ContinuityError::ProviderError(format!("serialize: {e}")))?;
         self.call_method_str("UpdatePeerConfigs", &json).await
+    }
+
+    async fn list_audio_devices(&self) -> Result<Vec<AudioDeviceInfo>, ContinuityError> {
+        Ok(self.list_audio_devices().await)
     }
 }

@@ -83,6 +83,7 @@ pub struct ContinuityStateSnapshot {
     pub screen_height: i32,
     pub remote_screen: Option<(i32, i32)>,
     pub reconnect: Option<DbusReconnectState>,
+    pub connecting_peer_id: Option<String>,
 }
 
 impl Default for ContinuityStateSnapshot {
@@ -99,6 +100,7 @@ impl Default for ContinuityStateSnapshot {
             screen_height: 1080,
             remote_screen: None,
             reconnect: None,
+            connecting_peer_id: None,
         }
     }
 }
@@ -132,6 +134,7 @@ pub fn build_snapshot(status: &ContinuityStatus) -> ContinuityStateSnapshot {
             max_attempts: r.max_attempts,
             delay_secs: r.delay_secs,
         }),
+        connecting_peer_id: status.connecting_peer_id.clone(),
     }
 }
 
@@ -150,6 +153,11 @@ impl ContinuityDbusServer {
 impl ContinuityDbusServer {
     async fn get_state(&self) -> String {
         serde_json::to_string(&*self.state_rx.borrow()).unwrap_or_default()
+    }
+
+    async fn list_audio_devices(&self) -> String {
+        let devices = super::pipewire_devices::list_pipewire_audio_devices().await;
+        serde_json::to_string(&devices).unwrap_or_default()
     }
 
     async fn connect_to_peer(&self, peer_id: &str) -> bool {
@@ -217,7 +225,7 @@ impl ContinuityDbusServer {
         env!("CARGO_PKG_VERSION")
     }
 
-    #[zbus(signal)]
+    #[zbus(signal, name = "StateChanged")]
     pub async fn state_changed(
         emitter: &zbus::object_server::SignalEmitter<'_>,
         json: &str,

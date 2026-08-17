@@ -58,6 +58,10 @@ impl From<KnownPeerArrangementSide> for Side {
     }
 }
 
+fn default_true() -> bool {
+    true
+}
+
 /// Complete persisted state for a known (paired) peer.
 /// This is the single source of truth for all peer configuration.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -68,12 +72,22 @@ pub struct KnownPeer {
     pub address: String,
     pub address_v6: Option<String>,
     pub trusted: bool,
+    #[serde(default = "default_true")]
+    pub auto_connect: bool,
     pub clipboard: bool,
     pub audio: bool,
+    #[serde(default)]
+    pub audio_direction: axis_domain::models::continuity::AudioStreamDirection,
     pub drag_drop: bool,
     pub arrangement_side: KnownPeerArrangementSide,
     pub arrangement_x: i32,
     pub arrangement_y: i32,
+    #[serde(default)]
+    pub version: u64,
+    #[serde(default)]
+    pub capture_device: Option<String>,
+    #[serde(default)]
+    pub playback_device: Option<String>,
 }
 
 impl Default for KnownPeer {
@@ -85,12 +99,17 @@ impl Default for KnownPeer {
             address: String::new(),
             address_v6: None,
             trusted: false,
+            auto_connect: true,
             clipboard: true,
             audio: false,
+            audio_direction: axis_domain::models::continuity::AudioStreamDirection::Off,
             drag_drop: false,
             arrangement_side: KnownPeerArrangementSide::Right,
             arrangement_x: 0,
             arrangement_y: 0,
+            version: 0,
+            capture_device: None,
+            playback_device: None,
         }
     }
 }
@@ -104,14 +123,18 @@ impl KnownPeer {
         };
         PeerConfig {
             trusted: self.trusted,
+            auto_connect: self.auto_connect,
             arrangement: PeerArrangement {
                 side: self.arrangement_side.into(),
                 offset,
             },
             clipboard: self.clipboard,
             audio: self.audio,
+            audio_direction: self.audio_direction,
+            capture_device: self.capture_device.clone(),
+            playback_device: self.playback_device.clone(),
             drag_drop: self.drag_drop,
-            version: 0, // version is runtime-only
+            version: self.version,
         }
     }
 }
@@ -128,8 +151,11 @@ pub fn known_peers_path() -> PathBuf {
 pub fn load_known_peers() -> KnownPeersStore {
     let path = known_peers_path();
     if let Ok(content) = std::fs::read_to_string(&path)
-        && let Ok(store) = serde_json::from_str(&content)
+        && let Ok(mut store) = serde_json::from_str::<KnownPeersStore>(&content)
     {
+        store
+            .peers
+            .retain(|_, p| !p.hostname.is_empty() || !p.address.is_empty());
         return store;
     }
     KnownPeersStore::default()
@@ -143,4 +169,20 @@ pub fn save_known_peers(store: &KnownPeersStore) {
     if let Ok(json) = serde_json::to_string_pretty(store) {
         let _ = std::fs::write(&path, json);
     }
+}
+
+pub fn persistent_device_id() -> String {
+    let path = config_dir().join("continuity_id");
+    if let Ok(id) = std::fs::read_to_string(&path) {
+        let id = id.trim().to_string();
+        if !id.is_empty() {
+            return id;
+        }
+    }
+    let id = uuid::Uuid::new_v4().to_string();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(&path, &id);
+    id
 }

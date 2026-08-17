@@ -26,7 +26,7 @@ gtk4 = { version = "0.11", features = ["v4_12"] }
 gtk4-layer-shell = "0.8"
 libadwaita = { version = "0.9", features = ["v1_4"] }
 libpulse-binding = "2.30.1"
-brightness = "0.7"
+brightness = "0.8"
 inotify = "0.11"
 niri-ipc = "26.4.0"
 tokio = { version = "1.50.0", features = ["full", "sync"] }
@@ -44,9 +44,9 @@ oauth2 = { version = "5.0", default-features = false, features = ["reqwest"] }
 open = "5"
 serde_json = "1.0"
 uuid = { version = "1", features = ["v4"] }
-rand = "0.9"
+rand = "0.10"
 evdev = { version = "0.13", features = ["tokio"] }
-notify = "7"
+notify = "8"
 image = "0.25"
 async-trait = "0.1.89"
 thiserror = "2.0.18"
@@ -54,3 +54,4 @@ async-stream = "0.3"
 clap = { version = "4.6.1", features = ["derive"] }
 wayland-client = "0.31"
 wayland-protocols = { version = "0.32", features = ["staging", "client"] }
+chacha20poly1305 = "0.10"

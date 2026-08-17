@@ -1,5 +1,5 @@
 {
-  description = "AXIS - A Wayland shell for niri";
+  description = "Axis - A desktop shell for Wayland compositors";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -28,15 +28,7 @@
             src = ./.;
             filter =
               path: type:
-              let
-                base = baseNameOf path;
-              in
-              base == "Cargo.toml"
-              || base == "Cargo.lock"
-              || (type == "directory" && base == "src")
-              || (type == "directory" && base == "crates")
-              || (lib.hasPrefix (toString ./src) (toString path))
-              || (lib.hasPrefix (toString ./crates) (toString path));
+              (craneLib.filterCargoSources path type) || (lib.hasSuffix ".css" path);
           };
           strictDeps = true;
 
@@ -45,6 +37,7 @@
             pkgs.clang
             pkgs.meson
             pkgs.ninja
+            pkgs.cmake
           ];
 
           buildInputs = [
@@ -52,10 +45,12 @@
             pkgs.libadwaita
             pkgs.gtk4-layer-shell
             pkgs.libpulseaudio
+            pkgs.opus
             pkgs.linux-pam
             pkgs.wl-clipboard
             pkgs.libevdev
           ];
+
 
           env = {
             LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
@@ -87,6 +82,28 @@
           }
         );
 
+        checks = {
+          axis-package = self.packages.${system}.default;
+          axis-clippy = craneLib.cargoClippy (
+            commonArgs
+            // {
+              inherit cargoArtifacts;
+              cargoClippyExtraArgs = "-- -D warnings";
+            }
+          );
+          axis-fmt = craneLib.cargoFmt {
+            inherit (commonArgs) src pname;
+          };
+          axis-test = craneLib.cargoTest (
+            commonArgs
+            // {
+              inherit cargoArtifacts;
+            }
+          );
+        };
+
+        formatter = pkgs.nixfmt;
+
         devShells.default = pkgs.mkShell {
           nativeBuildInputs = commonArgs.nativeBuildInputs ++ [
             pkgs.cargo
@@ -94,13 +111,18 @@
             pkgs.rust-analyzer
             pkgs.rustfmt
             pkgs.clippy
+            pkgs.gdb
+            pkgs.lldb
+            pkgs.cargo-deny
+            pkgs.cargo-watch
           ];
           buildInputs = commonArgs.buildInputs;
           env = commonArgs.env // {
             RUST_SRC_PATH = pkgs.rustPlatform.rustLibSrc;
+            RUST_BACKTRACE = "1";
           };
           shellHook = ''
-            echo "Entering AXIS development environment..."
+            echo "Entering Axis development environment..."
           '';
         };
       }

@@ -157,6 +157,7 @@ pub fn setup(uc: &UseCases) -> Presenters {
         disconnect_uc: uc.bt_disconnect.clone(),
         start_scan_uc: uc.bt_start_scan.clone(),
         stop_scan_uc: uc.bt_stop_scan.clone(),
+        show_notification_uc: Some(uc.show_notification.clone()),
     }));
 
     let nightlight = Rc::new(NightlightPresenter::new(NightlightPresenterArgs {

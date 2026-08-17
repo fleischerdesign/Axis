@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio_stream::wrappers::WatchStream;
-use zbus::{Connection, proxy, zvariant::OwnedObjectPath};
+use zbus::{Connection, MatchRule, MessageStream, proxy, zvariant::OwnedObjectPath};
 
 #[proxy(interface = "org.bluez.Device1", default_service = "org.bluez")]
 trait BluetoothDevice1 {
@@ -288,7 +288,7 @@ impl BlueZProvider {
         let provider_clone = provider.clone();
         tokio::spawn(async move {
             loop {
-                let Ok((_om_proxy, mut interfaces_added, mut interfaces_removed)) =
+                let Ok((_om_proxy, mut interfaces_added, mut interfaces_removed, mut props_stream)) =
                     crate::utils::retry_with_backoff(
                         || async {
                             let om = ObjectManagerProxy::new(&provider_clone.connection)
@@ -302,7 +302,26 @@ impl BlueZProvider {
                                 .receive_interfaces_removed()
                                 .await
                                 .map_err(|e| e.to_string())?;
-                            Ok::<_, String>((om, added, removed))
+
+                            let props_rule = MatchRule::builder()
+                                .msg_type(zbus::message::Type::Signal)
+                                .interface("org.freedesktop.DBus.Properties")
+                                .map_err(|e| e.to_string())?
+                                .member("PropertiesChanged")
+                                .map_err(|e| e.to_string())?
+                                .path_namespace("/org/bluez")
+                                .map_err(|e| e.to_string())?
+                                .build();
+
+                            let props = MessageStream::for_match_rule(
+                                props_rule,
+                                &provider_clone.connection,
+                                None,
+                            )
+                            .await
+                            .map_err(|e| e.to_string())?;
+
+                            Ok::<_, String>((om, added, removed, props))
                         },
                         30,
                         10,
@@ -318,6 +337,7 @@ impl BlueZProvider {
                     let alive = tokio::select! {
                         _ = interfaces_added.next() => true,
                         _ = interfaces_removed.next() => true,
+                        _ = props_stream.next() => true,
                         else => false,
                     };
 
@@ -412,12 +432,18 @@ impl BlueZProvider {
                 .await
                 .unwrap_or_else(|_| "bluetooth-symbolic".to_string());
 
+            let battery_percentage = interfaces
+                .get("org.bluez.Battery1")
+                .and_then(|props| props.get("Percentage"))
+                .and_then(|val| u8::try_from(val.clone()).ok());
+
             devices.push(BluetoothDevice {
                 id: path.to_string(),
                 name,
                 connected,
                 paired,
                 icon,
+                battery_percentage,
             });
         }
 

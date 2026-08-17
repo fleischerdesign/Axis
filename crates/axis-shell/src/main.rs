@@ -8,7 +8,7 @@ use std::cell::{OnceCell, RefCell};
 use std::rc::Rc;
 
 fn main() -> glib::ExitCode {
-    setup_logger().expect("Failed to initialize logger");
+    setup_logger();
     let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
     let _guard = rt.enter();
 

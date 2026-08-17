@@ -35,8 +35,7 @@ pub async fn run_dbus_host(
         on_lock: Arc::new(on_lock),
     };
 
-    let (status_tx, status_rx) = watch::channel(ContinuityStatus::default());
-    let cont_server = ContinuityDbusServer::new(continuity_cmd_tx, status_rx.clone());
+    let cont_server = ContinuityDbusServer::new(continuity_cmd_tx, continuity_status_rx.clone());
 
     let conn = match connection::Builder::session() {
         Ok(b) => b,
@@ -87,16 +86,24 @@ pub async fn run_dbus_host(
                 break;
             }
             let status = status_rx.borrow_and_update().clone();
-            let _ = status_tx.send(status.clone());
 
             let iface_res: Result<_, _> = conn
                 .object_server()
                 .interface::<&str, ContinuityDbusServer>("/org/axis/Shell/Continuity")
                 .await;
 
-            if let Ok(iface) = iface_res {
-                let json = serde_json::to_string(&status).unwrap_or_default();
-                let _ = ContinuityDbusServer::state_changed(iface.signal_emitter(), &json).await;
+            match iface_res {
+                Ok(iface) => {
+                    let json = serde_json::to_string(&status).unwrap_or_default();
+                    if let Err(e) =
+                        ContinuityDbusServer::state_changed(iface.signal_emitter(), &json).await
+                    {
+                        log::warn!("[dbus-host] Failed to emit state_changed signal: {e}");
+                    }
+                }
+                Err(e) => {
+                    log::warn!("[dbus-host] Failed to get ContinuityDbusServer interface: {e}");
+                }
             }
         }
     };

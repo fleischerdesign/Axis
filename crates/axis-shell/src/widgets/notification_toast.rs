@@ -105,7 +105,9 @@ impl NotificationToastManager {
                     gtk4::glib::timeout_add_local_once(
                         std::time::Duration::from_millis(260),
                         move || {
-                            cont_c.remove(&r);
+                            if r.parent().as_ref() == Some(cont_c.upcast_ref()) {
+                                cont_c.remove(&r);
+                            }
                             if cont_c.first_child().is_none() {
                                 win_c.set_visible(false);
                             }
@@ -124,7 +126,9 @@ impl NotificationToastManager {
             let win = self.window.clone();
             revealer.set_reveal_child(false);
             gtk4::glib::timeout_add_local_once(std::time::Duration::from_millis(260), move || {
-                cont.remove(&revealer);
+                if revealer.parent().as_ref() == Some(cont.upcast_ref()) {
+                    cont.remove(&revealer);
+                }
                 if cont.first_child().is_none() {
                     win.set_visible(false);
                 }
@@ -141,7 +145,9 @@ impl NotificationToastManager {
             let win = self.window.clone();
             revealer.set_reveal_child(false);
             gtk4::glib::timeout_add_local_once(std::time::Duration::from_millis(260), move || {
-                cont.remove(&revealer);
+                if revealer.parent().as_ref() == Some(cont.upcast_ref()) {
+                    cont.remove(&revealer);
+                }
                 if cont.first_child().is_none() {
                     win.set_visible(false);
                 }

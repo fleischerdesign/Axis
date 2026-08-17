@@ -1,4 +1,3 @@
-use chrono::Local;
 use gtk4::{gdk, glib};
 use libadwaita as adw;
 use libadwaita::prelude::*;
@@ -48,6 +47,7 @@ use axis_application::use_cases::continuity::cancel_reconnect::CancelReconnectUs
 use axis_application::use_cases::continuity::confirm_pin::ConfirmPinUseCase;
 use axis_application::use_cases::continuity::connect_to_peer::ConnectToPeerUseCase;
 use axis_application::use_cases::continuity::disconnect::DisconnectUseCase;
+use axis_application::use_cases::continuity::list_audio_devices::ListAudioDevicesUseCase;
 use axis_application::use_cases::continuity::reject_pin::RejectPinUseCase;
 use axis_application::use_cases::continuity::set_enabled::SetContinuityEnabledUseCase;
 use axis_application::use_cases::continuity::set_peer_arrangement::SetPeerArrangementUseCase;
@@ -76,7 +76,7 @@ use axis_domain::ports::network::NetworkProvider;
 use axis_presentation::ThemeService;
 
 fn main() -> glib::ExitCode {
-    setup_logger().expect("Failed to initialize logger");
+    setup_logger();
     let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
     let _guard = rt.enter();
 
@@ -222,6 +222,8 @@ fn build_ui(
         Arc::new(SetPeerArrangementUseCase::new(continuity_provider.clone()));
     let continuity_update_configs =
         Arc::new(UpdatePeerConfigsUseCase::new(continuity_provider.clone()));
+    let continuity_list_audio_devices =
+        Arc::new(ListAudioDevicesUseCase::new(continuity_provider.clone()));
 
     let set_idle_inhibited_uc = Arc::new(SetIdleInhibitUseCase::new(idle_inhibit_provider.clone()));
 
@@ -269,6 +271,7 @@ fn build_ui(
             unpair_uc: continuity_unpair,
             set_arrangement_uc: continuity_set_arrangement,
             update_configs_uc: continuity_update_configs,
+            list_audio_devices_uc: continuity_list_audio_devices,
         },
         rt,
     ));
@@ -399,25 +402,16 @@ fn build_ui(
     settings_window.present();
 }
 
-fn setup_logger() -> Result<(), fern::InitError> {
-    let mut dispatch = fern::Dispatch::new()
-        .format(|out, message, record| {
-            out.finish(format_args!(
-                "{}[{}][{}] {}",
-                Local::now().format("[%Y-%m-%d][%H:%M:%S]"),
-                record.target(),
-                record.level(),
-                message
-            ))
-        })
-        .level(log::LevelFilter::Info);
-
-    if let Ok(lvl) = std::env::var("RUST_LOG")
-        && let Ok(parsed) = lvl.parse()
-    {
-        dispatch = dispatch.level(parsed);
-    }
-
-    dispatch.chain(std::io::stdout()).apply()?;
-    Ok(())
+fn setup_logger() {
+    let log_dir = std::env::var("AXIS_LOG_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| {
+            let config = dirs::config_dir().or_else(|| dirs::home_dir().map(|h| h.join(".config")));
+            config
+                .unwrap_or_else(|| std::path::PathBuf::from("."))
+                .join("axis")
+                .join("logs")
+        });
+    axis_infrastructure::adapters::logging::setup_logger(&log_dir, "axis-settings")
+        .expect("Failed to initialize logger");
 }

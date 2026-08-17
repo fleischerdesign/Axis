@@ -22,6 +22,7 @@ impl MockBluetoothProvider {
                     connected: false,
                     paired: true,
                     icon: "audio-headphones-symbolic".to_string(),
+                    battery_percentage: Some(85),
                 },
                 BluetoothDevice {
                     id: "2".to_string(),
@@ -29,6 +30,7 @@ impl MockBluetoothProvider {
                     connected: true,
                     paired: true,
                     icon: "phone-symbolic".to_string(),
+                    battery_percentage: Some(50),
                 },
             ],
             pending_pairing: None,

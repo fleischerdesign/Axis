@@ -1,10 +1,19 @@
+pub mod audio_stream;
+pub mod codec;
+pub mod jitter_buffer;
+pub mod pipewire_devices;
+pub mod udp_audio;
+
 pub mod clipboard;
 pub mod connection;
+pub mod crypto;
 pub mod dbus;
 pub mod discovery;
+pub mod drag_drop;
 mod inner;
 pub mod input;
 pub mod known_peers;
+pub mod ports;
 pub mod proto;
 pub mod proxy;
 mod service;
@@ -12,3 +21,6 @@ mod service;
 pub use inner::ContinuityCmd;
 pub use proxy::ContinuityDbusProxy;
 pub use service::ContinuityService;
+
+#[cfg(test)]
+pub(crate) mod testing;

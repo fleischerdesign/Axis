@@ -1,5 +1,5 @@
 use crate::widgets::callback::{FnCell, FnCell0};
-use axis_domain::models::continuity::{ContinuityStatus, PeerConfig};
+use axis_domain::models::continuity::{AudioDeviceInfo, ContinuityStatus, PeerConfig};
 use libadwaita as adw;
 use libadwaita::prelude::*;
 use std::cell::RefCell;
@@ -10,8 +10,13 @@ type ConfigFnCell = Rc<RefCell<Option<Box<dyn Fn(String, PeerConfig) + 'static>>
 pub struct PeerDetailPage {
     root: adw::Clamp,
     peer_id: String,
+    auto_connect_switch: adw::SwitchRow,
     clipboard_switch: adw::SwitchRow,
     audio_switch: adw::SwitchRow,
+    audio_direction_row: adw::ComboRow,
+    audio_source_row: adw::ComboRow,
+    audio_source_model: gtk4::StringList,
+    audio_source_ids: Rc<RefCell<Vec<String>>>,
     drag_drop_switch: adw::SwitchRow,
     danger_group: adw::PreferencesGroup,
     disconnect_btn: gtk4::Button,
@@ -38,10 +43,16 @@ impl PeerDetailPage {
             .build();
 
         let caps_group = adw::PreferencesGroup::builder()
-            .title("Capabilities")
-            .description("Configure sharing permissions for this device")
+            .title("Capabilities &amp; Automation")
+            .description("Configure sharing permissions and automatic connection for this device")
             .build();
         page.add(&caps_group);
+
+        let auto_connect_switch = adw::SwitchRow::builder()
+            .title("Auto-Connect")
+            .subtitle("Automatically connect when this trusted peer is in range")
+            .build();
+        caps_group.add(&auto_connect_switch);
 
         let clipboard_switch = adw::SwitchRow::builder()
             .title("Synchronize Clipboard")
@@ -54,6 +65,28 @@ impl PeerDetailPage {
             .subtitle("Stream audio playback to this device")
             .build();
         caps_group.add(&audio_switch);
+
+        let audio_dir_model = gtk4::StringList::new(&[
+            "Aus",
+            "Dieser PC sendet →",
+            "← Empfangen",
+            "⇄ Beidseitig (Duplex)",
+        ]);
+        let audio_direction_row = adw::ComboRow::builder()
+            .title("Audio-Richtung (Direction)")
+            .subtitle("Steuert wer Ton sendet oder empfängt")
+            .model(&audio_dir_model)
+            .build();
+        caps_group.add(&audio_direction_row);
+
+        let audio_source_model = gtk4::StringList::new(&[] as &[&str]);
+        let audio_source_ids: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
+        let audio_source_row = adw::ComboRow::builder()
+            .title("Aufnahme-Quelle (Capture Source)")
+            .subtitle("Wähle Medienton-Monitor oder Mikrofon zum Senden")
+            .model(&audio_source_model)
+            .build();
+        caps_group.add(&audio_source_row);
 
         let drag_drop_switch = adw::SwitchRow::builder()
             .title("Drag &amp; Drop")
@@ -89,8 +122,13 @@ impl PeerDetailPage {
         let page = Rc::new(Self {
             root: clamp,
             peer_id,
+            auto_connect_switch,
             clipboard_switch,
             audio_switch,
+            audio_direction_row,
+            audio_source_row,
+            audio_source_model,
+            audio_source_ids,
             drag_drop_switch,
             danger_group,
             disconnect_btn,
@@ -109,17 +147,31 @@ impl PeerDetailPage {
 
     fn wire_notifies(page: &Rc<Self>) {
         let p = page.clone();
+        page.auto_connect_switch.connect_active_notify(move |row| {
+            if *p.update_silent.borrow() {
+                return;
+            }
+            let current = p.last_config.borrow().clone().unwrap_or_default();
+            let config = PeerConfig {
+                auto_connect: row.is_active(),
+                ..current
+            };
+            if let Some(f) = p.config_cb.borrow().as_ref() {
+                f(p.peer_id.clone(), config);
+            }
+        });
+
+        let p = page.clone();
         page.clipboard_switch.connect_active_notify(move |row| {
             if *p.update_silent.borrow() {
                 return;
             }
-            if let Some(f) = p.config_cb.borrow().as_ref()
-                && let Some(ref current) = *p.last_config.borrow()
-            {
-                let config = PeerConfig {
-                    clipboard: row.is_active(),
-                    ..current.clone()
-                };
+            let current = p.last_config.borrow().clone().unwrap_or_default();
+            let config = PeerConfig {
+                clipboard: row.is_active(),
+                ..current
+            };
+            if let Some(f) = p.config_cb.borrow().as_ref() {
                 f(p.peer_id.clone(), config);
             }
         });
@@ -129,13 +181,65 @@ impl PeerDetailPage {
             if *p.update_silent.borrow() {
                 return;
             }
-            if let Some(f) = p.config_cb.borrow().as_ref()
-                && let Some(ref current) = *p.last_config.borrow()
-            {
-                let config = PeerConfig {
-                    audio: row.is_active(),
-                    ..current.clone()
+            let current = p.last_config.borrow().clone().unwrap_or_default();
+            let is_active = row.is_active();
+            let audio_direction = if is_active {
+                if current.audio_direction
+                    == axis_domain::models::continuity::AudioStreamDirection::Off
+                {
+                    axis_domain::models::continuity::AudioStreamDirection::SendToPeer
+                } else {
+                    current.audio_direction
+                }
+            } else {
+                axis_domain::models::continuity::AudioStreamDirection::Off
+            };
+            let config = PeerConfig {
+                audio: is_active,
+                audio_direction,
+                ..current
+            };
+            if let Some(f) = p.config_cb.borrow().as_ref() {
+                f(p.peer_id.clone(), config);
+            }
+        });
+
+        let p = page.clone();
+        page.audio_direction_row
+            .connect_selected_notify(move |row| {
+                if *p.update_silent.borrow() {
+                    return;
+                }
+                let current = p.last_config.borrow().clone().unwrap_or_default();
+                let dir = match row.selected() {
+                    1 => axis_domain::models::continuity::AudioStreamDirection::SendToPeer,
+                    2 => axis_domain::models::continuity::AudioStreamDirection::ReceiveFromPeer,
+                    3 => axis_domain::models::continuity::AudioStreamDirection::BiDirectional,
+                    _ => axis_domain::models::continuity::AudioStreamDirection::Off,
                 };
+                let config = PeerConfig {
+                    audio_direction: dir,
+                    audio: dir != axis_domain::models::continuity::AudioStreamDirection::Off,
+                    ..current
+                };
+                if let Some(f) = p.config_cb.borrow().as_ref() {
+                    f(p.peer_id.clone(), config);
+                }
+            });
+
+        let p = page.clone();
+        page.audio_source_row.connect_selected_notify(move |row| {
+            if *p.update_silent.borrow() {
+                return;
+            }
+            let current = p.last_config.borrow().clone().unwrap_or_default();
+            let idx = row.selected() as usize;
+            let capture_device = p.audio_source_ids.borrow().get(idx).cloned();
+            let config = PeerConfig {
+                capture_device,
+                ..current
+            };
+            if let Some(f) = p.config_cb.borrow().as_ref() {
                 f(p.peer_id.clone(), config);
             }
         });
@@ -145,13 +249,12 @@ impl PeerDetailPage {
             if *p.update_silent.borrow() {
                 return;
             }
-            if let Some(f) = p.config_cb.borrow().as_ref()
-                && let Some(ref current) = *p.last_config.borrow()
-            {
-                let config = PeerConfig {
-                    drag_drop: row.is_active(),
-                    ..current.clone()
-                };
+            let current = p.last_config.borrow().clone().unwrap_or_default();
+            let config = PeerConfig {
+                drag_drop: row.is_active(),
+                ..current
+            };
+            if let Some(f) = p.config_cb.borrow().as_ref() {
                 f(p.peer_id.clone(), config);
             }
         });
@@ -178,11 +281,46 @@ impl PeerDetailPage {
     pub fn update_status(&self, status: &ContinuityStatus) {
         *self.update_silent.borrow_mut() = true;
 
-        let is_paired = status.peer_configs.contains_key(&self.peer_id);
-        if let Some(config) = status.peer_configs.get(&self.peer_id) {
+        let found_config = status.peer_configs.get(&self.peer_id).or_else(|| {
+            if let Some(p) = status.peers.iter().find(|p| {
+                p.device_name == self.peer_id
+                    || p.hostname == self.peer_id
+                    || p.device_id == self.peer_id
+            }) && let Some(cfg) = status.peer_configs.get(&p.device_id)
+            {
+                return Some(cfg);
+            }
+            None
+        });
+
+        let is_paired = found_config.is_some() || status.peer_configs.contains_key(&self.peer_id);
+        if let Some(config) = found_config {
             *self.last_config.borrow_mut() = Some(config.clone());
+            self.auto_connect_switch.set_active(config.auto_connect);
             self.clipboard_switch.set_active(config.clipboard);
             self.audio_switch.set_active(config.audio);
+
+            let dir_selected = match config.audio_direction {
+                axis_domain::models::continuity::AudioStreamDirection::Off => 0,
+                axis_domain::models::continuity::AudioStreamDirection::SendToPeer => 1,
+                axis_domain::models::continuity::AudioStreamDirection::ReceiveFromPeer => 2,
+                axis_domain::models::continuity::AudioStreamDirection::BiDirectional => 3,
+            };
+            self.audio_direction_row.set_selected(dir_selected);
+
+            let selected = config
+                .capture_device
+                .as_deref()
+                .and_then(|cd| {
+                    self.audio_source_ids
+                        .borrow()
+                        .iter()
+                        .position(|id| id.as_str() == cd)
+                })
+                .map(|i| i as u32)
+                .unwrap_or(0);
+            self.audio_source_row.set_selected(selected);
+
             self.drag_drop_switch.set_active(config.drag_drop);
         }
 
@@ -208,5 +346,27 @@ impl PeerDetailPage {
 
     pub fn set_on_config(&self, f: Box<dyn Fn(String, PeerConfig) + 'static>) {
         *self.config_cb.borrow_mut() = Some(f);
+    }
+
+    pub fn load_audio_devices(&self, devices: &[AudioDeviceInfo]) {
+        *self.update_silent.borrow_mut() = true;
+
+        let ids: Vec<String> = devices.iter().map(|d| d.id.clone()).collect();
+        let names: Vec<&str> = devices.iter().map(|d| d.description.as_str()).collect();
+        self.audio_source_model
+            .splice(0, self.audio_source_model.n_items(), &names);
+        *self.audio_source_ids.borrow_mut() = ids;
+
+        let selected = self
+            .last_config
+            .borrow()
+            .as_ref()
+            .and_then(|cfg| cfg.capture_device.as_deref())
+            .and_then(|cd| devices.iter().position(|d| d.id.as_str() == cd))
+            .map(|i| i as u32)
+            .unwrap_or(0);
+        self.audio_source_row.set_selected(selected);
+
+        *self.update_silent.borrow_mut() = false;
     }
 }

@@ -10,6 +10,7 @@ pub mod components;
 pub mod continuity_capture;
 pub mod continuity_status;
 pub mod dnd_status;
+pub mod drag_overlay;
 pub mod idle_inhibit_status;
 pub mod island;
 pub mod launcher;

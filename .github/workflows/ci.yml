@@ -27,17 +27,8 @@ jobs:
       - name: Magic Nix Cache
         uses: DeterminateSystems/magic-nix-cache-action@v14
 
-      - name: Rust Cache
-        uses: Swatinem/rust-cache@v2
-
-      - name: Check Formatting
-        run: nix develop --command cargo fmt --all -- --check
-
-      - name: Run Clippy Lints
-        run: nix develop --command cargo clippy -- -D warnings
-
-      - name: Run Workspace Tests
-        run: nix develop --command cargo test
+      - name: Run Flake Checks
+        run: nix flake check
 
   fix-cargo-lock:
     name: Auto-fix Cargo.lock

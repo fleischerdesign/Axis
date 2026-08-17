@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use axis_domain::models::continuity::{
-    ContinuityStatus, InputEvent, PeerArrangement, PeerConfig, Side,
+    AudioDeviceInfo, ContinuityStatus, InputEvent, PeerArrangement, PeerConfig, Side,
 };
 use axis_domain::ports::continuity::{
     ContinuityError, ContinuityProvider, ContinuitySharingProvider, ContinuityStream,
@@ -11,6 +11,7 @@ use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
 
 use super::inner::{ContinuityCmd, ContinuityInner};
+use super::pipewire_devices;
 
 pub struct ContinuityService {
     cmd_tx: async_channel::Sender<ContinuityCmd>,
@@ -55,9 +56,23 @@ impl ContinuityProvider for ContinuityService {
     }
 
     async fn set_enabled(&self, enabled: bool) -> Result<(), ContinuityError> {
+        let mut rx = self.status_tx.subscribe();
+        if rx.borrow().enabled == enabled {
+            return Ok(());
+        }
+
         self.cmd_tx
             .try_send(ContinuityCmd::SetEnabled(enabled))
-            .map_err(|e| ContinuityError::ProviderError(e.to_string()))
+            .map_err(|e| ContinuityError::ProviderError(e.to_string()))?;
+
+        loop {
+            rx.changed()
+                .await
+                .map_err(|e| ContinuityError::ProviderError(e.to_string()))?;
+            if rx.borrow_and_update().enabled == enabled {
+                return Ok(());
+            }
+        }
     }
 
     async fn connect_to_peer(&self, peer_id: &str) -> Result<(), ContinuityError> {
@@ -113,6 +128,17 @@ impl ContinuityProvider for ContinuityService {
             .try_send(ContinuityCmd::UpdatePeerConfigs(configs))
             .map_err(|e| ContinuityError::ProviderError(e.to_string()))
     }
+
+    async fn list_audio_devices(&self) -> Result<Vec<AudioDeviceInfo>, ContinuityError> {
+        let devices = pipewire_devices::list_pipewire_audio_devices().await;
+        Ok(devices
+            .into_iter()
+            .map(|d| AudioDeviceInfo {
+                id: d.id,
+                description: d.description,
+            })
+            .collect())
+    }
 }
 
 #[async_trait]
@@ -138,6 +164,16 @@ impl ContinuitySharingProvider for ContinuityService {
     async fn force_local(&self) -> Result<(), ContinuityError> {
         self.cmd_tx
             .try_send(ContinuityCmd::ForceLocal)
+            .map_err(|e| ContinuityError::ProviderError(e.to_string()))
+    }
+
+    async fn send_file(
+        &self,
+        path: std::path::PathBuf,
+        mime_type: String,
+    ) -> Result<(), ContinuityError> {
+        self.cmd_tx
+            .try_send(ContinuityCmd::SendFile(path, mime_type))
             .map_err(|e| ContinuityError::ProviderError(e.to_string()))
     }
 }

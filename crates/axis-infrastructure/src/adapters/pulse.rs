@@ -319,12 +319,23 @@ impl PulseAudioProvider {
 
         let cmd_tx_loop = cmd_tx.clone();
         context.set_subscribe_callback(Some(Box::new(move |fac, _, _| {
-            if let Some(Facility::Sink | Facility::Source | Facility::SinkInput) = fac {
+            if let Some(
+                Facility::Sink
+                | Facility::Source
+                | Facility::SinkInput
+                | Facility::Card
+                | Facility::Server,
+            ) = fac
+            {
                 let _ = cmd_tx_loop.try_send(PulseCmd::UpdateStatus);
             }
         })));
         context.subscribe(
-            InterestMaskSet::SINK | InterestMaskSet::SOURCE | InterestMaskSet::SINK_INPUT,
+            InterestMaskSet::SINK
+                | InterestMaskSet::SOURCE
+                | InterestMaskSet::SINK_INPUT
+                | InterestMaskSet::CARD
+                | InterestMaskSet::SERVER,
             |_| {},
         );
 

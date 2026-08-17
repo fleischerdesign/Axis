@@ -21,7 +21,8 @@ pub struct ContinuitySettingsPage {
     _status_page: adw::StatusPage,
     peer_list: gtk4::ListBox,
     grid: Rc<ArrangementGrid>,
-    current_peer_page: RefCell<Option<Rc<PeerDetailPage>>>,
+    current_peer_page: Rc<RefCell<Option<Rc<PeerDetailPage>>>>,
+    update_silent: Rc<RefCell<bool>>,
 
     toggle_cb: FnCell<bool>,
     connect_cb: FnCell<String>,
@@ -32,6 +33,8 @@ pub struct ContinuitySettingsPage {
     unpair_cb: FnCell<String>,
     arrangement_cb: FnCell<PeerArrangement>,
     config_cb: ContinuityConfigFnCell,
+
+    presenter: Rc<ContinuitySettingsPresenter>,
 }
 
 impl ContinuitySettingsPage {
@@ -124,7 +127,8 @@ impl ContinuitySettingsPage {
             _status_page: status_page,
             peer_list,
             grid: grid.clone(),
-            current_peer_page: RefCell::new(None),
+            current_peer_page: Rc::new(RefCell::new(None)),
+            update_silent: Rc::new(RefCell::new(false)),
             toggle_cb: Rc::new(RefCell::new(None)),
             connect_cb: Rc::new(RefCell::new(None)),
             disconnect_cb: Rc::new(RefCell::new(None)),
@@ -134,11 +138,16 @@ impl ContinuitySettingsPage {
             unpair_cb: Rc::new(RefCell::new(None)),
             arrangement_cb: grid_cb,
             config_cb: Rc::new(RefCell::new(None)),
+            presenter: _presenter,
         });
 
         // Event Connections
+        let update_silent_c = page.update_silent.clone();
         let cb_toggle = page.toggle_cb.clone();
         page.enable_switch.connect_active_notify(move |row| {
+            if *update_silent_c.borrow() {
+                return;
+            }
             if let Some(f) = cb_toggle.borrow().as_ref() {
                 f(row.is_active());
             }
@@ -228,10 +237,11 @@ impl ContinuitySettingsPage {
         }
 
         for peer in &status.peers {
-            let is_connected = status
-                .active_connection
-                .as_ref()
-                .is_some_and(|c| c.peer_id == peer.device_id);
+            let is_connected = status.active_connection.as_ref().is_some_and(|c| {
+                c.peer_id == peer.device_id
+                    || c.peer_name == peer.device_name
+                    || c.peer_name == peer.device_id
+            });
 
             let row = adw::ActionRow::builder()
                 .title(&peer.device_name)
@@ -239,6 +249,10 @@ impl ContinuitySettingsPage {
                 .build();
 
             row.add_prefix(&gtk4::Image::from_icon_name("computer-symbolic"));
+
+            let is_connecting = status.connecting_peer_id.as_ref().is_some_and(|id| {
+                id == &peer.device_id || id == &peer.device_name || id == &peer.hostname
+            });
 
             if is_connected {
                 let connected_secs = status
@@ -265,6 +279,13 @@ impl ContinuitySettingsPage {
                     }
                 });
                 row.add_suffix(&disconnect_btn);
+            } else if is_connecting {
+                row.set_subtitle("Connecting...");
+                let spinner = gtk4::Spinner::builder()
+                    .valign(gtk4::Align::Center)
+                    .spinning(true)
+                    .build();
+                row.add_suffix(&spinner);
             } else {
                 row.set_subtitle(&peer.hostname);
 
@@ -293,9 +314,12 @@ impl ContinuitySettingsPage {
             let disconnect_cb_r = self.disconnect_cb.clone();
             let unpair_cb_r = self.unpair_cb.clone();
             let current_peer_page = self.current_peer_page.clone();
+            let status_snapshot = status.clone();
+            let presenter = self.presenter.clone();
             let gesture = gtk4::GestureClick::new();
             gesture.connect_released(move |_, _, _, _| {
                 let detail_page = PeerDetailPage::new(peer_id.clone(), peer_name.clone());
+                detail_page.update_status(&status_snapshot);
 
                 detail_page.set_on_disconnect({
                     let cb = disconnect_cb_r.clone();
@@ -324,6 +348,13 @@ impl ContinuitySettingsPage {
                     })
                 });
 
+                let detail_page_c = detail_page.clone();
+                let presenter = presenter.clone();
+                gtk4::glib::spawn_future_local(async move {
+                    let devices = presenter.list_audio_devices().await;
+                    detail_page_c.load_audio_devices(&devices);
+                });
+
                 let nav_page = adw::NavigationPage::new(detail_page.widget(), &peer_name);
                 nav_view.push(&nav_page);
                 *current_peer_page.borrow_mut() = Some(detail_page);
@@ -337,7 +368,12 @@ impl ContinuitySettingsPage {
 
 impl View<ContinuityStatus> for ContinuitySettingsPage {
     fn render(&self, status: &ContinuityStatus) {
-        self.enable_switch.set_active(status.enabled);
+        *self.update_silent.borrow_mut() = true;
+        if self.enable_switch.is_active() != status.enabled {
+            self.enable_switch.set_active(status.enabled);
+        }
+        *self.update_silent.borrow_mut() = false;
+
         if !status.enabled {
             self.arrangement_group.set_visible(false);
             self.peers_group.set_visible(false);
