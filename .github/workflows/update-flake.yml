@@ -2,37 +2,10 @@ name: Update Flake Lock
 
 on:
   schedule:
-    # Runs at 00:00 every Monday
     - cron: '0 0 * * 1'
-  workflow_dispatch: # Allows manual triggering
-
-permissions:
-  contents: write
-  pull-requests: write
+  workflow_dispatch:
 
 jobs:
   update-flake:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@v22
-
-      - name: Clear nix-installer git credential overrides
-        run: |
-          git config --local --name-only --get-regexp '^includeIf\.gitdir:' |
-            while read key; do
-              git config --local --unset-all "$key" || true
-            done
-          git config --local --unset-all 'http.https://github.com/.extraheader' || true
-
-      - name: Update Flake Lock
-        uses: DeterminateSystems/update-flake-lock@v24
-        with:
-          pr-title: "chore(nix): update flake.lock"
-          pr-labels: |
-            dependencies
-            nix
+    uses: fleischerdesign/workflows/.github/workflows/update-flake.yml@v1
+    secrets: inherit
